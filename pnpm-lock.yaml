@@ -418,7 +418,7 @@ importers:
         version: link:../utils
       '@nolebase/vitepress-plugin-enhanced-mark':
         specifier: catalog:docs-dev
-        version: 2.18.2(vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3))
+        version: 2.18.2(vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3))
       '@types/http-proxy':
         specifier: catalog:docs-dev
         version: 1.17.17
@@ -454,7 +454,7 @@ importers:
         version: 3.0.0
       vitepress:
         specifier: catalog:frameworks
-        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
+        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
       vitepress-plugin-group-icons:
         specifier: catalog:docs-dev
         version: 1.7.1(vite@5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(terser@5.46.2))
@@ -751,11 +751,11 @@ importers:
         specifier: catalog:test
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.0)(jsdom@28.0.0)(less@4.4.2)(terser@5.46.2)
 
-  packages/logger/playground:
+  packages/logger/src/plugin/__tests__:
     dependencies:
       '@docs-islands/logger':
-        specifier: link:../dist
-        version: link:../dist
+        specifier: link:../../../dist
+        version: link:../../../dist
     devDependencies:
       '@farmfe/core':
         specifier: catalog:dev
@@ -944,7 +944,7 @@ importers:
         version: 5.9.3
       vitepress:
         specifier: catalog:frameworks
-        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
+        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
       vitest:
         specifier: catalog:test
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.0)(jsdom@28.0.0)(less@4.4.2)(terser@5.46.2)
@@ -984,7 +984,7 @@ importers:
         version: link:../dist
       '@nolebase/vitepress-plugin-enhanced-mark':
         specifier: catalog:docs-dev
-        version: 2.18.2(vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3))
+        version: 2.18.2(vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3))
       '@vercel/analytics':
         specifier: catalog:docs-dev
         version: 1.6.1(react@18.3.1)(vue-router@4.6.4(vue@3.5.28(typescript@5.9.3)))(vue@3.5.28(typescript@5.9.3))
@@ -1011,7 +1011,7 @@ importers:
         version: 5.9.3
       vitepress:
         specifier: catalog:frameworks
-        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
+        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
       vitepress-plugin-group-icons:
         specifier: catalog:docs-dev
         version: 1.7.1(vite@5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(terser@5.46.2))
@@ -1084,7 +1084,7 @@ importers:
         version: 5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(terser@5.46.2)
       vitepress:
         specifier: catalog:frameworks
-        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
+        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
       vitest:
         specifier: catalog:test
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.0)(jsdom@28.0.0)(less@4.4.2)(terser@5.46.2)
@@ -1139,7 +1139,7 @@ importers:
         version: 5.9.3
       vitepress:
         specifier: catalog:frameworks
-        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
+        version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
 
   utils:
     dependencies:
@@ -4302,10 +4302,10 @@ packages:
       }
     engines: { node: '>=4' }
 
-  axios@1.15.0:
+  axios@1.16.0:
     resolution:
       {
-        integrity: sha512-wWyJDlAatxk30ZJer+GeCWS209sA42X+N5jU2jy6oHTp7ufw8uzUTVFBX9+wTfAlhiJXGS0Bq7X6efruWjuK9Q==,
+        integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==,
       }
 
   axobject-query@4.1.0:
@@ -4328,10 +4328,10 @@ packages:
       }
     engines: { node: 18 || 20 || >=22 }
 
-  baseline-browser-mapping@2.10.22:
+  baseline-browser-mapping@2.10.27:
     resolution:
       {
-        integrity: sha512-6qruVrb5rse6WylFkU0FhBKKGuecWseqdpQfhkawn6ztyk2QlfwSRjsDxMCLJrkfmfN21qvhl9ABgaMeRkuwww==,
+        integrity: sha512-zEs/ufmZoUd7WftKpKyXaT6RFxpQ5Qm9xytKRHvJfxFV9DFJkZph9RvJ1LcOUi0Z1ZVijMte65JbILeV+8QQEA==,
       }
     engines: { node: '>=6.0.0' }
     hasBin: true
@@ -4465,10 +4465,10 @@ packages:
         integrity: sha512-x6OeBXueoAceOmotzx3PO4Zpt4rzpeIFsSr6AAePTZxSkXiYDUmpypEl7e2+8NCd9bD7bXjqyef8CJYPC1jfxg==,
       }
 
-  caniuse-lite@1.0.30001791:
+  caniuse-lite@1.0.30001792:
     resolution:
       {
-        integrity: sha512-yk0l/YSrOnFZk3UROpDLQD9+kC1l4meK/wed583AXrzoarMGJcbRi2Q4RaUYbKxYAsZ8sWmaSa/DsLmdBeI1vQ==,
+        integrity: sha512-hVLMUZFgR4JJ6ACt1uEESvQN1/dBVqPAKY0hgrV70eN3391K6juAfTjKZLKvOMsx8PxA7gsY1/tLMMTcfFLLpw==,
       }
 
   ccount@2.0.1:
@@ -4991,10 +4991,10 @@ packages:
         integrity: sha512-rdmGfW47ZhL/oWEJAY4qxRtdly2B98ooTJ0pdEI4jhVLZ6tNf8fPtov2wS1IRKwFJT92le3x4Knxiwzl7cPPpQ==,
       }
 
-  electron-to-chromium@1.5.344:
+  electron-to-chromium@1.5.352:
     resolution:
       {
-        integrity: sha512-4MxfbmNDm+KPh066EZy+eUnkcDPcZ35wNmOWzFuh/ijvHsve6kbLTLURy88uCNK5FbpN+yk2nQY6BYh1GEt+wg==,
+        integrity: sha512-9wHk8x6dyuimoe18EdiDPWKExNdxYqo4fn4FwOVVper6RxT3cmpBwBkWWfSOCYJjQdIco/nPhJhNLmn4Ufg1Yg==,
       }
 
   emoji-regex-xs@1.0.0:
@@ -5539,10 +5539,10 @@ packages:
         integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==,
       }
 
-  fast-uri@3.1.0:
+  fast-uri@3.1.2:
     resolution:
       {
-        integrity: sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==,
+        integrity: sha512-rVjf7ArG3LTk+FS6Yw81V1DLuZl1bRbNrev6Tmd/9RaroeeRRJhAt7jg/6YFxbvAQXUCavSoZhPPj6oOx+5KjQ==,
       }
 
   fastq@1.19.1:
@@ -5662,10 +5662,10 @@ packages:
       }
     engines: { node: '>=0.4.x' }
 
-  fs-extra@11.3.4:
+  fs-extra@11.3.5:
     resolution:
       {
-        integrity: sha512-CTXd6rk/M3/ULNQj8FBqBWHYBVYybQ3VPBw0xGKFe3tuH7ytT6ACnvzpIQ3UZtB8yvUKC2cXn1a+x+5EVQLovA==,
+        integrity: sha512-eKpRKAovdpZtR1WopLHxlBWvAgPny3c4gX1G5Jhwmmw4XJj0ifSD5qB5TOo8hmA0wlRKDAOAhEE1yVPgs6Fgcg==,
       }
     engines: { node: '>=14.14' }
 
@@ -9000,10 +9000,10 @@ packages:
       }
     engines: { node: '>=20' }
 
-  webpack-sources@3.4.0:
+  webpack-sources@3.4.1:
     resolution:
       {
-        integrity: sha512-gHwIe1cgBvvfLeu1Yz/dcFpmHfKDVxxyqI+kzqmuxZED81z2ChxpyqPaWcNqigPywhaEke7AjSGga+kxY55gjQ==,
+        integrity: sha512-eACpxRN02yaawnt+uUNIF7Qje6A9zArxBbcAJjK1PK3S9Ycg5jIuJ8pW4q8EMnwNZCEGltcjkRx1QzOxOkKD8A==,
       }
     engines: { node: '>=10.13.0' }
 
@@ -9886,7 +9886,7 @@ snapshots:
       etag: 1.8.1
       execa: 8.0.0
       fast-glob: 3.3.3
-      fs-extra: 11.3.4
+      fs-extra: 11.3.5
       http-proxy: 1.18.1(debug@4.4.3)
       is-plain-object: 5.0.0
       mime: 4.1.0
@@ -10135,10 +10135,10 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@nolebase/vitepress-plugin-enhanced-mark@2.18.2(vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3))':
+  '@nolebase/vitepress-plugin-enhanced-mark@2.18.2(vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3))':
     dependencies:
       less: 4.4.2
-      vitepress: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
+      vitepress: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
 
   '@oxc-project/types@0.113.0': {}
 
@@ -10864,13 +10864,13 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@vueuse/integrations@12.8.2(axios@1.15.0)(change-case@5.4.4)(focus-trap@7.6.6)(typescript@5.9.3)':
+  '@vueuse/integrations@12.8.2(axios@1.16.0)(change-case@5.4.4)(focus-trap@7.6.6)(typescript@5.9.3)':
     dependencies:
       '@vueuse/core': 12.8.2(patch_hash=6a05c078ab39e3f1210f336540cd3230be320b26307f9fdbea16a3a453a6b4c2)(typescript@5.9.3)
       '@vueuse/shared': 12.8.2(typescript@5.9.3)
       vue: 3.5.28(typescript@5.9.3)
     optionalDependencies:
-      axios: 1.15.0
+      axios: 1.16.0
       change-case: 5.4.4
       focus-trap: 7.6.6
     transitivePeerDependencies:
@@ -10997,7 +10997,7 @@ snapshots:
   ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.0
+      fast-uri: 3.1.2
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -11126,7 +11126,7 @@ snapshots:
 
   axe-core@4.11.0: {}
 
-  axios@1.15.0:
+  axios@1.16.0:
     dependencies:
       follow-redirects: 1.16.0(debug@4.4.3)
       form-data: 4.0.5
@@ -11140,7 +11140,7 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
-  baseline-browser-mapping@2.10.22: {}
+  baseline-browser-mapping@2.10.27: {}
 
   baseline-browser-mapping@2.9.19: {}
 
@@ -11174,9 +11174,9 @@ snapshots:
 
   browserslist@4.28.2:
     dependencies:
-      baseline-browser-mapping: 2.10.22
-      caniuse-lite: 1.0.30001791
-      electron-to-chromium: 1.5.344
+      baseline-browser-mapping: 2.10.27
+      caniuse-lite: 1.0.30001792
+      electron-to-chromium: 1.5.352
       node-releases: 2.0.38
       update-browserslist-db: 1.2.3(browserslist@4.28.2)
 
@@ -11211,7 +11211,7 @@ snapshots:
 
   caniuse-lite@1.0.30001754: {}
 
-  caniuse-lite@1.0.30001791: {}
+  caniuse-lite@1.0.30001792: {}
 
   ccount@2.0.1: {}
 
@@ -11525,7 +11525,7 @@ snapshots:
 
   electron-to-chromium@1.5.245: {}
 
-  electron-to-chromium@1.5.344: {}
+  electron-to-chromium@1.5.352: {}
 
   emoji-regex-xs@1.0.0: {}
 
@@ -12024,7 +12024,7 @@ snapshots:
 
   fast-levenshtein@2.0.6: {}
 
-  fast-uri@3.1.0: {}
+  fast-uri@3.1.2: {}
 
   fastq@1.19.1:
     dependencies:
@@ -12096,7 +12096,7 @@ snapshots:
 
   format@0.2.2: {}
 
-  fs-extra@11.3.4:
+  fs-extra@11.3.5:
     dependencies:
       graceful-fs: 4.2.11
       jsonfile: 6.2.1
@@ -14196,7 +14196,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.15.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3):
+  vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(postcss@8.5.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3):
     dependencies:
       '@docsearch/css': 3.8.2
       '@docsearch/js': 3.8.2(@algolia/client-search@5.42.0)(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
@@ -14209,7 +14209,7 @@ snapshots:
       '@vue/devtools-api': 7.7.7
       '@vue/shared': 3.5.23
       '@vueuse/core': 12.8.2(patch_hash=6a05c078ab39e3f1210f336540cd3230be320b26307f9fdbea16a3a453a6b4c2)(typescript@5.9.3)
-      '@vueuse/integrations': 12.8.2(axios@1.15.0)(change-case@5.4.4)(focus-trap@7.6.6)(typescript@5.9.3)
+      '@vueuse/integrations': 12.8.2(axios@1.16.0)(change-case@5.4.4)(focus-trap@7.6.6)(typescript@5.9.3)
       focus-trap: 7.6.6
       mark.js: 8.11.1
       minisearch: 7.2.0
@@ -14332,7 +14332,7 @@ snapshots:
 
   wait-on@9.0.3:
     dependencies:
-      axios: 1.15.0
+      axios: 1.16.0
       joi: 18.0.1
       lodash: 4.18.0
       minimist: 1.2.8
@@ -14347,7 +14347,7 @@ snapshots:
 
   webidl-conversions@8.0.1: {}
 
-  webpack-sources@3.4.0: {}
+  webpack-sources@3.4.1: {}
 
   webpack-virtual-modules@0.6.2: {}
 
@@ -14373,10 +14373,10 @@ snapshots:
       mime-db: 1.54.0
       neo-async: 2.6.2
       schema-utils: 4.3.3
-      tapable: 2.3.3
+      tapable: 2.3.0
       terser-webpack-plugin: 5.5.0(esbuild@0.27.3)(webpack@5.106.2(esbuild@0.27.3))
       watchpack: 2.5.1
-      webpack-sources: 3.4.0
+      webpack-sources: 3.4.1
     transitivePeerDependencies:
       - '@swc/core'
       - esbuild

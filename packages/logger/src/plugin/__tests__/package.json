@@ -1,9 +1,9 @@
 {
-  "name": "@docs-islands/logger-playground",
+  "name": "@docs-islands/logger-plugin-test",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@docs-islands/logger": "link:../dist"
+    "@docs-islands/logger": "link:../../../dist"
   },
   "devDependencies": {
     "@farmfe/core": "catalog:dev",

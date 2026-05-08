@@ -17,7 +17,10 @@ export default defineConfig([
   },
   {
     files: testFilePatterns,
-    rules: baseTestFileRules,
+    rules: {
+      ...baseTestFileRules,
+      'unicorn/better-regex': 'off',
+    },
   },
   {
     files: ['scripts/*.ts'],

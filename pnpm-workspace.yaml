@@ -4,6 +4,7 @@ packages:
   - packages/*/playground
   - packages/*/smoke
   - packages/plugins/*
+  - packages/**/__tests__/**
   - docs
   - utils
   - '!**/dist'

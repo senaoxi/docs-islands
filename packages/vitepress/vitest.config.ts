@@ -57,9 +57,6 @@ const config: ViteUserConfig = defineConfig({
     setupFiles: ['./tests/setup.ts'],
     watch: false,
   },
-  define: {
-    __TEST__: true,
-  },
 });
 
 export default config;

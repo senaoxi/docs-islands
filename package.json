@@ -11,6 +11,7 @@
     "packages/*/docs",
     "packages/*/playground",
     "packages/plugins/*",
+    "packages/**/__tests__/**",
     "docs",
     "utils"
   ],
