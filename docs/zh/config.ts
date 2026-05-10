@@ -15,6 +15,10 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
         link: '/zh/logger',
       },
       {
+        text: 'Skills',
+        link: '/zh/guide/skills',
+      },
+      {
         text: 'VitePress',
         target: '_blank',
         link: '/vitepress/zh/',
