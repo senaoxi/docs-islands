@@ -1,4 +1,9 @@
-import { supportedEcmaVersion } from '@docs-islands/eslint-config/config';
+import {
+  baseScriptFileRules,
+  baseTestFileRules,
+  supportedEcmaVersion,
+  testFilePatterns,
+} from '@docs-islands/eslint-config/config';
 import { core } from '@docs-islands/eslint-config/presets';
 import typescriptESlintParser from '@typescript-eslint/parser';
 import { defineConfig, globalIgnores } from 'eslint/config';
@@ -29,31 +34,7 @@ export default defineConfig([
         ...globals.node,
       },
     },
-    rules: {
-      'unicorn/no-process-exit': 'off',
-      // Script files can have higher complexity
-      complexity: ['warn', { max: 30 }],
-      'max-lines': [
-        'warn',
-        { max: 800, skipBlankLines: true, skipComments: true },
-      ],
-      'max-lines-per-function': [
-        'warn',
-        { max: 200, skipBlankLines: true, skipComments: true },
-      ],
-      // Relaxed TypeScript rules
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-floating-promises': 'off',
-      '@typescript-eslint/no-misused-promises': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      'no-return-await': 'off',
-      'require-await': 'off',
-    },
+    rules: baseScriptFileRules,
   },
   {
     files: ['scripts/release.ts'],
@@ -62,19 +43,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['**/__tests__/**/*.ts', '**/*.test.ts', 'tests/**/*.ts'],
-    rules: {
-      // Test files are allowed to use any type for mocks and test utilities
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      // Test files can have higher complexity
-      complexity: 'off',
-      'max-lines': 'off',
-      'max-lines-per-function': 'off',
-    },
+    files: testFilePatterns,
+    rules: baseTestFileRules,
   },
 ]);

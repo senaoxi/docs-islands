@@ -535,12 +535,18 @@ importers:
       '@types/react':
         specifier: catalog:dev
         version: 18.3.26
+      '@typescript-eslint/parser':
+        specifier: catalog:lint
+        version: 8.55.0(eslint@9.39.2)(typescript@5.9.3)
       del-cli:
         specifier: catalog:dev
         version: 7.0.0
       eslint:
         specifier: catalog:lint
         version: 9.39.2
+      globals:
+        specifier: catalog:test
+        version: 17.3.0
       jsdom:
         specifier: catalog:test
         version: 28.0.0
@@ -647,6 +653,9 @@ importers:
       typescript-eslint:
         specifier: catalog:lint
         version: 8.46.3(eslint@9.39.2)(typescript@5.9.3)
+      vitest:
+        specifier: catalog:test
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.0)(jsdom@28.0.0)(less@4.4.2)(terser@5.46.2)
       vue-eslint-parser:
         specifier: catalog:lint
         version: 10.2.0(eslint@9.39.2)(typescript@5.9.3)
@@ -699,6 +708,9 @@ importers:
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
+      '@typescript-eslint/parser':
+        specifier: catalog:lint
+        version: 8.55.0(eslint@9.39.2)(typescript@5.9.3)
       del-cli:
         specifier: catalog:dev
         version: 7.0.0
@@ -708,6 +720,9 @@ importers:
       eslint:
         specifier: catalog:lint
         version: 9.39.2
+      globals:
+        specifier: catalog:test
+        version: 17.3.0
       jsdom:
         specifier: catalog:test
         version: 28.0.0
@@ -1018,6 +1033,9 @@ importers:
 
   packages/vitepress/playground:
     dependencies:
+      '@docs-islands/logger':
+        specifier: catalog:prod
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       tinyglobby:
         specifier: catalog:prod
         version: 0.2.15
@@ -1028,9 +1046,6 @@ importers:
       '@docs-islands/eslint-config':
         specifier: workspace:*
         version: link:../../eslint-config
-      '@docs-islands/logger':
-        specifier: workspace:*
-        version: link:../../logger
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:../../../utils
@@ -10570,7 +10585,7 @@ snapshots:
   '@typescript-eslint/project-service@8.46.3(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/tsconfig-utils': 8.46.3(typescript@5.9.3)
-      '@typescript-eslint/types': 8.46.3
+      '@typescript-eslint/types': 8.55.0
       debug: 4.4.3
       typescript: 5.9.3
     transitivePeerDependencies:

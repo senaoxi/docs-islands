@@ -361,6 +361,8 @@ export interface RegisterUIFrameworkBuildHooksOptions {
   siteDevtoolsEnabled: boolean;
 }
 
+// Complex build orchestration function that coordinates multiple build phases
+// eslint-disable-next-line max-lines-per-function
 export function registerUIFrameworkBuildHooks(
   vitepressConfig: UserConfig<DefaultTheme.Config>,
   config: ConfigType,
@@ -408,6 +410,8 @@ export function registerUIFrameworkBuildHooks(
     );
   };
 
+  // Complex HTML transformation hook that coordinates SSR integration and metrics collection
+  // eslint-disable-next-line complexity
   vitepressConfig.transformHtml = async (html, id, ctx) => {
     const pendingResolvedId = join('/', ctx.page.replace('.md', ''));
     const Logger = getVitePressGroupLogger(

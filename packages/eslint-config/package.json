@@ -7,6 +7,8 @@
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --config ./dist/general.js --fix --cache",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "del-cli .eslintcache dist node_modules"
   },
   "dependencies": {
@@ -41,7 +43,8 @@
     "rolldown": "catalog:dev",
     "rolldown-plugin-dts": "catalog:dev",
     "globals": "catalog:test",
-    "del-cli": "catalog:dev"
+    "del-cli": "catalog:dev",
+    "vitest": "catalog:test"
   },
   "exports": {
     ".": "./dist/general.js",

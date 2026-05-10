@@ -1,3 +1,9 @@
+/**
+ * AI-powered build report generation for site development tools.
+ * This file contains complex orchestration logic for generating and caching
+ * AI analysis reports across multiple providers and pages.
+ */
+/* eslint-disable max-lines */
 import type {
   PageMetafile,
   SiteDevToolsAiBuildReportReference,
@@ -757,6 +763,7 @@ const createPageAnalysisTarget = ({
   };
 };
 
+// eslint-disable-next-line max-lines-per-function -- AI build report orchestration requires coordinating multiple providers, caching, execution planning, and result aggregation
 export const generateSiteDevToolsAiBuildReports = async ({
   aiConfig,
   assetsDir,

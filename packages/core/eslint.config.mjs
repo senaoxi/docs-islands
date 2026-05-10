@@ -1,6 +1,14 @@
+import {
+  baseScriptFileRules,
+  baseTestFileRules,
+  supportedEcmaVersion,
+  testFilePatterns,
+} from '@docs-islands/eslint-config/config';
 import { createLoggerPlugin } from '@docs-islands/eslint-config/plugins';
 import { core } from '@docs-islands/eslint-config/presets';
+import typescriptESlintParser from '@typescript-eslint/parser';
 import { defineConfig } from 'eslint/config';
+import globals from 'globals';
 
 export default defineConfig([
   ...core,
@@ -32,17 +40,22 @@ export default defineConfig([
     },
   },
   {
-    files: ['**/__tests__/**/*.ts', '**/*.test.ts', 'tests/**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      complexity: 'off',
-      'max-lines': 'off',
-      'max-lines-per-function': 'off',
+    files: ['scripts/*.ts', 'smoke/**/*.ts'],
+    languageOptions: {
+      parser: typescriptESlintParser,
+      parserOptions: {
+        projectService: true,
+        ecmaVersion: supportedEcmaVersion,
+        sourceType: 'module',
+      },
+      globals: {
+        ...globals.node,
+      },
     },
+    rules: baseScriptFileRules,
+  },
+  {
+    files: testFilePatterns,
+    rules: baseTestFileRules,
   },
 ]);

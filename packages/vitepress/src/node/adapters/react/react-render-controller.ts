@@ -37,6 +37,8 @@ const __site_debug_metric__ = () => {};
     `;
   }
 
+  // Complex runtime generation method that coordinates component compilation and rendering
+  // eslint-disable-next-line max-lines-per-function
   public async generateClientRuntimeInDEV(
     markdownModuleId: string,
   ): Promise<string> {

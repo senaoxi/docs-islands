@@ -13,6 +13,7 @@ const config: Config = [
     rules: {
       ...baseTestFileRules,
 
+      // Playground-specific overrides for E2E tests
       // Tests can have long setup/teardown sequences and multiple test cases in describe blocks
       'max-lines-per-function': [
         'warn',
@@ -38,16 +39,6 @@ const config: Config = [
 
       // Keep `any` visible in playground tests because broad mocks spread easily.
       '@typescript-eslint/no-explicit-any': 'warn',
-
-      // Allow unused vars with underscore prefix (common in test fixtures)
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
-        },
-      ],
 
       'unicorn/prefer-module': 'off',
     },

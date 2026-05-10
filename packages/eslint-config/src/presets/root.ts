@@ -3,6 +3,7 @@ import eslintPluginPnpm from 'eslint-plugin-pnpm';
 import type { defineConfig } from 'eslint/config';
 import { globalIgnores } from 'eslint/config';
 import {
+  baseScriptFileRules,
   commonJsModuleGlobals,
   nodeEsmGlobals,
   supportedEcmaVersion,
@@ -48,29 +49,17 @@ const config: Config = [
       },
     },
     rules: {
-      'unicorn/no-process-exit': 'off',
-      // Script files can have higher complexity
-      complexity: ['warn', { max: 30 }],
+      ...baseScriptFileRules,
+      // Root scripts have even higher complexity tolerance due to monorepo orchestration
+      complexity: ['warn', { max: 40 }],
       'max-lines': [
         'warn',
-        { max: 800, skipBlankLines: true, skipComments: true },
+        { max: 1200, skipBlankLines: true, skipComments: true },
       ],
       'max-lines-per-function': [
         'warn',
-        { max: 200, skipBlankLines: true, skipComments: true },
+        { max: 240, skipBlankLines: true, skipComments: true },
       ],
-      // Relaxed TypeScript rules
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-floating-promises': 'off',
-      '@typescript-eslint/no-misused-promises': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      'no-return-await': 'off',
-      'require-await': 'off',
     },
   },
 

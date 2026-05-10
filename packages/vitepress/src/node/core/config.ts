@@ -11,6 +11,7 @@ import { LOGGER_TREE_SHAKING_PLUGIN_NAME } from '@docs-islands/logger/plugin';
 import type { DefaultTheme, UserConfig } from 'vitepress';
 import { LOGGER_FACADE_PLUGIN_NAME } from '../constants/core/plugin-names';
 import { getVitePressGroupLogger } from '../logger';
+import { mergeAnalysisConfig } from './config-merge-helpers';
 import { ensureVitepressViteConfig } from './integration-plugin';
 import type { LoggerConfig } from './logging-config';
 import { resolveLoggingConfig } from './logging-config';
@@ -37,45 +38,7 @@ const mergeSiteDevToolsAnalysisConfig = (
   base: SiteDevToolsAnalysisUserConfig | undefined,
   override: SiteDevToolsAnalysisUserConfig | undefined,
 ): SiteDevToolsAnalysisUserConfig | undefined => {
-  if (!base && !override) {
-    return undefined;
-  }
-
-  const mergedProviders =
-    base?.providers || override?.providers
-      ? {
-          ...base?.providers,
-          ...override?.providers,
-          ...(base?.providers?.doubao || override?.providers?.doubao
-            ? {
-                doubao: override?.providers?.doubao ?? base?.providers?.doubao,
-              }
-            : {}),
-        }
-      : undefined;
-
-  const mergedBuildReports =
-    base?.buildReports || override?.buildReports
-      ? {
-          ...base?.buildReports,
-          ...override?.buildReports,
-        }
-      : undefined;
-
-  return {
-    ...base,
-    ...override,
-    ...(mergedProviders
-      ? {
-          providers: mergedProviders,
-        }
-      : {}),
-    ...(mergedBuildReports
-      ? {
-          buildReports: mergedBuildReports,
-        }
-      : {}),
-  };
+  return mergeAnalysisConfig(base, override);
 };
 
 export const mergeSiteDevToolsConfig = (

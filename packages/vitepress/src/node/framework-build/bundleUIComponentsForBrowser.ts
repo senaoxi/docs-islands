@@ -1,3 +1,10 @@
+/**
+ * Browser bundle orchestration for UI components.
+ * This file contains complex build pipeline logic that coordinates Vite bundling,
+ * asset processing, and metrics collection. Some functions exceed complexity limits
+ * due to the inherent nature of build orchestration.
+ */
+/* eslint-disable max-lines */
 import type {
   ComponentBundleInfo,
   UsedSnippetContainerType,
@@ -995,6 +1002,9 @@ async function bundleRuntimeModuleWithVite(
   }
 }
 
+// Complex build orchestration function that coordinates Vite bundling, asset processing,
+// and metrics collection. The complexity is inherent to the build pipeline.
+/* eslint-disable max-lines-per-function, complexity */
 export async function bundleUIComponentsForBrowser(
   config: ConfigType,
   components: ComponentBundleInfo[],

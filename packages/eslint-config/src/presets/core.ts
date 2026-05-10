@@ -33,16 +33,16 @@ const config: Config = [
     files: ['src/client/**/*.ts', 'src/node/**/*.ts'],
     rules: {
       'no-restricted-globals': ['error', 'require', '__dirname', '__filename'],
-      complexity: ['warn', { max: 50 }], // Rendering logic can be very complex
+      complexity: ['warn', { max: 25 }], // Balanced: strict enough to encourage refactoring, loose enough for rendering logic
       'max-lines-per-function': [
         'warn',
-        { max: 1000, skipBlankLines: true, skipComments: true },
-      ], // Large rendering functions are acceptable for core logic
+        { max: 300, skipBlankLines: true, skipComments: true },
+      ], // Encourages breaking down large functions while allowing complex rendering
       'max-lines': [
         'warn',
-        { max: 1500, skipBlankLines: true, skipComments: true },
-      ], // Core files can be large
-      'max-depth': ['warn', 10], // Deep nesting needed for complex rendering conditions
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ], // Aligns with industry standards while accommodating core complexity
+      'max-depth': ['warn', 6], // Reduced from 10: encourages early returns and guard clauses
     },
   },
 

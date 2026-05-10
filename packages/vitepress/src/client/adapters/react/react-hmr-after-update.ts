@@ -252,9 +252,12 @@ const buildComponentsMap = async (
   return componentsMap;
 };
 
+// Complex HMR update handler that coordinates React component updates and state preservation
+// eslint-disable-next-line max-lines-per-function
 export const applyReactMarkdownAfterUpdate = async (
   context: ReactMarkdownAfterUpdateContext,
   memoizedUpdateState: MemoizedReactUpdateState,
+  // eslint-disable-next-line complexity
 ): Promise<void> => {
   const updateStartedAt = getSiteDevToolsNow();
   /**
