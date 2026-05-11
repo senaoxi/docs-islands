@@ -22,6 +22,9 @@ const SITE_DEVTOOLS_AI_BUILD_REPORT_HASHED_FILE_SEGMENT_RE =
 const SITE_DEVTOOLS_AI_BUILD_REPORT_PROMPT_DIFF_LIMIT = 3;
 const SITE_DEVTOOLS_AI_BUILD_REPORTS_DEFAULT_CACHE_DIR =
   '.vitepress/cache/site-devtools-reports';
+const DEFAULT_CLAUDE_ANTHROPIC_VERSION = '2023-06-01';
+const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com/v1';
+const DEFAULT_CLAUDE_MAX_TOKENS = 4096;
 
 export interface BuildReportCacheConfig {
   dir: string;
@@ -51,6 +54,12 @@ export type BuildReportCacheInput =
 type SiteDevToolsAnalysisDoubaoRuntimeProviderConfig = NonNullable<
   NonNullable<NonNullable<SiteDevToolsAiConfig>['providers']>['doubao']
 >[number];
+type SiteDevToolsAnalysisClaudeRuntimeProviderConfig = NonNullable<
+  NonNullable<NonNullable<SiteDevToolsAiConfig>['providers']>['claude']
+>[number];
+type SiteDevToolsAnalysisRuntimeProviderConfig =
+  | SiteDevToolsAnalysisClaudeRuntimeProviderConfig
+  | SiteDevToolsAnalysisDoubaoRuntimeProviderConfig;
 
 const sanitizeFileStem = (value: string) =>
   value.replaceAll(/[^\w.-]/g, '_') || 'artifact';
@@ -266,13 +275,16 @@ const normalizeBuildReportCacheIdentity = (
     sanitizeOptions,
   );
 
-  if (typeof promptHash !== 'string' || provider !== 'doubao') {
+  if (
+    typeof promptHash !== 'string' ||
+    (provider !== 'claude' && provider !== 'doubao')
+  ) {
     return null;
   }
 
   return {
     promptHash,
-    provider,
+    provider: provider as SiteDevToolsAiProvider,
     providerConfig,
   };
 };
@@ -417,6 +429,18 @@ export const getBuildReportCacheInvalidationReason = ({
     : 'the exact cache key changed for an unknown reason';
 };
 
+const getClaudeProviderConfigs = (
+  aiConfig: SiteDevToolsAiConfig,
+): SiteDevToolsAnalysisClaudeRuntimeProviderConfig[] =>
+  Array.isArray(aiConfig?.providers?.claude)
+    ? aiConfig.providers.claude.filter(
+        (
+          providerConfig,
+        ): providerConfig is SiteDevToolsAnalysisClaudeRuntimeProviderConfig =>
+          Boolean(providerConfig),
+      )
+    : [];
+
 const getDoubaoProviderConfigs = (
   aiConfig: SiteDevToolsAiConfig,
 ): SiteDevToolsAnalysisDoubaoRuntimeProviderConfig[] =>
@@ -429,8 +453,10 @@ const getDoubaoProviderConfigs = (
       )
     : [];
 
-const getDefaultDoubaoProviderConfig = (
-  providerConfigs: SiteDevToolsAnalysisDoubaoRuntimeProviderConfig[],
+const getDefaultProviderConfig = <
+  ProviderConfig extends SiteDevToolsAnalysisRuntimeProviderConfig,
+>(
+  providerConfigs: ProviderConfig[],
 ) =>
   providerConfigs.find((providerConfig) => providerConfig.default === true) ??
   providerConfigs[0];
@@ -440,8 +466,24 @@ export const getBuildReportProviderConfigSnapshot = (
   provider: SiteDevToolsAiProvider,
 ): BuildReportProviderConfigSnapshot => {
   switch (provider) {
+    case 'claude': {
+      const providerConfig = getDefaultProviderConfig(
+        getClaudeProviderConfigs(aiConfig),
+      );
+
+      return {
+        anthropicVersion:
+          providerConfig?.anthropicVersion?.trim() ||
+          DEFAULT_CLAUDE_ANTHROPIC_VERSION,
+        baseUrl: providerConfig?.baseUrl?.trim() || DEFAULT_CLAUDE_BASE_URL,
+        maxTokens: providerConfig?.maxTokens ?? DEFAULT_CLAUDE_MAX_TOKENS,
+        model: providerConfig?.model?.trim() || null,
+        providerId: providerConfig?.id?.trim() || null,
+        temperature: providerConfig?.temperature ?? null,
+      };
+    }
     case 'doubao': {
-      const providerConfig = getDefaultDoubaoProviderConfig(
+      const providerConfig = getDefaultProviderConfig(
         getDoubaoProviderConfigs(aiConfig),
       );
 
@@ -518,7 +560,10 @@ const normalizeBuildReportCachePayload = (
       'string' ||
     typeof (payload as Partial<SiteDevToolsAiBuildReport>).prompt !==
       'string' ||
-    (payload as Partial<SiteDevToolsAiBuildReport>).provider !== 'doubao' ||
+    !(
+      (payload as Partial<SiteDevToolsAiBuildReport>).provider === 'claude' ||
+      (payload as Partial<SiteDevToolsAiBuildReport>).provider === 'doubao'
+    ) ||
     !(payload as Partial<SiteDevToolsAiBuildReport>).target
   ) {
     return null;

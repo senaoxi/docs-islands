@@ -16,6 +16,17 @@ describe('resolveConfig', () => {
             },
             models: [
               {
+                id: 'claude-sonnet',
+                label: 'Claude Sonnet',
+                maxTokens: 2048,
+                model: 'claude-sonnet-4-20250514',
+                providerRef: {
+                  id: 'us',
+                  provider: 'claude',
+                },
+                temperature: 0.2,
+              },
+              {
                 default: true,
                 id: 'doubao-pro',
                 label: 'Doubao Pro',
@@ -31,6 +42,16 @@ describe('resolveConfig', () => {
             resolvePage: resolveBuildReportsTestPage,
           },
           providers: {
+            claude: [
+              {
+                anthropicVersion: '2023-06-01',
+                apiKey: 'claude-key',
+                baseUrl: 'https://api.anthropic.com/v1',
+                id: 'us',
+                label: 'Claude US',
+                timeoutMs: 120_000,
+              },
+            ],
             doubao: [
               {
                 apiKey: 'test-key',
@@ -61,6 +82,17 @@ describe('resolveConfig', () => {
       resolveBuildReportsTestPage,
     );
     expect(config.siteDevtools.analysis?.buildReports?.models?.[0]).toEqual({
+      id: 'claude-sonnet',
+      label: 'Claude Sonnet',
+      maxTokens: 2048,
+      model: 'claude-sonnet-4-20250514',
+      providerRef: {
+        id: 'us',
+        provider: 'claude',
+      },
+      temperature: 0.2,
+    });
+    expect(config.siteDevtools.analysis?.buildReports?.models?.[1]).toEqual({
       default: true,
       id: 'doubao-pro',
       label: 'Doubao Pro',
@@ -72,6 +104,25 @@ describe('resolveConfig', () => {
       temperature: 0.1,
       thinking: true,
     });
+    expect(
+      config.siteDevtools.analysis?.providers?.claude?.[0]?.anthropicVersion,
+    ).toBe('2023-06-01');
+    expect(config.siteDevtools.analysis?.providers?.claude?.[0]?.apiKey).toBe(
+      'claude-key',
+    );
+    expect(config.siteDevtools.analysis?.providers?.claude?.[0]?.baseUrl).toBe(
+      'https://api.anthropic.com/v1',
+    );
+    expect(config.siteDevtools.analysis?.providers?.claude?.[0]?.default).toBe(
+      false,
+    );
+    expect(config.siteDevtools.analysis?.providers?.claude?.[0]?.id).toBe('us');
+    expect(config.siteDevtools.analysis?.providers?.claude?.[0]?.label).toBe(
+      'Claude US',
+    );
+    expect(
+      config.siteDevtools.analysis?.providers?.claude?.[0]?.timeoutMs,
+    ).toBe(120_000);
     expect(config.siteDevtools.analysis?.providers?.doubao?.[0]?.apiKey).toBe(
       'test-key',
     );

@@ -54,6 +54,9 @@ const managedProcessEnvSchema = z.object({
   DOCS_ISLANDS_BUILD_SKIP_PACKAGES: z.string().default(''),
 
   // site devtools
+  DOCS_ISLANDS_CLAUDE_BASE_URL: z.string().default(''),
+  DOCS_ISLANDS_CLAUDE_API_KEY: z.string().default(''),
+  DOCS_ISLANDS_DOUBAO_BASE_URL: z.string().default(''),
   DOCS_ISLANDS_ARK_API_KEY: z.string().default(''),
 });
 
@@ -72,7 +75,10 @@ export interface EnvConfig {
     silence: boolean;
   };
   siteDevtools: {
-    doubao_api_key: string;
+    CLAUDE_BASE_URL: string;
+    CLAUDE_API_KEY: string;
+    DOUBAO_BASE_URL: string;
+    DOUBAO_API_KEY: string;
   };
   build: {
     skipPackages: string;
@@ -165,7 +171,8 @@ function createEnvDebugSummary(
     },
     runtimeOverrideKeys: metadata.runtimeOverrideKeys,
     siteDevtools: {
-      doubaoApiKey: Boolean(env.siteDevtools.doubao_api_key),
+      claudeApiKey: Boolean(env.siteDevtools.CLAUDE_API_KEY),
+      doubaoApiKey: Boolean(env.siteDevtools.DOUBAO_API_KEY),
     },
     test: {
       port: Boolean(env.test.port),
@@ -453,7 +460,10 @@ export function loadEnv(options: LoadEnvOptions = defaultOptions): EnvConfig {
       silence: finalEnv.DOCS_ISLANDS_SILENCE_LOG,
     },
     siteDevtools: {
-      doubao_api_key: finalEnv.DOCS_ISLANDS_ARK_API_KEY,
+      CLAUDE_BASE_URL: finalEnv.DOCS_ISLANDS_CLAUDE_BASE_URL,
+      CLAUDE_API_KEY: finalEnv.DOCS_ISLANDS_CLAUDE_API_KEY,
+      DOUBAO_BASE_URL: finalEnv.DOCS_ISLANDS_DOUBAO_BASE_URL,
+      DOUBAO_API_KEY: finalEnv.DOCS_ISLANDS_ARK_API_KEY,
     },
     build: {
       skipPackages: finalEnv.DOCS_ISLANDS_BUILD_SKIP_PACKAGES,
@@ -526,6 +536,9 @@ type ProcessEnvKey =
   | 'DOCS_ISLANDS_MINIFY'
   | 'DOCS_ISLANDS_SILENCE_LOG'
   | 'DOCS_ISLANDS_DEBUG'
+  | 'DOCS_ISLANDS_CLAUDE_BASE_URL'
+  | 'DOCS_ISLANDS_CLAUDE_API_KEY'
+  | 'DOCS_ISLANDS_DOUBAO_BASE_URL'
   | 'DOCS_ISLANDS_ARK_API_KEY'
   | 'WS_ENDPOINT'
   | 'PORT'

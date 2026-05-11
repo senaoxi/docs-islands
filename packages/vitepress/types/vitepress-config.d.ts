@@ -1,4 +1,4 @@
-export type SiteDevToolsAnalysisProvider = 'doubao';
+export type SiteDevToolsAnalysisProvider = 'claude' | 'doubao';
 export type SiteDevToolsAnalysisDoubaoThinkingType = boolean;
 export type SiteDevToolsAnalysisBuildReportCacheStrategy = 'exact' | 'fallback';
 
@@ -38,8 +38,24 @@ export interface SiteDevToolsAnalysisProviderBaseConfig {
   timeoutMs?: number;
 }
 
-export interface SiteDevToolsAnalysisDoubaoConfig
+export interface SiteDevToolsAnalysisProviderInstanceBaseConfig
   extends SiteDevToolsAnalysisProviderBaseConfig {
+  /**
+   * Stable identifier used to reference this provider instance.
+   */
+  id: string;
+  /**
+   * Optional label shown in the debug console.
+   */
+  label?: string;
+  /**
+   * Marks this provider instance as the default for its provider group.
+   */
+  default?: boolean;
+}
+
+export interface SiteDevToolsAnalysisDoubaoConfig
+  extends SiteDevToolsAnalysisProviderInstanceBaseConfig {
   /**
    * Volcengine Ark API key used for ChatCompletions requests.
    */
@@ -48,16 +64,76 @@ export interface SiteDevToolsAnalysisDoubaoConfig
    * Base URL for the Ark API endpoint.
    */
   baseUrl?: string;
+}
+
+export interface SiteDevToolsAnalysisClaudeConfig
+  extends SiteDevToolsAnalysisProviderInstanceBaseConfig {
+  /**
+   * Anthropic API key used for Messages requests.
+   */
+  apiKey?: string;
+  /**
+   * Base URL for the Anthropic Messages API endpoint.
+   *
+   * @default 'https://api.anthropic.com/v1'
+   */
+  baseUrl?: string;
+  /**
+   * Anthropic API version header sent with Messages requests.
+   *
+   * @default '2023-06-01'
+   */
+  anthropicVersion?: string;
+}
+
+export interface SiteDevToolsAnalysisProviderRef<
+  Provider extends SiteDevToolsAnalysisProvider = SiteDevToolsAnalysisProvider,
+> {
+  /**
+   * Provider group used by this build-time AI report model.
+   */
+  provider: Provider;
+  /**
+   * Optional provider instance id inside the provider group.
+   *
+   * When omitted, the provider group's default instance is used.
+   */
+  id?: string;
+}
+
+interface SiteDevToolsAnalysisBuildReportModelBaseConfig<
+  Provider extends SiteDevToolsAnalysisProvider = SiteDevToolsAnalysisProvider,
+> {
+  /**
+   * Stable identifier used to reference this build-time AI report model.
+   */
+  id: string;
+  /**
+   * Marks this model as the default build-time AI report model.
+   */
+  default?: boolean;
+  /**
+   * Optional label shown in the debug console for the generated report.
+   */
+  label?: string;
+  /**
+   * Provider instance used for this build-time AI report model.
+   */
+  providerRef: SiteDevToolsAnalysisProviderRef<Provider>;
+}
+
+export interface SiteDevToolsAnalysisBuildReportDoubaoModelConfig
+  extends SiteDevToolsAnalysisBuildReportModelBaseConfig<'doubao'> {
   /**
    * Upper bound for generated output tokens in a single response.
    */
   maxTokens?: number;
   /**
-   * Model identifier passed to the ChatCompletions API.
+   * Doubao model used for this build-time analysis model.
    */
-  model?: string;
+  model: string;
   /**
-   * Whether reasoning mode is enabled for the ChatCompletions request.
+   * Whether reasoning mode is enabled for this build-time analysis model.
    *
    * @default false
    */
@@ -69,34 +145,31 @@ export interface SiteDevToolsAnalysisDoubaoConfig
   temperature?: number;
 }
 
-interface SiteDevToolsAnalysisBuildReportModelBaseConfig {
+export interface SiteDevToolsAnalysisBuildReportClaudeModelConfig
+  extends SiteDevToolsAnalysisBuildReportModelBaseConfig<'claude'> {
   /**
-   * Optional label shown in the debug console for the generated report.
+   * Upper bound for generated output tokens in a single response.
+   *
+   * When omitted, build-time analysis uses 4096 because Anthropic Messages
+   * requires max_tokens.
+   *
+   * @default 4096
    */
-  label?: string;
+  maxTokens?: number;
   /**
-   * Provider used for this build-time AI report.
-   */
-  provider: SiteDevToolsAnalysisProvider;
-}
-
-export interface SiteDevToolsAnalysisBuildReportDoubaoModelConfig
-  extends SiteDevToolsAnalysisBuildReportModelBaseConfig {
-  /**
-   * Doubao model used for this build-time analysis model.
+   * Claude model used for this build-time analysis model.
    */
   model: string;
-  provider: 'doubao';
   /**
-   * Whether reasoning mode is enabled for this build-time analysis model.
-   *
-   * @default false
+   * Sampling temperature for the generated analysis.
+   * Lower values are more deterministic; higher values are more creative.
    */
-  thinking?: SiteDevToolsAnalysisDoubaoThinkingType;
+  temperature?: number;
 }
 
 export type SiteDevToolsAnalysisBuildReportModelConfig =
-  SiteDevToolsAnalysisBuildReportDoubaoModelConfig;
+  | SiteDevToolsAnalysisBuildReportClaudeModelConfig
+  | SiteDevToolsAnalysisBuildReportDoubaoModelConfig;
 
 export interface SiteDevToolsAnalysisBuildReportsPageContext {
   /**
@@ -125,6 +198,23 @@ export interface SiteDevToolsAnalysisBuildReportsPageOverride {
    * When omitted, the global buildReports.includeModules setting is reused.
    */
   includeModules?: boolean;
+  /**
+   * Build report model used for this page.
+   *
+   * When omitted, the global default build report model is used.
+   */
+  modelId?: string;
+}
+
+export interface SiteDevToolsAnalysisBuildReportsResolvePageContext {
+  /**
+   * Current eligible VitePress page being evaluated.
+   */
+  page: SiteDevToolsAnalysisBuildReportsPageContext;
+  /**
+   * All configured build-time AI report models.
+   */
+  models: readonly SiteDevToolsAnalysisBuildReportModelConfig[];
 }
 
 export interface SiteDevToolsAnalysisBuildReportsConfig {
@@ -148,14 +238,15 @@ export interface SiteDevToolsAnalysisBuildReportsConfig {
   /**
    * Resolves whether a specific eligible page should generate a build report.
    *
-   * - return `false`: skip build report generation for this page.
+   * - return `undefined`, `null`, or `false`: skip build report generation
+   *   for this page.
    * - return an object: generate a page report using the returned local overrides.
    *
    * When omitted, all eligible pages generate reports with the global defaults.
    */
   resolvePage?: (
-    page: SiteDevToolsAnalysisBuildReportsPageContext,
-  ) => false | SiteDevToolsAnalysisBuildReportsPageOverride;
+    context: SiteDevToolsAnalysisBuildReportsResolvePageContext,
+  ) => false | null | undefined | SiteDevToolsAnalysisBuildReportsPageOverride;
   /**
    * Includes chunk resource reports in the build output.
    *
@@ -176,7 +267,8 @@ export interface SiteDevToolsAnalysisUserConfig {
    */
   buildReports?: SiteDevToolsAnalysisBuildReportsConfig;
   providers?: {
-    doubao?: SiteDevToolsAnalysisDoubaoConfig;
+    claude?: SiteDevToolsAnalysisClaudeConfig[];
+    doubao?: SiteDevToolsAnalysisDoubaoConfig[];
   };
 }
 
@@ -185,7 +277,13 @@ export type SiteDevToolsAiDoubaoThinkingType =
   SiteDevToolsAnalysisDoubaoThinkingType;
 export type SiteDevToolsAiProviderBaseConfig =
   SiteDevToolsAnalysisProviderBaseConfig;
+export type SiteDevToolsAiProviderInstanceBaseConfig =
+  SiteDevToolsAnalysisProviderInstanceBaseConfig;
+export type SiteDevToolsAiClaudeConfig = SiteDevToolsAnalysisClaudeConfig;
 export type SiteDevToolsAiDoubaoConfig = SiteDevToolsAnalysisDoubaoConfig;
+export type SiteDevToolsAiProviderRef = SiteDevToolsAnalysisProviderRef;
+export type SiteDevToolsAiBuildReportClaudeModelConfig =
+  SiteDevToolsAnalysisBuildReportClaudeModelConfig;
 export type SiteDevToolsAiBuildReportDoubaoModelConfig =
   SiteDevToolsAnalysisBuildReportDoubaoModelConfig;
 export type SiteDevToolsAiBuildReportModelConfig =
@@ -198,6 +296,8 @@ export type SiteDevToolsAiBuildReportsCacheConfig =
   SiteDevToolsAnalysisBuildReportsCacheConfig;
 export type SiteDevToolsAiBuildReportsPageContext =
   SiteDevToolsAnalysisBuildReportsPageContext;
+export type SiteDevToolsAiBuildReportsResolvePageContext =
+  SiteDevToolsAnalysisBuildReportsResolvePageContext;
 export type SiteDevToolsAiBuildReportsPageOverride =
   SiteDevToolsAnalysisBuildReportsPageOverride;
 export type SiteDevToolsAiBuildReportsConfig =

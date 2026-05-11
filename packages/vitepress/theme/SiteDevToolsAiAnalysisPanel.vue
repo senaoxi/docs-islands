@@ -28,7 +28,7 @@ const props = defineProps<{
   endpoint: string | null;
 }>();
 
-const PROVIDERS: SiteDevToolsAiProvider[] = ['doubao'];
+const PROVIDERS: SiteDevToolsAiProvider[] = ['doubao', 'claude'];
 type AnalysisViewMode = 'rendered' | 'raw';
 
 interface AnalysisSection {
@@ -712,11 +712,6 @@ const canAnalyze = computed(
     currentCapability.value?.available === true &&
     analysisState.value !== 'loading',
 );
-const hasAnyAvailableLiveProvider = computed(() =>
-  PROVIDERS.some(
-    (provider) => capabilities.value?.[provider]?.available === true,
-  ),
-);
 const analyzeLabel = computed(() =>
   analysisState.value === 'loading'
     ? `Analyzing with ${selectedProviderLabel.value}...`
@@ -742,9 +737,7 @@ const shouldShowBuildReportSelector = computed(
 const canViewBuildReport = computed(
   () => hasBuildReports.value && analysisState.value !== 'loading',
 );
-const shouldShowLiveAnalysisControls = computed(
-  () => !hasBuildReports.value && hasAnyAvailableLiveProvider.value,
-);
+const shouldShowLiveAnalysisControls = computed(() => false);
 const shouldShowProviderDetail = computed(() => !hasBuildReports.value);
 const promptToCopy = computed(() =>
   resolveSiteDevToolsAiCopyPrompt({
@@ -767,7 +760,7 @@ const copyResultLabel = computed(() =>
 );
 const providerDetail = computed(() => {
   if (capabilitiesState.value === 'loading') {
-    return 'Checking real-time analysis availability from the Vite dev server...';
+    return 'Checking AI report availability...';
   }
 
   if (currentCapability.value?.detail) {
@@ -778,12 +771,12 @@ const providerDetail = computed(() => {
     return capabilitiesError.value;
   }
 
-  return 'Prompt copy is always available. Running real-time analysis directly requires the Vite dev server middleware and siteDevtools.analysis provider config.';
+  return 'Prompt copy is always available. AI analysis runs during docs build through siteDevtools.analysis.buildReports.';
 });
 const analysisHint = computed(() =>
   hasBuildReports.value
     ? 'This artifact already has a saved build-time report. Review the generated result and the exact model that produced it below.'
-    : 'Review the current chunk or module source with Doubao. Prompt copy still works when real-time analysis is unavailable.',
+    : 'Review the current chunk or module source from a copied prompt, or rebuild with siteDevtools.analysis.buildReports to generate a saved report.',
 );
 const analysisSourceLabel = computed(() => {
   if (analysisSource.value === 'build-report') {
@@ -925,7 +918,7 @@ const loadBuildReport = async (report = activeBuildReport.value) => {
     if (
       !response.ok ||
       typeof payload.result !== 'string' ||
-      payload.provider !== 'doubao'
+      (payload.provider !== 'claude' && payload.provider !== 'doubao')
     ) {
       throw new Error('Failed to load saved build-time report.');
     }
@@ -969,7 +962,7 @@ const loadCapabilities = async (force = false) => {
     capabilities.value = null;
     capabilitiesState.value = 'error';
     capabilitiesError.value =
-      'The real-time analysis endpoint is unavailable. Start the Vite dev server with siteDevtools.analysis configured to run Doubao directly from the debug console.';
+      'AI analysis is generated during docs build. Configure siteDevtools.analysis.buildReports and rebuild the site to view saved reports here.';
     return;
   }
 
@@ -1233,7 +1226,7 @@ watch(
           {{ copyResultLabel }}
         </button>
         <button
-          v-if="!hasBuildReports"
+          v-if="shouldShowLiveAnalysisControls"
           type="button"
           class="site-devtools-dialog__action site-devtools-dialog__action--primary"
           :disabled="!canAnalyze"

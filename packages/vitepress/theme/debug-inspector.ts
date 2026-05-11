@@ -19,7 +19,7 @@ export interface SiteDevToolsAiBuildReportReference {
   generatedAt: string;
   model?: string;
   prompt?: string;
-  provider: 'doubao';
+  provider: 'claude' | 'doubao';
   providerId?: string;
   providerLabel?: string;
   reportId: string;

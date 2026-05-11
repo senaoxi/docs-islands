@@ -40,7 +40,6 @@ import {
   createSiteDevToolsAiResolvedSourceState,
   formatSiteDevToolsAiBytes,
   formatSiteDevToolsAiPercent,
-  getSiteDevToolsAiEndpoint,
   getSiteDevToolsAiModuleReportKey,
 } from '../src/shared/site-devtools-ai';
 import {
@@ -73,7 +72,6 @@ import {
   getCurrentPageId as getRuntimePageId,
   getRenderContainerElement as getRuntimeRenderContainerElement,
   getRenderContainerLabel as getRuntimeRenderContainerLabel,
-  getSiteBasePath,
   getThemeSnapshot,
   isSiteDevToolsAiReportRuntimeAvailable,
 } from './site-devtools-runtime';
@@ -1068,11 +1066,7 @@ const aiReportRuntimeAvailable = computed(() =>
     siteDevtoolsImportMetaEnv?.DEV === true,
   ),
 );
-const siteDevtoolsAiEndpoint = computed(() =>
-  aiReportRuntimeAvailable.value
-    ? getSiteDevToolsAiEndpoint(getSiteBasePath(getDebugWindow()))
-    : null,
-);
+const siteDevtoolsAiEndpoint = computed(() => null);
 const currentRoutePageMetafile = computed<PageMetafile | null>(() => {
   if (typeof window === 'undefined') {
     return currentPageMetafile.value;

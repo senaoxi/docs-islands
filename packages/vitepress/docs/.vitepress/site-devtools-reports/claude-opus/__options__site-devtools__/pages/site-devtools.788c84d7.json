@@ -1,0 +1,370 @@
+{
+  "cacheIdentity": {
+    "promptHash": "ff2afc3d2ddda3fe564d4abf58e0b1fa11cad249a52dcf26268d66027936563b",
+    "provider": "claude",
+    "providerConfig": {
+      "anthropicVersion": "2023-06-01",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "maxTokens": 4096,
+      "model": "claude-opus-4-7",
+      "providerId": "us",
+      "temperature": null
+    }
+  },
+  "cacheKey": "74ed0cde2c39f3829556746075249c5513d928e7cb26ce2ed7e9e2d485d75057",
+  "report": {
+    "detail": "Using https://api.anthropic.com/v1/messages · provider Claude US",
+    "generatedAt": "2026-05-11T15:58:34.450Z",
+    "model": "claude-opus-4-7",
+    "prompt": "## Task\nAnalyze the current docs-islands / VitePress page-build snapshot for this page.\nPrioritize build diagnosis over descriptive inventory. Focus first on dominant page cost drivers, SPA route-transition blocking paths, and the directives that materially change current-page behavior before spending time on secondary components.\nTreat `includeChunks` and `includeModules` as independent switches, and do not invent details that are not shown.\n\nAnalysis priorities:\n1. Identify the dominant deduped page-level cost drivers that are visible in the page bundle summary, top page resources, and top page modules.\n2. Identify the main SPA route-transition blocking path from the visible `spa:sync-render` side effects, including blocking CSS, embedded HTML, and render-order implications.\n3. Distinguish which directives materially affect this page now versus which directives are only present in the page inventory.\n4. Use component sections for local composition attribution and notable outliers, not for exhaustive repetition.\n5. Call out what cannot be proven from this snapshot and which additional artifact view would close the gap.\n\nMeta-rules:\n- Scope discipline: Always keep deduped page-level cost, per-component local composition, and `spa:sync-render` transition-side cost separate. Do not sum per-component totals to estimate page cost. A component with `Total: 0 B` or `Bundle Mode: No dedicated client component bundle emitted` can still contribute transition-side cost through `spa:sync-render` embedded HTML or blocking CSS. Page-level runtime or loader cost can appear in the page cost snapshot even when it does not appear in a component-local chunk list.\n- Evidence discipline: Separate observed facts from inferences. Use wording such as `visible in the snapshot`, `suggests`, or `cannot be confirmed from this snapshot` when appropriate. Keep inference confidence proportional to the evidence. Identify shared/runtime overhead only when the snapshot supports it; do not classify something as shared/runtime overhead from naming alone. For render-order implications, describe only ordering effects that are explicitly visible from the listed render order, patch sizes, and blocking CSS data.\n- Diagnosis discipline: Prioritize dominant drivers and blocking paths over exhaustive inventory. Do not restate the full snapshot component-by-component. Focus on the smallest set of components, chunks, modules, and directives that explains most of the page cost, transition blocking, or build interpretation.\n- Directive discipline: Explain only directive effects that materially affect this page now. Prioritize visible effects on deduped page cost, hydration timing, presence or absence of SSR HTML, `spa:sync-render` participation, blocking CSS, and route-transition stability. Do not fall back to generic framework explanations when the snapshot does not show a current-page consequence.\n- Optimization discipline: Order ideas by expected impact and confidence. Prefer a few high-signal opportunities over a long generic list. Tie every idea to visible evidence, name the component, directive, chunk, module, or `spa:sync-render` behavior it targets, and explain the expected tradeoff.\n\n## Output\nRespond in Markdown using these sections:\n- Summary\n- Dominant Page Cost Drivers\n- Rendering Strategy Breakdown\n- Component Composition Highlights\n- spa:sync-render Transition Impact\n- Optimization Opportunities\n- Evidence Gaps / Unknowns\n\nSection guidance:\n- Summary: Lead with the most important diagnosis. State explicitly whether page cost is concentrated in a few dominant resources/modules or spread across many smaller items, and whether SPA transition overhead is concentrated in a few `spa:sync-render` renders or broadly distributed.\n- Dominant Page Cost Drivers: Use the deduped page-level view first. Call out shared/runtime overhead versus component-specific payload when the snapshot supports that distinction.\n- Rendering Strategy Breakdown: Explain which directives materially affect current-page runtime or SPA transition behavior, and which directives are merely present.\n- Component Composition Highlights: Focus on the highest-impact or most diagnostic components. Keep lower-impact components brief instead of repeating every item evenly.\n- spa:sync-render Transition Impact: Report the exact visible fields when present: enabled component count, enabled render count, HTML patch target, total embedded HTML, blocking CSS files and total size, whether the CSS loading runtime is required, the biggest contributors to patch size, the components that add blocking CSS, and any render-order implications visible in the snapshot.\n- Optimization Opportunities: Order ideas by expected impact and confidence. Prefer a few high-signal opportunities over a long generic list. Tie every idea to visible evidence. For each idea, name the component, directive, chunk, module, or `spa:sync-render` behavior it targets, and explain the expected tradeoff.\n- Evidence Gaps / Unknowns: Categorize gaps as `Need chunk report`, `Need module report`, `Need page comparison`, or `Need directive config evidence`, and explain why that evidence is needed.\n\nKeep the analysis grounded in the visible snapshot. If evidence is missing, say exactly which additional page, chunk, module, comparison, or directive-config view would help.\n\n## Current Page Snapshot\n\nCurrent Page:\n- Panel: Page Build\n- Title: /options/site-devtools\n- Path: /options/site-devtools\n- Components: 2\n- Render Instances: 2\n- Used Directives: ssr:only\n- Chunk Resources: 4\n- Module Sources: 0\n- Composition Detail: component -> chunks -> modules\n- Module Preloads: 1\n- CSS Bundles: 1\n- Embedded HTML: 7.5 KB\n\nGlossary:\n- Share: Rendered-byte share within the current visible list.\n- Source: Resolved source or source-asset size when the original file is available.\n- Delta: Rendered-size change relative to the resolved source size.\n\nCurrent Page Rendered React Components:\n1. SiteDevToolsConsoleOverview\n   source path: components/react/SiteDevToolsConsoleDocs.tsx\n   render directives: `ssr:only`\n   Total: 0 B\n   JS: 0 B\n   CSS: 0 B\n   Asset: 0 B\n   Bundle Mode: No dedicated client component bundle emitted\n   Render Instances: 1\n   spa:sync-render Renders: 1\n2. SiteDevToolsConsolePanels\n   source path: components/react/SiteDevToolsConsoleDocs.tsx\n   render directives: `ssr:only`\n   Total: 0 B\n   JS: 0 B\n   CSS: 0 B\n   Asset: 0 B\n   Bundle Mode: No dedicated client component bundle emitted\n   Render Instances: 1\n   spa:sync-render Renders: 1\n\nPage Build Cost Snapshot:\nBundle Summary:\n- Total: 65.6 KB\n- JS: 61.0 KB\n- CSS: 4.7 KB\n\nTop Page Resources (4 shown):\n1. unified-loader.BhrfrgcM.js\n   path: /docs-islands/vitepress/assets/unified-loader.BhrfrgcM.js\n   type: JS\n   size: 35.3 KB\n   share: 53.8%\n   source modules: 0\n2. SiteDevToolsConsoleDocs.DzlrQV31.js\n   path: /docs-islands/vitepress/assets/chunks/SiteDevToolsConsoleDocs.DzlrQV31.js\n   type: JS\n   size: 13.2 KB\n   share: 20.1%\n   source modules: 0\n3. options_site-devtools_index.md.Bh7Pnz-q.js\n   path: /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js\n   type: JS\n   size: 12.5 KB\n   share: 19.1%\n   source modules: 0\n4. SiteDevToolsConsoleDocs.p6V38qoI.css\n   path: /docs-islands/vitepress/assets/SiteDevToolsConsoleDocs.p6V38qoI.css\n   type: CSS\n   size: 4.7 KB\n   share: 7.1%\n   source modules: 0\n\nCurrent Page Rendering Strategy Context:\n1. `ssr:only`\n   description: Build-time pre-render only. The component keeps SSR HTML, but the component itself does not hydrate on the client.\n   impacts:\n   - Usually best for static content, SEO, and avoiding client JavaScript for the component itself.\n   - `spa:sync-render` is enabled by default unless explicitly disabled.\n   - No client-side interactivity is restored after navigation.\n\nspa:sync-render Artifact Context:\n- `client:only` does not support `spa:sync-render`.\n- `client:load` and `client:visible` only use `spa:sync-render` when explicitly enabled.\n- `ssr:only` defaults to `spa:sync-render` unless it is explicitly disabled.\n- When enabled, pre-rendered HTML is patched into the page client chunk used for SPA route transitions.\n- Blocking CSS required by those renders can delay the page content until the CSS is loaded.\n- Enabled Components: 2\n- Enabled Renders: 2\n- HTML Patch Target: /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js\n- Embedded HTML: 7.5 KB\n- Blocking CSS: 0 file(s) · 0 B\n- Blocking CSS Files: None\n- CSS Loading Runtime: Not required\n- Loader Script: /docs-islands/vitepress/assets/unified-loader.BhrfrgcM.js\n\nspa:sync-render Components (2 shown):\n1. SiteDevToolsConsoleOverview\n   render ids: 2cd1808a\n   render directives: `ssr:only`\n   HTML Patch Target: /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js\n   Embedded HTML Patch: 3.1 KB\n   Blocking CSS: 0 file(s) · 0 B\n   Blocking CSS Files: None\n   CSS Loading Runtime: Not required\n   spa:sync-render Side Effect: injects 3.1 KB of pre-rendered HTML into /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js and does not require additional blocking CSS before the page content can render during SPA route transitions.\n2. SiteDevToolsConsolePanels\n   render ids: 1fc69e0b\n   render directives: `ssr:only`\n   HTML Patch Target: /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js\n   Embedded HTML Patch: 4.4 KB\n   Blocking CSS: 0 file(s) · 0 B\n   Blocking CSS Files: None\n   CSS Loading Runtime: Not required\n   spa:sync-render Side Effect: injects 4.4 KB of pre-rendered HTML into /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js and does not require additional blocking CSS before the page content can render during SPA route transitions.\n\nRender Order and Side Effects:\n1. SiteDevToolsConsoleOverview\n   render id: 2cd1808a\n   source path: components/react/SiteDevToolsConsoleDocs.tsx\n   render directive: `ssr:only`\n   spa:sync-render: Enabled\n   HTML Patch Target: /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js\n   Embedded HTML Patch: 3.1 KB\n   Blocking CSS: 0 file(s) · 0 B\n   Blocking CSS Files: None\n   CSS Loading Runtime: Not required\n   spa:sync-render Side Effect: injects 3.1 KB of pre-rendered HTML into /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js and does not require additional blocking CSS before the page content can render during SPA route transitions.\n2. SiteDevToolsConsolePanels\n   render id: 1fc69e0b\n   source path: components/react/SiteDevToolsConsoleDocs.tsx\n   render directive: `ssr:only`\n   spa:sync-render: Enabled\n   HTML Patch Target: /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js\n   Embedded HTML Patch: 4.4 KB\n   Blocking CSS: 0 file(s) · 0 B\n   Blocking CSS Files: None\n   CSS Loading Runtime: Not required\n   spa:sync-render Side Effect: injects 4.4 KB of pre-rendered HTML into /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js and does not require additional blocking CSS before the page content can render during SPA route transitions.",
+    "provider": "claude",
+    "providerId": "us",
+    "providerLabel": "Claude US",
+    "reportId": "claude-opus",
+    "reportLabel": "Claude Opus",
+    "result": "# Page Build Analysis: /options/site-devtools/\n\n## Summary\n\nPage cost is **concentrated in a single dominant resource**: `unified-loader.BhrfrgcM.js` at 35.3 KB (53.8% of the 65.6 KB page bundle). The two React components on this page are both `ssr:only` with **no dedicated client bundle**, so all component-attributable JS cost lives in the shared chunk `SiteDevToolsConsoleDocs.DzlrQV31.js` (13.2 KB) plus the page MD chunk (12.5 KB). SPA transition overhead is **modest and evenly split** between the two `spa:sync-render` participants (3.1 KB + 4.4 KB = 7.5 KB embedded HTML), and crucially **no blocking CSS** is required during route transitions.\n\n## Dominant Page Cost Drivers\n\nFrom the deduped page-level view (Total 65.6 KB):\n\n1. **`unified-loader.BhrfrgcM.js` — 35.3 KB (53.8%)**: The loader script. This is page-level runtime overhead, not component-specific. It is the single largest cost item by a wide margin and is presumably shared across the site.\n2. **`SiteDevToolsConsoleDocs.DzlrQV31.js` — 13.2 KB (20.1%)**: The compiled chunk for both `SiteDevToolsConsole*` components (they share `SiteDevToolsConsoleDocs.tsx`). Even though both components report `Total: 0 B` in their per-component bundle view (because they emit no dedicated client bundle), the snapshot still ships this chunk at the page level.\n3. **`options_site-devtools_index.md.Bh7Pnz-q.js` — 12.5 KB (19.1%)**: The page MD chunk and the `spa:sync-render` HTML patch target.\n4. **`SiteDevToolsConsoleDocs.p6V38qoI.css` — 4.7 KB (7.1%)**: All CSS on the page.\n\nThe split between **shared/runtime overhead** (loader = 35.3 KB) and **component+page-specific payload** (~30 KB) suggests the loader dominates and is the highest-leverage target if it can be trimmed or made non-blocking. The 13.2 KB component chunk being present despite both components rendering `ssr:only` cannot be fully explained from this snapshot alone (see Evidence Gaps).\n\n## Rendering Strategy Breakdown\n\n- **`ssr:only` (materially affects this page)**: Both components on the page use `ssr:only`. Per the directive context, this means SSR HTML is kept but components do not hydrate. The visible consequence here is: (a) `Bundle Mode: No dedicated client component bundle emitted` for both components, and (b) `spa:sync-render` is enabled by default for both, producing the 7.5 KB embedded HTML patch into the page MD chunk.\n\nNo other directives are present in this page's inventory.\n\n## Component Composition Highlights\n\nBoth rendered components originate from the same source file (`components/react/SiteDevToolsConsoleDocs.tsx`) and have identical zero per-component byte totals. The diagnostic distinction is **HTML patch size**:\n\n- **SiteDevToolsConsolePanels — 4.4 KB embedded HTML** (larger contributor to transition payload)\n- **SiteDevToolsConsoleOverview — 3.1 KB embedded HTML**\n\nNeither contributes blocking CSS. The 4.7 KB CSS bundle (`SiteDevToolsConsoleDocs.p6V38qoI.css`) is present in the page bundle but is not listed as blocking CSS for either `spa:sync-render` render — so it is fetched as a normal page resource, not as a transition gate.\n\n## spa:sync-render Transition Impact\n\n- **Enabled Components**: 2\n- **Enabled Renders**: 2\n- **HTML Patch Target**: `/docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js` (single target for both)\n- **Total Embedded HTML**: 7.5 KB\n- **Blocking CSS**: 0 files / 0 B\n- **CSS Loading Runtime**: Not required\n- **Loader Script**: `unified-loader.BhrfrgcM.js`\n\nPatch contributors (in render order):\n1. `SiteDevToolsConsoleOverview` → 3.1 KB\n2. `SiteDevToolsConsolePanels` → 4.4 KB\n\nTransition cost is **evenly distributed** between two small `ssr:only` injections into the same target chunk, with **no CSS gating**. This is a low-risk transition profile. No render-order implication is visible beyond Overview rendering before Panels.\n\n## Optimization Opportunities\n\nOrdered by expected impact and confidence:\n\n1. **Investigate `unified-loader.BhrfrgcM.js` (35.3 KB, 53.8% of page)** — *high impact, medium confidence*. This single file dominates page cost. If it is a site-wide shared loader, it likely amortizes across navigations, but on a page where the components themselves emit no client bundle and do not hydrate (`ssr:only`), 35 KB of loader is a large fixed cost. Worth confirming what the loader bundles (likely the React runtime + island/SPA-sync-render orchestration) and whether tree-shaking or splitting the SPA-sync-render path from the general island loader is viable. Tradeoff: shared-chunk caching benefits versus per-page weight.\n2. **Confirm whether `SiteDevToolsConsoleDocs.DzlrQV31.js` (13.2 KB) is actually needed for `ssr:only` components** — *medium impact, medium confidence*. Both components show `No dedicated client component bundle emitted`, yet the chunk is listed as a top page resource. If the loader fetches it only to satisfy the `spa:sync-render` patch reference, it may be possible to strip client code and ship only the patch metadata. Tradeoff: requires verifying chunk contents.\n3. **The CSS bundle (4.7 KB) is not flagged as blocking** — *low impact*. No action needed for transition timing; it is correctly non-gating.\n4. **`spa:sync-render` embedded HTML (7.5 KB) is reasonable** — no immediate optimization. Both patches are small and split evenly. Only worth revisiting if the page MD chunk grows.\n\n## Evidence Gaps / Unknowns\n\n- **Need chunk report** for `unified-loader.BhrfrgcM.js`: cannot determine from this snapshot what makes up its 35.3 KB or whether the cost is `ssr:only`-specific runtime, general island runtime, React, or vendor code. This is the largest cost driver and the biggest blind spot.\n- **Need chunk report** for `SiteDevToolsConsoleDocs.DzlrQV31.js`: cannot explain why a 13.2 KB chunk ships for two components that emit no dedicated client bundle. `source modules: 0` is shown for every resource in this snapshot, which prevents module-level attribution.\n- **Need module report**: `Module Sources: 0` on the page and `source modules: 0` on every chunk means no module-level breakdown is available. Module composition for the loader and the shared component chunk would directly resolve opportunity #1 and #2.\n- **Need directive-config evidence**: cannot confirm from this snapshot whether `spa:sync-render` could be explicitly disabled for these `ssr:only` components, and what the downstream effect on the page MD chunk size (currently 12.5 KB, including the 7.5 KB embedded HTML) would be.\n- **Need page comparison**: to determine whether `unified-loader` is genuinely shared/cached across routes (amortized) or appears as a fresh cost per page, comparison with another page's snapshot would help.",
+    "target": {
+      "artifactKind": "page-build",
+      "artifactLabel": "/options/site-devtools/",
+      "bytes": 67195,
+      "content": "Build overview for /options/site-devtools/",
+      "context": {
+        "artifactHeaderItems": [
+          {
+            "label": "Path",
+            "value": "/options/site-devtools/"
+          },
+          {
+            "label": "Components",
+            "value": "2"
+          },
+          {
+            "label": "Render Instances",
+            "value": "2"
+          },
+          {
+            "label": "Used Directives",
+            "value": "ssr:only"
+          },
+          {
+            "label": "Chunk Resources",
+            "value": "4"
+          },
+          {
+            "label": "Module Sources",
+            "value": "0"
+          },
+          {
+            "label": "Composition Detail",
+            "value": "component -> chunks -> modules"
+          },
+          {
+            "label": "Module Preloads",
+            "value": "1"
+          },
+          {
+            "label": "CSS Bundles",
+            "value": "1"
+          },
+          {
+            "label": "Embedded HTML",
+            "value": "7.5 KB"
+          }
+        ],
+        "bundleSummaryItems": [
+          {
+            "label": "Total",
+            "value": "65.6 KB"
+          },
+          {
+            "label": "JS",
+            "value": "61.0 KB"
+          },
+          {
+            "label": "CSS",
+            "value": "4.7 KB"
+          }
+        ],
+        "chunkResourceItems": [
+          {
+            "file": "/docs-islands/vitepress/assets/unified-loader.BhrfrgcM.js",
+            "label": "unified-loader.BhrfrgcM.js",
+            "moduleCount": 0,
+            "share": "53.8%",
+            "size": "35.3 KB",
+            "type": "js"
+          },
+          {
+            "file": "/docs-islands/vitepress/assets/chunks/SiteDevToolsConsoleDocs.DzlrQV31.js",
+            "label": "SiteDevToolsConsoleDocs.DzlrQV31.js",
+            "moduleCount": 0,
+            "share": "20.1%",
+            "size": "13.2 KB",
+            "type": "js"
+          },
+          {
+            "file": "/docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js",
+            "label": "options_site-devtools_index.md.Bh7Pnz-q.js",
+            "moduleCount": 0,
+            "share": "19.1%",
+            "size": "12.5 KB",
+            "type": "js"
+          },
+          {
+            "file": "/docs-islands/vitepress/assets/SiteDevToolsConsoleDocs.p6V38qoI.css",
+            "label": "SiteDevToolsConsoleDocs.p6V38qoI.css",
+            "moduleCount": 0,
+            "share": "7.1%",
+            "size": "4.7 KB",
+            "type": "css"
+          }
+        ],
+        "moduleItems": [],
+        "pageComponentItems": [
+          {
+            "sourcePath": "components/react/SiteDevToolsConsoleDocs.tsx",
+            "componentName": "SiteDevToolsConsoleOverview",
+            "renderDirectives": ["ssr:only"],
+            "summaryItems": [
+              {
+                "label": "Total",
+                "value": "0 B"
+              },
+              {
+                "label": "JS",
+                "value": "0 B"
+              },
+              {
+                "label": "CSS",
+                "value": "0 B"
+              },
+              {
+                "label": "Asset",
+                "value": "0 B"
+              },
+              {
+                "label": "Bundle Mode",
+                "value": "No dedicated client component bundle emitted"
+              },
+              {
+                "label": "Render Instances",
+                "value": "1"
+              },
+              {
+                "label": "spa:sync-render Renders",
+                "value": "1"
+              }
+            ]
+          },
+          {
+            "sourcePath": "components/react/SiteDevToolsConsoleDocs.tsx",
+            "componentName": "SiteDevToolsConsolePanels",
+            "renderDirectives": ["ssr:only"],
+            "summaryItems": [
+              {
+                "label": "Total",
+                "value": "0 B"
+              },
+              {
+                "label": "JS",
+                "value": "0 B"
+              },
+              {
+                "label": "CSS",
+                "value": "0 B"
+              },
+              {
+                "label": "Asset",
+                "value": "0 B"
+              },
+              {
+                "label": "Bundle Mode",
+                "value": "No dedicated client component bundle emitted"
+              },
+              {
+                "label": "Render Instances",
+                "value": "1"
+              },
+              {
+                "label": "spa:sync-render Renders",
+                "value": "1"
+              }
+            ]
+          }
+        ],
+        "pageRenderOrderItems": [
+          {
+            "componentName": "SiteDevToolsConsoleOverview",
+            "renderDirective": "ssr:only",
+            "renderId": "2cd1808a",
+            "sequence": 1,
+            "sourcePath": "components/react/SiteDevToolsConsoleDocs.tsx",
+            "summaryItems": [
+              {
+                "label": "HTML Patch Target",
+                "value": "/docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js"
+              },
+              {
+                "label": "Embedded HTML Patch",
+                "value": "3.1 KB"
+              },
+              {
+                "label": "Blocking CSS",
+                "value": "0 file(s) · 0 B"
+              },
+              {
+                "label": "Blocking CSS Files",
+                "value": "None"
+              },
+              {
+                "label": "CSS Loading Runtime",
+                "value": "Not required"
+              },
+              {
+                "label": "spa:sync-render Side Effect",
+                "value": "injects 3.1 KB of pre-rendered HTML into /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js and does not require additional blocking CSS before the page content can render during SPA route transitions."
+              }
+            ],
+            "useSpaSyncRender": true
+          },
+          {
+            "componentName": "SiteDevToolsConsolePanels",
+            "renderDirective": "ssr:only",
+            "renderId": "1fc69e0b",
+            "sequence": 2,
+            "sourcePath": "components/react/SiteDevToolsConsoleDocs.tsx",
+            "summaryItems": [
+              {
+                "label": "HTML Patch Target",
+                "value": "/docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js"
+              },
+              {
+                "label": "Embedded HTML Patch",
+                "value": "4.4 KB"
+              },
+              {
+                "label": "Blocking CSS",
+                "value": "0 file(s) · 0 B"
+              },
+              {
+                "label": "Blocking CSS Files",
+                "value": "None"
+              },
+              {
+                "label": "CSS Loading Runtime",
+                "value": "Not required"
+              },
+              {
+                "label": "spa:sync-render Side Effect",
+                "value": "injects 4.4 KB of pre-rendered HTML into /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js and does not require additional blocking CSS before the page content can render during SPA route transitions."
+              }
+            ],
+            "useSpaSyncRender": true
+          }
+        ],
+        "pageSpaSyncComponentItems": [
+          {
+            "componentName": "SiteDevToolsConsoleOverview",
+            "renderDirectives": ["ssr:only"],
+            "renderIds": ["2cd1808a"],
+            "summaryItems": [
+              {
+                "label": "HTML Patch Target",
+                "value": "/docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js"
+              },
+              {
+                "label": "Embedded HTML Patch",
+                "value": "3.1 KB"
+              },
+              {
+                "label": "Blocking CSS",
+                "value": "0 file(s) · 0 B"
+              },
+              {
+                "label": "Blocking CSS Files",
+                "value": "None"
+              },
+              {
+                "label": "CSS Loading Runtime",
+                "value": "Not required"
+              },
+              {
+                "label": "spa:sync-render Side Effect",
+                "value": "injects 3.1 KB of pre-rendered HTML into /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js and does not require additional blocking CSS before the page content can render during SPA route transitions."
+              }
+            ]
+          },
+          {
+            "componentName": "SiteDevToolsConsolePanels",
+            "renderDirectives": ["ssr:only"],
+            "renderIds": ["1fc69e0b"],
+            "summaryItems": [
+              {
+                "label": "HTML Patch Target",
+                "value": "/docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js"
+              },
+              {
+                "label": "Embedded HTML Patch",
+                "value": "4.4 KB"
+              },
+              {
+                "label": "Blocking CSS",
+                "value": "0 file(s) · 0 B"
+              },
+              {
+                "label": "Blocking CSS Files",
+                "value": "None"
+              },
+              {
+                "label": "CSS Loading Runtime",
+                "value": "Not required"
+              },
+              {
+                "label": "spa:sync-render Side Effect",
+                "value": "injects 4.4 KB of pre-rendered HTML into /docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js and does not require additional blocking CSS before the page content can render during SPA route transitions."
+              }
+            ]
+          }
+        ],
+        "pageSpaSyncSummaryItems": [
+          {
+            "label": "Enabled Components",
+            "value": "2"
+          },
+          {
+            "label": "Enabled Renders",
+            "value": "2"
+          },
+          {
+            "label": "HTML Patch Target",
+            "value": "/docs-islands/vitepress/assets/options_site-devtools_index.md.Bh7Pnz-q.js"
+          },
+          {
+            "label": "Embedded HTML",
+            "value": "7.5 KB"
+          },
+          {
+            "label": "Blocking CSS",
+            "value": "0 file(s) · 0 B"
+          },
+          {
+            "label": "Blocking CSS Files",
+            "value": "None"
+          },
+          {
+            "label": "CSS Loading Runtime",
+            "value": "Not required"
+          },
+          {
+            "label": "Loader Script",
+            "value": "/docs-islands/vitepress/assets/unified-loader.BhrfrgcM.js"
+          }
+        ],
+        "pageId": "/options/site-devtools/",
+        "renderId": null
+      },
+      "displayPath": "/options/site-devtools/",
+      "language": "text"
+    }
+  }
+}

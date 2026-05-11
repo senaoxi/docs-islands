@@ -1222,6 +1222,235 @@ describe('generateSiteDevToolsAiBuildReports', () => {
     ).toBeUndefined();
   });
 
+  it('generates mixed Doubao and Claude reports with providerRef.id metadata', async () => {
+    const pageMetafiles = createMultiPageMetafiles([
+      '/guide/doubao',
+      '/guide/claude',
+    ]);
+    const analyzeTarget = vi.fn(async ({ config, provider, target }) => ({
+      model:
+        provider === 'claude'
+          ? 'claude-sonnet-4-20250514'
+          : 'doubao-test-model',
+      result:
+        provider === 'claude'
+          ? `${target.displayPath}::${config.providers?.claude?.[0]?.id}`
+          : `${target.displayPath}::${config.providers?.doubao?.[0]?.id}`,
+    }));
+
+    const result = await generateSiteDevToolsAiBuildReports({
+      aiConfig: {
+        buildReports: {
+          models: [
+            {
+              default: true,
+              id: 'doubao-default',
+              model: 'doubao-test-model',
+              providerRef: {
+                provider: 'doubao',
+              },
+            },
+            {
+              id: 'claude-intl',
+              model: 'claude-sonnet-4-20250514',
+              providerRef: {
+                id: 'intl',
+                provider: 'claude',
+              },
+            },
+          ],
+          resolvePage: ({ page }) =>
+            page.routePath === '/guide/claude'
+              ? { modelId: 'claude-intl' }
+              : {},
+        },
+        providers: {
+          claude: [
+            {
+              apiKey: 'test-key-us',
+              default: true,
+              id: 'us',
+            },
+            {
+              apiKey: 'test-key-intl',
+              id: 'intl',
+              label: 'Claude Intl',
+            },
+          ],
+          doubao: [
+            {
+              apiKey: 'test-key-cn',
+              default: true,
+              id: 'cn',
+            },
+          ],
+        },
+      },
+      assetsDir: 'assets',
+      cacheDir: createTempDirectory('site-devtools-ai-cache-'),
+      dependencies: {
+        analyzeTarget,
+        resolveCapabilities: async () => ({
+          ok: true,
+          providers: {
+            claude: {
+              available: true,
+              detail: 'Claude available in test',
+              model: 'claude-sonnet-4-20250514',
+              provider: 'claude',
+            },
+            doubao: {
+              available: true,
+              detail: 'Doubao available in test',
+              model: 'doubao-test-model',
+              provider: 'doubao',
+            },
+          },
+        }),
+      },
+      outDir: createTempDirectory(),
+      pageContexts: createPageContexts(pageMetafiles),
+      pageMetafiles,
+      wrapBaseUrl: (value) => `/docs${value}`,
+    });
+
+    expect(result.executionCount).toBe(2);
+    expect(result.generatedReportCount).toBe(2);
+    expect(new Set(result.providers)).toEqual(new Set(['doubao', 'claude']));
+    expect(analyzeTarget).toHaveBeenCalledTimes(2);
+    expect(
+      analyzeTarget.mock.calls.find(
+        ([options]) => options.provider === 'claude',
+      )?.[0].config.providers?.claude?.[0]?.id,
+    ).toBe('intl');
+    expect(pageMetafiles['/guide/doubao'].buildMetrics?.aiReports?.[0]).toEqual(
+      expect.objectContaining({
+        provider: 'doubao',
+        providerId: 'cn',
+        reportId: 'doubao-default',
+      }),
+    );
+    expect(pageMetafiles['/guide/claude'].buildMetrics?.aiReports?.[0]).toEqual(
+      expect.objectContaining({
+        provider: 'claude',
+        providerId: 'intl',
+        providerLabel: 'Claude Intl',
+        reportId: 'claude-intl',
+        reportLabel: expect.stringContaining('Claude'),
+      }),
+    );
+  });
+
+  it('reuses cached Claude build reports and writes Claude report assets', async () => {
+    const cacheDir = createTempDirectory('site-devtools-ai-claude-cache-');
+    const firstPageMetafiles = createPageMetafiles();
+    const secondPageMetafiles = createPageMetafiles();
+    const firstOutDir = createTempDirectory();
+    const secondOutDir = createTempDirectory();
+    const analyzeTarget = vi.fn(async ({ target }) => ({
+      detail: 'Claude generated in test',
+      model: 'claude-sonnet-4-20250514',
+      result: `analysis:${target.displayPath}`,
+    }));
+    const aiConfig = {
+      buildReports: {
+        cache: {
+          dir: cacheDir,
+        },
+        models: [
+          {
+            default: true,
+            id: 'claude-default',
+            model: 'claude-sonnet-4-20250514',
+            providerRef: {
+              provider: 'claude',
+            },
+            temperature: 0.2,
+          },
+        ],
+      },
+      providers: {
+        claude: [
+          {
+            apiKey: 'test-key',
+            default: true,
+            id: 'us',
+          },
+        ],
+      },
+    };
+    const dependencies = {
+      analyzeTarget,
+      resolveCapabilities: async () => ({
+        ok: true,
+        providers: {
+          claude: {
+            available: true,
+            detail: 'Claude available in test',
+            model: 'claude-sonnet-4-20250514',
+            provider: 'claude' as const,
+          },
+        },
+      }),
+    };
+
+    const firstResult = await generateSiteDevToolsAiBuildReports({
+      aiConfig,
+      assetsDir: 'assets',
+      cacheDir: createTempDirectory('vitepress-cache-'),
+      dependencies,
+      outDir: firstOutDir,
+      pageContexts: createPageContexts(firstPageMetafiles),
+      pageMetafiles: firstPageMetafiles,
+      wrapBaseUrl: (value) => `/docs${value}`,
+    });
+    const secondResult = await generateSiteDevToolsAiBuildReports({
+      aiConfig,
+      assetsDir: 'assets',
+      cacheDir: createTempDirectory('vitepress-cache-'),
+      dependencies,
+      outDir: secondOutDir,
+      pageContexts: createPageContexts(secondPageMetafiles),
+      pageMetafiles: secondPageMetafiles,
+      wrapBaseUrl: (value) => `/docs${value}`,
+    });
+
+    const reportReference =
+      secondPageMetafiles['/guide/getting-started'].buildMetrics
+        ?.aiReports?.[0];
+    const reportPath = reportReference?.reportFile
+      ? path.join(
+          secondOutDir,
+          reportReference.reportFile.replace(/^\/docs\//, ''),
+        )
+      : '';
+    const reportPayload = JSON.parse(fs.readFileSync(reportPath, 'utf8')) as {
+      provider?: string;
+      reportId?: string;
+      result?: string;
+    };
+
+    expect(firstResult.generatedReportCount).toBe(1);
+    expect(firstResult.reusedReportCount).toBe(0);
+    expect(secondResult.generatedReportCount).toBe(0);
+    expect(secondResult.reusedReportCount).toBe(1);
+    expect(analyzeTarget).toHaveBeenCalledTimes(1);
+    expect(reportReference).toEqual(
+      expect.objectContaining({
+        provider: 'claude',
+        providerId: 'us',
+        reportId: 'claude-default',
+      }),
+    );
+    expect(reportPayload).toEqual(
+      expect.objectContaining({
+        provider: 'claude',
+        reportId: 'claude-default',
+        result: 'analysis:/guide/getting-started',
+      }),
+    );
+  });
+
   it('reuses page reports across chunk and module references when detail expansion is enabled', async () => {
     const outDir = createTempDirectory();
     const cacheDir = createTempDirectory('site-devtools-ai-cache-');

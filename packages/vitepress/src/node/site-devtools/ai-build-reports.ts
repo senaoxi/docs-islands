@@ -128,9 +128,37 @@ const getBuildReportModelConfigs = (
       ) as SiteDevToolsAnalysisBuildReportModelConfig[])
     : [];
 
+type SiteDevToolsAnalysisDoubaoBuildReportModelConfig =
+  SiteDevToolsAnalysisBuildReportModelConfig & {
+    thinking?: boolean;
+  };
+
+const isDoubaoBuildReportModelConfig = (
+  modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
+): modelConfig is SiteDevToolsAnalysisDoubaoBuildReportModelConfig =>
+  modelConfig.providerRef.provider === 'doubao';
+
 type SiteDevToolsAnalysisDoubaoRuntimeProviderConfig = NonNullable<
   NonNullable<NonNullable<SiteDevToolsAiConfig>['providers']>['doubao']
 >[number];
+type SiteDevToolsAnalysisClaudeRuntimeProviderConfig = NonNullable<
+  NonNullable<NonNullable<SiteDevToolsAiConfig>['providers']>['claude']
+>[number];
+type SiteDevToolsAnalysisRuntimeProviderConfig =
+  | SiteDevToolsAnalysisClaudeRuntimeProviderConfig
+  | SiteDevToolsAnalysisDoubaoRuntimeProviderConfig;
+
+const getClaudeProviderConfigs = (
+  aiConfig: SiteDevToolsAiConfig,
+): SiteDevToolsAnalysisClaudeRuntimeProviderConfig[] =>
+  Array.isArray(aiConfig?.providers?.claude)
+    ? aiConfig.providers.claude.filter(
+        (
+          providerConfig,
+        ): providerConfig is SiteDevToolsAnalysisClaudeRuntimeProviderConfig =>
+          Boolean(providerConfig),
+      )
+    : [];
 
 const getDoubaoProviderConfigs = (
   aiConfig: SiteDevToolsAiConfig,
@@ -144,8 +172,27 @@ const getDoubaoProviderConfigs = (
       )
     : [];
 
-const getDefaultDoubaoProviderConfig = (
-  providerConfigs: SiteDevToolsAnalysisDoubaoRuntimeProviderConfig[],
+const getProviderConfigs = (
+  aiConfig: SiteDevToolsAiConfig,
+  provider: SiteDevToolsAiProvider,
+): SiteDevToolsAnalysisRuntimeProviderConfig[] => {
+  switch (provider) {
+    case 'claude': {
+      return getClaudeProviderConfigs(aiConfig);
+    }
+    case 'doubao': {
+      return getDoubaoProviderConfigs(aiConfig);
+    }
+    default: {
+      return [];
+    }
+  }
+};
+
+const getDefaultProviderConfig = <
+  ProviderConfig extends SiteDevToolsAnalysisRuntimeProviderConfig,
+>(
+  providerConfigs: ProviderConfig[],
 ) =>
   providerConfigs.find((providerConfig) => providerConfig.default === true) ??
   providerConfigs[0];
@@ -158,7 +205,7 @@ const getDefaultBuildReportModelConfig = (
 
 const getBuildReportExecutionLabel = (
   modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
-  providerConfig?: SiteDevToolsAnalysisDoubaoRuntimeProviderConfig,
+  providerConfig?: SiteDevToolsAnalysisRuntimeProviderConfig,
 ) =>
   modelConfig.label?.trim() ||
   [
@@ -176,24 +223,53 @@ const getBuildReportExecutionId = (
 const createBuildReportExecutionConfig = (
   aiConfig: SiteDevToolsAiConfig,
   modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
-  providerConfig: SiteDevToolsAnalysisDoubaoRuntimeProviderConfig,
+  providerConfig: SiteDevToolsAnalysisRuntimeProviderConfig,
 ): SiteDevToolsAiConfig => {
-  return {
-    buildReports: aiConfig?.buildReports,
-    providers: {
-      ...aiConfig?.providers,
-      doubao: [
-        {
-          ...providerConfig,
-          default: true,
-          maxTokens: modelConfig.maxTokens,
-          model: modelConfig.model,
-          temperature: modelConfig.temperature,
-          thinking: modelConfig.thinking ?? false,
+  switch (modelConfig.providerRef.provider) {
+    case 'claude': {
+      return {
+        buildReports: aiConfig?.buildReports,
+        providers: {
+          ...aiConfig?.providers,
+          claude: [
+            {
+              ...providerConfig,
+              default: true,
+              maxTokens: modelConfig.maxTokens,
+              model: modelConfig.model,
+              temperature: modelConfig.temperature,
+            },
+          ],
         },
-      ],
-    },
-  };
+      };
+    }
+    case 'doubao': {
+      return {
+        buildReports: aiConfig?.buildReports,
+        providers: {
+          ...aiConfig?.providers,
+          doubao: [
+            {
+              ...providerConfig,
+              default: true,
+              maxTokens: modelConfig.maxTokens,
+              model: modelConfig.model,
+              temperature: modelConfig.temperature,
+              thinking: isDoubaoBuildReportModelConfig(modelConfig)
+                ? (modelConfig.thinking ?? false)
+                : false,
+            },
+          ],
+        },
+      };
+    }
+    default: {
+      return {
+        buildReports: aiConfig?.buildReports,
+        providers: aiConfig?.providers,
+      };
+    }
+  }
 };
 
 const resolveBuildReportExecutionProvider = ({
@@ -205,7 +281,7 @@ const resolveBuildReportExecutionProvider = ({
 }):
   | {
       provider: SiteDevToolsAiProvider;
-      providerConfig: SiteDevToolsAnalysisDoubaoRuntimeProviderConfig;
+      providerConfig: SiteDevToolsAnalysisRuntimeProviderConfig;
       warningMessages: string[];
     }
   | {
@@ -214,14 +290,18 @@ const resolveBuildReportExecutionProvider = ({
       warningMessages: string[];
     } => {
   const warningMessages: string[] = [];
+  const provider = modelConfig.providerRef.provider;
+  const providerLabel = getSiteDevToolsAiProviderLabel(provider);
+  const providerKey = provider;
 
-  switch (modelConfig.providerRef.provider) {
+  switch (provider) {
+    case 'claude':
     case 'doubao': {
-      const providerConfigs = getDoubaoProviderConfigs(aiConfig);
+      const providerConfigs = getProviderConfigs(aiConfig, provider);
 
       if (providerConfigs.length === 0) {
         warningMessages.push(
-          `Skipped build-time AI report model ${modelConfig.id}: siteDevtools.analysis.providers.doubao must contain at least one provider entry.`,
+          `Skipped build-time AI report model ${modelConfig.id}: siteDevtools.analysis.providers.${providerKey} must contain at least one provider entry.`,
         );
         return { warningMessages };
       }
@@ -232,7 +312,7 @@ const resolveBuildReportExecutionProvider = ({
 
       if (flaggedDefaults.length > 1) {
         warningMessages.push(
-          `Multiple default Doubao provider entries are configured. Using the first default entry for build-time AI report model ${modelConfig.id}.`,
+          `Multiple default ${providerLabel} provider entries are configured. Using the first default entry for build-time AI report model ${modelConfig.id}.`,
         );
       }
 
@@ -243,33 +323,33 @@ const resolveBuildReportExecutionProvider = ({
 
         if (matchingProviders.length === 0) {
           warningMessages.push(
-            `Skipped build-time AI report model ${modelConfig.id}: providerRef.id "${modelConfig.providerRef.id}" was not found in siteDevtools.analysis.providers.doubao.`,
+            `Skipped build-time AI report model ${modelConfig.id}: providerRef.id "${modelConfig.providerRef.id}" was not found in siteDevtools.analysis.providers.${providerKey}.`,
           );
           return { warningMessages };
         }
 
         if (matchingProviders.length > 1) {
           warningMessages.push(
-            `Multiple Doubao provider entries use id "${modelConfig.providerRef.id}". Using the first matching entry for build-time AI report model ${modelConfig.id}.`,
+            `Multiple ${providerLabel} provider entries use id "${modelConfig.providerRef.id}". Using the first matching entry for build-time AI report model ${modelConfig.id}.`,
           );
         }
 
         return {
-          provider: 'doubao',
+          provider,
           providerConfig: matchingProviders[0],
           warningMessages,
         };
       }
 
       return {
-        provider: 'doubao',
-        providerConfig: getDefaultDoubaoProviderConfig(providerConfigs),
+        provider,
+        providerConfig: getDefaultProviderConfig(providerConfigs),
         warningMessages,
       };
     }
     default: {
       warningMessages.push(
-        `Skipped build-time AI report model ${modelConfig.id}: provider "${modelConfig.providerRef.provider}" is not supported.`,
+        `Skipped build-time AI report model ${modelConfig.id}: provider "${String(provider)}" is not supported.`,
       );
       return { warningMessages };
     }

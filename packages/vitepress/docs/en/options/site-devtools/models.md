@@ -1,6 +1,6 @@
 # Providers and Models
 
-`providers.doubao` defines provider instances, and `buildReports.models` defines the model configs that actually execute on top of them. Together they answer “which endpoint do we call?” and “which model do we ask for this report?”
+`providers.doubao` and `providers.claude` define provider instances, and `buildReports.models` defines the model configs that actually execute on top of them. Together they answer “which endpoint do we call?” and “which model do we ask for this report?” Analysis requests run during docs build only.
 
 ## Minimal Example
 
@@ -18,6 +18,17 @@ const analysis = {
         timeoutMs: 300_000,
       },
     ],
+    claude: [
+      {
+        id: 'us',
+        label: 'Claude US',
+        // eslint-disable-next-line no-restricted-syntax
+        apiKey: process.env.CLAUDE_API_KEY!,
+        baseUrl: 'https://api.anthropic.com/v1',
+        anthropicVersion: '2023-06-01',
+        timeoutMs: 300_000,
+      },
+    ],
   },
   buildReports: {
     models: [
@@ -30,6 +41,16 @@ const analysis = {
           provider: 'doubao',
         },
         thinking: true,
+        maxTokens: 4096,
+        temperature: 0.2,
+      },
+      {
+        id: 'claude-sonnet',
+        label: 'Claude Sonnet',
+        model: 'claude-sonnet-4-20250514',
+        providerRef: {
+          provider: 'claude',
+        },
         maxTokens: 4096,
         temperature: 0.2,
       },
@@ -49,6 +70,8 @@ const analysis = {
 | `baseUrl`   | Provider endpoint. Changing it changes the effective request semantics.           |
 | `timeoutMs` | Local timeout for one request.                                                    |
 
+Claude provider instances also accept `anthropicVersion`, which is sent as the Anthropic API version header. When omitted, it defaults to `2023-06-01`.
+
 ## Model Config Fields
 
 | Field         | Meaning                                                                           |
@@ -58,13 +81,13 @@ const analysis = {
 | `default`     | Default execution model.                                                          |
 | `providerRef` | Points to a provider group and, when needed, a concrete instance.                 |
 | `model`       | The actual provider model name.                                                   |
-| `thinking`    | Whether reasoning-style behavior should be enabled.                               |
+| `thinking`    | Whether reasoning-style behavior should be enabled. Doubao only.                  |
 | `maxTokens`   | Maximum output token budget.                                                      |
 | `temperature` | Generation randomness. Lower values are more stable.                              |
 
 ## Defaults and `providerRef`
 
-If `providerRef` only declares `provider: 'doubao'`, the provider group's default instance is used. When you have more than one instance, declaring `providerRef.id` explicitly is safer. If no instance is marked with `default: true`, the first item in the array becomes the default.
+If `providerRef` only declares `provider: 'doubao'` or `provider: 'claude'`, the provider group's default instance is used. When you have more than one instance, declaring `providerRef.id` explicitly is safer. If no instance is marked with `default: true`, the first item in the array becomes the default.
 
 ## When You Need More Than One Instance
 

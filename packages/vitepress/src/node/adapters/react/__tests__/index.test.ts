@@ -362,6 +362,12 @@ describe('createDocsIslands + react adapter', () => {
       siteDevtools: {
         analysis: {
           providers: {
+            claude: [
+              {
+                apiKey: 'claude-key',
+                id: 'us',
+              },
+            ],
             doubao: [
               {
                 apiKey: 'test-key',
@@ -371,6 +377,16 @@ describe('createDocsIslands + react adapter', () => {
           },
           buildReports: {
             models: [
+              {
+                id: 'claude-sonnet',
+                label: 'Claude Sonnet',
+                maxTokens: 4096,
+                model: 'claude-sonnet-4-20250514',
+                providerRef: {
+                  provider: 'claude',
+                },
+                temperature: 0.2,
+              },
               {
                 id: 'doubao-pro',
                 label: 'Doubao Pro',
@@ -389,10 +405,23 @@ describe('createDocsIslands + react adapter', () => {
     });
 
     expect(
+      vitepressConfig.siteDevtools.analysis?.providers?.claude?.[0]?.apiKey,
+    ).toBe('claude-key');
+    expect(
       vitepressConfig.siteDevtools.analysis?.providers?.doubao?.[0]?.apiKey,
     ).toBe('test-key');
     expect(vitepressConfig.siteDevtools.analysis?.buildReports?.models).toEqual(
       [
+        {
+          id: 'claude-sonnet',
+          label: 'Claude Sonnet',
+          maxTokens: 4096,
+          model: 'claude-sonnet-4-20250514',
+          providerRef: {
+            provider: 'claude',
+          },
+          temperature: 0.2,
+        },
         {
           id: 'doubao-pro',
           label: 'Doubao Pro',

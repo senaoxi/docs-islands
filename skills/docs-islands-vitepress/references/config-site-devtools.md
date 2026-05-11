@@ -6,10 +6,10 @@ Use this when configuring optional build-time analysis reports for Site DevTools
 
 `siteDevtools.analysis` has two parts:
 
-- `providers.doubao`: provider instances and credentials.
+- `providers.doubao` / `providers.claude`: provider instances and credentials.
 - `buildReports`: page report model selection, cache, page filtering, and evidence size.
 
-The runtime console can work without `siteDevtools.analysis`; reports are generated only when analysis is configured.
+The runtime console can work without `siteDevtools.analysis`; reports are generated only during docs build when analysis is configured.
 
 ## Minimal Configuration
 
@@ -27,6 +27,12 @@ const islands = createDocsIslands({
             baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
           },
         ],
+        claude: [
+          {
+            id: 'us',
+            apiKey: process.env.CLAUDE_API_KEY!,
+          },
+        ],
       },
       buildReports: {
         models: [
@@ -36,6 +42,14 @@ const islands = createDocsIslands({
             model: 'doubao-seed-2-0-pro-260215',
             providerRef: {
               provider: 'doubao',
+            },
+          },
+          {
+            id: 'claude-sonnet',
+            model: 'claude-sonnet-4-20250514',
+            maxTokens: 4096,
+            providerRef: {
+              provider: 'claude',
             },
           },
         ],
@@ -58,6 +72,8 @@ Do not use `enabled`, `providers: ['anthropic']`, `providers: ['openai']`, `defa
 | `baseUrl`   | Provider endpoint                      |
 | `timeoutMs` | Request timeout in milliseconds        |
 
+Claude providers also accept `anthropicVersion`, defaulting to `2023-06-01`.
+
 ## Build Report Model Fields
 
 | Field         | Meaning                                 |
@@ -66,8 +82,8 @@ Do not use `enabled`, `providers: ['anthropic']`, `providers: ['openai']`, `defa
 | `label`       | Optional console label                  |
 | `default`     | Default report model                    |
 | `providerRef` | Provider group and optional instance id |
-| `model`       | Doubao model identifier                 |
-| `thinking`    | Optional reasoning mode                 |
+| `model`       | Provider model identifier               |
+| `thinking`    | Optional Doubao reasoning mode          |
 | `maxTokens`   | Output token budget                     |
 | `temperature` | Generation randomness                   |
 

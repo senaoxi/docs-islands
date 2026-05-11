@@ -15,6 +15,16 @@ type SiteDevToolsBuildReportsInput =
 const SITE_DEVTOOLS_AI_BUILD_REPORTS_DEFAULT_CACHE_DIR =
   '.vitepress/cache/site-devtools-reports';
 
+type SiteDevToolsAnalysisDoubaoBuildReportModelConfig =
+  SiteDevToolsAnalysisBuildReportModelConfig & {
+    thinking?: boolean;
+  };
+
+const isDoubaoBuildReportModelConfig = (
+  model: SiteDevToolsAnalysisBuildReportModelConfig,
+): model is SiteDevToolsAnalysisDoubaoBuildReportModelConfig =>
+  model.providerRef.provider === 'doubao';
+
 const normalizeBuildReportModels = (
   buildReports: SiteDevToolsBuildReportsInput,
 ): SiteDevToolsAnalysisBuildReportModelConfig[] | undefined => {
@@ -24,7 +34,7 @@ const normalizeBuildReportModels = (
 
   return Array.isArray(buildReports.models)
     ? (buildReports.models.filter(Boolean).map((model) =>
-        model.providerRef.provider === 'doubao'
+        isDoubaoBuildReportModelConfig(model)
           ? {
               ...model,
               thinking: model.thinking ?? false,
@@ -38,6 +48,19 @@ const normalizeAnalysisProviders = (
   providers: SiteDevToolsAnalysisUserConfig['providers'],
 ) => {
   const normalizedProviders = {
+    ...(Array.isArray(providers?.claude)
+      ? {
+          claude: providers.claude.filter(Boolean).map((provider) => ({
+            anthropicVersion: provider.anthropicVersion,
+            apiKey: provider.apiKey,
+            baseUrl: provider.baseUrl,
+            default: provider.default === true,
+            id: provider.id,
+            label: provider.label,
+            timeoutMs: provider.timeoutMs,
+          })),
+        }
+      : {}),
     ...(Array.isArray(providers?.doubao)
       ? {
           doubao: providers.doubao.filter(Boolean).map((provider) => ({

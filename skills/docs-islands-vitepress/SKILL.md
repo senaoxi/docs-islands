@@ -100,7 +100,7 @@ Read only the reference needed for the current task:
 - [Adapters](references/config-adapters.md): current adapter API and `createDocsIslands()` ownership.
 - [Theme](references/config-theme.md): `reactClient()` and optional Site DevTools layout mounting.
 - [Site DevTools](references/feature-site-devtools.md): runtime console, browser helper, optional UI dependencies.
-- [Site DevTools Config](references/config-site-devtools.md): Doubao provider and build report configuration.
+- [Site DevTools Config](references/config-site-devtools.md): Doubao/Claude provider and build report configuration.
 - [Logging](references/config-logging.md): top-level `logging` config, presets, and logger facade rules.
 - [Diagnostics](references/guide-diagnostics.md): fastest checks by symptom.
 - [How It Works](references/guide-how-it-works.md): architecture and render pipeline summary.

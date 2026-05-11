@@ -72,8 +72,8 @@ Use this order:
 
 ## Build-Time Reports Are Missing
 
-- Confirm `siteDevtools.analysis.providers.doubao` has at least one provider.
+- Confirm `siteDevtools.analysis.providers.doubao` or `siteDevtools.analysis.providers.claude` has at least one provider.
 - Confirm `siteDevtools.analysis.buildReports.models` has at least one model.
-- Confirm `providerRef.provider` is `doubao`.
+- Confirm `providerRef.provider` is `doubao` or `claude`.
 - Confirm `resolvePage` does not skip the page.
 - Remember pure static Markdown pages without docs-islands analysis signals are not report targets just because `buildReports` exists.

@@ -28,8 +28,12 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
   it('marks providers unavailable until they are configured', async () => {
     const capabilities = await resolveSiteDevToolsAiCapabilities();
 
-    expect(capabilities.providers.doubao.available).toBe(false);
-    expect(capabilities.providers.doubao.detail).toContain(
+    expect(capabilities.providers.claude?.available).toBe(false);
+    expect(capabilities.providers.claude?.detail).toContain(
+      'analysis.providers.claude',
+    );
+    expect(capabilities.providers.doubao?.available).toBe(false);
+    expect(capabilities.providers.doubao?.detail).toContain(
       'analysis.providers.doubao',
     );
   });
@@ -59,8 +63,111 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
       },
     });
 
-    expect(capabilities.providers.doubao.available).toBe(true);
-    expect(capabilities.providers.doubao.model).toBe('doubao-seed-1-6');
+    expect(capabilities.providers.doubao?.available).toBe(true);
+    expect(capabilities.providers.doubao?.model).toBe('doubao-seed-1-6');
+  });
+
+  it('reads the configured Claude model from buildReports.models', async () => {
+    const capabilities = await resolveSiteDevToolsAiCapabilities({
+      buildReports: {
+        models: [
+          {
+            id: 'claude-default',
+            model: 'claude-sonnet-4-20250514',
+            providerRef: {
+              provider: 'claude',
+            },
+          },
+        ],
+      },
+      providers: {
+        claude: [
+          {
+            apiKey: 'test-key',
+            default: true,
+            id: 'us',
+          },
+        ],
+      },
+    });
+
+    expect(capabilities.providers.claude?.available).toBe(true);
+    expect(capabilities.providers.claude?.model).toBe(
+      'claude-sonnet-4-20250514',
+    );
+  });
+
+  it('reports Claude configuration gaps and duplicate defaults', async () => {
+    const missingKey = await resolveSiteDevToolsAiCapabilities({
+      buildReports: {
+        models: [
+          {
+            id: 'claude-default',
+            model: 'claude-sonnet-4-20250514',
+            providerRef: {
+              provider: 'claude',
+            },
+          },
+        ],
+      },
+      providers: {
+        claude: [
+          {
+            id: 'us',
+          },
+        ],
+      },
+    });
+    const missingModel = await resolveSiteDevToolsAiCapabilities({
+      providers: {
+        claude: [
+          {
+            apiKey: 'test-key',
+            id: 'us',
+          },
+        ],
+      },
+    });
+    const duplicateDefaults = await resolveSiteDevToolsAiCapabilities({
+      buildReports: {
+        models: [
+          {
+            id: 'claude-default',
+            model: 'claude-sonnet-4-20250514',
+            providerRef: {
+              provider: 'claude',
+            },
+          },
+        ],
+      },
+      providers: {
+        claude: [
+          {
+            apiKey: 'first-key',
+            default: true,
+            id: 'first',
+          },
+          {
+            apiKey: 'second-key',
+            default: true,
+            id: 'second',
+          },
+        ],
+      },
+    });
+
+    expect(missingKey.providers.claude?.available).toBe(false);
+    expect(missingKey.providers.claude?.detail).toContain(
+      'providers.claude[].apiKey',
+    );
+    expect(missingModel.providers.claude?.available).toBe(false);
+    expect(missingModel.providers.claude?.detail).toContain(
+      'Claude model configuration',
+    );
+    expect(duplicateDefaults.providers.claude?.available).toBe(true);
+    expect(duplicateDefaults.providers.claude?.detail).toContain(
+      'multiple defaults declared',
+    );
   });
 });
 
@@ -268,5 +375,257 @@ describe('analyzeSiteDevToolsAiTarget', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.result).toBe('analysis result');
+  });
+
+  it('passes Claude headers and Messages body, then parses text blocks', async () => {
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      expect(input).toBe('https://gateway.example/v1/messages');
+      expect(init?.method).toBe('POST');
+      expect(init?.headers).toEqual({
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'x-api-key': 'test-key',
+      });
+
+      const requestBody = JSON.parse(String(init?.body)) as {
+        max_tokens?: number;
+        messages?: {
+          content?: string;
+          role?: string;
+        }[];
+        model?: string;
+        system?: string;
+        temperature?: number;
+      };
+
+      expect(requestBody.max_tokens).toBe(4096);
+      expect(requestBody.messages?.[0]?.role).toBe('user');
+      expect(requestBody.messages?.[0]?.content).toContain('## Role');
+      expect(requestBody.model).toBe('claude-sonnet-4-20250514');
+      expect(requestBody.system).toContain(
+        'frontend performance and bundling engineer',
+      );
+      expect(requestBody.temperature).toBe(0.2);
+
+      return Response.json(
+        {
+          content: [
+            {
+              text: 'analysis',
+              type: 'text',
+            },
+            {
+              text: 'result',
+              type: 'text',
+            },
+          ],
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          status: 200,
+        },
+      );
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await analyzeSiteDevToolsAiTarget({
+      config: {
+        buildReports: {
+          models: [
+            {
+              id: 'claude-default',
+              model: 'claude-sonnet-4-20250514',
+              providerRef: {
+                provider: 'claude',
+              },
+              temperature: 0.2,
+            },
+          ],
+        },
+        providers: {
+          claude: [
+            {
+              apiKey: 'test-key',
+              baseUrl: 'https://gateway.example/v1',
+              default: true,
+              id: 'us',
+            },
+          ],
+        },
+      },
+      provider: 'claude',
+      target: createAnalysisTarget(),
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      model: 'claude-sonnet-4-20250514',
+      result: 'analysis\nresult',
+    });
+  });
+
+  it('uses Claude provider timeoutMs for requests', async () => {
+    const fetchMock = vi.fn(
+      (_input: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              reject(new DOMException('Aborted', 'AbortError'));
+            },
+            { once: true },
+          );
+        }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await analyzeSiteDevToolsAiTarget({
+        config: {
+          buildReports: {
+            models: [
+              {
+                id: 'claude-default',
+                model: 'claude-sonnet-4-20250514',
+                providerRef: {
+                  provider: 'claude',
+                },
+              },
+            ],
+          },
+          providers: {
+            claude: [
+              {
+                apiKey: 'test-key',
+                default: true,
+                id: 'us',
+                timeoutMs: 5,
+              },
+            ],
+          },
+        },
+        provider: 'claude',
+        target: createAnalysisTarget({
+          artifactKind: 'bundle-module',
+          artifactLabel: 'component.ts',
+          content: 'export const value = 1;',
+          displayPath: '/src/component.ts',
+          language: 'ts',
+        }),
+      });
+    } catch (error) {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('Claude analysis timed out.');
+      expect((error as Error).message).toContain('Trace ');
+      expect((error as Error).message).toContain(
+        'bundle-module /src/component.ts',
+      );
+      expect((error as Error).message).toContain('timeout 5 ms');
+      return;
+    }
+
+    throw new Error('Expected timeout rejection');
+  });
+
+  it('surfaces Claude HTTP errors', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        {
+          error: {
+            message: 'rate limited',
+            type: 'rate_limit_error',
+          },
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          status: 429,
+        },
+      ),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      analyzeSiteDevToolsAiTarget({
+        config: {
+          buildReports: {
+            models: [
+              {
+                id: 'claude-default',
+                model: 'claude-sonnet-4-20250514',
+                providerRef: {
+                  provider: 'claude',
+                },
+              },
+            ],
+          },
+          providers: {
+            claude: [
+              {
+                apiKey: 'test-key',
+                default: true,
+                id: 'us',
+              },
+            ],
+          },
+        },
+        provider: 'claude',
+        target: createAnalysisTarget(),
+      }),
+    ).rejects.toThrow('rate limited');
+  });
+
+  it('rejects empty Claude responses', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        {
+          content: [],
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          status: 200,
+        },
+      ),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      analyzeSiteDevToolsAiTarget({
+        config: {
+          buildReports: {
+            models: [
+              {
+                id: 'claude-default',
+                model: 'claude-sonnet-4-20250514',
+                providerRef: {
+                  provider: 'claude',
+                },
+              },
+            ],
+          },
+          providers: {
+            claude: [
+              {
+                apiKey: 'test-key',
+                default: true,
+                id: 'us',
+              },
+            ],
+          },
+        },
+        provider: 'claude',
+        target: createAnalysisTarget(),
+      }),
+    ).rejects.toThrow('Claude returned an empty analysis result.');
   });
 });

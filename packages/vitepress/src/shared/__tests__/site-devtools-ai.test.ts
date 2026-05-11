@@ -19,6 +19,7 @@ describe('site-devtools-ai helpers', () => {
   });
 
   it('formats provider and artifact labels for the UI', () => {
+    expect(getSiteDevToolsAiProviderLabel('claude')).toBe('Claude');
     expect(getSiteDevToolsAiProviderLabel('doubao')).toBe('Doubao');
     expect(getSiteDevToolsAiArtifactKindLabel('bundle-chunk')).toBe(
       'Bundle Chunk',

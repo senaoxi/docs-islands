@@ -15,9 +15,10 @@ import enConfig from '../en/config';
 import zhConfig from '../zh/config';
 
 const { release, siteDevtools } = loadEnv();
-const { doubao_api_key } = siteDevtools;
-
+const { DOUBAO_BASE_URL, DOUBAO_API_KEY, CLAUDE_BASE_URL, CLAUDE_API_KEY } =
+  siteDevtools;
 const base = `/${vitepressRenderingStrategiesPackageJson.name.replace('@', '')}/`;
+
 const docsLoggerProbePreset = {
   rules: {
     controlledVisible: {
@@ -147,14 +148,25 @@ createDocsIslands({
   siteDevtools: {
     analysis: {
       providers: {
+        claude: [
+          {
+            id: 'us',
+            label: 'Claude US',
+            baseUrl: CLAUDE_BASE_URL,
+            apiKey: CLAUDE_API_KEY,
+            timeoutMs: 300_000,
+            anthropicVersion: '2023-06-01',
+            default: true,
+          },
+        ],
         doubao: [
           {
-            apiKey: doubao_api_key,
-            baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-            default: true,
             id: 'cn',
             label: 'Doubao CN',
+            baseUrl: DOUBAO_BASE_URL,
+            apiKey: DOUBAO_API_KEY,
             timeoutMs: 300_000,
+            default: true,
           },
         ],
       },
@@ -168,7 +180,16 @@ createDocsIslands({
         includeModules: true,
         models: [
           {
+            id: 'claude-opus',
+            label: 'Claude Opus',
+            maxTokens: 4096,
+            model: 'claude-opus-4-7',
+            providerRef: {
+              provider: 'claude',
+            },
             default: true,
+          },
+          {
             id: 'doubao-pro',
             label: 'Doubao Pro',
             model: 'doubao-seed-2-0-pro-260215',
@@ -187,10 +208,11 @@ createDocsIslands({
             return null;
           }
 
-          const cacheDir = routePath.replaceAll('/', '__');
+          const modelId = 'claude-opus';
+          const cacheDir = `${modelId}/${routePath.replaceAll('/', '__')}`;
 
           return {
-            modelId: 'doubao-pro',
+            modelId,
             cache: {
               dir: `.vitepress/site-devtools-reports/${cacheDir}`,
               strategy: isInCi ? 'fallback' : 'exact',

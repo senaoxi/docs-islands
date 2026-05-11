@@ -22,6 +22,14 @@ const buildReports = {
         provider: 'doubao',
       },
     },
+    {
+      id: 'claude-sonnet',
+      model: 'claude-sonnet-4-20250514',
+      maxTokens: 4096,
+      providerRef: {
+        provider: 'claude',
+      },
+    },
   ],
 };
 ```
@@ -55,8 +63,8 @@ const buildReports = {
     },
     {
       id: 'perf-review',
-      model: 'doubao-seed-2-0-pro-260215',
-      providerRef: { provider: 'doubao', id: 'cn' },
+      model: 'claude-sonnet-4-20250514',
+      providerRef: { provider: 'claude', id: 'us' },
     },
   ],
   resolvePage({ page }) {

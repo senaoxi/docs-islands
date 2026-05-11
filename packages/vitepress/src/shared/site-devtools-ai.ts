@@ -20,7 +20,7 @@ import type {
   SiteDevToolsAiPromptValueItem,
 } from './site-devtools-ai-prompt-snapshot';
 
-export type SiteDevToolsAiProvider = 'doubao';
+export type SiteDevToolsAiProvider = 'claude' | 'doubao';
 export type SiteDevToolsAiArtifactKind = 'bundle-chunk' | 'bundle-module';
 export type SiteDevToolsAiAnalysisTargetKind =
   | SiteDevToolsAiArtifactKind
@@ -63,7 +63,9 @@ export interface SiteDevToolsAiProviderCapability {
 
 export interface SiteDevToolsAiCapabilitiesResponse {
   ok: true;
-  providers: Record<SiteDevToolsAiProvider, SiteDevToolsAiProviderCapability>;
+  providers: Partial<
+    Record<SiteDevToolsAiProvider, SiteDevToolsAiProviderCapability>
+  >;
 }
 
 export interface SiteDevToolsAiAnalyzeRequest {
@@ -898,6 +900,9 @@ export const getSiteDevToolsAiProviderLabel = (
   provider: SiteDevToolsAiProvider,
 ): string => {
   switch (provider) {
+    case 'claude': {
+      return 'Claude';
+    }
     case 'doubao': {
       return 'Doubao';
     }

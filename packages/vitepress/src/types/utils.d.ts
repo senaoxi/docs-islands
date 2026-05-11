@@ -17,7 +17,7 @@ export interface PrintOptions {
 /**
  * Build-time analysis providers.
  */
-export type SiteDevToolsAnalysisProvider = 'doubao';
+export type SiteDevToolsAnalysisProvider = 'claude' | 'doubao';
 export type SiteDevToolsAnalysisDoubaoThinkingType = boolean;
 export type SiteDevToolsAnalysisBuildReportCacheStrategy = 'exact' | 'fallback';
 
@@ -85,11 +85,33 @@ export interface SiteDevToolsAnalysisDoubaoConfig
   baseUrl?: string;
 }
 
-export interface SiteDevToolsAnalysisProviderRef {
+export interface SiteDevToolsAnalysisClaudeConfig
+  extends SiteDevToolsAnalysisProviderInstanceBaseConfig {
+  /**
+   * Anthropic API key used for Messages requests.
+   */
+  apiKey?: string;
+  /**
+   * Base URL for the Anthropic Messages API endpoint.
+   *
+   * @default 'https://api.anthropic.com/v1'
+   */
+  baseUrl?: string;
+  /**
+   * Anthropic API version header sent with Messages requests.
+   *
+   * @default '2023-06-01'
+   */
+  anthropicVersion?: string;
+}
+
+export interface SiteDevToolsAnalysisProviderRef<
+  Provider extends SiteDevToolsAnalysisProvider = SiteDevToolsAnalysisProvider,
+> {
   /**
    * Provider group used by this build-time AI report model.
    */
-  provider: SiteDevToolsAnalysisProvider;
+  provider: Provider;
   /**
    * Optional provider instance id inside the provider group.
    *
@@ -98,7 +120,9 @@ export interface SiteDevToolsAnalysisProviderRef {
   id?: string;
 }
 
-interface SiteDevToolsAnalysisBuildReportModelBaseConfig {
+interface SiteDevToolsAnalysisBuildReportModelBaseConfig<
+  Provider extends SiteDevToolsAnalysisProvider = SiteDevToolsAnalysisProvider,
+> {
   /**
    * Stable identifier used to reference this build-time AI report model.
    */
@@ -114,11 +138,11 @@ interface SiteDevToolsAnalysisBuildReportModelBaseConfig {
   /**
    * Provider instance used for this build-time AI report model.
    */
-  providerRef: SiteDevToolsAnalysisProviderRef;
+  providerRef: SiteDevToolsAnalysisProviderRef<Provider>;
 }
 
 export interface SiteDevToolsAnalysisBuildReportDoubaoModelConfig
-  extends SiteDevToolsAnalysisBuildReportModelBaseConfig {
+  extends SiteDevToolsAnalysisBuildReportModelBaseConfig<'doubao'> {
   /**
    * Upper bound for generated output tokens in a single response.
    */
@@ -140,8 +164,31 @@ export interface SiteDevToolsAnalysisBuildReportDoubaoModelConfig
   temperature?: number;
 }
 
+export interface SiteDevToolsAnalysisBuildReportClaudeModelConfig
+  extends SiteDevToolsAnalysisBuildReportModelBaseConfig<'claude'> {
+  /**
+   * Upper bound for generated output tokens in a single response.
+   *
+   * When omitted, build-time analysis uses 4096 because Anthropic Messages
+   * requires max_tokens.
+   *
+   * @default 4096
+   */
+  maxTokens?: number;
+  /**
+   * Claude model used for this build-time analysis model.
+   */
+  model: string;
+  /**
+   * Sampling temperature for the generated analysis.
+   * Lower values are more deterministic; higher values are more creative.
+   */
+  temperature?: number;
+}
+
 export type SiteDevToolsAnalysisBuildReportModelConfig =
-  SiteDevToolsAnalysisBuildReportDoubaoModelConfig;
+  | SiteDevToolsAnalysisBuildReportClaudeModelConfig
+  | SiteDevToolsAnalysisBuildReportDoubaoModelConfig;
 
 export interface SiteDevToolsAnalysisBuildReportsPageContext {
   /**
@@ -241,6 +288,7 @@ export interface SiteDevToolsAnalysisUserConfig {
    */
   buildReports?: SiteDevToolsAnalysisBuildReportsConfig;
   providers?: {
+    claude?: SiteDevToolsAnalysisClaudeConfig[];
     doubao?: SiteDevToolsAnalysisDoubaoConfig[];
   };
 }
@@ -252,8 +300,11 @@ export type SiteDevToolsAiProviderBaseConfig =
   SiteDevToolsAnalysisProviderBaseConfig;
 export type SiteDevToolsAiProviderInstanceBaseConfig =
   SiteDevToolsAnalysisProviderInstanceBaseConfig;
+export type SiteDevToolsAiClaudeConfig = SiteDevToolsAnalysisClaudeConfig;
 export type SiteDevToolsAiDoubaoConfig = SiteDevToolsAnalysisDoubaoConfig;
 export type SiteDevToolsAiProviderRef = SiteDevToolsAnalysisProviderRef;
+export type SiteDevToolsAiBuildReportClaudeModelConfig =
+  SiteDevToolsAnalysisBuildReportClaudeModelConfig;
 export type SiteDevToolsAiBuildReportDoubaoModelConfig =
   SiteDevToolsAnalysisBuildReportDoubaoModelConfig;
 export type SiteDevToolsAiBuildReportModelConfig =
