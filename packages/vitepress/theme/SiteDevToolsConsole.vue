@@ -299,7 +299,7 @@ let siteDevtoolsModeClickTimer:
 let siteDevtoolsModeToastTimer:
   | ReturnType<typeof globalThis.setTimeout>
   | undefined;
-let siteDevtoolsModeTriggerElements: HTMLElement[] = [];
+let siteDevtoolsModeTriggerElements: Element[] = [];
 let siteDevtoolsModeTriggerObserver: MutationObserver | null = null;
 const pendingBundleModuleSourceSizeRequests = new Map<
   string,
@@ -637,7 +637,7 @@ const bindSiteDevToolsModeTriggerElements = () => {
   const nextElements = querySelectorAllToArray(
     globalThis.document,
     '.VPNavBarTitle .title .logo',
-  ).filter((element): element is HTMLElement => element instanceof HTMLElement);
+  );
 
   if (
     nextElements.length === siteDevtoolsModeTriggerElements.length &&
@@ -3919,6 +3919,7 @@ onBeforeUnmount(() => {
 <style scoped>
 :global(.site-devtools-mode-entry__trigger) {
   cursor: pointer;
+  pointer-events: all;
   transition:
     transform 180ms ease,
     filter 180ms ease,
