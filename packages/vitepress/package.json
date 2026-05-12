@@ -153,6 +153,7 @@
     "./client": "./src/client/index.ts",
     "./adapters/react": "./src/node/adapters/react/index.ts",
     "./adapters/react/client": "./src/client/adapters/react/index.ts",
+    "./models": "./src/node/models.ts",
     "./logger": "./src/shared/logger.ts",
     "./logger/presets": "./src/shared/logger/presets.ts",
     "./devtools/client": {
@@ -194,6 +195,9 @@
       ],
       "client": [
         "./client/index.d.mts"
+      ],
+      "models": [
+        "./node/models.d.ts"
       ],
       "devtools/client": [
         "./types/devtools-client.d.ts"

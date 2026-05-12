@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { normalizePath, type PluginOption } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { claude, doubao } from '../../../../shared/site-devtools-models';
 import { REACT_DEPENDENCY_BOOTSTRAP_PLUGIN_NAME } from '../../../constants/adapters/react/plugin-names';
 import {
   FRAMEWORK_MARKDOWN_TRANSFORM_PLUGIN_NAME,
@@ -350,10 +351,29 @@ describe('createDocsIslands + react adapter', () => {
   });
 
   it('merges root siteDevtools options into the VitePress config', async () => {
+    const claudeUS = claude.provider({
+      apiKey: 'claude-key',
+    });
+    const doubaoCN = doubao.provider({
+      apiKey: 'test-key',
+    });
+    const claudeSonnet = claudeUS.model({
+      label: 'Claude Sonnet',
+      maxTokens: 4096,
+      model: 'claude-sonnet-4-20250514',
+      temperature: 0.2,
+    });
+    const doubaoPro = doubaoCN.model({
+      label: 'Doubao Pro',
+      maxTokens: 4096,
+      model: 'doubao-seed-2-0-pro-260215',
+      temperature: 0.1,
+      thinking: true,
+    });
     const vitepressConfig: any = {
       siteDevtools: {
         analysis: {
-          providers: {},
+          providers: [],
         },
       },
     };
@@ -361,79 +381,22 @@ describe('createDocsIslands + react adapter', () => {
     await applyReactDocsIslands(vitepressConfig, {
       siteDevtools: {
         analysis: {
-          providers: {
-            claude: [
-              {
-                apiKey: 'claude-key',
-                id: 'us',
-              },
-            ],
-            doubao: [
-              {
-                apiKey: 'test-key',
-                id: 'cn',
-              },
-            ],
-          },
+          providers: [claudeUS, doubaoCN],
           buildReports: {
-            models: [
-              {
-                id: 'claude-sonnet',
-                label: 'Claude Sonnet',
-                maxTokens: 4096,
-                model: 'claude-sonnet-4-20250514',
-                providerRef: {
-                  provider: 'claude',
-                },
-                temperature: 0.2,
-              },
-              {
-                id: 'doubao-pro',
-                label: 'Doubao Pro',
-                maxTokens: 4096,
-                model: 'doubao-seed-2-0-pro-260215',
-                providerRef: {
-                  provider: 'doubao',
-                },
-                temperature: 0.1,
-                thinking: true,
-              },
-            ],
+            models: [claudeSonnet, doubaoPro],
           },
         },
       },
     });
 
-    expect(
-      vitepressConfig.siteDevtools.analysis?.providers?.claude?.[0]?.apiKey,
-    ).toBe('claude-key');
-    expect(
-      vitepressConfig.siteDevtools.analysis?.providers?.doubao?.[0]?.apiKey,
-    ).toBe('test-key');
+    expect(vitepressConfig.siteDevtools.analysis?.providers?.[0]).toBe(
+      claudeUS,
+    );
+    expect(vitepressConfig.siteDevtools.analysis?.providers?.[1]).toBe(
+      doubaoCN,
+    );
     expect(vitepressConfig.siteDevtools.analysis?.buildReports?.models).toEqual(
-      [
-        {
-          id: 'claude-sonnet',
-          label: 'Claude Sonnet',
-          maxTokens: 4096,
-          model: 'claude-sonnet-4-20250514',
-          providerRef: {
-            provider: 'claude',
-          },
-          temperature: 0.2,
-        },
-        {
-          id: 'doubao-pro',
-          label: 'Doubao Pro',
-          maxTokens: 4096,
-          model: 'doubao-seed-2-0-pro-260215',
-          providerRef: {
-            provider: 'doubao',
-          },
-          temperature: 0.1,
-          thinking: true,
-        },
-      ],
+      [claudeSonnet, doubaoPro],
     );
     expect(vitepressConfig.vite?.worker?.format).toBe('es');
     expect(

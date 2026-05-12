@@ -26,7 +26,6 @@ export interface BuildReportReferenceBase {
   model?: string;
   prompt?: string;
   provider: string;
-  providerId?: string;
   providerLabel?: string;
   reportId: string;
   reportLabel: string;

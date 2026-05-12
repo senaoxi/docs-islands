@@ -9,28 +9,28 @@
 ## 最小配置
 
 ```ts [.vitepress/config.ts]
+import { claude, doubao } from '@docs-islands/vitepress/models';
+
+const doubaoCN = doubao.provider({
+  apiKey: process.env.DOUBAO_API_KEY!,
+});
+const claudeUS = claude.provider({
+  apiKey: process.env.CLAUDE_API_KEY!,
+});
+const doubaoPro = doubaoCN.model({
+  default: true,
+  model: 'doubao-seed-2-0-pro-260215',
+});
+const claudeSonnet = claudeUS.model({
+  model: 'claude-sonnet-4-20250514',
+  maxTokens: 4096,
+});
+
 const buildReports = {
   cache: true,
   includeChunks: false,
   includeModules: false,
-  models: [
-    {
-      id: 'doubao-pro',
-      default: true,
-      model: 'doubao-seed-2-0-pro-260215',
-      providerRef: {
-        provider: 'doubao',
-      },
-    },
-    {
-      id: 'claude-sonnet',
-      model: 'claude-sonnet-4-20250514',
-      maxTokens: 4096,
-      providerRef: {
-        provider: 'claude',
-      },
-    },
-  ],
+  models: [doubaoPro, claudeSonnet],
 };
 ```
 
@@ -42,7 +42,7 @@ const buildReports = {
 | `models`               | 可执行的模型配置列表。                                                                                                         |
 | `includeChunks`        | 是否把 page-level chunk 细节加入 prompt。默认 `false`。                                                                        |
 | `includeModules`       | 是否把 page-level 和 component-level module 细节加入 prompt。默认 `false`。                                                    |
-| `resolvePage(context)` | 页面级过滤与局部 override 钩子。可以跳过页面，也可以只覆盖该页的 `modelId`、`cache`、`includeChunks`、`includeModules`。       |
+| `resolvePage(context)` | 页面级过滤与局部 override 钩子。可以跳过页面，也可以只覆盖该页的 `model`、`cache`、`includeChunks`、`includeModules`。         |
 
 ## `resolvePage(context)` 如何工作
 
@@ -53,24 +53,20 @@ const buildReports = {
 | override 对象                  | 保留该页面，并只对该页局部覆盖配置。 |
 
 ```ts
+const defaultReview = doubaoCN.model({
+  default: true,
+  model: 'doubao-seed-2-0-pro-260215',
+});
+const perfReview = claudeUS.model({
+  model: 'claude-sonnet-4-20250514',
+});
+
 const buildReports = {
-  models: [
-    {
-      id: 'default-review',
-      default: true,
-      model: 'doubao-seed-2-0-pro-260215',
-      providerRef: { provider: 'doubao' },
-    },
-    {
-      id: 'perf-review',
-      model: 'claude-sonnet-4-20250514',
-      providerRef: { provider: 'claude', id: 'us' },
-    },
-  ],
+  models: [defaultReview, perfReview],
   resolvePage({ page }) {
     if (page.routePath === '/guide/performance') {
       return {
-        modelId: 'perf-review',
+        model: perfReview,
         includeChunks: true,
         includeModules: true,
       };

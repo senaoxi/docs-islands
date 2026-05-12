@@ -1,0 +1,261 @@
+{
+  "cacheIdentity": {
+    "promptHash": "82b47940c2877d9e675c4db43f27b9043e766179d49e4b56f5872e9dd07fcb99",
+    "provider": "claude",
+    "providerConfig": {
+      "anthropicVersion": "2023-06-01",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "maxTokens": 4096,
+      "model": "claude-opus-4-7",
+      "temperature": null
+    }
+  },
+  "cacheKey": "e73884c27ded246beac43422c8e92f7ceda53618e819d9c77d43bb14035bb2f1",
+  "report": {
+    "detail": "Using https://api.anthropic.com/v1/messages · provider Claude US",
+    "generatedAt": "2026-05-12T10:56:55.263Z",
+    "model": "claude-opus-4-7",
+    "prompt": "## Task\nAnalyze the current docs-islands / VitePress page-build snapshot for this page.\nPrioritize build diagnosis over descriptive inventory. Focus first on dominant page cost drivers, SPA route-transition blocking paths, and the directives that materially change current-page behavior before spending time on secondary components.\nTreat `includeChunks` and `includeModules` as independent switches, and do not invent details that are not shown.\n\nAnalysis priorities:\n1. Identify the dominant deduped page-level cost drivers that are visible in the page bundle summary, top page resources, and top page modules.\n2. Identify the main SPA route-transition blocking path from the visible `spa:sync-render` side effects, including blocking CSS, embedded HTML, and render-order implications.\n3. Distinguish which directives materially affect this page now versus which directives are only present in the page inventory.\n4. Use component sections for local composition attribution and notable outliers, not for exhaustive repetition.\n5. Call out what cannot be proven from this snapshot and which additional artifact view would close the gap.\n\nMeta-rules:\n- Scope discipline: Always keep deduped page-level cost, per-component local composition, and `spa:sync-render` transition-side cost separate. Do not sum per-component totals to estimate page cost. A component with `Total: 0 B` or `Bundle Mode: No dedicated client component bundle emitted` can still contribute transition-side cost through `spa:sync-render` embedded HTML or blocking CSS. Page-level runtime or loader cost can appear in the page cost snapshot even when it does not appear in a component-local chunk list.\n- Evidence discipline: Separate observed facts from inferences. Use wording such as `visible in the snapshot`, `suggests`, or `cannot be confirmed from this snapshot` when appropriate. Keep inference confidence proportional to the evidence. Identify shared/runtime overhead only when the snapshot supports it; do not classify something as shared/runtime overhead from naming alone. For render-order implications, describe only ordering effects that are explicitly visible from the listed render order, patch sizes, and blocking CSS data.\n- Diagnosis discipline: Prioritize dominant drivers and blocking paths over exhaustive inventory. Do not restate the full snapshot component-by-component. Focus on the smallest set of components, chunks, modules, and directives that explains most of the page cost, transition blocking, or build interpretation.\n- Directive discipline: Explain only directive effects that materially affect this page now. Prioritize visible effects on deduped page cost, hydration timing, presence or absence of SSR HTML, `spa:sync-render` participation, blocking CSS, and route-transition stability. Do not fall back to generic framework explanations when the snapshot does not show a current-page consequence.\n- Optimization discipline: Order ideas by expected impact and confidence. Prefer a few high-signal opportunities over a long generic list. Tie every idea to visible evidence, name the component, directive, chunk, module, or `spa:sync-render` behavior it targets, and explain the expected tradeoff.\n\n## Output\nRespond in Markdown using these sections:\n- Summary\n- Dominant Page Cost Drivers\n- Rendering Strategy Breakdown\n- Component Composition Highlights\n- spa:sync-render Transition Impact\n- Optimization Opportunities\n- Evidence Gaps / Unknowns\n\nSection guidance:\n- Summary: Lead with the most important diagnosis. State explicitly whether page cost is concentrated in a few dominant resources/modules or spread across many smaller items, and whether SPA transition overhead is concentrated in a few `spa:sync-render` renders or broadly distributed.\n- Dominant Page Cost Drivers: Use the deduped page-level view first. Call out shared/runtime overhead versus component-specific payload when the snapshot supports that distinction.\n- Rendering Strategy Breakdown: Explain which directives materially affect current-page runtime or SPA transition behavior, and which directives are merely present.\n- Component Composition Highlights: Focus on the highest-impact or most diagnostic components. Keep lower-impact components brief instead of repeating every item evenly.\n- spa:sync-render Transition Impact: Report the exact visible fields when present: enabled component count, enabled render count, HTML patch target, total embedded HTML, blocking CSS files and total size, whether the CSS loading runtime is required, the biggest contributors to patch size, the components that add blocking CSS, and any render-order implications visible in the snapshot.\n- Optimization Opportunities: Order ideas by expected impact and confidence. Prefer a few high-signal opportunities over a long generic list. Tie every idea to visible evidence. For each idea, name the component, directive, chunk, module, or `spa:sync-render` behavior it targets, and explain the expected tradeoff.\n- Evidence Gaps / Unknowns: Categorize gaps as `Need chunk report`, `Need module report`, `Need page comparison`, or `Need directive config evidence`, and explain why that evidence is needed.\n\nKeep the analysis grounded in the visible snapshot. If evidence is missing, say exactly which additional page, chunk, module, comparison, or directive-config view would help.\n\n## Current Page Snapshot\n\nCurrent Page:\n- Panel: Page Build\n- Title: /zh/guide/getting-started\n- Path: /zh/guide/getting-started\n- Components: 1\n- Render Instances: 1\n- Used Directives: ssr:only\n- Chunk Resources: 3\n- Module Sources: 0\n- Composition Detail: component -> chunks -> modules\n- Module Preloads: 0\n- CSS Bundles: 1\n- Embedded HTML: 308 B\n\nGlossary:\n- Share: Rendered-byte share within the current visible list.\n- Source: Resolved source or source-asset size when the original file is available.\n- Delta: Rendered-size change relative to the resolved source size.\n\nCurrent Page Rendered React Components:\n1. CounterCard\n   source path: zh/guide/CounterCard.tsx\n   render directives: `ssr:only`\n   Total: 0 B\n   JS: 0 B\n   CSS: 0 B\n   Asset: 0 B\n   Bundle Mode: No dedicated client component bundle emitted\n   Render Instances: 1\n   spa:sync-render Renders: 1\n\nPage Build Cost Snapshot:\nBundle Summary:\n- Total: 73.5 KB\n- JS: 73.0 KB\n- CSS: 517 B\n\nTop Page Resources (3 shown):\n1. zh_guide_getting-started.md.Bjg-f0xa.js\n   path: /docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js\n   type: JS\n   size: 37.7 KB\n   share: 51.3%\n   source modules: 0\n2. unified-loader.C-ba9gJr.js\n   path: /docs-islands/vitepress/assets/unified-loader.C-ba9gJr.js\n   type: JS\n   size: 35.3 KB\n   share: 48.0%\n   source modules: 0\n3. CounterCard.voQQjh8K.css\n   path: /docs-islands/vitepress/assets/CounterCard.voQQjh8K.css\n   type: CSS\n   size: 517 B\n   share: 0.7%\n   source modules: 0\n\nCurrent Page Rendering Strategy Context:\n1. `ssr:only`\n   description: Build-time pre-render only. The component keeps SSR HTML, but the component itself does not hydrate on the client.\n   impacts:\n   - Usually best for static content, SEO, and avoiding client JavaScript for the component itself.\n   - `spa:sync-render` is enabled by default unless explicitly disabled.\n   - No client-side interactivity is restored after navigation.\n\nspa:sync-render Artifact Context:\n- `client:only` does not support `spa:sync-render`.\n- `client:load` and `client:visible` only use `spa:sync-render` when explicitly enabled.\n- `ssr:only` defaults to `spa:sync-render` unless it is explicitly disabled.\n- When enabled, pre-rendered HTML is patched into the page client chunk used for SPA route transitions.\n- Blocking CSS required by those renders can delay the page content until the CSS is loaded.\n- Enabled Components: 1\n- Enabled Renders: 1\n- HTML Patch Target: /docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js\n- Embedded HTML: 308 B\n- Blocking CSS: 1 file(s) · 517 B\n- Blocking CSS Files: /docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B)\n- CSS Loading Runtime: Required\n- Loader Script: /docs-islands/vitepress/assets/unified-loader.C-ba9gJr.js\n\nspa:sync-render Components (1 shown):\n1. CounterCard\n   render ids: 00343d2e\n   render directives: `ssr:only`\n   HTML Patch Target: /docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js\n   Embedded HTML Patch: 308 B\n   Blocking CSS: 1 file(s) · 517 B\n   Blocking CSS Files: /docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B)\n   CSS Loading Runtime: Required\n   spa:sync-render Side Effect: injects 308 B of pre-rendered HTML into /docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js and waits for 1 blocking CSS file(s) before the page content can render during SPA route transitions: /docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B).\n\nRender Order and Side Effects:\n1. CounterCard\n   render id: 00343d2e\n   source path: zh/guide/CounterCard.tsx\n   render directive: `ssr:only`\n   spa:sync-render: Enabled\n   HTML Patch Target: /docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js\n   Embedded HTML Patch: 308 B\n   Blocking CSS: 1 file(s) · 517 B\n   Blocking CSS Files: /docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B)\n   CSS Loading Runtime: Required\n   spa:sync-render Side Effect: injects 308 B of pre-rendered HTML into /docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js and waits for 1 blocking CSS file(s) before the page content can render during SPA route transitions: /docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B).",
+    "provider": "claude",
+    "providerLabel": "Claude US",
+    "reportId": "claude-report-model-8d724cdcfdc4",
+    "reportLabel": "Claude Opus",
+    "result": "# Page Build Analysis: /zh/guide/getting-started\n\n## Summary\n\nPage cost (73.5 KB total) is concentrated in **two roughly equal JS resources**: the page chunk (`zh_guide_getting-started.md`, 37.7 KB / 51.3%) and the shared `unified-loader` runtime (35.3 KB / 48.0%). Together they account for ~99.3% of page bytes, while component-attributable payload is effectively just the 517 B `CounterCard.css`. SPA transition overhead is minimal and concentrated in a single `spa:sync-render` (CounterCard, `ssr:only`): 308 B embedded HTML plus one 517 B blocking CSS file. There is no client component JS bundle emitted for this page.\n\n## Dominant Page Cost Drivers\n\nFrom the deduped page-level view:\n\n1. **`zh_guide_getting-started.md.Bjg-f0xa.js` — 37.7 KB (51.3%)**: the per-page chunk and also the `spa:sync-render` HTML patch target. Drives most page-specific cost.\n2. **`unified-loader.C-ba9gJr.js` — 35.3 KB (48.0%)**: a loader script reused for `spa:sync-render` CSS loading runtime. Its size is significant on this page but, by name and role, is likely shared across pages — though shared status **cannot be confirmed from this snapshot alone** (no page comparison view).\n3. **`CounterCard.voQQjh8K.css` — 517 B (0.7%)**: small but functionally important as the only blocking CSS for SPA transitions.\n\nNo component-specific JS bundle is emitted (CounterCard is `ssr:only`), so component-attributable cost is essentially the 517 B CSS. The bulk of bytes is framework/page-runtime overhead, not component payload.\n\n## Rendering Strategy Breakdown\n\nOnly **`ssr:only`** is used on this page (single component, single render). Material current-page effects:\n\n- No client hydration JS for CounterCard — confirmed by `Bundle Mode: No dedicated client component bundle emitted` and JS: 0 B.\n- `spa:sync-render` is enabled by default for `ssr:only` and **is active here** (1 enabled component, 1 enabled render). This makes the CSS loading runtime required, which is what justifies pulling in `unified-loader` for SPA transitions even though the component itself ships no JS.\n- No client-side interactivity restored after SPA navigation — accepted tradeoff for static content.\n\nNo other directives are present in the page inventory.\n\n## Component Composition Highlights\n\nOnly one component (CounterCard) is rendered. Its local composition is trivial: 0 B JS, 517 B CSS, 1 instance, 1 `spa:sync-render` render. The diagnostic note is the asymmetry — CounterCard contributes 0 B of dedicated bundle but still imposes a blocking CSS dependency and 308 B HTML patch during SPA transitions. This is the classic `ssr:only` + `spa:sync-render` cost profile.\n\n## spa:sync-render Transition Impact\n\n- **Enabled Components:** 1 · **Enabled Renders:** 1\n- **HTML Patch Target:** `zh_guide_getting-started.md.Bjg-f0xa.js` (the page chunk itself)\n- **Embedded HTML:** 308 B (all from CounterCard)\n- **Blocking CSS:** 1 file, 517 B (`CounterCard.voQQjh8K.css`)\n- **CSS Loading Runtime:** Required → pulls in `unified-loader.C-ba9gJr.js` (35.3 KB)\n- **Render Order:** Only one render (CounterCard, id `00343d2e`); no ordering interactions visible.\n\nTransition behavior: during SPA route changes into this page, the page chunk applies the 308 B HTML patch but must wait on the 517 B CSS before content can render. The CSS is small, so the blocking window is dominated by network round-trip rather than byte size. The largest cost related to `spa:sync-render` on this page is actually the **loader runtime itself (35.3 KB)**, not the patched HTML or blocking CSS.\n\n## Optimization Opportunities\n\nOrdered by expected impact and confidence:\n\n1. **Verify `unified-loader` is shared across pages (high impact, needs evidence).** At 35.3 KB and 48% of this page, if it is already a cross-page shared chunk, no action is needed and the per-page amortized cost is much lower. If it is duplicated or page-scoped, dedupe/promote-to-shared would roughly halve this page's JS. **Action: compare against another page snapshot.**\n2. **Consider disabling `spa:sync-render` for CounterCard if SPA-transition fidelity is not required (medium impact, low risk).** Disabling it would remove the 308 B HTML patch + 517 B blocking CSS dependency from the transition path and, more importantly, eliminate the `CSS Loading Runtime: Required` signal — which is the reason `unified-loader` participates here. Tradeoff: CounterCard content would not appear synchronously during SPA navigation. Whether the loader chunk itself shrinks or is fully avoidable elsewhere on this page **cannot be confirmed from this snapshot**.\n3. **Inline the 517 B CounterCard CSS into the page chunk (low impact, low risk).** Eliminates the blocking CSS request entirely during SPA transitions for a small byte cost. Only worthwhile if the CSS-loading-runtime requirement could then also be dropped — which depends on whether other pages need it.\n\nNo optimization targets the page chunk (37.7 KB) directly because the snapshot exposes 0 source modules for it — its internal composition is not visible.\n\n## Evidence Gaps / Unknowns\n\n- **Need page comparison:** To confirm whether `unified-loader.C-ba9gJr.js` (35.3 KB) is a shared runtime amortized across pages or a per-page cost. This is the single biggest uncertainty in the cost diagnosis.\n- **Need module report:** `Module Sources: 0` and `source modules: 0` on every chunk mean the internal composition of the 37.7 KB page chunk and the 35.3 KB loader is opaque. A module-level view would clarify whether the page chunk contains framework code, MD-compiled content, or embedded component HTML/runtime glue.\n- **Need directive config evidence:** Whether `spa:sync-render` can be disabled for `ssr:only` on this site (and what would happen to `unified-loader` inclusion if it were) is not derivable from this snapshot.\n- **Need chunk report:** To see whether `unified-loader` and the page chunk share modules, which would inform whether dedupe or splitting is feasible.",
+    "target": {
+      "artifactKind": "page-build",
+      "artifactLabel": "/zh/guide/getting-started",
+      "bytes": 75219,
+      "content": "Build overview for /zh/guide/getting-started",
+      "context": {
+        "artifactHeaderItems": [
+          {
+            "label": "Path",
+            "value": "/zh/guide/getting-started"
+          },
+          {
+            "label": "Components",
+            "value": "1"
+          },
+          {
+            "label": "Render Instances",
+            "value": "1"
+          },
+          {
+            "label": "Used Directives",
+            "value": "ssr:only"
+          },
+          {
+            "label": "Chunk Resources",
+            "value": "3"
+          },
+          {
+            "label": "Module Sources",
+            "value": "0"
+          },
+          {
+            "label": "Composition Detail",
+            "value": "component -> chunks -> modules"
+          },
+          {
+            "label": "Module Preloads",
+            "value": "0"
+          },
+          {
+            "label": "CSS Bundles",
+            "value": "1"
+          },
+          {
+            "label": "Embedded HTML",
+            "value": "308 B"
+          }
+        ],
+        "bundleSummaryItems": [
+          {
+            "label": "Total",
+            "value": "73.5 KB"
+          },
+          {
+            "label": "JS",
+            "value": "73.0 KB"
+          },
+          {
+            "label": "CSS",
+            "value": "517 B"
+          }
+        ],
+        "chunkResourceItems": [
+          {
+            "file": "/docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js",
+            "label": "zh_guide_getting-started.md.Bjg-f0xa.js",
+            "moduleCount": 0,
+            "share": "51.3%",
+            "size": "37.7 KB",
+            "type": "js"
+          },
+          {
+            "file": "/docs-islands/vitepress/assets/unified-loader.C-ba9gJr.js",
+            "label": "unified-loader.C-ba9gJr.js",
+            "moduleCount": 0,
+            "share": "48.0%",
+            "size": "35.3 KB",
+            "type": "js"
+          },
+          {
+            "file": "/docs-islands/vitepress/assets/CounterCard.voQQjh8K.css",
+            "label": "CounterCard.voQQjh8K.css",
+            "moduleCount": 0,
+            "share": "0.7%",
+            "size": "517 B",
+            "type": "css"
+          }
+        ],
+        "componentName": "CounterCard",
+        "moduleItems": [],
+        "pageComponentItems": [
+          {
+            "sourcePath": "zh/guide/CounterCard.tsx",
+            "componentName": "CounterCard",
+            "renderDirectives": ["ssr:only"],
+            "summaryItems": [
+              {
+                "label": "Total",
+                "value": "0 B"
+              },
+              {
+                "label": "JS",
+                "value": "0 B"
+              },
+              {
+                "label": "CSS",
+                "value": "0 B"
+              },
+              {
+                "label": "Asset",
+                "value": "0 B"
+              },
+              {
+                "label": "Bundle Mode",
+                "value": "No dedicated client component bundle emitted"
+              },
+              {
+                "label": "Render Instances",
+                "value": "1"
+              },
+              {
+                "label": "spa:sync-render Renders",
+                "value": "1"
+              }
+            ]
+          }
+        ],
+        "pageRenderOrderItems": [
+          {
+            "componentName": "CounterCard",
+            "renderDirective": "ssr:only",
+            "renderId": "00343d2e",
+            "sequence": 1,
+            "sourcePath": "zh/guide/CounterCard.tsx",
+            "summaryItems": [
+              {
+                "label": "HTML Patch Target",
+                "value": "/docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js"
+              },
+              {
+                "label": "Embedded HTML Patch",
+                "value": "308 B"
+              },
+              {
+                "label": "Blocking CSS",
+                "value": "1 file(s) · 517 B"
+              },
+              {
+                "label": "Blocking CSS Files",
+                "value": "/docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B)"
+              },
+              {
+                "label": "CSS Loading Runtime",
+                "value": "Required"
+              },
+              {
+                "label": "spa:sync-render Side Effect",
+                "value": "injects 308 B of pre-rendered HTML into /docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js and waits for 1 blocking CSS file(s) before the page content can render during SPA route transitions: /docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B)."
+              }
+            ],
+            "useSpaSyncRender": true
+          }
+        ],
+        "pageSpaSyncComponentItems": [
+          {
+            "componentName": "CounterCard",
+            "renderDirectives": ["ssr:only"],
+            "renderIds": ["00343d2e"],
+            "summaryItems": [
+              {
+                "label": "HTML Patch Target",
+                "value": "/docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js"
+              },
+              {
+                "label": "Embedded HTML Patch",
+                "value": "308 B"
+              },
+              {
+                "label": "Blocking CSS",
+                "value": "1 file(s) · 517 B"
+              },
+              {
+                "label": "Blocking CSS Files",
+                "value": "/docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B)"
+              },
+              {
+                "label": "CSS Loading Runtime",
+                "value": "Required"
+              },
+              {
+                "label": "spa:sync-render Side Effect",
+                "value": "injects 308 B of pre-rendered HTML into /docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js and waits for 1 blocking CSS file(s) before the page content can render during SPA route transitions: /docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B)."
+              }
+            ]
+          }
+        ],
+        "pageSpaSyncSummaryItems": [
+          {
+            "label": "Enabled Components",
+            "value": "1"
+          },
+          {
+            "label": "Enabled Renders",
+            "value": "1"
+          },
+          {
+            "label": "HTML Patch Target",
+            "value": "/docs-islands/vitepress/assets/zh_guide_getting-started.md.Bjg-f0xa.js"
+          },
+          {
+            "label": "Embedded HTML",
+            "value": "308 B"
+          },
+          {
+            "label": "Blocking CSS",
+            "value": "1 file(s) · 517 B"
+          },
+          {
+            "label": "Blocking CSS Files",
+            "value": "/docs-islands/vitepress/assets/CounterCard.voQQjh8K.css (517 B)"
+          },
+          {
+            "label": "CSS Loading Runtime",
+            "value": "Required"
+          },
+          {
+            "label": "Loader Script",
+            "value": "/docs-islands/vitepress/assets/unified-loader.C-ba9gJr.js"
+          }
+        ],
+        "pageId": "/zh/guide/getting-started",
+        "renderId": null
+      },
+      "displayPath": "/zh/guide/getting-started",
+      "language": "text"
+    }
+  }
+}

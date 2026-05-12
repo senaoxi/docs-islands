@@ -1,13 +1,7 @@
 import type {
-  SiteDevToolsAnalysisBuildReportModelConfig,
-  SiteDevToolsAnalysisUserConfig,
+  SiteDevToolsAnalysisResolvedBuildReportModelConfig,
+  SiteDevToolsAnalysisResolvedUserConfig,
 } from '#dep-types/utils';
-import { VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS } from '#shared/constants/log-groups/site-devtools';
-import {
-  createElapsedLogOptions,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
-import { createHash } from 'node:crypto';
 import {
   buildSiteDevToolsAiAnalysisPrompt,
   getSiteDevToolsAiProviderLabel,
@@ -15,35 +9,39 @@ import {
   type SiteDevToolsAiCapabilitiesResponse,
   type SiteDevToolsAiProvider,
   type SiteDevToolsAiProviderCapability,
-  type SiteDevToolsAiRequestTrace,
 } from '../../shared/site-devtools-ai';
-import { getVitePressGroupLogger } from '../logger';
+import {
+  createExecutionFailure,
+  createRequestTrace,
+  createTimeoutExecutionError,
+  formatRequestTraceDetail,
+  logAiRequestFailed,
+  logAiRequestStarted,
+  logAiRequestSucceeded,
+  resolveTextContent,
+  SiteDevToolsAiExecutionError,
+} from './ai-server-trace';
 
 const SITE_DEVTOOLS_AI_ANALYSIS_SYSTEM_PROMPT =
   'You are a senior frontend performance and bundling engineer. Help analyze generated build artifacts accurately and pragmatically.';
-const DEFAULT_CLAUDE_ANTHROPIC_VERSION = '2023-06-01';
+const LATEST_CLAUDE_ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com/v1';
 const DEFAULT_CLAUDE_MAX_TOKENS = 4096;
 const DEFAULT_DOUBAO_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
 const DEFAULT_ANALYSIS_TIMEOUT_MS = Number.POSITIVE_INFINITY;
-const getSiteDevToolsAiLogger = (loggerScopeId: string) =>
-  getVitePressGroupLogger(
-    VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS.aiServer,
-    loggerScopeId,
-  );
 
 export interface SiteDevToolsAnalysisRuntimeConfig {
-  buildReports?: SiteDevToolsAnalysisUserConfig['buildReports'];
+  buildReports?: SiteDevToolsAnalysisResolvedUserConfig['buildReports'];
   providers?: {
     claude?: (NonNullable<
-      NonNullable<SiteDevToolsAnalysisUserConfig['providers']>['claude']
+      NonNullable<SiteDevToolsAnalysisResolvedUserConfig['providers']>['claude']
     >[number] & {
       maxTokens?: number;
       model?: string;
       temperature?: number;
     })[];
     doubao?: (NonNullable<
-      NonNullable<SiteDevToolsAnalysisUserConfig['providers']>['doubao']
+      NonNullable<SiteDevToolsAnalysisResolvedUserConfig['providers']>['doubao']
     >[number] & {
       maxTokens?: number;
       model?: string;
@@ -65,33 +63,6 @@ export interface SiteDevToolsAiExecutionResult {
   result: string;
 }
 
-class SiteDevToolsAiExecutionError extends Error {
-  declare readonly detail?: string;
-  declare readonly statusCode: number;
-
-  constructor(
-    message: string,
-    options?: {
-      cause?: unknown;
-      detail?: string;
-      statusCode?: number;
-    },
-  ) {
-    super(message, options?.cause ? { cause: options.cause } : undefined);
-    this.name = 'SiteDevToolsAiExecutionError';
-    Object.defineProperty(this, 'detail', {
-      configurable: true,
-      value: options?.detail,
-      writable: true,
-    });
-    Object.defineProperty(this, 'statusCode', {
-      configurable: true,
-      value: options?.statusCode ?? 500,
-      writable: true,
-    });
-  }
-}
-
 type SiteDevToolsAnalysisDoubaoRuntimeProviderConfig = NonNullable<
   NonNullable<SiteDevToolsAnalysisRuntimeConfig['providers']>['doubao']
 >[number];
@@ -99,14 +70,14 @@ type SiteDevToolsAnalysisClaudeRuntimeProviderConfig = NonNullable<
   NonNullable<SiteDevToolsAnalysisRuntimeConfig['providers']>['claude']
 >[number];
 type SiteDevToolsAnalysisDoubaoBuildReportModelConfig =
-  SiteDevToolsAnalysisBuildReportModelConfig & {
+  SiteDevToolsAnalysisResolvedBuildReportModelConfig & {
     thinking?: boolean;
   };
 
 const isDoubaoBuildReportModelConfig = (
-  modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
+  modelConfig: SiteDevToolsAnalysisResolvedBuildReportModelConfig,
 ): modelConfig is SiteDevToolsAnalysisDoubaoBuildReportModelConfig =>
-  modelConfig.providerRef.provider === 'doubao';
+  modelConfig.provider === 'doubao';
 
 const getClaudeProviderConfigs = (
   config: SiteDevToolsAiConfig,
@@ -174,11 +145,11 @@ const getDoubaoProviderDefaultCount = (config: SiteDevToolsAiConfig) =>
 
 const getClaudeBuildReportModelConfigs = (
   config: SiteDevToolsAiConfig,
-): SiteDevToolsAnalysisBuildReportModelConfig[] =>
+): SiteDevToolsAnalysisResolvedBuildReportModelConfig[] =>
   Array.isArray(config?.buildReports?.models)
     ? config.buildReports.models.filter(
-        (model): model is SiteDevToolsAnalysisBuildReportModelConfig =>
-          Boolean(model) && model.providerRef.provider === 'claude',
+        (model): model is SiteDevToolsAnalysisResolvedBuildReportModelConfig =>
+          Boolean(model) && model.provider === 'claude',
       )
     : [];
 
@@ -324,222 +295,7 @@ const getDoubaoThinkingType = (
       : undefined;
 };
 
-const getClaudeAnthropicVersion = (config: SiteDevToolsAiConfig) =>
-  getClaudeProviderConfig(config)?.anthropicVersion?.trim() ||
-  DEFAULT_CLAUDE_ANTHROPIC_VERSION;
-
-const formatDurationMs = (value: number) => {
-  if (!Number.isFinite(value)) {
-    return 'Infinity';
-  }
-
-  if (value < 1000) {
-    return `${value} ms`;
-  }
-
-  const seconds = value / 1000;
-
-  if (seconds < 60) {
-    return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} s`;
-  }
-
-  const minutes = seconds / 60;
-
-  return `${Number.isInteger(minutes) ? minutes : minutes.toFixed(1)} min`;
-};
-
-const formatByteCount = (value: number) => {
-  if (value < 1024) {
-    return `${value} B`;
-  }
-
-  const units = ['KB', 'MB', 'GB'];
-  let normalizedValue = value;
-  let unitIndex = -1;
-
-  while (normalizedValue >= 1024 && unitIndex < units.length - 1) {
-    normalizedValue /= 1024;
-    unitIndex += 1;
-  }
-
-  const formattedValue =
-    normalizedValue >= 10 || Number.isInteger(normalizedValue)
-      ? normalizedValue.toFixed(0)
-      : normalizedValue.toFixed(1);
-
-  return `${formattedValue} ${units[unitIndex]}`;
-};
-
-const createProviderRequestId = ({
-  prompt,
-  provider,
-  target,
-}: {
-  prompt: string;
-  provider: SiteDevToolsAiProvider;
-  target: SiteDevToolsAiAnalysisTarget;
-}) =>
-  createHash('sha256')
-    .update(
-      JSON.stringify({
-        artifactKind: target.artifactKind,
-        displayPath: target.displayPath,
-        prompt,
-        provider,
-      }),
-    )
-    .digest('hex')
-    .slice(0, 12);
-
-const createRequestTrace = ({
-  model,
-  prompt,
-  provider,
-  target,
-  timeoutMs,
-}: {
-  model?: string;
-  prompt: string;
-  provider: SiteDevToolsAiProvider;
-  target: SiteDevToolsAiAnalysisTarget;
-  timeoutMs: number;
-}): SiteDevToolsAiRequestTrace => ({
-  artifactKind: target.artifactKind,
-  displayPath: target.displayPath,
-  ...(model ? { model } : {}),
-  promptBytes: Buffer.byteLength(prompt, 'utf8'),
-  provider,
-  providerRequestId: createProviderRequestId({
-    prompt,
-    provider,
-    target,
-  }),
-  timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 'infinite',
-});
-
-const formatRequestTraceDetail = (trace: SiteDevToolsAiRequestTrace) =>
-  [
-    `Trace ${trace.providerRequestId}`,
-    `${getSiteDevToolsAiProviderLabel(trace.provider)}`,
-    trace.model ? `model ${trace.model}` : null,
-    `${trace.artifactKind} ${trace.displayPath}`,
-    `prompt ${formatByteCount(trace.promptBytes)}`,
-    trace.timeoutMs === 'infinite'
-      ? 'timeout disabled'
-      : `timeout ${formatDurationMs(trace.timeoutMs)}`,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join(' · ');
-
-const logAiRequestStarted = (
-  trace: SiteDevToolsAiRequestTrace,
-  startedAt: number,
-  loggerScopeId: string,
-) => {
-  getSiteDevToolsAiLogger(loggerScopeId).info(
-    `Starting AI analysis: ${formatRequestTraceDetail(trace)}`,
-    createElapsedLogOptions(startedAt, Date.now()),
-  );
-};
-
-const logAiRequestSucceeded = ({
-  elapsedMs,
-  loggerScopeId,
-  result,
-  trace,
-}: {
-  elapsedMs: number;
-  loggerScopeId: string;
-  result: string;
-  trace: SiteDevToolsAiRequestTrace;
-}) => {
-  getSiteDevToolsAiLogger(loggerScopeId).success(
-    `AI analysis returned data: ${formatRequestTraceDetail(trace)} · response ${formatByteCount(
-      Buffer.byteLength(result, 'utf8'),
-    )} · elapsed ${formatDurationMs(elapsedMs)}`,
-    { elapsedTimeMs: elapsedMs },
-  );
-};
-
-const logAiRequestFailed = ({
-  elapsedMs,
-  error,
-  loggerScopeId,
-  trace,
-}: {
-  elapsedMs: number;
-  error: unknown;
-  loggerScopeId: string;
-  trace: SiteDevToolsAiRequestTrace;
-}) => {
-  getSiteDevToolsAiLogger(loggerScopeId).error(
-    `AI analysis returned no data: ${formatRequestTraceDetail(trace)} · elapsed ${formatDurationMs(
-      elapsedMs,
-    )} · reason ${formatErrorMessage(error)}`,
-    { elapsedTimeMs: elapsedMs },
-  );
-};
-
-const createTimeoutExecutionError = ({
-  trace,
-}: {
-  trace: SiteDevToolsAiRequestTrace;
-}) => {
-  const detail = formatRequestTraceDetail(trace);
-
-  return new SiteDevToolsAiExecutionError(
-    `${getSiteDevToolsAiProviderLabel(trace.provider)} analysis timed out. ${detail}`,
-    {
-      detail,
-      statusCode: 504,
-    },
-  );
-};
-
-const createExecutionFailure = ({
-  detail,
-  message,
-  statusCode,
-}: {
-  detail: string;
-  message: string;
-  statusCode?: number;
-}) =>
-  new SiteDevToolsAiExecutionError(`${message} ${detail}`.trim(), {
-    detail,
-    statusCode,
-  });
-
-const resolveTextContent = (value: unknown): string => {
-  if (typeof value === 'string') {
-    return value.trim();
-  }
-
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => {
-        if (typeof item === 'string') {
-          return item;
-        }
-
-        if (
-          item &&
-          typeof item === 'object' &&
-          'text' in item &&
-          typeof item.text === 'string'
-        ) {
-          return item.text;
-        }
-
-        return '';
-      })
-      .filter(Boolean)
-      .join('\n')
-      .trim();
-  }
-
-  return '';
-};
+const getClaudeAnthropicVersion = () => LATEST_CLAUDE_ANTHROPIC_VERSION;
 
 const getClaudeCapability = (
   config: SiteDevToolsAiConfig,
@@ -552,7 +308,7 @@ const getClaudeCapability = (
     return {
       available: false,
       detail:
-        'Configure siteDevtools.analysis.providers.claude with at least one provider entry to use Claude analysis.',
+        'Configure siteDevtools.analysis.providers with at least one claude.provider(...) entry to use Claude analysis.',
       provider: 'claude',
     };
   }
@@ -561,7 +317,7 @@ const getClaudeCapability = (
     return {
       available: false,
       detail:
-        'Missing siteDevtools.analysis.providers.claude[].apiKey for the active Claude provider entry in the VitePress config.',
+        'Missing apiKey for the active Claude provider entry in siteDevtools.analysis.providers.',
       provider: 'claude',
     };
   }
@@ -570,7 +326,7 @@ const getClaudeCapability = (
     return {
       available: false,
       detail:
-        'Missing a Claude model configuration. Add a siteDevtools.analysis.buildReports.models entry with { providerRef: { provider: "claude" }, model: "..." }.',
+        'Missing a Claude model configuration. Add a siteDevtools.analysis.buildReports.models entry created by claude.provider(...).model(...).',
       provider: 'claude',
     };
   }
@@ -579,8 +335,6 @@ const getClaudeCapability = (
 
   if (providerConfig.label?.trim()) {
     detailParts.push(`provider ${providerConfig.label.trim()}`);
-  } else if (providerConfig.id?.trim()) {
-    detailParts.push(`provider id ${providerConfig.id.trim()}`);
   }
 
   if (getClaudeProviderDefaultCount(config) > 1) {
@@ -608,7 +362,7 @@ const getDoubaoCapability = (
     return {
       available: false,
       detail:
-        'Configure siteDevtools.analysis.providers.doubao with at least one provider entry to use Doubao analysis.',
+        'Configure siteDevtools.analysis.providers with at least one doubao.provider(...) entry to use Doubao analysis.',
       provider: 'doubao',
     };
   }
@@ -617,7 +371,7 @@ const getDoubaoCapability = (
     return {
       available: false,
       detail:
-        'Missing siteDevtools.analysis.providers.doubao[].apiKey for the active Doubao provider entry in the VitePress config.',
+        'Missing apiKey for the active Doubao provider entry in siteDevtools.analysis.providers.',
       provider: 'doubao',
     };
   }
@@ -626,7 +380,7 @@ const getDoubaoCapability = (
     return {
       available: false,
       detail:
-        'Missing a Doubao model configuration. Add a siteDevtools.analysis.buildReports.models entry with { providerRef: { provider: "doubao" }, model: "..." }.',
+        'Missing a Doubao model configuration. Add a siteDevtools.analysis.buildReports.models entry created by doubao.provider(...).model(...).',
       provider: 'doubao',
     };
   }
@@ -637,8 +391,6 @@ const getDoubaoCapability = (
 
   if (providerConfig.label?.trim()) {
     detailParts.push(`provider ${providerConfig.label.trim()}`);
-  } else if (providerConfig.id?.trim()) {
-    detailParts.push(`provider id ${providerConfig.id.trim()}`);
   }
 
   if (getDoubaoProviderDefaultCount(config) > 1) {
@@ -868,7 +620,7 @@ const runClaudeAnalysis = async (
       }),
       headers: {
         'Content-Type': 'application/json',
-        'anthropic-version': getClaudeAnthropicVersion(config),
+        'anthropic-version': getClaudeAnthropicVersion(),
         'x-api-key': providerConfig.apiKey,
       },
       method: 'POST',

@@ -5,7 +5,7 @@ import type {
 
 /**
  * Merge provider configurations from base and override.
- * Override takes precedence for all providers including claude and doubao.
+ * Override takes precedence for the provider list.
  */
 export function mergeProviderConfig(
   base: SiteDevToolsAnalysisUserConfig | undefined,
@@ -15,22 +15,7 @@ export function mergeProviderConfig(
     return undefined;
   }
 
-  const mergedProviders = {
-    ...base?.providers,
-    ...override?.providers,
-  };
-
-  if (base?.providers?.claude || override?.providers?.claude) {
-    mergedProviders.claude =
-      override?.providers?.claude ?? base?.providers?.claude;
-  }
-
-  if (base?.providers?.doubao || override?.providers?.doubao) {
-    mergedProviders.doubao =
-      override?.providers?.doubao ?? base?.providers?.doubao;
-  }
-
-  return mergedProviders;
+  return override?.providers ?? base?.providers;
 }
 
 /**

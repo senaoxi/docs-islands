@@ -2,6 +2,7 @@ import { loadEnv } from '@docs-islands/utils/env';
 import { createDocsIslands } from '@docs-islands/vitepress';
 import { react } from '@docs-islands/vitepress/adapters/react';
 import loggerPresets from '@docs-islands/vitepress/logger/presets';
+import { claude, doubao } from '@docs-islands/vitepress/models';
 import vitepressRenderingStrategiesPackageJson from '@docs-islands/vitepress/package.json' with { type: 'json' };
 import isInCi from 'is-in-ci';
 import { join } from 'pathe';
@@ -18,6 +19,32 @@ const { release, siteDevtools } = loadEnv();
 const { DOUBAO_BASE_URL, DOUBAO_API_KEY, CLAUDE_BASE_URL, CLAUDE_API_KEY } =
   siteDevtools;
 const base = `/${vitepressRenderingStrategiesPackageJson.name.replace('@', '')}/`;
+const claudeUS = claude.provider({
+  label: 'Claude US',
+  baseUrl: CLAUDE_BASE_URL,
+  apiKey: CLAUDE_API_KEY,
+  timeoutMs: 300_000,
+});
+const doubaoCN = doubao.provider({
+  label: 'Doubao CN',
+  baseUrl: DOUBAO_BASE_URL,
+  apiKey: DOUBAO_API_KEY,
+  timeoutMs: 300_000,
+});
+const claudeOpus = claudeUS.model({
+  label: 'Claude Opus',
+  maxTokens: 4096,
+  model: 'claude-opus-4-7',
+  default: true,
+});
+const doubaoPro = doubaoCN.model({
+  label: 'Doubao Pro',
+  model: 'doubao-seed-2-0-pro-260215',
+  temperature: 0.2,
+  thinking: true,
+  maxTokens: 4096,
+});
+const claudeOpusCacheId = 'claude-opus';
 
 const docsLoggerProbePreset = {
   rules: {
@@ -147,29 +174,7 @@ createDocsIslands({
   },
   siteDevtools: {
     analysis: {
-      providers: {
-        claude: [
-          {
-            id: 'us',
-            label: 'Claude US',
-            baseUrl: CLAUDE_BASE_URL,
-            apiKey: CLAUDE_API_KEY,
-            timeoutMs: 300_000,
-            anthropicVersion: '2023-06-01',
-            default: true,
-          },
-        ],
-        doubao: [
-          {
-            id: 'cn',
-            label: 'Doubao CN',
-            baseUrl: DOUBAO_BASE_URL,
-            apiKey: DOUBAO_API_KEY,
-            timeoutMs: 300_000,
-            default: true,
-          },
-        ],
-      },
+      providers: [claudeUS, doubaoCN],
       buildReports: {
         cache: {
           dir: '.vitepress/site-devtools-reports',
@@ -178,29 +183,7 @@ createDocsIslands({
         },
         includeChunks: true,
         includeModules: true,
-        models: [
-          {
-            id: 'claude-opus',
-            label: 'Claude Opus',
-            maxTokens: 4096,
-            model: 'claude-opus-4-7',
-            providerRef: {
-              provider: 'claude',
-            },
-            default: true,
-          },
-          {
-            id: 'doubao-pro',
-            label: 'Doubao Pro',
-            model: 'doubao-seed-2-0-pro-260215',
-            providerRef: {
-              provider: 'doubao',
-            },
-            temperature: 0.2,
-            thinking: true,
-            maxTokens: 4096,
-          },
-        ],
+        models: [claudeOpus, doubaoPro],
         resolvePage: ({ page }) => {
           const { routePath } = page;
 
@@ -208,11 +191,10 @@ createDocsIslands({
             return null;
           }
 
-          const modelId = 'claude-opus';
-          const cacheDir = `${modelId}/${routePath.replaceAll('/', '__')}`;
+          const cacheDir = `${claudeOpusCacheId}/${routePath.replaceAll('/', '__')}`;
 
           return {
-            modelId,
+            model: claudeOpus,
             cache: {
               dir: `.vitepress/site-devtools-reports/${cacheDir}`,
               strategy: isInCi ? 'fallback' : 'exact',

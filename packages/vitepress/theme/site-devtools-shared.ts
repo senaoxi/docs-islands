@@ -155,7 +155,7 @@ export const DEFAULT_GLOBAL_PATH = '__VP_SITE_DATA__';
 export const ENABLE_HMR_DEBUG_UI =
   (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;
 export const MAX_DEBUG_ENTRIES = 200;
-export const OVERLAY_PANEL_WIDTH = 296;
+export const OVERLAY_PANEL_WIDTH = 336;
 export const renderMetricContainerAttr = '__render_id__';
 export const renderMetricComponentAttr = '__render_component__';
 export const renderMetricDirectiveAttr = '__render_directive__';

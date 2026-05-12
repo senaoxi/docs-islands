@@ -14,8 +14,10 @@ function getVitepressRoot(): string | undefined {
 }
 
 export function resolveDependencyResolutionBase(searchStart: string): string {
-  const packageRoot = findNearestPackageRoot(searchStart);
-  return join(packageRoot ?? searchStart, 'package.json');
+  return join(
+    findNearestPackageRoot(searchStart) ?? searchStart,
+    'package.json',
+  );
 }
 
 export function resolveDependencySearchStart(configRoot?: string): string {

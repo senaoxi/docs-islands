@@ -30,6 +30,7 @@
 .site-devtools-overlay__side-effect-item {
   display: grid;
   gap: 0.22rem;
+  min-width: 0;
   border: 1px solid transparent;
   border-radius: 12px;
   background: color-mix(in srgb, var(--vp-c-bg-soft) 92%, transparent);
@@ -74,6 +75,7 @@
   color: var(--vp-c-text-1);
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
   font-size: 0.8rem;
+  overflow-wrap: anywhere;
 }
 
 .site-devtools-dialog__actions {

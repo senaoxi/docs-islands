@@ -9,28 +9,28 @@ Only pages that already contain docs-islands page-build analysis signals enter t
 ## Minimal Configuration
 
 ```ts [.vitepress/config.ts]
+import { claude, doubao } from '@docs-islands/vitepress/models';
+
+const doubaoCN = doubao.provider({
+  apiKey: process.env.DOUBAO_API_KEY!,
+});
+const claudeUS = claude.provider({
+  apiKey: process.env.CLAUDE_API_KEY!,
+});
+const doubaoPro = doubaoCN.model({
+  default: true,
+  model: 'doubao-seed-2-0-pro-260215',
+});
+const claudeSonnet = claudeUS.model({
+  model: 'claude-sonnet-4-20250514',
+  maxTokens: 4096,
+});
+
 const buildReports = {
   cache: true,
   includeChunks: false,
   includeModules: false,
-  models: [
-    {
-      id: 'doubao-pro',
-      default: true,
-      model: 'doubao-seed-2-0-pro-260215',
-      providerRef: {
-        provider: 'doubao',
-      },
-    },
-    {
-      id: 'claude-sonnet',
-      model: 'claude-sonnet-4-20250514',
-      maxTokens: 4096,
-      providerRef: {
-        provider: 'claude',
-      },
-    },
-  ],
+  models: [doubaoPro, claudeSonnet],
 };
 ```
 
@@ -42,7 +42,7 @@ const buildReports = {
 | `models`               | The executable model configuration list.                                                                                                                  |
 | `includeChunks`        | Whether page-level chunk detail is added to the prompt. Default: `false`.                                                                                 |
 | `includeModules`       | Whether page-level and component-level module detail is added to the prompt. Default: `false`.                                                            |
-| `resolvePage(context)` | Page-level filter and override hook. It can skip a page or override `modelId`, `cache`, `includeChunks`, and `includeModules` for that page only.         |
+| `resolvePage(context)` | Page-level filter and override hook. It can skip a page or override `model`, `cache`, `includeChunks`, and `includeModules` for that page only.           |
 
 ## How `resolvePage(context)` Works
 
@@ -53,24 +53,20 @@ const buildReports = {
 | Override object                 | Keep the page and override config for that page only. |
 
 ```ts
+const defaultReview = doubaoCN.model({
+  default: true,
+  model: 'doubao-seed-2-0-pro-260215',
+});
+const perfReview = claudeUS.model({
+  model: 'claude-sonnet-4-20250514',
+});
+
 const buildReports = {
-  models: [
-    {
-      id: 'default-review',
-      default: true,
-      model: 'doubao-seed-2-0-pro-260215',
-      providerRef: { provider: 'doubao' },
-    },
-    {
-      id: 'perf-review',
-      model: 'claude-sonnet-4-20250514',
-      providerRef: { provider: 'claude', id: 'us' },
-    },
-  ],
+  models: [defaultReview, perfReview],
   resolvePage({ page }) {
     if (page.routePath === '/guide/performance') {
       return {
-        modelId: 'perf-review',
+        model: perfReview,
         includeChunks: true,
         includeModules: true,
       };

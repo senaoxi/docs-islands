@@ -89,7 +89,6 @@ export interface SiteDevToolsAiBuildReport {
   model?: string;
   prompt: string;
   provider: SiteDevToolsAiProvider;
-  providerId?: string;
   providerLabel?: string;
   reportId: string;
   reportLabel: string;

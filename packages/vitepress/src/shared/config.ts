@@ -1,83 +1,211 @@
 import type {
   ConfigType,
+  SiteDevToolsAnalysisBuildReportDoubaoModelConfig,
   SiteDevToolsAnalysisBuildReportModelConfig,
   SiteDevToolsAnalysisBuildReportsCacheConfig,
+  SiteDevToolsAnalysisBuildReportsPageOverride,
+  SiteDevToolsAnalysisProvider,
+  SiteDevToolsAnalysisProviderConfig,
+  SiteDevToolsAnalysisResolvedBuildReportModelConfig,
+  SiteDevToolsAnalysisResolvedBuildReportsConfig,
+  SiteDevToolsAnalysisResolvedUserConfig,
   SiteDevToolsAnalysisUserConfig,
+  SiteDevToolsResolvedUserConfig,
   SiteDevToolsUserConfig,
 } from '#dep-types/utils';
 import { getProjectRoot, slash } from '@docs-islands/utils/path';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'pathe';
 import { normalizePath } from 'vite';
 import type { DefaultTheme, UserConfig } from 'vitepress';
+import {
+  getSiteDevToolsAnalysisModelMetadata,
+  getSiteDevToolsAnalysisProviderMetadata,
+  isSiteDevToolsAnalysisBuildReportModelConfig,
+  isSiteDevToolsAnalysisProviderConfig,
+} from './site-devtools-models';
 
 type SiteDevToolsBuildReportsInput =
   SiteDevToolsAnalysisUserConfig['buildReports'];
 const SITE_DEVTOOLS_AI_BUILD_REPORTS_DEFAULT_CACHE_DIR =
   '.vitepress/cache/site-devtools-reports';
+const UNKNOWN_BUILD_REPORT_MODEL_ID =
+  '__docs_islands_unknown_build_report_model__';
 
-type SiteDevToolsAnalysisDoubaoBuildReportModelConfig =
-  SiteDevToolsAnalysisBuildReportModelConfig & {
-    thinking?: boolean;
-  };
+const createStableConfigId = (prefix: string, payload: unknown) =>
+  `${prefix}-${createHash('sha256')
+    .update(JSON.stringify(payload))
+    .digest('hex')
+    .slice(0, 12)}`;
 
-const isDoubaoBuildReportModelConfig = (
-  model: SiteDevToolsAnalysisBuildReportModelConfig,
-): model is SiteDevToolsAnalysisDoubaoBuildReportModelConfig =>
-  model.providerRef.provider === 'doubao';
+const pickProviderConfigPayload = (
+  provider: SiteDevToolsAnalysisProvider,
+  providerConfig: SiteDevToolsAnalysisProviderConfig,
+  providerIndex: number,
+) => ({
+  apiKey: providerConfig.apiKey ? '<configured>' : null,
+  baseUrl: providerConfig.baseUrl ?? null,
+  provider,
+  providerIndex,
+  timeoutMs: providerConfig.timeoutMs ?? null,
+});
 
-const normalizeBuildReportModels = (
-  buildReports: SiteDevToolsBuildReportsInput,
-): SiteDevToolsAnalysisBuildReportModelConfig[] | undefined => {
+const pickModelConfigPayload = (
+  modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
+  provider: SiteDevToolsAnalysisProvider,
+  providerKey: string,
+  modelIndex: number,
+) => ({
+  maxTokens: modelConfig.maxTokens ?? null,
+  model: modelConfig.model,
+  modelIndex,
+  provider,
+  providerKey,
+  temperature: modelConfig.temperature ?? null,
+  ...(provider === 'doubao'
+    ? {
+        thinking:
+          (modelConfig as SiteDevToolsAnalysisBuildReportDoubaoModelConfig)
+            .thinking ?? false,
+      }
+    : {}),
+});
+
+const normalizeBuildReportModels = ({
+  buildReports,
+  resolvedProviderKeyBySourceKey,
+}: {
+  buildReports: SiteDevToolsBuildReportsInput;
+  resolvedProviderKeyBySourceKey: Map<string, string>;
+}): {
+  modelConfigIdBySource: WeakMap<object, string>;
+  models?: SiteDevToolsAnalysisResolvedBuildReportModelConfig[];
+  sourceModels: SiteDevToolsAnalysisBuildReportModelConfig[];
+} => {
+  const modelConfigIdBySource = new WeakMap<object, string>();
+
   if (!buildReports) {
-    return undefined;
+    return {
+      modelConfigIdBySource,
+      sourceModels: [],
+    };
   }
 
-  return Array.isArray(buildReports.models)
-    ? (buildReports.models.filter(Boolean).map((model) =>
-        isDoubaoBuildReportModelConfig(model)
-          ? {
-              ...model,
-              thinking: model.thinking ?? false,
-            }
-          : model,
-      ) as SiteDevToolsAnalysisBuildReportModelConfig[])
-    : undefined;
+  const sourceModels = Array.isArray(buildReports.models)
+    ? buildReports.models.filter((model) =>
+        isSiteDevToolsAnalysisBuildReportModelConfig(model),
+      )
+    : [];
+  const models = sourceModels.map((modelConfig, modelIndex) => {
+    const modelMetadata = getSiteDevToolsAnalysisModelMetadata(modelConfig);
+    const providerKey =
+      resolvedProviderKeyBySourceKey.get(modelMetadata.providerKey) ??
+      createStableConfigId('missing-provider', {
+        provider: modelMetadata.provider,
+        providerKey: modelMetadata.providerKey,
+      });
+    const id = createStableConfigId(
+      `${modelMetadata.provider}-report-model`,
+      pickModelConfigPayload(
+        modelConfig,
+        modelMetadata.provider,
+        providerKey,
+        modelIndex,
+      ),
+    );
+    const normalizedModel = {
+      default: modelConfig.default === true,
+      id,
+      label: modelConfig.label,
+      maxTokens: modelConfig.maxTokens,
+      model: modelConfig.model,
+      provider: modelMetadata.provider,
+      providerKey,
+      temperature: modelConfig.temperature,
+      ...(modelMetadata.provider === 'doubao'
+        ? {
+            thinking:
+              (modelConfig as SiteDevToolsAnalysisBuildReportDoubaoModelConfig)
+                .thinking ?? false,
+          }
+        : {}),
+    } satisfies SiteDevToolsAnalysisResolvedBuildReportModelConfig;
+
+    modelConfigIdBySource.set(modelConfig, id);
+
+    return normalizedModel;
+  });
+
+  return {
+    modelConfigIdBySource,
+    models,
+    sourceModels,
+  };
 };
 
 const normalizeAnalysisProviders = (
   providers: SiteDevToolsAnalysisUserConfig['providers'],
 ) => {
-  const normalizedProviders = {
-    ...(Array.isArray(providers?.claude)
-      ? {
-          claude: providers.claude.filter(Boolean).map((provider) => ({
-            anthropicVersion: provider.anthropicVersion,
-            apiKey: provider.apiKey,
-            baseUrl: provider.baseUrl,
-            default: provider.default === true,
-            id: provider.id,
-            label: provider.label,
-            timeoutMs: provider.timeoutMs,
-          })),
-        }
-      : {}),
-    ...(Array.isArray(providers?.doubao)
-      ? {
-          doubao: providers.doubao.filter(Boolean).map((provider) => ({
-            apiKey: provider.apiKey,
-            baseUrl: provider.baseUrl,
-            default: provider.default === true,
-            id: provider.id,
-            label: provider.label,
-            timeoutMs: provider.timeoutMs,
-          })),
-        }
-      : {}),
-  };
+  const normalizedProviders: NonNullable<
+    SiteDevToolsAnalysisResolvedUserConfig['providers']
+  > = {};
+  const resolvedProviderKeyBySourceKey = new Map<string, string>();
 
-  return providers && Object.keys(normalizedProviders).length > 0
-    ? normalizedProviders
-    : undefined;
+  if (!Array.isArray(providers)) {
+    return {
+      resolvedProviderKeyBySourceKey,
+      providers: undefined,
+    };
+  }
+
+  for (const [providerIndex, providerConfig] of providers
+    .filter((provider) => isSiteDevToolsAnalysisProviderConfig(provider))
+    .entries()) {
+    const providerMetadata =
+      getSiteDevToolsAnalysisProviderMetadata(providerConfig);
+    const providerKey = createStableConfigId(
+      `${providerMetadata.provider}-provider`,
+      pickProviderConfigPayload(
+        providerMetadata.provider,
+        providerConfig,
+        providerIndex,
+      ),
+    );
+    const normalizedProvider = {
+      apiKey: providerConfig.apiKey,
+      baseUrl: providerConfig.baseUrl,
+      default: false,
+      key: providerKey,
+      label: providerConfig.label,
+      timeoutMs: providerConfig.timeoutMs,
+    };
+
+    resolvedProviderKeyBySourceKey.set(
+      providerMetadata.providerKey,
+      providerKey,
+    );
+
+    if (providerMetadata.provider === 'claude') {
+      normalizedProviders.claude = [
+        ...(normalizedProviders.claude ?? []),
+        normalizedProvider,
+      ];
+      continue;
+    }
+
+    normalizedProviders.doubao = [
+      ...(normalizedProviders.doubao ?? []),
+      normalizedProvider,
+    ];
+  }
+
+  return {
+    resolvedProviderKeyBySourceKey,
+    providers:
+      Object.keys(normalizedProviders).length > 0
+        ? normalizedProviders
+        : undefined,
+  };
 };
 
 const normalizeBuildReportCache = (
@@ -102,57 +230,124 @@ const normalizeBuildReportCache = (
   };
 };
 
-const normalizeBuildReportsConfig = (
-  buildReports: SiteDevToolsBuildReportsInput,
-  root: string,
-) => {
-  const normalizedModels = buildReports
-    ? normalizeBuildReportModels(buildReports)
-    : undefined;
+const normalizeResolvePage = ({
+  buildReports,
+  modelConfigIdBySource,
+  sourceModels,
+}: {
+  buildReports: SiteDevToolsBuildReportsInput;
+  modelConfigIdBySource: WeakMap<object, string>;
+  sourceModels: SiteDevToolsAnalysisBuildReportModelConfig[];
+}): SiteDevToolsAnalysisResolvedBuildReportsConfig['resolvePage'] => {
+  if (!buildReports || typeof buildReports.resolvePage !== 'function') {
+    return undefined;
+  }
+
+  return ((context) => {
+    const resolvedPage = buildReports.resolvePage?.({
+      models: sourceModels,
+      page: context.page,
+    });
+
+    if (
+      resolvedPage === false ||
+      resolvedPage === null ||
+      resolvedPage === undefined
+    ) {
+      return resolvedPage;
+    }
+
+    const { model, ...pageOverride } =
+      resolvedPage as SiteDevToolsAnalysisBuildReportsPageOverride;
+
+    if (!model) {
+      return pageOverride;
+    }
+
+    const selectedModelId = modelConfigIdBySource.get(model);
+
+    return {
+      ...pageOverride,
+      ...(selectedModelId
+        ? { modelId: selectedModelId }
+        : {
+            invalidModelSelection: true,
+            modelId: UNKNOWN_BUILD_REPORT_MODEL_ID,
+          }),
+    };
+  }) satisfies NonNullable<
+    SiteDevToolsAnalysisResolvedBuildReportsConfig['resolvePage']
+  >;
+};
+
+const normalizeBuildReportsConfig = ({
+  buildReports,
+  resolvedProviderKeyBySourceKey,
+  root,
+}: {
+  buildReports: SiteDevToolsBuildReportsInput;
+  resolvedProviderKeyBySourceKey: Map<string, string>;
+  root: string;
+}) => {
+  const {
+    modelConfigIdBySource,
+    models: normalizedModels,
+    sourceModels,
+  } = normalizeBuildReportModels({
+    buildReports,
+    resolvedProviderKeyBySourceKey,
+  });
+  const normalizedResolvePage = normalizeResolvePage({
+    buildReports,
+    modelConfigIdBySource,
+    sourceModels,
+  });
 
   return buildReports
     ? ({
         cache: normalizeBuildReportCache(buildReports.cache, root),
         includeChunks: buildReports.includeChunks ?? false,
         includeModules: buildReports.includeModules ?? false,
-        ...(typeof buildReports.resolvePage === 'function'
+        ...(normalizedResolvePage
           ? {
-              resolvePage: buildReports.resolvePage,
+              resolvePage: normalizedResolvePage,
             }
           : {}),
-        ...(normalizedModels
+        ...(normalizedModels && normalizedModels.length > 0
           ? {
               models: normalizedModels,
             }
           : {}),
-      } satisfies NonNullable<SiteDevToolsAnalysisUserConfig['buildReports']>)
+      } satisfies NonNullable<
+        SiteDevToolsAnalysisResolvedUserConfig['buildReports']
+      >)
     : undefined;
 };
 
 const normalizeSiteDevToolsAnalysisConfig = (
   siteDevtools: SiteDevToolsUserConfig | undefined,
   root: string,
-): SiteDevToolsAnalysisUserConfig | undefined => {
+): SiteDevToolsAnalysisResolvedUserConfig | undefined => {
   const analysisConfig = siteDevtools?.analysis;
 
   if (!analysisConfig) {
     return undefined;
   }
 
-  const normalizedAnalysis: SiteDevToolsAnalysisUserConfig = {};
+  const normalizedAnalysis: SiteDevToolsAnalysisResolvedUserConfig = {};
 
-  const normalizedProviders = normalizeAnalysisProviders(
-    analysisConfig.providers,
-  );
+  const { resolvedProviderKeyBySourceKey, providers: normalizedProviders } =
+    normalizeAnalysisProviders(analysisConfig.providers);
 
   if (normalizedProviders) {
     normalizedAnalysis.providers = normalizedProviders;
   }
 
-  const normalizedBuildReports = normalizeBuildReportsConfig(
-    analysisConfig.buildReports,
+  const normalizedBuildReports = normalizeBuildReportsConfig({
+    buildReports: analysisConfig.buildReports,
+    resolvedProviderKeyBySourceKey,
     root,
-  );
+  });
 
   if (normalizedBuildReports) {
     normalizedAnalysis.buildReports = normalizedBuildReports;
@@ -187,11 +382,12 @@ export const resolveConfig = (
     rawVitepressConfig.siteDevtools,
     root,
   );
-  const siteDevtools: SiteDevToolsUserConfig = normalizedSiteDevToolsAnalysis
-    ? {
-        analysis: normalizedSiteDevToolsAnalysis,
-      }
-    : {};
+  const siteDevtools: SiteDevToolsResolvedUserConfig =
+    normalizedSiteDevToolsAnalysis
+      ? {
+          analysis: normalizedSiteDevToolsAnalysis,
+        }
+      : {};
 
   const config: ConfigType = {
     root,

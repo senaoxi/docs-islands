@@ -329,6 +329,7 @@ const config: Config = [
       'no-console': 'off',
       'no-unused-vars': 'off',
       'no-unused-expressions': 'off',
+      'no-restricted-syntax': 'off',
       'dot-notation': 'off',
       'import/no-unresolved': 'off',
       'no-constant-binary-expression': 'off',

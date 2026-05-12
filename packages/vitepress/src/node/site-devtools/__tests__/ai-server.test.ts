@@ -6,6 +6,7 @@ import type { SiteDevToolsAiAnalysisTarget } from '../../../shared/site-devtools
 import {
   analyzeSiteDevToolsAiTarget,
   resolveSiteDevToolsAiCapabilities,
+  type SiteDevToolsAiConfig,
 } from '../ai-server';
 
 const createAnalysisTarget = (
@@ -29,13 +30,9 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
     const capabilities = await resolveSiteDevToolsAiCapabilities();
 
     expect(capabilities.providers.claude?.available).toBe(false);
-    expect(capabilities.providers.claude?.detail).toContain(
-      'analysis.providers.claude',
-    );
+    expect(capabilities.providers.claude?.detail).toContain('claude.provider');
     expect(capabilities.providers.doubao?.available).toBe(false);
-    expect(capabilities.providers.doubao?.detail).toContain(
-      'analysis.providers.doubao',
-    );
+    expect(capabilities.providers.doubao?.detail).toContain('doubao.provider');
   });
 
   it('reads the configured Doubao model from buildReports.models', async () => {
@@ -45,9 +42,8 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
           {
             id: 'doubao-default',
             model: 'doubao-seed-1-6',
-            providerRef: {
-              provider: 'doubao',
-            },
+            provider: 'doubao',
+            providerKey: 'cn',
           },
         ],
       },
@@ -57,7 +53,7 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
             apiKey: 'test-key',
             baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
             default: true,
-            id: 'cn',
+            key: 'cn',
           },
         ],
       },
@@ -74,9 +70,8 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
           {
             id: 'claude-default',
             model: 'claude-sonnet-4-20250514',
-            providerRef: {
-              provider: 'claude',
-            },
+            provider: 'claude',
+            providerKey: 'us',
           },
         ],
       },
@@ -85,7 +80,7 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
           {
             apiKey: 'test-key',
             default: true,
-            id: 'us',
+            key: 'us',
           },
         ],
       },
@@ -104,16 +99,15 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
           {
             id: 'claude-default',
             model: 'claude-sonnet-4-20250514',
-            providerRef: {
-              provider: 'claude',
-            },
+            provider: 'claude',
+            providerKey: 'us',
           },
         ],
       },
       providers: {
         claude: [
           {
-            id: 'us',
+            key: 'us',
           },
         ],
       },
@@ -123,7 +117,7 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
         claude: [
           {
             apiKey: 'test-key',
-            id: 'us',
+            key: 'us',
           },
         ],
       },
@@ -134,9 +128,8 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
           {
             id: 'claude-default',
             model: 'claude-sonnet-4-20250514',
-            providerRef: {
-              provider: 'claude',
-            },
+            provider: 'claude',
+            providerKey: 'us',
           },
         ],
       },
@@ -157,9 +150,7 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
     });
 
     expect(missingKey.providers.claude?.available).toBe(false);
-    expect(missingKey.providers.claude?.detail).toContain(
-      'providers.claude[].apiKey',
-    );
+    expect(missingKey.providers.claude?.detail).toContain('apiKey');
     expect(missingModel.providers.claude?.available).toBe(false);
     expect(missingModel.providers.claude?.detail).toContain(
       'Claude model configuration',
@@ -221,9 +212,8 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               id: 'doubao-default',
               maxTokens: 2048,
               model: 'doubao-seed-2-0-pro-260215',
-              providerRef: {
-                provider: 'doubao',
-              },
+              provider: 'doubao',
+              providerKey: 'cn',
               temperature: 0.1,
               thinking: true,
             },
@@ -234,7 +224,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
             {
               apiKey: 'test-key',
               default: true,
-              id: 'cn',
+              key: 'cn',
             },
           ],
         },
@@ -274,9 +264,8 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               {
                 id: 'doubao-default',
                 model: 'doubao-seed-2-0-pro-260215',
-                providerRef: {
-                  provider: 'doubao',
-                },
+                provider: 'doubao',
+                providerKey: 'cn',
               },
             ],
           },
@@ -285,7 +274,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               {
                 apiKey: 'test-key',
                 default: true,
-                id: 'cn',
+                key: 'cn',
                 timeoutMs: 5,
               },
             ],
@@ -350,9 +339,8 @@ describe('analyzeSiteDevToolsAiTarget', () => {
             {
               id: 'doubao-default',
               model: 'doubao-seed-2-0-pro-260215',
-              providerRef: {
-                provider: 'doubao',
-              },
+              provider: 'doubao',
+              providerKey: 'cn',
             },
           ],
         },
@@ -438,9 +426,8 @@ describe('analyzeSiteDevToolsAiTarget', () => {
             {
               id: 'claude-default',
               model: 'claude-sonnet-4-20250514',
-              providerRef: {
-                provider: 'claude',
-              },
+              provider: 'claude',
+              providerKey: 'us',
               temperature: 0.2,
             },
           ],
@@ -451,7 +438,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               apiKey: 'test-key',
               baseUrl: 'https://gateway.example/v1',
               default: true,
-              id: 'us',
+              key: 'us',
             },
           ],
         },
@@ -465,6 +452,64 @@ describe('analyzeSiteDevToolsAiTarget', () => {
       model: 'claude-sonnet-4-20250514',
       result: 'analysis\nresult',
     });
+  });
+
+  it('keeps the Claude API version fixed internally', async () => {
+    const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({
+        'anthropic-version': '2023-06-01',
+      });
+
+      return Response.json(
+        {
+          content: [
+            {
+              text: 'ok',
+              type: 'text',
+            },
+          ],
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          status: 200,
+        },
+      );
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const config = {
+      buildReports: {
+        models: [
+          {
+            id: 'claude-default',
+            model: 'claude-sonnet-4-20250514',
+            provider: 'claude',
+            providerKey: 'us',
+          },
+        ],
+      },
+      providers: {
+        claude: [
+          {
+            anthropicVersion: '2099-01-01',
+            apiKey: 'test-key',
+            default: true,
+            key: 'us',
+          },
+        ],
+      },
+    } as unknown as SiteDevToolsAiConfig;
+
+    await analyzeSiteDevToolsAiTarget({
+      config,
+      provider: 'claude',
+      target: createAnalysisTarget(),
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('uses Claude provider timeoutMs for requests', async () => {
@@ -491,9 +536,8 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               {
                 id: 'claude-default',
                 model: 'claude-sonnet-4-20250514',
-                providerRef: {
-                  provider: 'claude',
-                },
+                provider: 'claude',
+                providerKey: 'us',
               },
             ],
           },
@@ -502,7 +546,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               {
                 apiKey: 'test-key',
                 default: true,
-                id: 'us',
+                key: 'us',
                 timeoutMs: 5,
               },
             ],
@@ -560,9 +604,8 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               {
                 id: 'claude-default',
                 model: 'claude-sonnet-4-20250514',
-                providerRef: {
-                  provider: 'claude',
-                },
+                provider: 'claude',
+                providerKey: 'us',
               },
             ],
           },
@@ -571,7 +614,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               {
                 apiKey: 'test-key',
                 default: true,
-                id: 'us',
+                key: 'us',
               },
             ],
           },
@@ -607,9 +650,8 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               {
                 id: 'claude-default',
                 model: 'claude-sonnet-4-20250514',
-                providerRef: {
-                  provider: 'claude',
-                },
+                provider: 'claude',
+                providerKey: 'us',
               },
             ],
           },
@@ -618,7 +660,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
               {
                 apiKey: 'test-key',
                 default: true,
-                id: 'us',
+                key: 'us',
               },
             ],
           },

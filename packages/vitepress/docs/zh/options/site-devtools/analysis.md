@@ -4,58 +4,42 @@
 
 ## 它负责什么
 
-| 部分           | 作用                                                                          |
-| -------------- | ----------------------------------------------------------------------------- |
-| `providers`    | 声明可用的 provider instance，例如 `providers.doubao` 或 `providers.claude`。 |
-| `buildReports` | 决定哪些页面生成报告，以及每个页面使用哪个 model。                            |
-| 运行时入口     | 把构建期产出的报告挂到控制台可以读取的位置。                                  |
+| 部分           | 作用                                                                       |
+| -------------- | -------------------------------------------------------------------------- |
+| `providers`    | 声明通过 `claude.provider()` 或 `doubao.provider()` 创建的 provider 对象。 |
+| `buildReports` | 决定哪些页面生成报告，以及每个页面使用哪个 model。                         |
+| 运行时入口     | 把构建期产出的报告挂到控制台可以读取的位置。                               |
 
 它不会改变组件的渲染策略，也不会替代页面浮层、`Debug Logs` 或 `Render Metrics` 这类运行时信息。AI 分析只在文档构建期间执行；运行时控制台只读取已经保存的 report JSON。
 
 ## 最小示例
 
 ```ts [.vitepress/config.ts]
+import { claude, doubao } from '@docs-islands/vitepress/models';
+
+const doubaoCN = doubao.provider({
+  apiKey: process.env.DOUBAO_API_KEY!,
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+});
+const claudeUS = claude.provider({
+  apiKey: process.env.CLAUDE_API_KEY!,
+});
+const doubaoPro = doubaoCN.model({
+  default: true,
+  model: 'doubao-seed-2-0-pro-260215',
+});
+const claudeSonnet = claudeUS.model({
+  model: 'claude-sonnet-4-20250514',
+  maxTokens: 4096,
+});
+
 const islands = createDocsIslands({
   adapters: [react()],
   siteDevtools: {
     analysis: {
-      providers: {
-        doubao: [
-          {
-            id: 'cn',
-            default: true,
-            // eslint-disable-next-line no-restricted-syntax
-            apiKey: process.env.DOUBAO_API_KEY!,
-            baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-          },
-        ],
-        claude: [
-          {
-            id: 'us',
-            // eslint-disable-next-line no-restricted-syntax
-            apiKey: process.env.CLAUDE_API_KEY!,
-          },
-        ],
-      },
+      providers: [doubaoCN, claudeUS],
       buildReports: {
-        models: [
-          {
-            id: 'doubao-pro',
-            default: true,
-            model: 'doubao-seed-2-0-pro-260215',
-            providerRef: {
-              provider: 'doubao',
-            },
-          },
-          {
-            id: 'claude-sonnet',
-            model: 'claude-sonnet-4-20250514',
-            maxTokens: 4096,
-            providerRef: {
-              provider: 'claude',
-            },
-          },
-        ],
+        models: [doubaoPro, claudeSonnet],
       },
     },
   },

@@ -22,7 +22,7 @@ const SITE_DEVTOOLS_AI_BUILD_REPORT_HASHED_FILE_SEGMENT_RE =
 const SITE_DEVTOOLS_AI_BUILD_REPORT_PROMPT_DIFF_LIMIT = 3;
 const SITE_DEVTOOLS_AI_BUILD_REPORTS_DEFAULT_CACHE_DIR =
   '.vitepress/cache/site-devtools-reports';
-const DEFAULT_CLAUDE_ANTHROPIC_VERSION = '2023-06-01';
+const LATEST_CLAUDE_ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com/v1';
 const DEFAULT_CLAUDE_MAX_TOKENS = 4096;
 
@@ -461,40 +461,48 @@ const getDefaultProviderConfig = <
   providerConfigs.find((providerConfig) => providerConfig.default === true) ??
   providerConfigs[0];
 
+const getClaudeBuildReportProviderConfigSnapshot = (
+  aiConfig: SiteDevToolsAiConfig,
+): BuildReportProviderConfigSnapshot => {
+  const providerConfig = getDefaultProviderConfig(
+    getClaudeProviderConfigs(aiConfig),
+  );
+
+  return {
+    anthropicVersion: LATEST_CLAUDE_ANTHROPIC_VERSION,
+    baseUrl: providerConfig?.baseUrl?.trim() || DEFAULT_CLAUDE_BASE_URL,
+    maxTokens: providerConfig?.maxTokens ?? DEFAULT_CLAUDE_MAX_TOKENS,
+    model: providerConfig?.model?.trim() || null,
+    temperature: providerConfig?.temperature ?? null,
+  };
+};
+
+const getDoubaoBuildReportProviderConfigSnapshot = (
+  aiConfig: SiteDevToolsAiConfig,
+): BuildReportProviderConfigSnapshot => {
+  const providerConfig = getDefaultProviderConfig(
+    getDoubaoProviderConfigs(aiConfig),
+  );
+
+  return {
+    baseUrl: providerConfig?.baseUrl?.trim() || null,
+    maxTokens: providerConfig?.maxTokens ?? null,
+    model: providerConfig?.model?.trim() || null,
+    thinking: providerConfig?.thinking ?? null,
+    temperature: providerConfig?.temperature ?? null,
+  };
+};
+
 export const getBuildReportProviderConfigSnapshot = (
   aiConfig: SiteDevToolsAiConfig,
   provider: SiteDevToolsAiProvider,
 ): BuildReportProviderConfigSnapshot => {
   switch (provider) {
     case 'claude': {
-      const providerConfig = getDefaultProviderConfig(
-        getClaudeProviderConfigs(aiConfig),
-      );
-
-      return {
-        anthropicVersion:
-          providerConfig?.anthropicVersion?.trim() ||
-          DEFAULT_CLAUDE_ANTHROPIC_VERSION,
-        baseUrl: providerConfig?.baseUrl?.trim() || DEFAULT_CLAUDE_BASE_URL,
-        maxTokens: providerConfig?.maxTokens ?? DEFAULT_CLAUDE_MAX_TOKENS,
-        model: providerConfig?.model?.trim() || null,
-        providerId: providerConfig?.id?.trim() || null,
-        temperature: providerConfig?.temperature ?? null,
-      };
+      return getClaudeBuildReportProviderConfigSnapshot(aiConfig);
     }
     case 'doubao': {
-      const providerConfig = getDefaultProviderConfig(
-        getDoubaoProviderConfigs(aiConfig),
-      );
-
-      return {
-        baseUrl: providerConfig?.baseUrl?.trim() || null,
-        maxTokens: providerConfig?.maxTokens ?? null,
-        model: providerConfig?.model?.trim() || null,
-        providerId: providerConfig?.id?.trim() || null,
-        thinking: providerConfig?.thinking ?? null,
-        temperature: providerConfig?.temperature ?? null,
-      };
+      return getDoubaoBuildReportProviderConfigSnapshot(aiConfig);
     }
     default: {
       return null;
@@ -637,6 +645,101 @@ export const readBuildReportCacheEntry = (
   } catch {
     return null;
   }
+};
+
+const areBuildReportCacheTargetsEqual = (
+  previousTarget: SiteDevToolsAiAnalysisTarget,
+  nextTarget: SiteDevToolsAiAnalysisTarget,
+) => {
+  if (previousTarget.artifactKind !== nextTarget.artifactKind) {
+    return false;
+  }
+
+  const previousDisplayPath = previousTarget.displayPath?.trim();
+  const nextDisplayPath = nextTarget.displayPath?.trim();
+
+  if (previousDisplayPath || nextDisplayPath) {
+    return previousDisplayPath === nextDisplayPath;
+  }
+
+  return previousTarget.artifactLabel === nextTarget.artifactLabel;
+};
+
+export const readBuildReportFallbackCacheEntry = ({
+  cacheDir,
+  currentFilePath,
+  provider,
+  sanitizeOptions = {},
+  target,
+}: {
+  cacheDir: string;
+  currentFilePath?: string | null;
+  provider: SiteDevToolsAiProvider;
+  sanitizeOptions?: SiteDevToolsAiSanitizeOptions;
+  target: SiteDevToolsAiAnalysisTarget;
+}): StoredBuildReportCacheEntry | null => {
+  const artifactDir = join(
+    cacheDir,
+    getBuildReportArtifactDir(target.artifactKind),
+  );
+
+  if (!fs.existsSync(artifactDir)) {
+    return null;
+  }
+
+  const safeBaseName = sanitizeFileStem(
+    basename(target.displayPath || target.artifactLabel),
+  );
+  const candidates: {
+    entry: StoredBuildReportCacheEntry;
+    filePath: string;
+    mtimeMs: number;
+  }[] = [];
+
+  for (const entryName of fs.readdirSync(artifactDir)) {
+    if (
+      !entryName.startsWith(`${safeBaseName}.`) ||
+      !entryName.endsWith('.json')
+    ) {
+      continue;
+    }
+
+    const filePath = join(artifactDir, entryName);
+
+    if (currentFilePath && filePath === currentFilePath) {
+      continue;
+    }
+
+    const stat = fs.statSync(filePath);
+
+    if (!stat.isFile()) {
+      continue;
+    }
+
+    const entry = readBuildReportCacheEntry(filePath, sanitizeOptions);
+
+    if (
+      !entry ||
+      entry.report.provider !== provider ||
+      !areBuildReportCacheTargetsEqual(entry.report.target, target)
+    ) {
+      continue;
+    }
+
+    candidates.push({
+      entry,
+      filePath,
+      mtimeMs: stat.mtimeMs,
+    });
+  }
+
+  return (
+    candidates.toSorted(
+      (left, right) =>
+        right.mtimeMs - left.mtimeMs ||
+        right.filePath.localeCompare(left.filePath),
+    )[0]?.entry ?? null
+  );
 };
 
 export const writeBuildReportCacheEntry = ({

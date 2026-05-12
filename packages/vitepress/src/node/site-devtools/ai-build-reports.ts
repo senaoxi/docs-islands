@@ -9,9 +9,9 @@ import type {
   SiteDevToolsAiBuildReportReference,
 } from '#dep-types/page';
 import type {
-  SiteDevToolsAnalysisBuildReportModelConfig,
-  SiteDevToolsAnalysisBuildReportsConfig,
   SiteDevToolsAnalysisBuildReportsPageContext,
+  SiteDevToolsAnalysisResolvedBuildReportModelConfig,
+  SiteDevToolsAnalysisResolvedBuildReportsConfig,
 } from '#dep-types/utils';
 import { VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS } from '#shared/constants/log-groups/site-devtools';
 import { createElapsedLogOptions } from '@docs-islands/logger/helper';
@@ -38,6 +38,7 @@ import {
   getBuildReportProviderConfigSnapshot,
   mergeBuildReportCacheInput,
   readBuildReportCacheEntry,
+  readBuildReportFallbackCacheEntry,
   resolveBuildReportCacheConfig,
   sanitizeBuildReportCacheDirectory,
   writeBuildReportAsset,
@@ -89,7 +90,6 @@ interface BuildReportDependencies {
 
 interface BuildReportExecution {
   config: SiteDevToolsAiConfig;
-  providerId?: string;
   providerLabel?: string;
   provider: SiteDevToolsAiProvider;
   reportId: string;
@@ -121,22 +121,22 @@ export interface GenerateSiteDevToolsAiBuildReportsResult {
 
 const getBuildReportModelConfigs = (
   aiConfig: SiteDevToolsAiConfig,
-): SiteDevToolsAnalysisBuildReportModelConfig[] =>
+): SiteDevToolsAnalysisResolvedBuildReportModelConfig[] =>
   Array.isArray(aiConfig?.buildReports?.models)
     ? (aiConfig.buildReports.models.filter(
         Boolean,
-      ) as SiteDevToolsAnalysisBuildReportModelConfig[])
+      ) as SiteDevToolsAnalysisResolvedBuildReportModelConfig[])
     : [];
 
 type SiteDevToolsAnalysisDoubaoBuildReportModelConfig =
-  SiteDevToolsAnalysisBuildReportModelConfig & {
+  SiteDevToolsAnalysisResolvedBuildReportModelConfig & {
     thinking?: boolean;
   };
 
 const isDoubaoBuildReportModelConfig = (
-  modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
+  modelConfig: SiteDevToolsAnalysisResolvedBuildReportModelConfig,
 ): modelConfig is SiteDevToolsAnalysisDoubaoBuildReportModelConfig =>
-  modelConfig.providerRef.provider === 'doubao';
+  modelConfig.provider === 'doubao';
 
 type SiteDevToolsAnalysisDoubaoRuntimeProviderConfig = NonNullable<
   NonNullable<NonNullable<SiteDevToolsAiConfig>['providers']>['doubao']
@@ -189,43 +189,41 @@ const getProviderConfigs = (
   }
 };
 
-const getDefaultProviderConfig = <
-  ProviderConfig extends SiteDevToolsAnalysisRuntimeProviderConfig,
->(
-  providerConfigs: ProviderConfig[],
-) =>
-  providerConfigs.find((providerConfig) => providerConfig.default === true) ??
-  providerConfigs[0];
-
 const getDefaultBuildReportModelConfig = (
-  modelConfigs: SiteDevToolsAnalysisBuildReportModelConfig[],
+  modelConfigs: SiteDevToolsAnalysisResolvedBuildReportModelConfig[],
 ) =>
   modelConfigs.find((modelConfig) => modelConfig.default === true) ??
   modelConfigs[0];
 
+const getBuildReportModelDescription = (
+  modelConfig: SiteDevToolsAnalysisResolvedBuildReportModelConfig,
+) =>
+  modelConfig.label?.trim() ||
+  `${getSiteDevToolsAiProviderLabel(modelConfig.provider)} ${modelConfig.model}`;
+
 const getBuildReportExecutionLabel = (
-  modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
+  modelConfig: SiteDevToolsAnalysisResolvedBuildReportModelConfig,
   providerConfig?: SiteDevToolsAnalysisRuntimeProviderConfig,
 ) =>
   modelConfig.label?.trim() ||
   [
-    getSiteDevToolsAiProviderLabel(modelConfig.providerRef.provider),
-    providerConfig?.label?.trim() || providerConfig?.id?.trim() || null,
+    getSiteDevToolsAiProviderLabel(modelConfig.provider),
+    providerConfig?.label?.trim() || null,
     modelConfig.model,
   ]
     .filter((value): value is string => Boolean(value))
     .join(' · ');
 
 const getBuildReportExecutionId = (
-  modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
+  modelConfig: SiteDevToolsAnalysisResolvedBuildReportModelConfig,
 ) => modelConfig.id;
 
 const createBuildReportExecutionConfig = (
   aiConfig: SiteDevToolsAiConfig,
-  modelConfig: SiteDevToolsAnalysisBuildReportModelConfig,
+  modelConfig: SiteDevToolsAnalysisResolvedBuildReportModelConfig,
   providerConfig: SiteDevToolsAnalysisRuntimeProviderConfig,
 ): SiteDevToolsAiConfig => {
-  switch (modelConfig.providerRef.provider) {
+  switch (modelConfig.provider) {
     case 'claude': {
       return {
         buildReports: aiConfig?.buildReports,
@@ -277,7 +275,7 @@ const resolveBuildReportExecutionProvider = ({
   modelConfig,
 }: {
   aiConfig: SiteDevToolsAiConfig;
-  modelConfig: SiteDevToolsAnalysisBuildReportModelConfig;
+  modelConfig: SiteDevToolsAnalysisResolvedBuildReportModelConfig;
 }):
   | {
       provider: SiteDevToolsAiProvider;
@@ -290,7 +288,7 @@ const resolveBuildReportExecutionProvider = ({
       warningMessages: string[];
     } => {
   const warningMessages: string[] = [];
-  const provider = modelConfig.providerRef.provider;
+  const provider = modelConfig.provider;
   const providerLabel = getSiteDevToolsAiProviderLabel(provider);
   const providerKey = provider;
 
@@ -301,55 +299,42 @@ const resolveBuildReportExecutionProvider = ({
 
       if (providerConfigs.length === 0) {
         warningMessages.push(
-          `Skipped build-time AI report model ${modelConfig.id}: siteDevtools.analysis.providers.${providerKey} must contain at least one provider entry.`,
+          `Skipped build-time AI report model ${getBuildReportModelDescription(modelConfig)}: siteDevtools.analysis.providers must include the ${providerKey}.provider(...) entry used to create it.`,
         );
         return { warningMessages };
       }
 
-      const flaggedDefaults = providerConfigs.filter(
-        (providerConfig) => providerConfig.default === true,
+      const matchingProviders = providerConfigs.filter(
+        (providerConfig) => providerConfig.key === modelConfig.providerKey,
       );
 
-      if (flaggedDefaults.length > 1) {
+      if (matchingProviders.length === 0) {
         warningMessages.push(
-          `Multiple default ${providerLabel} provider entries are configured. Using the first default entry for build-time AI report model ${modelConfig.id}.`,
+          `Skipped build-time AI report model ${getBuildReportModelDescription(modelConfig)}: the ${providerLabel} provider used to create it was not found in siteDevtools.analysis.providers.`,
         );
+        return { warningMessages };
       }
 
-      if (modelConfig.providerRef.id) {
-        const matchingProviders = providerConfigs.filter(
-          (providerConfig) => providerConfig.id === modelConfig.providerRef.id,
+      if (matchingProviders.length > 1) {
+        warningMessages.push(
+          `Multiple ${providerLabel} provider entries match the provider used by build-time AI report model ${getBuildReportModelDescription(modelConfig)}. Using the first matching entry.`,
         );
-
-        if (matchingProviders.length === 0) {
-          warningMessages.push(
-            `Skipped build-time AI report model ${modelConfig.id}: providerRef.id "${modelConfig.providerRef.id}" was not found in siteDevtools.analysis.providers.${providerKey}.`,
-          );
-          return { warningMessages };
-        }
-
-        if (matchingProviders.length > 1) {
-          warningMessages.push(
-            `Multiple ${providerLabel} provider entries use id "${modelConfig.providerRef.id}". Using the first matching entry for build-time AI report model ${modelConfig.id}.`,
-          );
-        }
-
-        return {
-          provider,
-          providerConfig: matchingProviders[0],
-          warningMessages,
-        };
       }
 
       return {
         provider,
-        providerConfig: getDefaultProviderConfig(providerConfigs),
+        providerConfig: matchingProviders[0],
         warningMessages,
       };
     }
     default: {
+      const unsupportedModelConfig = modelConfig as unknown as {
+        label?: string;
+        model?: string;
+        provider?: unknown;
+      };
       warningMessages.push(
-        `Skipped build-time AI report model ${modelConfig.id}: provider "${String(provider)}" is not supported.`,
+        `Skipped build-time AI report model ${unsupportedModelConfig.label || unsupportedModelConfig.model || 'unknown model'}: provider "${String(unsupportedModelConfig.provider)}" is not supported.`,
       );
       return { warningMessages };
     }
@@ -382,7 +367,7 @@ const createBuildReportExecutions = (
 
   if (defaultModelConfigs.length > 1) {
     warningMessages.add(
-      `Multiple build-time AI report models are marked as default. Using the first default model (${defaultModelConfig?.id}).`,
+      `Multiple build-time AI report models are marked as default. Using the first default model (${defaultModelConfig ? getBuildReportModelDescription(defaultModelConfig) : 'unknown model'}).`,
     );
   }
 
@@ -398,7 +383,7 @@ const createBuildReportExecutions = (
 
     if (seenModelIds.has(modelConfig.id)) {
       warningMessages.add(
-        `Skipped build-time AI report model ${modelConfig.id}: duplicate model id.`,
+        `Skipped build-time AI report model ${getBuildReportModelDescription(modelConfig)}: duplicate internal model identity.`,
       );
       continue;
     }
@@ -425,7 +410,6 @@ const createBuildReportExecutions = (
     const execution = {
       config: executionConfig,
       provider: resolvedProvider.provider,
-      providerId: resolvedProvider.providerConfig.id,
       providerLabel: resolvedProvider.providerConfig.label,
       reportId: getBuildReportExecutionId(modelConfig),
       reportLabel: getBuildReportExecutionLabel(
@@ -496,12 +480,10 @@ const applyBuildReportExecutionMetadata = ({
 }): SiteDevToolsAiBuildReport =>
   report.reportId === execution.reportId &&
   report.reportLabel === execution.reportLabel &&
-  report.providerId === execution.providerId &&
   report.providerLabel === execution.providerLabel
     ? report
     : {
         ...report,
-        providerId: execution.providerId,
         providerLabel: execution.providerLabel,
         reportId: execution.reportId,
         reportLabel: execution.reportLabel,
@@ -513,7 +495,7 @@ const createDefaultBuildReportPagePlan = ({
   defaultExecution,
   root,
 }: {
-  buildReportsConfig: SiteDevToolsAnalysisBuildReportsConfig;
+  buildReportsConfig: SiteDevToolsAnalysisResolvedBuildReportsConfig;
   cacheDir: string;
   defaultExecution?: BuildReportExecution;
   root?: string;
@@ -538,7 +520,7 @@ const resolveBuildReportPagePlan = ({
   pageMetafile,
   root,
 }: {
-  buildReportsConfig: SiteDevToolsAnalysisBuildReportsConfig;
+  buildReportsConfig: SiteDevToolsAnalysisResolvedBuildReportsConfig;
   cacheDir: string;
   executionPlan: BuildReportExecutionPlan;
   logger: ReturnType<typeof getAiBuildReportsLogger>;
@@ -575,7 +557,7 @@ const resolveBuildReportPagePlan = ({
   }
 
   let resolvedPageOverride: ReturnType<
-    NonNullable<SiteDevToolsAnalysisBuildReportsConfig['resolvePage']>
+    NonNullable<SiteDevToolsAnalysisResolvedBuildReportsConfig['resolvePage']>
   >;
 
   try {
@@ -599,12 +581,20 @@ const resolveBuildReportPagePlan = ({
     return null;
   }
 
+  if (resolvedPageOverride.invalidModelSelection) {
+    logger.warn(
+      `Skipped build-time AI report for ${pageId}: resolvePage selected a model that is not included in siteDevtools.analysis.buildReports.models.`,
+      elapsedSince(resolveStartedAt),
+    );
+    return null;
+  }
+
   const selectedExecutionId =
     resolvedPageOverride.modelId ?? executionPlan.defaultExecutionId;
 
   if (!selectedExecutionId) {
     logger.warn(
-      `Skipped build-time AI report for ${pageId}: no default build report model is available, and resolvePage did not return modelId.`,
+      `Skipped build-time AI report for ${pageId}: no default build report model is available, and resolvePage did not return a model.`,
       elapsedSince(resolveStartedAt),
     );
     return null;
@@ -616,8 +606,8 @@ const resolveBuildReportPagePlan = ({
   if (!selectedExecution) {
     logger.warn(
       resolvedPageOverride.modelId
-        ? `Skipped build-time AI report for ${pageId}: resolvePage selected modelId "${resolvedPageOverride.modelId}", but no matching buildReports.models entry could be resolved.`
-        : `Skipped build-time AI report for ${pageId}: the default build report model "${selectedExecutionId}" could not be resolved.`,
+        ? `Skipped build-time AI report for ${pageId}: resolvePage selected a model, but no matching buildReports.models entry could be resolved.`
+        : `Skipped build-time AI report for ${pageId}: the default build report model could not be resolved.`,
       elapsedSince(resolveStartedAt),
     );
     return null;
@@ -649,7 +639,7 @@ const createBuildReportPagePlans = ({
   pageMetafiles,
   root,
 }: {
-  buildReportsConfig: SiteDevToolsAnalysisBuildReportsConfig;
+  buildReportsConfig: SiteDevToolsAnalysisResolvedBuildReportsConfig;
   cacheDir: string;
   executionPlan: BuildReportExecutionPlan;
   logger: ReturnType<typeof getAiBuildReportsLogger>;
@@ -1055,9 +1045,22 @@ export const generateSiteDevToolsAiBuildReports = async ({
             target: sanitizedTarget,
           })
         : null;
-      const cachedEntry = cacheFilePath
+      const exactCachedEntry = cacheFilePath
         ? readBuildReportCacheEntry(cacheFilePath, sanitizeOptions)
         : null;
+      const fallbackCachedEntry =
+        cacheConfig?.strategy === 'fallback' &&
+        cacheFilePath &&
+        !exactCachedEntry
+          ? readBuildReportFallbackCacheEntry({
+              cacheDir: cacheConfig.dir,
+              currentFilePath: cacheFilePath,
+              provider: execution.provider,
+              sanitizeOptions,
+              target: sanitizedTarget,
+            })
+          : null;
+      const cachedEntry = exactCachedEntry ?? fallbackCachedEntry;
       const cacheKeyMatches = cachedEntry?.cacheKey === cacheKey;
       const cacheInvalidationReason =
         cachedEntry && !cacheKeyMatches
@@ -1066,7 +1069,9 @@ export const generateSiteDevToolsAiBuildReports = async ({
               cachedEntry,
               prompt,
             })
-          : null;
+          : fallbackCachedEntry
+            ? 'cache artifact identity changed'
+            : null;
       const cachedReport =
         cachedEntry && (cacheConfig?.strategy === 'fallback' || cacheKeyMatches)
           ? cachedEntry.report
@@ -1110,7 +1115,6 @@ export const generateSiteDevToolsAiBuildReports = async ({
           generatedAt: resolvedCachedReport.generatedAt,
           model: resolvedCachedReport.model,
           provider: execution.provider,
-          providerId: execution.providerId,
           providerLabel: execution.providerLabel,
           reportFile,
           reportId: resolvedCachedReport.reportId,
@@ -1141,7 +1145,6 @@ export const generateSiteDevToolsAiBuildReports = async ({
         model: result.model,
         prompt,
         provider: execution.provider,
-        providerId: execution.providerId,
         providerLabel: execution.providerLabel,
         reportId: execution.reportId,
         reportLabel: execution.reportLabel,
@@ -1170,7 +1173,6 @@ export const generateSiteDevToolsAiBuildReports = async ({
         generatedAt,
         model: result.model,
         provider: execution.provider,
-        providerId: execution.providerId,
         providerLabel: execution.providerLabel,
         reportFile,
         reportId: execution.reportId,

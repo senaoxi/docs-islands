@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, resolve } from 'node:url';
 import { defineConfig, type RolldownOptions } from 'rolldown';
 import { dts } from 'rolldown-plugin-dts';
+import ts from 'typescript';
 import pkg from './package.json' with { type: 'json' };
 import generatePackageJson from './packagePlugin';
 
@@ -63,6 +64,68 @@ const dtsExternalDeps = [
   ...packageExternalDeps,
 ];
 let hasCleanedDist = false;
+
+const isDeclarationFile = (filePath: string): boolean =>
+  /\.d\.[cm]?ts$/.test(filePath);
+
+const hasInternalJSDocTag = (node: ts.Node): boolean =>
+  ts
+    .getJSDocTags(node)
+    .some((tag) => tag.tagName.getText(node.getSourceFile()) === 'internal');
+
+const isRemovableInternalTypeMember = (node: ts.Node): boolean =>
+  hasInternalJSDocTag(node) &&
+  (ts.isPropertySignature(node) ||
+    ts.isMethodSignature(node) ||
+    ts.isIndexSignatureDeclaration(node) ||
+    ts.isCallSignatureDeclaration(node) ||
+    ts.isConstructSignatureDeclaration(node) ||
+    ts.isPropertyDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node));
+
+const stripInternalTypeMembers = (
+  content: string,
+  fileName: string,
+): string => {
+  if (!content.includes('@internal')) {
+    return content;
+  }
+
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const removalRanges: [start: number, end: number][] = [];
+  const collectRemovalRanges = (node: ts.Node): void => {
+    if (isRemovableInternalTypeMember(node)) {
+      removalRanges.push([node.getFullStart(), node.getEnd()]);
+      return;
+    }
+
+    ts.forEachChild(node, collectRemovalRanges);
+  };
+  collectRemovalRanges(sourceFile);
+
+  if (removalRanges.length === 0) {
+    return content;
+  }
+
+  let strippedContent = content;
+
+  for (const [start, end] of removalRanges.toReversed()) {
+    strippedContent =
+      strippedContent.slice(0, start) + strippedContent.slice(end);
+  }
+
+  return strippedContent.endsWith('\n')
+    ? strippedContent
+    : `${strippedContent}\n`;
+};
 
 const nodePlugins: RolldownOptions['plugins'] = [
   {
@@ -125,11 +188,15 @@ const nodePlugins: RolldownOptions['plugins'] = [
           await scanFiles(
             resolve(__dirname, copyDir),
             async (_, absolutePath) => {
-              const content = await readFile(absolutePath, 'utf8');
               const relativePath = path.relative(__dirname, absolutePath);
+              const content = await readFile(absolutePath, 'utf8');
+              const copiedContent = isDeclarationFile(relativePath)
+                ? stripInternalTypeMembers(content, relativePath)
+                : content;
+
               this.emitFile({
                 type: 'asset',
-                source: content,
+                source: copiedContent,
                 fileName: relativePath,
               });
             },
@@ -181,6 +248,7 @@ const nodeConfig = defineConfig({
   input: {
     index: resolve(__dirname, 'src/node/index.ts'),
     'adapters/react': resolve(__dirname, 'src/node/adapters/react/index.ts'),
+    models: resolve(__dirname, 'src/node/models.ts'),
     'site-devtools/mcp': resolve(__dirname, 'src/node/site-devtools/mcp.ts'),
   },
   plugins: [createManagedLoggerAliasPlugin(), ...nodePlugins],
@@ -206,6 +274,7 @@ const nodeDtsConfig = defineConfig({
   input: {
     index: resolve(__dirname, 'src/node/index.ts'),
     'adapters/react': resolve(__dirname, 'src/node/adapters/react/index.ts'),
+    models: resolve(__dirname, 'src/node/models.ts'),
     'site-devtools/mcp': resolve(__dirname, 'src/node/site-devtools/mcp.ts'),
   },
   plugins: [

@@ -4064,10 +4064,13 @@ onBeforeUnmount(() => {
 .site-devtools-overlay__panel {
   position: fixed;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
-  width: min(calc(100vw - 16px), 296px);
+  min-width: 0;
+  width: min(calc(100vw - 16px), 336px);
   max-height: min(calc(100vh - 16px), 78vh);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid color-mix(in srgb, var(--vp-c-divider) 82%, transparent);
   border-radius: 18px;
@@ -4078,6 +4081,10 @@ onBeforeUnmount(() => {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--vp-c-brand-1) 42%, transparent)
     color-mix(in srgb, var(--vp-c-bg-soft) 82%, transparent);
+}
+
+.site-devtools-overlay__panel > * {
+  min-width: 0;
 }
 
 .site-devtools-overlay__panel::-webkit-scrollbar {
@@ -4105,17 +4112,26 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
 }
 
+.site-devtools-overlay__panel-header > div {
+  min-width: 0;
+}
+
 .site-devtools-overlay__panel-eyebrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.18rem 0.4rem;
   margin: 0 0 0.3rem;
   color: var(--vp-c-text-2);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .site-devtools-overlay__panel-eyebrow span {
-  margin: 0 0.25rem;
+  margin: 0;
 }
 
 .site-devtools-overlay__panel-title {
@@ -4124,11 +4140,12 @@ onBeforeUnmount(() => {
   color: var(--vp-c-text-1);
   font-size: 0.92rem;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .site-devtools-overlay__panel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(118px, 100%), 1fr));
   gap: 0.55rem;
 }
 
@@ -4136,6 +4153,7 @@ onBeforeUnmount(() => {
   appearance: none;
   display: grid;
   gap: 0.22rem;
+  min-width: 0;
   width: 100%;
   border: 1px solid transparent;
   border-radius: 12px;
@@ -4193,6 +4211,7 @@ onBeforeUnmount(() => {
 .site-devtools-overlay__panel-side-effect {
   display: grid;
   gap: 0.55rem;
+  min-width: 0;
   border-radius: 12px;
   background: color-mix(in srgb, var(--vp-c-bg-soft) 90%, transparent);
   padding: 0.68rem 0.72rem;
@@ -4644,11 +4663,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+  min-width: 0;
 }
 
 .site-devtools-hmr-chip {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
+  min-width: 0;
   min-height: 1.75rem;
   border: 1px solid color-mix(in srgb, var(--vp-c-divider) 78%, transparent);
   border-radius: 999px;
@@ -4657,9 +4679,11 @@ onBeforeUnmount(() => {
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  line-height: 1;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
   padding: 0.38rem 0.62rem;
   text-transform: uppercase;
+  white-space: normal;
 }
 
 .site-devtools-hmr-chip.is-primary {
@@ -4676,11 +4700,13 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .site-devtools-hmr-summary__metric {
   display: grid;
   gap: 0.22rem;
+  min-width: 0;
   border-radius: 12px;
   background: color-mix(in srgb, var(--vp-c-bg-soft) 88%, transparent);
   padding: 0.56rem 0.6rem;
@@ -4713,6 +4739,22 @@ onBeforeUnmount(() => {
 .site-devtools-hmr-summary__event {
   display: grid;
   gap: 0.22rem;
+  min-width: 0;
+}
+
+.site-devtools-hmr-summary__event code {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--vp-c-divider) 58%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--vp-c-bg) 86%, transparent);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  padding: 0.46rem 0.54rem;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .site-devtools-hmr-summary__description {

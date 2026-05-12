@@ -27,6 +27,18 @@ vi.mock('../../logger', () => ({
 const tempDirectories: string[] = [];
 const TEST_DOUBAO_PROVIDER_ID = 'doubao-default';
 
+const resolveAvailableDoubaoCapabilities = async () => ({
+  ok: true as const,
+  providers: {
+    doubao: {
+      available: true,
+      detail: 'Available in test',
+      model: 'doubao-test-model',
+      provider: 'doubao' as const,
+    },
+  },
+});
+
 const createTempDirectory = (prefix = 'site-devtools-ai-build-reports-') => {
   const directoryPath = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   tempDirectories.push(directoryPath);
@@ -262,34 +274,104 @@ const createPageContexts = (
     ]),
   );
 
-const normalizeLegacyAiConfig = (aiConfig: Record<string, any> | undefined) => {
+const normalizeTestAiConfig = (aiConfig: Record<string, any> | undefined) => {
   if (!aiConfig) {
     return aiConfig;
   }
 
+  const normalizeProviderGroup = (
+    provider: Record<string, any>,
+    fallbackKey: string,
+    index: number,
+  ) => ({
+    ...provider,
+    default: provider.default === true,
+    key:
+      provider.key ||
+      (index === 0 ? fallbackKey : `${fallbackKey}-${index + 1}`),
+  });
+  const providers = aiConfig.providers
+    ? {
+        ...aiConfig.providers,
+        ...(Array.isArray(aiConfig.providers.claude)
+          ? {
+              claude: aiConfig.providers.claude.map(
+                (provider: Record<string, any>, index: number) =>
+                  normalizeProviderGroup(provider, 'claude-default', index),
+              ),
+            }
+          : aiConfig.providers.claude
+            ? {
+                claude: [
+                  normalizeProviderGroup(
+                    aiConfig.providers.claude,
+                    'claude-default',
+                    0,
+                  ),
+                ],
+              }
+            : {}),
+        ...(Array.isArray(aiConfig.providers.doubao)
+          ? {
+              doubao: aiConfig.providers.doubao.map(
+                (provider: Record<string, any>, index: number) =>
+                  normalizeProviderGroup(
+                    provider,
+                    TEST_DOUBAO_PROVIDER_ID,
+                    index,
+                  ),
+              ),
+            }
+          : aiConfig.providers.doubao
+            ? {
+                doubao: [
+                  normalizeProviderGroup(
+                    aiConfig.providers.doubao,
+                    TEST_DOUBAO_PROVIDER_ID,
+                    0,
+                  ),
+                ],
+              }
+            : {}),
+      }
+    : aiConfig.providers;
+  const getDefaultProviderKey = (provider: string) => {
+    const providerConfigs =
+      provider === 'claude' ? providers?.claude : providers?.doubao;
+
+    return (
+      providerConfigs?.find(
+        (providerConfig: Record<string, any>) =>
+          providerConfig.default === true,
+      )?.key ??
+      providerConfigs?.[0]?.key ??
+      `${provider}-default`
+    );
+  };
   const buildReports = aiConfig.buildReports
     ? {
         ...aiConfig.buildReports,
         ...(Array.isArray(aiConfig.buildReports.models)
           ? {
               models: aiConfig.buildReports.models.map(
-                (model: Record<string, any>, index: number) => ({
-                  ...model,
-                  id:
-                    typeof model.id === 'string' && model.id.trim()
-                      ? model.id
-                      : `legacy-build-report-model-${index + 1}`,
-                  ...(model.providerRef
-                    ? {}
-                    : {
-                        providerRef: {
-                          provider:
-                            typeof model.provider === 'string'
-                              ? model.provider
-                              : 'doubao',
-                        },
-                      }),
-                }),
+                (model: Record<string, any>, index: number) => {
+                  const provider =
+                    typeof model.provider === 'string'
+                      ? model.provider
+                      : 'doubao';
+                  const providerKey =
+                    model.providerKey ?? getDefaultProviderKey(provider);
+
+                  return {
+                    ...model,
+                    id:
+                      typeof model.id === 'string' && model.id.trim()
+                        ? model.id
+                        : `test-build-report-model-${index + 1}`,
+                    provider,
+                    providerKey,
+                  };
+                },
               ),
             }
           : {}),
@@ -305,38 +387,6 @@ const normalizeLegacyAiConfig = (aiConfig: Record<string, any> | undefined) => {
         ...context.page,
       });
   }
-
-  const providers = aiConfig.providers
-    ? {
-        ...aiConfig.providers,
-        ...(Array.isArray(aiConfig.providers.doubao)
-          ? {
-              doubao: aiConfig.providers.doubao.map(
-                (provider: Record<string, any>, index: number) => ({
-                  ...provider,
-                  ...(provider.id
-                    ? {}
-                    : {
-                        id:
-                          index === 0
-                            ? TEST_DOUBAO_PROVIDER_ID
-                            : `doubao-provider-${index + 1}`,
-                      }),
-                }),
-              ),
-            }
-          : aiConfig.providers.doubao
-            ? {
-                doubao: [
-                  {
-                    ...aiConfig.providers.doubao,
-                    id: aiConfig.providers.doubao.id || TEST_DOUBAO_PROVIDER_ID,
-                  },
-                ],
-              }
-            : {}),
-      }
-    : aiConfig.providers;
 
   return {
     ...aiConfig,
@@ -355,7 +405,7 @@ const generateSiteDevToolsAiBuildReports = (
 ) =>
   generateSiteDevToolsAiBuildReportsImpl({
     ...options,
-    aiConfig: normalizeLegacyAiConfig(options.aiConfig),
+    aiConfig: normalizeTestAiConfig(options.aiConfig),
   });
 
 afterEach(() => {
@@ -772,11 +822,10 @@ describe('generateSiteDevToolsAiBuildReports', () => {
       filePath: gettingStartedFilePath,
       models: [
         expect.objectContaining({
-          id: 'legacy-build-report-model-1',
+          id: 'test-build-report-model-1',
           model: 'doubao-test-model',
-          providerRef: {
-            provider: 'doubao',
-          },
+          provider: 'doubao',
+          providerKey: TEST_DOUBAO_PROVIDER_ID,
         }),
       ],
       page: {
@@ -1090,7 +1139,7 @@ describe('generateSiteDevToolsAiBuildReports', () => {
     );
   });
 
-  it('uses the default model for empty resolvePage overrides, resolves providerRef.id against grouped providers, and treats undefined/null/false as equivalent skips', async () => {
+  it('uses the default model for empty resolvePage overrides, resolves providerKey against grouped providers, and treats undefined/null/false as equivalent skips', async () => {
     const pageMetafiles = createMultiPageMetafiles([
       '/guide/default-model',
       '/guide/intl-model',
@@ -1100,7 +1149,7 @@ describe('generateSiteDevToolsAiBuildReports', () => {
     ]);
     const analyzeTarget = vi.fn(async ({ config, target }) => ({
       model: 'doubao-test-model',
-      result: `${target.displayPath}::${config.providers?.doubao?.[0]?.id}`,
+      result: `${target.displayPath}::${config.providers?.doubao?.[0]?.key}`,
     }));
 
     const result = await generateSiteDevToolsAiBuildReports({
@@ -1111,17 +1160,14 @@ describe('generateSiteDevToolsAiBuildReports', () => {
               default: true,
               id: 'default-model',
               model: 'doubao-test-model',
-              providerRef: {
-                provider: 'doubao',
-              },
+              provider: 'doubao',
+              providerKey: 'cn',
             },
             {
               id: 'intl-model',
               model: 'doubao-test-model',
-              providerRef: {
-                id: 'intl',
-                provider: 'doubao',
-              },
+              provider: 'doubao',
+              providerKey: 'intl',
             },
           ],
           resolvePage: ({ page }) => {
@@ -1165,11 +1211,11 @@ describe('generateSiteDevToolsAiBuildReports', () => {
             {
               apiKey: 'test-key-cn',
               default: true,
-              id: 'cn',
+              key: 'cn',
             },
             {
               apiKey: 'test-key-intl',
-              id: 'intl',
+              key: 'intl',
             },
           ],
         },
@@ -1201,7 +1247,7 @@ describe('generateSiteDevToolsAiBuildReports', () => {
     expect(analyzeTarget).toHaveBeenCalledTimes(2);
     expect(
       analyzeTarget.mock.calls.map(
-        ([options]) => options.config.providers?.doubao?.[0]?.id,
+        ([options]) => options.config.providers?.doubao?.[0]?.key,
       ),
     ).toEqual(['cn', 'intl']);
     expect(
@@ -1222,7 +1268,7 @@ describe('generateSiteDevToolsAiBuildReports', () => {
     ).toBeUndefined();
   });
 
-  it('generates mixed Doubao and Claude reports with providerRef.id metadata', async () => {
+  it('generates mixed Doubao and Claude reports with provider config metadata', async () => {
     const pageMetafiles = createMultiPageMetafiles([
       '/guide/doubao',
       '/guide/claude',
@@ -1234,8 +1280,8 @@ describe('generateSiteDevToolsAiBuildReports', () => {
           : 'doubao-test-model',
       result:
         provider === 'claude'
-          ? `${target.displayPath}::${config.providers?.claude?.[0]?.id}`
-          : `${target.displayPath}::${config.providers?.doubao?.[0]?.id}`,
+          ? `${target.displayPath}::${config.providers?.claude?.[0]?.key}`
+          : `${target.displayPath}::${config.providers?.doubao?.[0]?.key}`,
     }));
 
     const result = await generateSiteDevToolsAiBuildReports({
@@ -1246,17 +1292,14 @@ describe('generateSiteDevToolsAiBuildReports', () => {
               default: true,
               id: 'doubao-default',
               model: 'doubao-test-model',
-              providerRef: {
-                provider: 'doubao',
-              },
+              provider: 'doubao',
+              providerKey: 'cn',
             },
             {
               id: 'claude-intl',
               model: 'claude-sonnet-4-20250514',
-              providerRef: {
-                id: 'intl',
-                provider: 'claude',
-              },
+              provider: 'claude',
+              providerKey: 'intl',
             },
           ],
           resolvePage: ({ page }) =>
@@ -1269,11 +1312,11 @@ describe('generateSiteDevToolsAiBuildReports', () => {
             {
               apiKey: 'test-key-us',
               default: true,
-              id: 'us',
+              key: 'us',
             },
             {
               apiKey: 'test-key-intl',
-              id: 'intl',
+              key: 'intl',
               label: 'Claude Intl',
             },
           ],
@@ -1281,7 +1324,7 @@ describe('generateSiteDevToolsAiBuildReports', () => {
             {
               apiKey: 'test-key-cn',
               default: true,
-              id: 'cn',
+              key: 'cn',
             },
           ],
         },
@@ -1321,19 +1364,17 @@ describe('generateSiteDevToolsAiBuildReports', () => {
     expect(
       analyzeTarget.mock.calls.find(
         ([options]) => options.provider === 'claude',
-      )?.[0].config.providers?.claude?.[0]?.id,
+      )?.[0].config.providers?.claude?.[0]?.key,
     ).toBe('intl');
     expect(pageMetafiles['/guide/doubao'].buildMetrics?.aiReports?.[0]).toEqual(
       expect.objectContaining({
         provider: 'doubao',
-        providerId: 'cn',
         reportId: 'doubao-default',
       }),
     );
     expect(pageMetafiles['/guide/claude'].buildMetrics?.aiReports?.[0]).toEqual(
       expect.objectContaining({
         provider: 'claude',
-        providerId: 'intl',
         providerLabel: 'Claude Intl',
         reportId: 'claude-intl',
         reportLabel: expect.stringContaining('Claude'),
@@ -1362,9 +1403,8 @@ describe('generateSiteDevToolsAiBuildReports', () => {
             default: true,
             id: 'claude-default',
             model: 'claude-sonnet-4-20250514',
-            providerRef: {
-              provider: 'claude',
-            },
+            provider: 'claude',
+            providerKey: 'us',
             temperature: 0.2,
           },
         ],
@@ -1374,7 +1414,7 @@ describe('generateSiteDevToolsAiBuildReports', () => {
           {
             apiKey: 'test-key',
             default: true,
-            id: 'us',
+            key: 'us',
           },
         ],
       },
@@ -1438,7 +1478,6 @@ describe('generateSiteDevToolsAiBuildReports', () => {
     expect(reportReference).toEqual(
       expect.objectContaining({
         provider: 'claude',
-        providerId: 'us',
         reportId: 'claude-default',
       }),
     );
@@ -2100,11 +2139,10 @@ describe('generateSiteDevToolsAiBuildReports', () => {
       filePath: gettingStartedFilePath,
       models: [
         expect.objectContaining({
-          id: 'legacy-build-report-model-1',
+          id: 'test-build-report-model-1',
           model: 'doubao-test-model',
-          providerRef: {
-            provider: 'doubao',
-          },
+          provider: 'doubao',
+          providerKey: TEST_DOUBAO_PROVIDER_ID,
         }),
       ],
       page: {
@@ -3420,6 +3458,114 @@ describe('generateSiteDevToolsAiBuildReports', () => {
         .aiReports?.chunkReports?.['/docs/assets/chunks/demo-card.js']?.[0]
         ?.reportFile,
     ).toContain('/docs/assets/page-metafiles/ai/pages/');
+  });
+
+  it('finds fallback cache entries when the report model identity changes', async () => {
+    const reportCacheDir = createTempDirectory('site-devtools-ai-cache-');
+    const firstOutDir = createTempDirectory();
+    const secondOutDir = createTempDirectory();
+    const vitepressCacheDir = createTempDirectory('vitepress-cache-');
+    const firstPageMetafiles = createPageMetafiles();
+    const secondPageMetafiles = createPageMetafiles();
+    const analyzeTarget = vi.fn(async ({ target }) => ({
+      detail: 'Generated in test for the legacy model identity',
+      model: 'doubao-test-model',
+      result: `analysis:${target.displayPath}`,
+    }));
+
+    for (const outDir of [firstOutDir, secondOutDir]) {
+      writeTextFile(
+        path.join(outDir, 'assets/chunks/demo-card.js'),
+        'export const DemoCard = () => "demo";',
+      );
+      writeTextFile(
+        path.join(outDir, 'assets/sources/DemoCard.tsx'),
+        'export function DemoCard() { return <div>demo</div>; }',
+      );
+    }
+
+    const firstResult = await generateSiteDevToolsAiBuildReports({
+      aiConfig: {
+        buildReports: {
+          cache: {
+            dir: reportCacheDir,
+            strategy: 'fallback',
+          },
+          models: [
+            {
+              id: 'legacy-report-model',
+              model: 'doubao-test-model',
+              provider: 'doubao',
+            },
+          ],
+        },
+        providers: {
+          doubao: {
+            apiKey: 'test-key',
+          },
+        },
+      },
+      assetsDir: 'assets',
+      cacheDir: vitepressCacheDir,
+      dependencies: {
+        analyzeTarget,
+        resolveCapabilities: resolveAvailableDoubaoCapabilities,
+      },
+      outDir: firstOutDir,
+      pageMetafiles: firstPageMetafiles,
+      wrapBaseUrl: (value) => `/docs${value}`,
+    });
+    const firstCacheFiles = fs.readdirSync(path.join(reportCacheDir, 'pages'));
+    const secondAnalyzeTarget = vi.fn(async () => {
+      throw new Error(
+        'fallback cache should be found after the report identity changes',
+      );
+    });
+
+    const secondResult = await generateSiteDevToolsAiBuildReports({
+      aiConfig: {
+        buildReports: {
+          cache: {
+            dir: reportCacheDir,
+            strategy: 'fallback',
+          },
+          models: [
+            {
+              id: 'current-report-model',
+              model: 'doubao-test-model',
+              provider: 'doubao',
+            },
+          ],
+        },
+        providers: {
+          doubao: {
+            apiKey: 'test-key',
+          },
+        },
+      },
+      assetsDir: 'assets',
+      cacheDir: vitepressCacheDir,
+      dependencies: {
+        analyzeTarget: secondAnalyzeTarget,
+        resolveCapabilities: resolveAvailableDoubaoCapabilities,
+      },
+      outDir: secondOutDir,
+      pageMetafiles: secondPageMetafiles,
+      wrapBaseUrl: (value) => `/docs${value}`,
+    });
+
+    expect(firstResult.generatedReportCount).toBe(1);
+    expect(firstResult.reusedReportCount).toBe(0);
+    expect(firstCacheFiles).toHaveLength(1);
+    expect(analyzeTarget).toHaveBeenCalledTimes(1);
+    expect(secondAnalyzeTarget).not.toHaveBeenCalled();
+    expect(secondResult.generatedReportCount).toBe(0);
+    expect(secondResult.reusedReportCount).toBe(1);
+    expect(fs.readdirSync(path.join(reportCacheDir, 'pages'))).toHaveLength(2);
+    expect(
+      secondPageMetafiles['/guide/getting-started'].buildMetrics?.aiReports?.[0]
+        ?.reportId,
+    ).toBe('current-report-model');
   });
 
   it('reuses exact cache by default when cache is omitted', async () => {

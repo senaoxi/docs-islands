@@ -4,58 +4,42 @@
 
 ## What It Controls
 
-| Part           | Responsibility                                                                          |
-| -------------- | --------------------------------------------------------------------------------------- |
-| `providers`    | Declares available provider instances such as `providers.doubao` or `providers.claude`. |
-| `buildReports` | Decides which pages generate reports and which model each page uses.                    |
-| Runtime entry  | Makes emitted reports available to the runtime console.                                 |
+| Part           | Responsibility                                                                   |
+| -------------- | -------------------------------------------------------------------------------- |
+| `providers`    | Declares provider objects created by `claude.provider()` or `doubao.provider()`. |
+| `buildReports` | Decides which pages generate reports and which model each page uses.             |
+| Runtime entry  | Makes emitted reports available to the runtime console.                          |
 
 It does not change component render strategies, and it does not replace runtime evidence such as the page overlay, `Debug Logs`, or `Render Metrics`. AI analysis runs during docs build only; the runtime console reads saved report JSON.
 
 ## Minimal Example
 
 ```ts [.vitepress/config.ts]
+import { claude, doubao } from '@docs-islands/vitepress/models';
+
+const doubaoCN = doubao.provider({
+  apiKey: process.env.DOUBAO_API_KEY!,
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+});
+const claudeUS = claude.provider({
+  apiKey: process.env.CLAUDE_API_KEY!,
+});
+const doubaoPro = doubaoCN.model({
+  default: true,
+  model: 'doubao-seed-2-0-pro-260215',
+});
+const claudeSonnet = claudeUS.model({
+  model: 'claude-sonnet-4-20250514',
+  maxTokens: 4096,
+});
+
 const islands = createDocsIslands({
   adapters: [react()],
   siteDevtools: {
     analysis: {
-      providers: {
-        doubao: [
-          {
-            id: 'cn',
-            default: true,
-            // eslint-disable-next-line no-restricted-syntax
-            apiKey: process.env.DOUBAO_API_KEY!,
-            baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-          },
-        ],
-        claude: [
-          {
-            id: 'us',
-            // eslint-disable-next-line no-restricted-syntax
-            apiKey: process.env.CLAUDE_API_KEY!,
-          },
-        ],
-      },
+      providers: [doubaoCN, claudeUS],
       buildReports: {
-        models: [
-          {
-            id: 'doubao-pro',
-            default: true,
-            model: 'doubao-seed-2-0-pro-260215',
-            providerRef: {
-              provider: 'doubao',
-            },
-          },
-          {
-            id: 'claude-sonnet',
-            model: 'claude-sonnet-4-20250514',
-            maxTokens: 4096,
-            providerRef: {
-              provider: 'claude',
-            },
-          },
-        ],
+        models: [doubaoPro, claudeSonnet],
       },
     },
   },

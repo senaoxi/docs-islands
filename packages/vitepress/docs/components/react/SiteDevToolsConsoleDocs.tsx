@@ -93,7 +93,7 @@ const overviewCopy: Record<Locale, OverviewCopy> = {
     ],
     subtitle:
       'Site DevTools works best when it reads like documentation: start from the question you have, then move to the surface that answers it.',
-    title: 'Open Site DevTools and choose the right surface',
+    title: 'Open Site DevTools and choose the right surface!',
   },
   zh: {
     intro: [
