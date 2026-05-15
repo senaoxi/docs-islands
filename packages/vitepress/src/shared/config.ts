@@ -379,7 +379,7 @@ export const resolveConfig = (
     : vitepressResolve(root, 'cache');
   const cleanUrls = rawVitepressConfig.cleanUrls ?? false;
   const normalizedSiteDevToolsAnalysis = normalizeSiteDevToolsAnalysisConfig(
-    rawVitepressConfig.siteDevtools,
+    rawVitepressConfig.siteDevtools as SiteDevToolsUserConfig | undefined,
     root,
   );
   const siteDevtools: SiteDevToolsResolvedUserConfig =

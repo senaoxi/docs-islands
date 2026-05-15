@@ -19,17 +19,16 @@ setScopedLoggerConfig(scopeId, {
 setScopedLoggerConfig(scopeId, {
   debug: true,
   levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'renderer',
+  rules: {
+    'custom:renderer': {
       group: 'runtime.renderer',
       levels: ['info', 'warn', 'error'],
     },
-  ],
+  },
 });
 ```
 
-Rules behave the same inside explicit scopes as they do in the default scope: non-debug logs are allowed only by enabled rules whose scope and effective levels match, unmatched logs are hidden, and current runtime behavior suppresses `logger.debug()` while rules are active.
+Rules behave the same inside explicit scopes as they do in the default scope: non-debug logs are allowed only by resolved rules whose scope and effective levels match, unmatched logs are hidden, and current runtime behavior suppresses `logger.debug()` while rules are active.
 
 ## Dynamic Host API
 

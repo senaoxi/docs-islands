@@ -14,7 +14,10 @@ import type {
   SiteDevToolsAnalysisResolvedBuildReportsConfig,
 } from '#dep-types/utils';
 import { VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS } from '#shared/constants/log-groups/site-devtools';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import { join } from 'pathe';
 import {
   buildSiteDevToolsAiAnalysisPrompt,
@@ -66,9 +69,6 @@ import {
   type SiteDevToolsAiConfig,
   type SiteDevToolsAiExecutionResult,
 } from './ai-server';
-
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 const getAiBuildReportsLogger = (loggerScopeId: string) =>
   getVitePressGroupLogger(
@@ -529,8 +529,6 @@ const resolveBuildReportPagePlan = ({
   pageMetafile: PageMetafile;
   root?: string;
 }): BuildReportPagePlan | null => {
-  const resolveStartedAt = Date.now();
-
   if (!hasPageBuildAnalysisSignals(pageMetafile)) {
     return null;
   }
@@ -551,7 +549,6 @@ const resolveBuildReportPagePlan = ({
   if (!pageContext) {
     logger.warn(
       `Skipped build-time AI report for ${pageId}: siteDevtools.analysis.buildReports.resolvePage requires page context, but no page filePath was provided.`,
-      elapsedSince(resolveStartedAt),
     );
     return null;
   }
@@ -560,6 +557,7 @@ const resolveBuildReportPagePlan = ({
     NonNullable<SiteDevToolsAnalysisResolvedBuildReportsConfig['resolvePage']>
   >;
 
+  const resolvedPageOverrideElapsed = createElapsedTimer();
   try {
     resolvedPageOverride = buildReportsConfig.resolvePage({
       models: buildReportsConfig.models ?? [],
@@ -567,8 +565,8 @@ const resolveBuildReportPagePlan = ({
     });
   } catch (error) {
     logger.warn(
-      `Skipped build-time AI report for ${pageId}: siteDevtools.analysis.buildReports.resolvePage threw an error: ${error instanceof Error ? error.message : String(error)}`,
-      elapsedSince(resolveStartedAt),
+      `Skipped build-time AI report for ${pageId}: siteDevtools.analysis.buildReports.resolvePage threw an error: ${formatErrorMessage(error)}`,
+      resolvedPageOverrideElapsed(),
     );
     return null;
   }
@@ -584,7 +582,6 @@ const resolveBuildReportPagePlan = ({
   if (resolvedPageOverride.invalidModelSelection) {
     logger.warn(
       `Skipped build-time AI report for ${pageId}: resolvePage selected a model that is not included in siteDevtools.analysis.buildReports.models.`,
-      elapsedSince(resolveStartedAt),
     );
     return null;
   }
@@ -595,7 +592,6 @@ const resolveBuildReportPagePlan = ({
   if (!selectedExecutionId) {
     logger.warn(
       `Skipped build-time AI report for ${pageId}: no default build report model is available, and resolvePage did not return a model.`,
-      elapsedSince(resolveStartedAt),
     );
     return null;
   }
@@ -608,7 +604,6 @@ const resolveBuildReportPagePlan = ({
       resolvedPageOverride.modelId
         ? `Skipped build-time AI report for ${pageId}: resolvePage selected a model, but no matching buildReports.models entry could be resolved.`
         : `Skipped build-time AI report for ${pageId}: the default build report model could not be resolved.`,
-      elapsedSince(resolveStartedAt),
     );
     return null;
   }
@@ -857,7 +852,6 @@ export const generateSiteDevToolsAiBuildReports = async ({
   root?: string;
   wrapBaseUrl: (value: string) => string;
 }): Promise<GenerateSiteDevToolsAiBuildReportsResult> => {
-  const generationStartedAt = Date.now();
   const buildReportsConfig = aiConfig?.buildReports;
   const Logger = getAiBuildReportsLogger(loggerScopeId);
 
@@ -884,14 +878,11 @@ export const generateSiteDevToolsAiBuildReports = async ({
 
   if (executions.length === 0) {
     for (const warningMessage of executionPlanWarningMessages) {
-      Logger.warn(warningMessage, elapsedSince(generationStartedAt));
+      Logger.warn(warningMessage);
     }
 
     if (executionPlanSkippedReason) {
-      Logger.info(
-        executionPlanSkippedReason,
-        elapsedSince(generationStartedAt),
-      );
+      Logger.info(executionPlanSkippedReason);
     }
 
     return {
@@ -904,7 +895,7 @@ export const generateSiteDevToolsAiBuildReports = async ({
   }
 
   for (const warningMessage of executionPlanWarningMessages) {
-    Logger.warn(warningMessage, elapsedSince(generationStartedAt));
+    Logger.warn(warningMessage);
   }
 
   const pagePlans = createBuildReportPagePlans({
@@ -1002,7 +993,6 @@ export const generateSiteDevToolsAiBuildReports = async ({
     execution: BuildReportExecution;
     target: SiteDevToolsAiAnalysisTarget;
   }) => {
-    const reportReferenceStartedAt = Date.now();
     const cachedReference = generatedReportReferences.get(artifactKey);
 
     if (cachedReference) {
@@ -1082,7 +1072,6 @@ export const generateSiteDevToolsAiBuildReports = async ({
           cacheConfig?.strategy === 'fallback'
             ? `Fallback build-time AI report cache reuse for ${sanitizedTarget.displayPath} (${execution.reportLabel}): ${cacheInvalidationReason}. Reusing the stale cached report because strategy=fallback.`
             : `Exact build-time AI report cache miss for ${sanitizedTarget.displayPath} (${execution.reportLabel}): ${cacheInvalidationReason}. Regenerating the report.`,
-          elapsedSince(reportReferenceStartedAt),
         );
       }
 
@@ -1196,7 +1185,6 @@ export const generateSiteDevToolsAiBuildReports = async ({
   if (Object.keys(pagePlans).length > 1) {
     Logger.info(
       `Dispatching build-time AI report generation in parallel for ${Object.keys(pagePlans).length} eligible pages across ${executions.length} execution${executions.length === 1 ? '' : 's'}.`,
-      elapsedSince(generationStartedAt),
     );
   }
 
@@ -1211,9 +1199,8 @@ export const generateSiteDevToolsAiBuildReports = async ({
   });
 
   if (generatedReportCount > 0 || reusedReportCount > 0) {
-    Logger.info(
+    Logger.success(
       `Build-time AI reports across ${executions.length} execution${executions.length === 1 ? '' : 's'}: generated ${generatedReportCount}, reused ${reusedReportCount}.`,
-      elapsedSince(generationStartedAt),
     );
   }
 

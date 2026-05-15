@@ -2,7 +2,7 @@ import type {
   PageMetafile,
   SiteDevToolsAiBuildReportReference,
 } from '#dep-types/page';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import type { LoggerElapsedLogOptions } from '@docs-islands/logger/types';
 import {
   getSiteDevToolsAiModuleReportKey,
@@ -412,7 +412,7 @@ export const collectBuildReportReferencesForPageMetafiles = async <
   TExecution,
   TCacheConfig
 >): Promise<void> => {
-  const collectStartedAt = Date.now();
+  const collectElapsed = createElapsedTimer();
   const pageResults = await Promise.all(
     Object.entries(pageMetafiles).map(async ([pageId, pageMetafile]) => {
       const pagePlan = pagePlans[pageId];
@@ -443,10 +443,7 @@ export const collectBuildReportReferencesForPageMetafiles = async <
 
   for (const pageResult of pageResults) {
     for (const warningMessage of pageResult.warningMessages) {
-      logger.warn(
-        warningMessage,
-        createElapsedLogOptions(collectStartedAt, Date.now()),
-      );
+      logger.warn(warningMessage, collectElapsed());
     }
 
     const pageGroupedReportReferenceMap = new Map(

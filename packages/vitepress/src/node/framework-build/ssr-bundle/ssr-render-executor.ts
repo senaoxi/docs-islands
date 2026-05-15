@@ -4,14 +4,14 @@ import type {
 } from '#dep-types/component';
 import type { OutputChunk } from '#dep-types/rollup';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'pathe';
 import { getVitePressGroupLogger } from '../../logger';
 import type { UIFrameworkBuildAdapter } from '../adapter';
-
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 async function renderComponentForSnippet(
   ssrModuleComponent: unknown,
@@ -25,7 +25,7 @@ async function renderComponentForSnippet(
     VITEPRESS_BUILD_LOG_GROUPS.frameworkSsrBundle,
     loggerScopeId,
   );
-  const renderStartedAt = Date.now();
+  const renderElapsed = createElapsedTimer();
   try {
     const frameworkSSRHtml = await adapter.renderToString(
       ssrModuleComponent,
@@ -34,13 +34,13 @@ async function renderComponentForSnippet(
     usedSnippet.ssrHtml = frameworkSSRHtml;
     Logger.success(
       `Rendered ${adapter.framework} component ${componentName} for render ID: ${renderId}`,
-      elapsedSince(renderStartedAt),
+      renderElapsed(),
     );
     return frameworkSSRHtml;
   } catch (error) {
     Logger.error(
-      `Error rendering component "${componentName}" for render ID ${renderId}: ${error}`,
-      elapsedSince(renderStartedAt),
+      `failed to render component "${componentName}" for render ID ${renderId}: ${formatErrorMessage(error)}`,
+      renderElapsed(),
     );
     return null;
   }
@@ -96,7 +96,7 @@ export async function executeSSRRender(
   }
 
   const bundlePath = resolve(ssrTempDir, chunk.fileName);
-  const importStartedAt = Date.now();
+  const importElapsed = createElapsedTimer();
 
   try {
     const ssrModule = await import(pathToFileURL(bundlePath).href);
@@ -105,7 +105,7 @@ export async function executeSSRRender(
     if (!ssrModuleComponent) {
       Logger.warn(
         `Component "${ssrComponent.componentName}" not found in bundle`,
-        elapsedSince(importStartedAt),
+        importElapsed(),
       );
       return;
     }
@@ -120,8 +120,8 @@ export async function executeSSRRender(
     );
   } catch (error) {
     Logger.error(
-      `Failed to import SSR bundle for ${ssrComponent.componentName}: ${error}`,
-      elapsedSince(importStartedAt),
+      `failed to import SSR bundle for ${ssrComponent.componentName}: ${formatErrorMessage(error)}`,
+      importElapsed(),
     );
   }
 }

@@ -1,3 +1,14 @@
+import type {
+  LoggerConfig,
+  LoggerPluginMap,
+  LoggerPresetPlugin,
+  LoggerPresetRuleUserConfig,
+  LoggerRuleSetting,
+  LoggerRulesUserConfig,
+  LoggerRuleUserConfig,
+  LoggerVisibilityLevel,
+} from '@docs-islands/logger/types';
+
 export type SiteDevToolsAnalysisProvider = 'claude' | 'doubao';
 export type SiteDevToolsAnalysisDoubaoThinkingType = boolean;
 export type SiteDevToolsAnalysisBuildReportCacheStrategy = 'exact' | 'fallback';
@@ -593,155 +604,29 @@ export interface SiteDevToolsResolvedUserConfig {
   analysis?: SiteDevToolsAnalysisResolvedUserConfig;
 }
 
-export type LoggingVisibilityLevel = 'error' | 'warn' | 'info' | 'success';
-
-export interface LoggingRuleUserConfig {
+export type LoggingVisibilityLevel = LoggerVisibilityLevel;
+export type LoggingRuleUserConfig = LoggerRuleUserConfig;
+export type LoggingPresetRuleUserConfig = LoggerPresetRuleUserConfig;
+export type LoggingPresetPlugin<
+  TRules extends Record<string, LoggingPresetRuleUserConfig> = Record<
+    string,
+    LoggingPresetRuleUserConfig
+  >,
+> = LoggerPresetPlugin<TRules>;
+export type LoggingRuleSetting = LoggerRuleSetting;
+export type LoggingRulesUserConfig<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+> = LoggerRulesUserConfig<TPlugins>;
+export type LoggingUserConfig<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+> = LoggerConfig<TPlugins> & {
   /**
-   * Pre-filter switch for this rule.
-   *
-   * `false` makes the rule fully inactive: it does not match scope, does not
-   * allow levels, and does not appear in debug labels.
-   *
-   * @default true
-   */
-  enabled?: boolean;
-  /**
-   * Logger group matcher.
-   *
-   * Plain strings are exact matches. Patterns containing glob magic use
-   * picomatch, for example `runtime.react.*`, `test.case.?1`, or `task-[ab]`.
-   */
-  group?: string;
-  /**
-   * Stable unique identifier for this rule.
-   *
-   * When `logging.debug` is enabled, visible logs surface every contributing
-   * rule label as `[LabelA][LabelB]` before the normal log prefix.
-   */
-  label: string;
-  /**
-   * Effective levels for this rule.
-   *
-   * When omitted, the rule inherits `logging.levels`. When present, it replaces
-   * the root levels for this rule and contributes to the union with other
-   * matching active rules.
-   */
-  levels?: LoggingVisibilityLevel[];
-  /**
-   * Exact package-name matcher, for example `@docs-islands/vitepress`.
-   *
-   * `main` does not use glob matching.
-   */
-  main?: string;
-  /**
-   * Log message matcher.
-   *
-   * Plain strings are exact matches. Patterns containing glob magic use
-   * picomatch, for example `*timeout*`, `request *`, or `task-[ab]`.
-   */
-  message?: string;
-}
-
-export interface LoggingPresetRuleUserConfig {
-  /**
-   * Logger group matcher used by a logging preset rule.
-   */
-  group?: string;
-  /**
-   * Effective levels contributed by the preset rule.
-   *
-   * When omitted, the rule inherits `logging.levels`.
-   */
-  levels?: LoggingVisibilityLevel[];
-  /**
-   * Exact package-name matcher used by the preset rule.
-   */
-  main?: string;
-  /**
-   * Optional log message matcher used by the preset rule.
-   */
-  message?: string;
-}
-
-export interface LoggingPresetPlugin {
-  /**
-   * Plugin-exposed logging rules keyed by `<rule>` and consumed through
-   * `logging.rules["<plugin>/<rule>"]`.
-   */
-  rules: Record<string, LoggingPresetRuleUserConfig>;
-}
-
-export interface LoggingPresetRuleOverrideUserConfig {
-  /**
-   * Pre-filter switch for this preset-backed rule.
-   *
-   * `false` disables the rule entirely after it inherits the preset matcher.
-   */
-  enabled?: boolean;
-  /**
-   * Effective levels contributed by this preset-backed rule override.
-   *
-   * When omitted, the preset rule keeps its own levels and then falls back to
-   * `logging.levels` if needed.
-   */
-  levels?: LoggingVisibilityLevel[];
-  /**
-   * Optional message matcher override.
-   *
-   * `group` and `main` always inherit from the preset rule.
-   */
-  message?: string;
-}
-
-export type LoggingPresetRuleSetting =
-  | false
-  | 'off'
-  | LoggingPresetRuleOverrideUserConfig;
-
-export type LoggingPresetRulesUserConfig = Record<
-  string,
-  LoggingPresetRuleSetting
->;
-
-export interface LoggingUserConfig {
-  /**
-   * Global debug gate for project-owned debug logs.
-   *
-   * When enabled, visible `error`, `warn`, `info`, and `success` logs include
-   * contributing rule labels and a relative elapsed-time suffix such as
-   * `12.34ms`. `debug` logs are visible by default only when `rules` are not
-   * configured.
+   * Enable managed VitePress logger tree-shaking during production builds.
    *
    * @default false
    */
-  debug?: boolean;
-  /**
-   * Root visibility levels.
-   *
-   * Without `rules`, this controls the visible non-debug levels. With `rules`,
-   * it is the default effective levels for rules that omit `rule.levels`; it is
-   * not a maximum that narrows explicit `rule.levels`.
-   *
-   * @default ['error', 'warn', 'info', 'success']
-   */
-  levels?: LoggingVisibilityLevel[];
-  /**
-   * Optional logging preset plugins, similar to ESLint plugins.
-   *
-   * The object key becomes the `<plugin>` namespace referenced by
-   * `logging.rules["<plugin>/<rule>"]`.
-   */
-  plugins?: Record<string, LoggingPresetPlugin>;
-  /**
-   * Rule-mode visibility configuration.
-   *
-   * Supports two forms:
-   *
-   * - array: direct low-level logger rules
-   * - object: plugin rule settings keyed by `<plugin>/<rule>`
-   */
-  rules?: LoggingRuleUserConfig[] | LoggingPresetRulesUserConfig;
-}
+  treeshake?: boolean;
+};
 
 declare module 'vitepress' {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- must match upstream VitePress generic default for declaration merging

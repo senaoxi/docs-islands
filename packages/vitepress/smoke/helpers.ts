@@ -1,4 +1,5 @@
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import type { createElapsedTimer } from '@docs-islands/logger/helper';
+import { formatErrorMessage } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/utils/logger';
 import type { ConsoleMessage, Page, Request, Response } from '@playwright/test';
 import { load } from 'cheerio';
@@ -36,7 +37,7 @@ export interface PageRuntimeWatch {
   responseFailures: string[];
 }
 
-type SmokeLogOptions = ReturnType<typeof createElapsedLogOptions>;
+type SmokeLogOptions = ReturnType<ReturnType<typeof createElapsedTimer>>;
 
 export interface SmokeLogger {
   error: (message: string, options?: SmokeLogOptions) => void;
@@ -48,6 +49,7 @@ interface CreateConsumerFixtureOptions {
   fixtureRootPrefix: string;
   installLogMessage: string;
   logger: SmokeLogger;
+  localDependencyTarballPaths?: Record<string, string>;
   manifest: DistPackageJson;
   tarballPath: string;
   writeFiles: (fixtureDir: string) => Promise<void>;
@@ -61,6 +63,12 @@ const MANAGED_LOGGER_SPECIFIERS = ['@docs-islands/utils/logger'] as const;
 
 export const PACKAGE_ROOT_DIR = fileURLToPath(new URL('..', import.meta.url));
 export const DIST_DIR = path.join(PACKAGE_ROOT_DIR, 'dist');
+export const LOGGER_DIST_DIR = path.join(
+  PACKAGE_ROOT_DIR,
+  '..',
+  'logger',
+  'dist',
+);
 
 const REQUIRED_CONSUMER_DEPENDENCIES = [
   '@vitejs/plugin-react-swc',
@@ -74,15 +82,12 @@ const loggerInstance = createLogger({
 });
 const require = createRequire(import.meta.url);
 
-export const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
-
 export function getSmokeLogger(group: string): SmokeLogger {
   return loggerInstance.getLoggerByGroup(group);
 }
 
 export function formatUnknownError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return formatErrorMessage(error);
 }
 
 export function getPnpmCommand(): string {
@@ -230,10 +235,19 @@ export function resolveInstalledPackageVersion(
 
 export function installConsumerDependencies(options: {
   fixtureDir: string;
+  localDependencyTarballPaths?: Record<string, string>;
   manifest: DistPackageJson;
   tarballPath: string;
 }): void {
-  const { fixtureDir, manifest, tarballPath } = options;
+  const {
+    fixtureDir,
+    localDependencyTarballPaths = {},
+    manifest,
+    tarballPath,
+  } = options;
+  const localDependencyNames = new Set(
+    Object.keys(localDependencyTarballPaths),
+  );
   const peerDependencyArguments = REQUIRED_CONSUMER_DEPENDENCIES.map(
     (packageName) =>
       `${packageName}@${resolveInstalledPackageVersion(
@@ -241,13 +255,18 @@ export function installConsumerDependencies(options: {
         manifest.peerDependencies?.[packageName],
       )}`,
   );
-  const dependencyArguments = Object.keys(manifest.dependencies ?? {}).map(
-    (packageName) =>
-      `${packageName}@${resolveInstalledPackageVersion(
-        packageName,
-        manifest.dependencies?.[packageName],
-      )}`,
-  );
+  const dependencyArguments = [
+    ...Object.keys(manifest.dependencies ?? {})
+      .filter((packageName) => !localDependencyNames.has(packageName))
+      .map(
+        (packageName) =>
+          `${packageName}@${resolveInstalledPackageVersion(
+            packageName,
+            manifest.dependencies?.[packageName],
+          )}`,
+      ),
+    ...Object.values(localDependencyTarballPaths),
+  ];
 
   execFileSync(
     getPnpmCommand(),
@@ -277,6 +296,41 @@ export function installConsumerDependencies(options: {
       cwd: fixtureDir,
       stdio: 'inherit',
     },
+  );
+}
+
+async function writeLocalDependencyOverrides(
+  fixtureDir: string,
+  localDependencyTarballPaths: Record<string, string>,
+): Promise<void> {
+  if (Object.keys(localDependencyTarballPaths).length === 0) {
+    return;
+  }
+
+  const packageJsonPath = path.join(fixtureDir, 'package.json');
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+    pnpm?: {
+      overrides?: Record<string, string>;
+    };
+  };
+  const overrideEntries = Object.fromEntries(
+    Object.entries(localDependencyTarballPaths).map(
+      ([packageName, tarballPath]) => [packageName, `file:${tarballPath}`],
+    ),
+  );
+
+  packageJson.pnpm = {
+    ...packageJson.pnpm,
+    overrides: {
+      ...packageJson.pnpm?.overrides,
+      ...overrideEntries,
+    },
+  };
+
+  await writeFile(
+    packageJsonPath,
+    `${JSON.stringify(packageJson, null, 2)}\n`,
+    'utf8',
   );
 }
 
@@ -316,19 +370,20 @@ export async function createConsumerFixture(
     path.join(tmpdir(), options.fixtureRootPrefix),
   );
   const fixtureDir = path.join(fixtureRoot, 'fixture');
-  const installStartedAt = Date.now();
 
   try {
     await mkdir(fixtureDir, {
       recursive: true,
     });
     await options.writeFiles(fixtureDir);
-    options.logger.info(
-      options.installLogMessage,
-      elapsedSince(installStartedAt),
+    await writeLocalDependencyOverrides(
+      fixtureDir,
+      options.localDependencyTarballPaths ?? {},
     );
+    options.logger.info(options.installLogMessage);
     installConsumerDependencies({
       fixtureDir,
+      localDependencyTarballPaths: options.localDependencyTarballPaths,
       manifest: options.manifest,
       tarballPath: options.tarballPath,
     });
@@ -494,6 +549,10 @@ export async function waitForServerReady(options: {
 
 export async function packVitepressDist() {
   return await packDistTarball(DIST_DIR);
+}
+
+export async function packLoggerDist() {
+  return await packDistTarball(LOGGER_DIST_DIR);
 }
 
 export function isCriticalRequestFailure(
@@ -684,12 +743,7 @@ export function runVitePressBuild(options: {
   fixtureDir: string;
   logger: SmokeLogger;
 }): void {
-  const buildStartedAt = Date.now();
-
-  options.logger.info(
-    'Building MPA consumer fixture...',
-    elapsedSince(buildStartedAt),
-  );
+  options.logger.info('building MPA consumer fixture');
   execFileSync(getPnpmCommand(), ['exec', 'vitepress', 'build', '.'], {
     cwd: options.fixtureDir,
     stdio: 'inherit',

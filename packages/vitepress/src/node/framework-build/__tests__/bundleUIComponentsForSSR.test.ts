@@ -6,13 +6,14 @@ import type { ConfigType } from '#dep-types/utils';
 import { resolveConfig } from '#shared/config';
 import {
   resetScopedLoggerConfig,
-  setScopedLoggerConfig as setLoggerConfigForScope,
+  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
 } from '@docs-islands/logger/core';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'pathe';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { reactAdapter } from '../../adapters/react/adapter';
+import { setVitePressLoggerTreeShakingEnabled } from '../../core/vite-plugin-logger-tree-shaking';
 import { bundleUIComponentsForSSR } from '../bundleUIComponentsForSSR';
 
 const TEST_LOGGER_SCOPE_ID = 'ssr-bundle-logger-tree-shaking-scope';
@@ -94,6 +95,7 @@ describe('bundleUIComponentsForSSR', () => {
 
   afterEach(() => {
     resetScopedLoggerConfig(TEST_LOGGER_SCOPE_ID);
+    setVitePressLoggerTreeShakingEnabled(TEST_LOGGER_SCOPE_ID, false);
   });
 
   it('Verify that SSR meets expectations', async () => {
@@ -257,6 +259,7 @@ describe('bundleUIComponentsForSSR', () => {
     setLoggerConfigForScope(TEST_LOGGER_SCOPE_ID, {
       levels: ['warn', 'error'],
     });
+    setVitePressLoggerTreeShakingEnabled(TEST_LOGGER_SCOPE_ID, true);
 
     const ssrComponents: ComponentBundleInfo[] = [
       {

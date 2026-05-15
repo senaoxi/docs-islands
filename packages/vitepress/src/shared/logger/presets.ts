@@ -1,13 +1,14 @@
-import type {
-  LoggingPresetPlugin,
-  LoggingPresetRuleUserConfig,
-} from '#dep-types/utils';
 import {
   CORE_RUNTIME_LOG_GROUPS,
   getFrameworkComponentManagerLogGroup,
   getFrameworkRenderStrategyLogGroup,
 } from '@docs-islands/core/shared/constants/log-groups/runtime';
 import { CORE_TRANSFORM_LOG_GROUPS } from '@docs-islands/core/shared/constants/log-groups/transform';
+import type {
+  LoggerPresetConfig,
+  LoggerPresetPlugin,
+  LoggerPresetRuleUserConfig,
+} from '@docs-islands/logger/types';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '../constants/log-groups/build';
 import { VITEPRESS_CONFIG_LOG_GROUPS } from '../constants/log-groups/config';
 import { VITEPRESS_HMR_LOG_GROUPS } from '../constants/log-groups/hmr';
@@ -20,15 +21,34 @@ import { VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS } from '../constants/log-groups/site
 const CORE_MAIN_NAME = '@docs-islands/core';
 const VITEPRESS_MAIN_NAME = '@docs-islands/vitepress';
 
-const createPresetPlugin = <
-  TRules extends Record<string, LoggingPresetRuleUserConfig>,
+type PresetRules<TKey extends string> = Record<
+  TKey,
+  LoggerPresetRuleUserConfig
+>;
+
+const createPresetConfig = <
+  const TRules extends Record<string, LoggerPresetRuleUserConfig>,
 >(
   rules: TRules,
-): LoggingPresetPlugin => ({
-  rules,
-});
+): LoggerPresetConfig<TRules> => {
+  const recommendedRules = Object.fromEntries(
+    Object.keys(rules).map((ruleName) => [ruleName, { levels: 'inherit' }]),
+  ) as LoggerPresetConfig<TRules>['rules'];
 
-export const build: LoggingPresetPlugin = createPresetPlugin({
+  return {
+    rules: recommendedRules,
+  };
+};
+
+const buildRules: PresetRules<
+  | 'browserBundle'
+  | 'finalize'
+  | 'mpaIntegration'
+  | 'sharedClientRuntimeMetafile'
+  | 'ssrBundle'
+  | 'ssrIntegration'
+  | 'transformHtml'
+> = {
   browserBundle: {
     group: VITEPRESS_BUILD_LOG_GROUPS.frameworkBrowserBundle,
     main: VITEPRESS_MAIN_NAME,
@@ -57,16 +77,22 @@ export const build: LoggingPresetPlugin = createPresetPlugin({
     group: VITEPRESS_BUILD_LOG_GROUPS.frameworkBuildTransformHtml,
     main: VITEPRESS_MAIN_NAME,
   },
-});
+};
 
-export const config: LoggingPresetPlugin = createPresetPlugin({
+const configRules: PresetRules<'nodeVersion'> = {
   nodeVersion: {
     group: VITEPRESS_CONFIG_LOG_GROUPS.nodeVersion,
     main: VITEPRESS_MAIN_NAME,
   },
-});
+};
 
-export const hmr: LoggingPresetPlugin = createPresetPlugin({
+const hmrRules: PresetRules<
+  | 'markdownUpdate'
+  | 'reactRuntimePrepare'
+  | 'reactSsrOnlyRender'
+  | 'viteAfterUpdate'
+  | 'viteAfterUpdateRender'
+> = {
   markdownUpdate: {
     group: VITEPRESS_HMR_LOG_GROUPS.markdownUpdate,
     main: VITEPRESS_MAIN_NAME,
@@ -87,9 +113,9 @@ export const hmr: LoggingPresetPlugin = createPresetPlugin({
     group: VITEPRESS_HMR_LOG_GROUPS.viteAfterUpdateRender,
     main: VITEPRESS_MAIN_NAME,
   },
-});
+};
 
-export const parser: LoggingPresetPlugin = createPresetPlugin({
+const parserRules: PresetRules<'framework' | 'react'> = {
   framework: {
     group: VITEPRESS_PARSER_LOG_GROUPS.framework,
     main: VITEPRESS_MAIN_NAME,
@@ -98,23 +124,34 @@ export const parser: LoggingPresetPlugin = createPresetPlugin({
     group: VITEPRESS_PARSER_LOG_GROUPS.react,
     main: VITEPRESS_MAIN_NAME,
   },
-});
+};
 
-export const plugin: LoggingPresetPlugin = createPresetPlugin({
+const pluginRules: PresetRules<'renderingStrategies'> = {
   renderingStrategies: {
     group: VITEPRESS_PLUGIN_LOG_GROUPS.renderingStrategies,
     main: VITEPRESS_MAIN_NAME,
   },
-});
+};
 
-export const resolver: LoggingPresetPlugin = createPresetPlugin({
+const resolverRules: PresetRules<'inlinePage'> = {
   inlinePage: {
     group: VITEPRESS_RESOLVER_LOG_GROUPS.inlinePage,
     main: VITEPRESS_MAIN_NAME,
   },
-});
+};
 
-export const runtime: LoggingPresetPlugin = createPresetPlugin({
+const runtimeRules: PresetRules<
+  | 'coreReactComponentManager'
+  | 'coreReactRenderStrategy'
+  | 'reactClientLoader'
+  | 'reactComponentManager'
+  | 'reactDevContentUpdated'
+  | 'reactDevMountFallback'
+  | 'reactDevMountRender'
+  | 'reactDevRender'
+  | 'reactDevRuntimeLoader'
+  | 'renderValidation'
+> = {
   coreReactComponentManager: {
     group: getFrameworkComponentManagerLogGroup('react'),
     main: CORE_MAIN_NAME,
@@ -155,9 +192,9 @@ export const runtime: LoggingPresetPlugin = createPresetPlugin({
     group: CORE_RUNTIME_LOG_GROUPS.renderValidation,
     main: CORE_MAIN_NAME,
   },
-});
+};
 
-export const siteDevtools: LoggingPresetPlugin = createPresetPlugin({
+const siteDevtoolsRules: PresetRules<'aiBuildReports' | 'aiServer'> = {
   aiBuildReports: {
     group: VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS.aiBuildReports,
     main: VITEPRESS_MAIN_NAME,
@@ -166,9 +203,11 @@ export const siteDevtools: LoggingPresetPlugin = createPresetPlugin({
     group: VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS.aiServer,
     main: VITEPRESS_MAIN_NAME,
   },
-});
+};
 
-export const transform: LoggingPresetPlugin = createPresetPlugin({
+const transformRules: PresetRules<
+  'markdownComponentTags' | 'ssrContainerIntegration' | 'ssrCssInjection'
+> = {
   markdownComponentTags: {
     group: CORE_TRANSFORM_LOG_GROUPS.transformComponentTags,
     main: CORE_MAIN_NAME,
@@ -181,28 +220,54 @@ export const transform: LoggingPresetPlugin = createPresetPlugin({
     group: CORE_TRANSFORM_LOG_GROUPS.ssrCssInjection,
     main: CORE_MAIN_NAME,
   },
-});
-
-const presets: {
-  build: LoggingPresetPlugin;
-  config: LoggingPresetPlugin;
-  hmr: LoggingPresetPlugin;
-  parser: LoggingPresetPlugin;
-  plugin: LoggingPresetPlugin;
-  resolver: LoggingPresetPlugin;
-  runtime: LoggingPresetPlugin;
-  siteDevtools: LoggingPresetPlugin;
-  transform: LoggingPresetPlugin;
-} = {
-  build,
-  config,
-  hmr,
-  parser,
-  plugin,
-  resolver,
-  runtime,
-  siteDevtools,
-  transform,
 };
 
-export default presets;
+type VitePressLoggerRuleName =
+  | (keyof typeof buildRules & string)
+  | (keyof typeof configRules & string)
+  | (keyof typeof hmrRules & string)
+  | (keyof typeof parserRules & string)
+  | (keyof typeof pluginRules & string)
+  | (keyof typeof resolverRules & string)
+  | (keyof typeof runtimeRules & string)
+  | (keyof typeof siteDevtoolsRules & string)
+  | (keyof typeof transformRules & string);
+
+const vitepressRules: PresetRules<VitePressLoggerRuleName> = {
+  ...buildRules,
+  ...configRules,
+  ...hmrRules,
+  ...parserRules,
+  ...pluginRules,
+  ...resolverRules,
+  ...runtimeRules,
+  ...siteDevtoolsRules,
+  ...transformRules,
+};
+
+type VitePressLoggerPresetConfig = LoggerPresetConfig<typeof vitepressRules>;
+
+const toVitePressLoggerPresetConfig = <
+  const TRules extends Record<string, LoggerPresetRuleUserConfig>,
+>(
+  rules: TRules,
+): VitePressLoggerPresetConfig =>
+  createPresetConfig(rules) as VitePressLoggerPresetConfig;
+
+export const vitepress: LoggerPresetPlugin<typeof vitepressRules> = {
+  configs: {
+    build: toVitePressLoggerPresetConfig(buildRules),
+    config: toVitePressLoggerPresetConfig(configRules),
+    hmr: toVitePressLoggerPresetConfig(hmrRules),
+    parser: toVitePressLoggerPresetConfig(parserRules),
+    plugin: toVitePressLoggerPresetConfig(pluginRules),
+    recommended: createPresetConfig(vitepressRules),
+    resolver: toVitePressLoggerPresetConfig(resolverRules),
+    runtime: toVitePressLoggerPresetConfig(runtimeRules),
+    siteDevtools: toVitePressLoggerPresetConfig(siteDevtoolsRules),
+    transform: toVitePressLoggerPresetConfig(transformRules),
+  },
+  rules: vitepressRules,
+} satisfies LoggerPresetPlugin<typeof vitepressRules>;
+
+export default vitepress;

@@ -3,6 +3,8 @@ import type { ScopedLogger } from '@docs-islands/logger/types';
 
 const MAIN_NAME = '@docs-islands/vitepress';
 
+export type { LoggerElapsedLogOptions } from '@docs-islands/logger/types';
+
 export const getVitePressGroupLogger = (
   group: string,
   scopeId: string,

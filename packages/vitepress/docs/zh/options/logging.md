@@ -18,16 +18,16 @@
 ```ts [.vitepress/config.ts]
 import { createDocsIslands } from '@docs-islands/vitepress';
 import { react } from '@docs-islands/vitepress/adapters/react';
-import { hmr } from '@docs-islands/vitepress/logger/presets';
+import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 
 const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     levels: ['warn', 'error'],
-    plugins: { hmr },
+    plugins: { vitepress: vitepressLogger },
+    extends: ['vitepress/hmr'],
     rules: {
-      'hmr/markdownUpdate': 'off',
-      'hmr/viteAfterUpdate': {},
+      'vitepress/markdownUpdate': 'off',
     },
   },
 });
@@ -35,7 +35,7 @@ const islands = createDocsIslands({
 islands.apply(vitepressConfig);
 ```
 
-这个配置只保留选中的 docs-islands HMR 日志的 `warn` 和 `error`。`hmr/viteAfterUpdate` 使用预设默认匹配器，`hmr/markdownUpdate` 则被显式关闭。`'off'` 是 `{ enabled: false }` 的简写。
+这个配置会导入 VitePress HMR 规则集，让这些规则继承根 `warn` / `error` 级别，然后从最终 resolved rules 中删除 `vitepress/markdownUpdate`。
 
 ## 判断模型
 
@@ -44,54 +44,63 @@ islands.apply(vitepressConfig);
 - `debug: false`：输出 `error`、`warn`、`info`、`success`。
 - `debug: true`：输出 `error`、`warn`、`info`、`success`、`debug`。
 
-当配置了 `logging.rules` 时，logger 会先展开 plugin 规则，再进入规则模式：
+当 `logging.extends` 或 `logging.rules` 产生 resolved rules 时，logger 会进入规则模式：
 
-1. 先过滤掉 `enabled: false` 的 rule。它们不参与 scope 匹配、不参与 level 放行，也不会出现在 debug label 中。
-2. 每一条 active rule 都会按日志的 `main`、`group`、`message` 做匹配。只要 rule 声明了多个字段，这些字段就必须同时命中。
-3. 命中的 rule 使用 `rule.levels ?? logging.levels` 作为自己的 effective levels。若两者都没写，则使用默认非 debug 级别集合。
-4. 只要有任意一条命中的 active rule 放行当前 level，日志就会输出。
-5. 如果处于规则模式但没有 active rule 命中，则不输出；不会 fallback 到根 `levels`。
+1. `plugins` 只注册 rule template，不会自动启用任何规则。
+2. `extends` 导入 `vitepress/hmr` 这样的 plugin config，并把本地 rule id 展开为完整 rule id。
+3. `rules` 最后生效。对象表示启用或覆盖规则，`'off'` 表示删除该规则，不生成 resolved rule。
+4. 每一条 resolved rule 都会按日志的 `main`、`group`、`message` 做匹配。只要 rule 声明了多个字段，这些字段就必须同时命中。
+5. 命中的 rule 使用 `rule.levels ?? logging.levels ?? defaultResolvedLevels` 作为自己的 effective levels。
+6. 只要有任意一条命中的 resolved rule 放行当前 level，日志就会输出。如果处于规则模式但没有 rule 命中，则不输出。
+
+如果导入的规则全部被删除、最终没有任何 resolved rule，logger 会回到默认无规则行为。
 
 多条 rule 可以同时放行同一条日志。它们的可见级别按并集生效，debug label 按 `logging.rules` 中的声明顺序展示。
 
 ## 根配置项
 
-| 配置项    | 含义                                                                                                                           |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `debug`   | 启用诊断输出。可见的 `error`、`warn`、`info`、`success` 日志会带上命中的 label，以及 `12.34ms` 这样的相对耗时后缀。            |
-| `levels`  | 根可见级别集合。在规则模式下，它是没有声明 `rule.levels` 的 rule 的默认 effective levels；它不是用来强制收窄所有 rule 的上限。 |
-| `plugins` | 可选的预设 plugin 注册表。对象 key 会成为 `logging.rules["<plugin>/<rule>"]` 里的命名空间。                                    |
-| `rules`   | 既支持原始规则数组，也支持 plugin 规则对象。它存在且规范化后非空时，日志是否输出只由 active 且命中的 rules 决定。              |
+| 配置项      | 含义                                                                                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `debug`     | 启用诊断输出。可见的 `error`、`warn`、`info`、`success` 日志会带上命中的 label，以及 `12.34ms` 这样的相对耗时后缀。                                     |
+| `levels`    | 根可见级别集合。在规则模式下，它是使用 `levels: 'inherit'` 的 rule 的默认 effective levels；它不是用来强制收窄所有 rule 的上限。                        |
+| `plugins`   | 可选的预设 plugin 注册表。对象 key 会成为 `logging.rules["<plugin>/<rule>"]` 里的命名空间。                                                             |
+| `extends`   | 可选的 plugin config 列表，例如 `"vitepress/runtime"`；它们会在用户 `rules` 覆盖之前导入。                                                              |
+| `rules`     | 最终规则覆盖 map，key 可以是 custom label，也可以是 `"vitepress/viteAfterUpdate"` 这样的 preset 引用。对象必须声明 `levels`；`'off'` 表示删除一条规则。 |
+| `treeshake` | 控制 VitePress managed logger 的构建期裁剪 transform。默认关闭；设置为 `true` 时启用 build-time pruning。                                               |
 
 ## Plugin 规则
 
 如果你只是想过滤 docs-islands 内部日志，推荐优先使用 `logging.plugins`。
 
 ```ts
-import { hmr, runtime } from '@docs-islands/vitepress/logger/presets';
+import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 
 const logging = {
   debug: true,
   levels: ['warn'],
-  plugins: { hmr, runtime },
+  plugins: { vitepress: vitepressLogger },
+  extends: ['vitepress/hmr', 'vitepress/runtime'],
   rules: {
-    'hmr/viteAfterUpdate': {},
-    'runtime/reactDevRender': {
+    'vitepress/viteAfterUpdate': {
       levels: ['warn', 'error'],
     },
-    'runtime/renderValidation': 'off',
+    'vitepress/reactDevRender': {
+      levels: ['warn', 'error'],
+    },
+    'vitepress/renderValidation': 'off',
   },
 };
 ```
 
-- `plugins` 用来注册 logging 预设 plugin，例如 `hmr`。
-- `rules["<plugin>/<rule>"] = {}` 表示启用该预设规则并使用默认匹配器。
-- `rules["<plugin>/<rule>"] = 'off'` 表示关闭该预设规则，等价于 `{ enabled: false }`。
-- override 对象只允许覆盖 `enabled`、`message`、`levels`；`group` 和 `main` 始终继承 preset matcher。
+- `plugins` 用来把内置 VitePress 预设 plugin 注册到 `vitepress` 命名空间。
+- `extends: ["vitepress/<config>"]` 导入内置预设 config。
+- `rules["<plugin>/<rule>"] = { levels: 'inherit' }` 表示启用该预设规则，使用 template matcher 并继承根 levels。
+- `rules["<plugin>/<rule>"] = 'off'` 表示从最终 resolved config 中删除该预设规则。
+- override 对象可以设置 `main`、`group`、`message` 和 `levels`；显式字段会覆盖 preset template 字段。
 
 ### 内建日志预设与覆盖范围
 
-`@docs-islands/vitepress/logger/presets` 导出的 preset，本质上是一组内建日志的默认 `main/group` 匹配器。下面这张目录会列出所有 preset、所有 rule，以及它们默认约束到的范围。
+`@docs-islands/vitepress/logger/presets` 导出的 `vitepress` preset，本质上是一组内建日志的默认 `main/group` 匹配器。它提供 `vitepress/hmr` 这类分组 config，也提供包含全部规则的 `vitepress/recommended`。下面这张目录会列出所有 config、所有 rule，以及它们的默认 matcher。
 
 <LoggingPresetCatalog
   client:load
@@ -162,14 +171,13 @@ const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     debug: true,
-    rules: [
-      {
-        label: 'userland-metrics',
+    rules: {
+      'custom:userland-metrics': {
         main: '@acme/custom-docs',
         group: 'userland.metrics',
         levels: ['info'],
       },
-    ],
+    },
   },
 });
 
@@ -196,7 +204,9 @@ hiddenLogger.info('suppressed userland info');
 
 ### Logger Tree-Shaking Plugin
 
-在 `createDocsIslands()` 管理的构建链里，docs-islands 已经会自动安装 logger tree-shaking transform。这个 VitePress 自动 transform 只处理受控 VitePress module graph 里的 `@docs-islands/vitepress/logger` 导入，包括用户组件的 browser/SSR bundle，以及 unified loader 这类经 Vite 二次打包的 runtime module。它不会裁剪框架无关的 `@docs-islands/logger` 导入。
+在 `createDocsIslands()` 管理的构建链里，设置 `logging.treeshake: true` 后，docs-islands 会安装 logger tree-shaking transform。这个 VitePress transform 只处理受控 VitePress module graph 里的 `@docs-islands/vitepress/logger` 导入，包括用户组件的 browser/SSR bundle，以及 unified loader 这类经 Vite 二次打包的 runtime module。它不会裁剪框架无关的 `@docs-islands/logger` 导入。
+
+如果你希望在 VitePress managed logger facade 和 runtime 过滤之外启用构建期裁剪，可以设置 `logging.treeshake: true`。
 
 共享的 utils facade 也会参与这条接管链路。例如 `@docs-islands/core` 会导入 `@docs-islands/utils/logger`；VitePress 包在构建自身产物时，会把这个 facade 改写为 `@docs-islands/vitepress/logger`。改写后的 import 在 VitePress 包产物里保持 external 是有意的：最终消费方站点的 Vite 管道仍然需要看到并解析 `@docs-islands/vitepress/logger`，这样绑定 scope 的 virtual module 和 VitePress tree-shaking transform 才能生效。不要在消费方站点的 Vite 构建中把 `@docs-islands/vitepress/logger` external 掉。
 
@@ -313,22 +323,21 @@ resetLoggerConfig();
 
 :::
 
-## 原始 Rule 字段
+## Custom Rule 字段
 
-当你需要写更底层的 `group` / `message` 匹配，而不是绑定到某个 preset label 时，依然可以继续使用数组形式的 `logging.rules`。
+custom rule 和 preset rule 共用同一个 `logging.rules` 对象 map。custom rule 的 key 不能包含 `/`，这个 key 会成为 debug label。public custom rule 对象不接受 `label` 字段。
 
 | 字段      | 含义                                                                                                                         |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `label`   | 必填、稳定的规则标识。开启 `debug` 后，可见日志会以 `[LabelA][LabelB]` 的形式展示真正贡献输出的规则。                        |
-| `enabled` | 可选预过滤开关。`false` 表示这条 rule 完全不生效；它不是低优先级 deny rule。                                                 |
+| map key   | 必填、稳定的规则标识。开启 `debug` 后，可见日志会以 `[LabelA][LabelB]` 的形式展示真正贡献输出的规则。                        |
 | `main`    | 可选包名精确匹配，例如 `@docs-islands/vitepress`。`main` 不使用 glob。                                                       |
 | `group`   | 可选 logger group 匹配。普通字符串按精确匹配；包含 glob magic 时使用 `picomatch`，例如 `runtime.react.*` 或 `test.case.?1`。 |
 | `message` | 可选消息文本匹配。普通字符串按精确匹配；包含 glob magic 时使用 `picomatch`，例如 `*timeout*`、`request *` 或 `task-[ab]`。   |
-| `levels`  | 可选的当前 rule effective levels。它会替代根 `levels`，并和其它命中 rule 的 levels 一起组成并集。                            |
+| `levels`  | 必填。可以写显式级别数组，也可以写 `levels: 'inherit'`，表示继承根 `logging.levels`，再 fallback 到默认 resolved levels。    |
 
 ## 匹配示例
 
-原始规则数组仍然适合那种跨 preset 的宽匹配，比如直接按大范围 `group` 前缀或消息文本筛选。
+custom rule 适合那种跨 preset 的宽匹配，比如直接按大范围 `group` 前缀或消息文本筛选。
 
 ```ts
 const islands = createDocsIslands({
@@ -336,19 +345,18 @@ const islands = createDocsIslands({
   logging: {
     debug: true,
     levels: ['warn'],
-    rules: [
-      {
-        label: 'react-runtime-warnings',
+    rules: {
+      'custom:react-runtime-warnings': {
         main: '@docs-islands/vitepress',
         group: 'runtime.react.*',
+        levels: 'inherit',
       },
-      {
-        label: 'runtime-timeouts',
+      'custom:runtime-timeouts': {
         group: 'runtime.*',
         message: '*timeout*',
         levels: ['error'],
       },
-    ],
+    },
   },
 });
 ```
@@ -370,13 +378,13 @@ const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     levels: ['warn', 'error'],
-    rules: [
-      {
-        label: 'react-runtime-warn-error',
+    rules: {
+      'custom:react-runtime-warn-error': {
         main: '@docs-islands/vitepress',
         group: 'runtime.react.*',
+        levels: 'inherit',
       },
-    ],
+    },
   },
 });
 ```
@@ -388,47 +396,38 @@ const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     levels: ['warn'],
-    rules: [
-      {
-        label: 'runtime-warnings',
+    rules: {
+      'custom:runtime-warnings': {
         group: 'runtime.*',
+        levels: 'inherit',
       },
-      {
-        label: 'timeout-errors',
+      'custom:timeout-errors': {
         message: '*timeout*',
         levels: ['error'],
       },
-    ],
+    },
   },
 });
 ```
 
 这会保留 runtime 的 warning，同时额外保留任何包含 `timeout` 的 error。两条 rule 不会互相覆盖，而是一起贡献输出能力。
 
-### 临时关闭一条 rule
+### 临时关闭一条 preset rule
 
 ```ts
 const islands = createDocsIslands({
   adapters: [react()],
   logging: {
-    rules: [
-      {
-        label: 'runtime-react',
-        group: 'runtime.react.*',
-        levels: ['warn'],
-      },
-      {
-        label: 'runtime-react-disabled',
-        enabled: false,
-        group: 'runtime.react.component-manager',
-        levels: ['error'],
-      },
-    ],
+    plugins: { vitepress: vitepressLogger },
+    extends: ['vitepress/runtime'],
+    rules: {
+      'vitepress/reactComponentManager': 'off',
+    },
   },
 });
 ```
 
-被禁用的 rule 会被完全忽略。它不会静音或覆盖 active 的 `runtime-react` rule，也不会污染 debug label。
+被删除的 preset rule 不会生成 resolved rule，因此不能匹配 scope、不能放行 level，也不会出现在 debug label 中。其它从 `vitepress/runtime` 导入的规则仍然保持启用。
 
 ### 按消息文本筛选
 
@@ -436,13 +435,12 @@ const islands = createDocsIslands({
 const islands = createDocsIslands({
   adapters: [react()],
   logging: {
-    rules: [
-      {
-        label: 'hydration-timeouts',
+    rules: {
+      'custom:hydration-timeouts': {
         message: '*hydration*timeout*',
         levels: ['warn', 'error'],
       },
-    ],
+    },
   },
 });
 ```

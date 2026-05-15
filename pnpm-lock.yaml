@@ -961,8 +961,8 @@ importers:
   packages/vitepress/docs:
     dependencies:
       '@docs-islands/logger':
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        specifier: workspace:*
+        version: link:../../logger
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -1034,8 +1034,8 @@ importers:
   packages/vitepress/playground:
     dependencies:
       '@docs-islands/logger':
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        specifier: workspace:*
+        version: link:../../logger
       tinyglobby:
         specifier: catalog:prod
         version: 0.2.15

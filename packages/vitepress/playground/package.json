@@ -16,7 +16,7 @@
   "dependencies": {
     "vue": "catalog:prod",
     "tinyglobby": "catalog:prod",
-    "@docs-islands/logger": "catalog:prod"
+    "@docs-islands/logger": "workspace:*"
   },
   "devDependencies": {
     "eslint": "catalog:lint",

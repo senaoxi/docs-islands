@@ -47,16 +47,12 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn'],
-        rules: [
-          { label: 'Test1', message: 'msg.exact.default' },
-          { label: 'Test2', message: 'msg.exact.explicit', levels: ['info'] },
-          { label: 'Test3', message: 'msg.match.default.*' },
-          {
-            label: 'Test4',
-            message: 'msg.match.explicit.*',
-            levels: ['error'],
-          },
-        ],
+        rules: {
+          Test1: { message: 'msg.exact.default', levels: 'inherit' },
+          Test2: { message: 'msg.exact.explicit', levels: ['info'] },
+          Test3: { message: 'msg.match.default.*', levels: 'inherit' },
+          Test4: { message: 'msg.match.explicit.*', levels: ['error'] },
+        },
       });
 
       const logger = createLogger({
@@ -110,16 +106,12 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn'],
-        rules: [
-          { label: 'Test1', message: 'msg.exact.default' },
-          { label: 'Test2', message: 'msg.exact.explicit', levels: ['info'] },
-          { label: 'Test3', message: 'msg.match.default.*' },
-          {
-            label: 'Test4',
-            message: 'msg.match.explicit.*',
-            levels: ['error'],
-          },
-        ],
+        rules: {
+          Test1: { message: 'msg.exact.default', levels: 'inherit' },
+          Test2: { message: 'msg.exact.explicit', levels: ['info'] },
+          Test3: { message: 'msg.match.default.*', levels: 'inherit' },
+          Test4: { message: 'msg.match.explicit.*', levels: ['error'] },
+        },
       });
 
       const logger2 = createLogger({
@@ -171,30 +163,28 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             message: 'main-message.exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             message: 'main-message.exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             main: '@docs-islands/test',
             message: 'main-message.match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             main: '@docs-islands/test',
             message: 'main-message.match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -252,30 +242,28 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             message: 'main-message.exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             message: 'main-message.exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             main: '@docs-islands/test',
             message: 'main-message.match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             main: '@docs-islands/test',
             message: 'main-message.match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({
@@ -331,30 +319,28 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             group: 'test.case.gx',
             message: 'group-exact-message-exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             group: 'test.case.gx',
             message: 'group-exact-message-exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             group: 'test.case.gx',
             message: 'group-exact-message-match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             group: 'test.case.gx',
             message: 'group-exact-message-match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -412,30 +398,28 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             group: 'test.case.gx',
             message: 'group-exact-message-exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             group: 'test.case.gx',
             message: 'group-exact-message-exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             group: 'test.case.gx',
             message: 'group-exact-message-match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             group: 'test.case.gx',
             message: 'group-exact-message-match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({
@@ -497,30 +481,28 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             group: 'test.case.gm*',
             message: 'group-match-message-exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             group: 'test.case.gm*',
             message: 'group-match-message-exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             group: 'test.case.gm*',
             message: 'group-match-message-match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             group: 'test.case.gm*',
             message: 'group-match-message-match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -578,30 +560,28 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             group: 'test.case.gm*',
             message: 'group-match-message-exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             group: 'test.case.gm*',
             message: 'group-match-message-exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             group: 'test.case.gm*',
             message: 'group-match-message-match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             group: 'test.case.gm*',
             message: 'group-match-message-match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({
@@ -663,14 +643,10 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn'],
-        rules: [
-          { label: 'Test1', group: 'test.only.exact.default' },
-          {
-            label: 'Test2',
-            group: 'test.only.exact.explicit',
-            levels: ['error'],
-          },
-        ],
+        rules: {
+          Test1: { group: 'test.only.exact.default', levels: 'inherit' },
+          Test2: { group: 'test.only.exact.explicit', levels: ['error'] },
+        },
       });
 
       const loggerA = createLogger({
@@ -712,14 +688,10 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn'],
-        rules: [
-          { label: 'Test1', group: 'test.only.exact.default' },
-          {
-            label: 'Test2',
-            group: 'test.only.exact.explicit',
-            levels: ['error'],
-          },
-        ],
+        rules: {
+          Test1: { group: 'test.only.exact.default', levels: 'inherit' },
+          Test2: { group: 'test.only.exact.explicit', levels: ['error'] },
+        },
       });
 
       const loggerA2 = createLogger({
@@ -759,34 +731,32 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.case.mgx',
             message: 'mgx-message-exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             group: 'test.case.mgx',
             message: 'mgx-message-exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             main: '@docs-islands/test',
             group: 'test.case.mgx',
             message: 'mgx-message-match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             main: '@docs-islands/test',
             group: 'test.case.mgx',
             message: 'mgx-message-match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -852,34 +822,32 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.case.mgx',
             message: 'mgx-message-exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             group: 'test.case.mgx',
             message: 'mgx-message-exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             main: '@docs-islands/test',
             group: 'test.case.mgx',
             message: 'mgx-message-match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             main: '@docs-islands/test',
             group: 'test.case.mgx',
             message: 'mgx-message-match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({
@@ -940,34 +908,32 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.case.mgm*',
             message: 'mgm-message-exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             group: 'test.case.mgm*',
             message: 'mgm-message-exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             main: '@docs-islands/test',
             group: 'test.case.mgm*',
             message: 'mgm-message-match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             main: '@docs-islands/test',
             group: 'test.case.mgm*',
             message: 'mgm-message-match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -1033,34 +999,32 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.case.mgm*',
             message: 'mgm-message-exact.default',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             group: 'test.case.mgm*',
             message: 'mgm-message-exact.explicit',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             main: '@docs-islands/test',
             group: 'test.case.mgm*',
             message: 'mgm-message-match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test4',
+          Test4: {
             main: '@docs-islands/test',
             group: 'test.case.mgm*',
             message: 'mgm-message-match.explicit.*',
             levels: ['info'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({
@@ -1120,19 +1084,18 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.combo.match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             group: 'test.combo.match.explicit.*',
             levels: ['error'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -1178,19 +1141,18 @@ describe('Integration: Rule Complex Combinations', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.combo.match.default.*',
+            levels: 'inherit',
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             group: 'test.combo.match.explicit.*',
             levels: ['error'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({

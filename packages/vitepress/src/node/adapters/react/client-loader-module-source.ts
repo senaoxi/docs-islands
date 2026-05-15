@@ -22,7 +22,8 @@ export function createReactClientLoaderModuleSource({
 
   return `
 import {
-  formatDebugMessage as __docs_islands_format_debug__
+  formatDebugMessage as __docs_islands_format_debug__,
+  formatErrorMessage as __docs_islands_format_error__
 } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/vitepress/logger';
 
@@ -102,7 +103,7 @@ const resolveComponentExport = (module, importedName) => {
         return { name, success: true };
       } catch (error) {
         __log_client_loader_error__(
-          'Failed to load component ' + name + ': ' + (error instanceof Error ? error.message : String(error))
+          'Failed to load component ' + name + ': ' + __docs_islands_format_error__(error)
         );
         return { name, success: false };
       }

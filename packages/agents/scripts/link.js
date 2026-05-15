@@ -1,4 +1,7 @@
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/utils/logger';
 import { execSync } from 'node:child_process';
 import {
@@ -17,9 +20,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const logger = createLogger({
   main: '@docs-islands/agents',
 }).getLoggerByGroup('task.link');
-const scriptStartedAt = Date.now();
-const elapsedSince = (startTimeMs) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
+const scriptElapsed = createElapsedTimer();
 
 function findProjectRoot() {
   try {
@@ -34,9 +35,9 @@ function findProjectRoot() {
 
 function ensureDir(dir) {
   if (!existsSync(dir)) {
-    const ensureStartedAt = Date.now();
+    logger.info(`creating directory: ${dir}`);
     mkdirSync(dir, { recursive: true });
-    logger.success(`Created: ${dir}`, elapsedSince(ensureStartedAt));
+    logger.success(`directory created: ${dir}`);
   }
 }
 
@@ -73,7 +74,8 @@ function getSkillDirs(basePath) {
 }
 
 function linkSkillsForTool(projectRoot, skillsBase, toolDir, toolName) {
-  const linkStartedAt = Date.now();
+  logger.info(`${toolName} symlink setup started`);
+  const linkElapsed = createElapsedTimer();
   const targetDir = join(projectRoot, toolDir, 'skills');
   const generalSkills = join(skillsBase, 'general');
   const specificSkills = join(skillsBase, toolDir.replace(/^\./, ''));
@@ -102,18 +104,18 @@ function linkSkillsForTool(projectRoot, skillsBase, toolDir, toolName) {
   }
   logger.success(
     `${toolName}: ${created} created, ${existed} exist`,
-    elapsedSince(linkStartedAt),
+    linkElapsed(),
   );
 }
 
 function main() {
-  const mainStartedAt = Date.now();
-  logger.info('Setting up AI tool symlinks');
+  logger.info('AI tool symlink setup started');
+  const mainElapsed = createElapsedTimer();
   const projectRoot = findProjectRoot();
   const skillsBase = join(__dirname, '..', 'skills');
 
   if (!existsSync(join(skillsBase, 'general'))) {
-    logger.warn('Skills not organized, skipping');
+    logger.warn('skills not organized, skipping');
     return;
   }
 
@@ -126,15 +128,15 @@ function main() {
     ensureDir(join(projectRoot, dir));
     linkSkillsForTool(projectRoot, skillsBase, dir, name);
   });
-  logger.success('Done', elapsedSince(mainStartedAt));
+  logger.success('AI tool symlink setup finished', mainElapsed());
 }
 
 try {
   main();
 } catch (error) {
   logger.error(
-    `Link setup failed: ${error instanceof Error ? error.message : String(error)}`,
-    elapsedSince(scriptStartedAt),
+    `link setup failed: ${formatErrorMessage(error)}`,
+    scriptElapsed(),
   );
   process.exitCode = 1;
 }

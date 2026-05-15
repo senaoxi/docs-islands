@@ -7,7 +7,7 @@ import type {
   DocsInjectComponent,
   DocsRuntimeManagerLike,
 } from '@docs-islands/core/types/client';
-import type { LoggerConfigRegistryEntry } from '@docs-islands/logger/types';
+
 import type * as ReactDOMClient from 'react-dom/client';
 import type { DefaultTheme, SiteConfig } from 'vitepress';
 
@@ -33,10 +33,6 @@ declare global {
   // Define-time global constant injected via bundler `define`.
   const __BASE__: string | undefined;
   const __CLEAN_URLS__: boolean | undefined;
-  var __DOCS_ISLANDS_LOGGER_CONFIG_REGISTRY__:
-    | Map<string, LoggerConfigRegistryEntry>
-    | undefined;
-
   // Global React and ReactDOM runtime (loaded dynamically)
   var React: typeof React | undefined;
   var ReactDOM: typeof ReactDOMClient | undefined;

@@ -10,7 +10,10 @@ import coreTransformComponentTags, {
   travelImports,
 } from '@docs-islands/core/node/transform';
 import { RENDER_STRATEGY_CONSTANTS } from '@docs-islands/core/shared/constants/render-strategy';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import { type ImportSpecifier, init, parse } from 'es-module-lexer';
 import type { SourceMap } from 'magic-string';
 import { join } from 'pathe';
@@ -24,9 +27,6 @@ import type {
 } from '../../core/framework-parser';
 import { getVitePressGroupLogger } from '../../logger';
 import type { ReactIntegrationPluginContext } from './context';
-
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 interface ReactParsedScriptResult extends RenderingFrameworkParsedScriptResult {
   metadata: {
@@ -93,7 +93,7 @@ export function createReactFrameworkParser(
       normalizedId,
       script,
     }: RenderingFrameworkParserScriptContext): Promise<ReactParsedScriptResult> {
-      const parseStartedAt = Date.now();
+      const parseElapsed = createElapsedTimer();
       await init;
       const importReferenceResolver =
         createImportReferenceResolver(moduleResolver);
@@ -111,12 +111,8 @@ export function createReactFrameworkParser(
         [imports] = parse(script.content);
       } catch (parseError) {
         Logger.error(
-          `Failed to parse JavaScript in ${id}: ${
-            parseError instanceof Error
-              ? parseError.message
-              : String(parseError)
-          }`,
-          elapsedSince(parseStartedAt),
+          `failed to parse JavaScript in ${id}: ${formatErrorMessage(parseError)}`,
+          parseElapsed(),
         );
 
         return {
@@ -142,12 +138,8 @@ export function createReactFrameworkParser(
           importSets = travelImports(exp) || [];
         } catch (importParseError) {
           Logger.warn(
-            `Failed to parse import statement in ${id}: ${
-              importParseError instanceof Error
-                ? importParseError.message
-                : String(importParseError)
-            }`,
-            elapsedSince(parseStartedAt),
+            `failed to parse import statement in ${id}: ${formatErrorMessage(importParseError)}`,
+            parseElapsed(),
           );
           continue;
         }
@@ -169,13 +161,13 @@ export function createReactFrameworkParser(
           if (!finalImportReference) {
             Logger.error(
               `Failed to resolve final import reference ${rawIdentifier}#${importedName} in ${id}, skipping component registration`,
-              elapsedSince(parseStartedAt),
+              parseElapsed(),
             );
             continue;
           }
 
           for (const warning of finalImportReference.warnings) {
-            Logger.warn(warning, elapsedSince(parseStartedAt));
+            Logger.warn(warning, parseElapsed());
           }
 
           maybeComponentReferenceMap.set(localName, {

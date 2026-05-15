@@ -1,3 +1,4 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -356,6 +357,8 @@ export async function runChangelogCommand(
   ChangelogLogger.info(
     `Preparing changelog updates:\n${formatReleasePlans(plans)}`,
   );
+  ChangelogLogger.info('changelog update started');
+  const changelogElapsed = createElapsedTimer();
 
   for (const plan of plans) {
     const result = writeChangelogForPlan(plan, {
@@ -380,4 +383,5 @@ export async function runChangelogCommand(
       );
     }
   }
+  ChangelogLogger.success('changelog update finished', changelogElapsed());
 }

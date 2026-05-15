@@ -13,8 +13,9 @@ Use rules when production visibility must focus on specific packages, groups, or
 ## Behavior
 
 - A normalized `rules` config with at least one rule switches non-debug logs to allowlist mode.
-- A log is visible only when at least one enabled rule matches its scope and allows its level.
+- A log is visible only when at least one resolved rule matches its scope and allows its level.
 - Unmatched logs do not fall back to root `levels`.
+- If all imported rules are deleted with `'off'`, no resolved rules remain and the logger falls back to default no-rule behavior.
 - `debug: true` adds contributing rule labels to visible non-debug logs and renders elapsed timing when `{ elapsedTimeMs }` is provided.
 - In current runtime behavior, `logger.debug()` is suppressed while rule mode is active.
 
@@ -26,51 +27,53 @@ import { setLoggerConfig } from '@docs-islands/logger';
 setLoggerConfig({
   debug: true,
   levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'metrics',
+  rules: {
+    'custom:metrics': {
       main: '@acme/docs',
       group: 'userland.metrics',
       levels: ['info', 'warn'],
     },
-  ],
+  },
 });
 ```
 
-`levels` at the root is used as the fallback allowed levels for rules that omit their own `levels`. It is not a fallback for unmatched logs.
+`levels` at the root is used as the fallback allowed levels for rules that use `levels: 'inherit'`. It is not a fallback for unmatched logs.
 
 ## Rule Fields
 
 ```ts
-interface LoggerRule {
-  label: string;
-  enabled?: boolean;
+type LoggerRuleLevelsUserConfig = 'inherit' | Array<'error' | 'warn' | 'info' | 'success'>;
+
+type LoggerRuleSetting = 'off' | LoggerRuleUserConfig;
+
+interface LoggerRuleUserConfig {
   main?: string;
   group?: string;
   message?: string;
-  levels?: Array<'error' | 'warn' | 'info' | 'success'>;
+  levels: LoggerRuleLevelsUserConfig;
 }
 ```
 
-- `label` is required, must be unique, and cannot be `<root>`.
-- `enabled: false` keeps a rule declared but inactive.
+- `rules` is an object map. The map key is the label, must be unique, and cannot be `<root>`.
+- `'off'` deletes a rule, so no resolved rule is emitted.
+- Object settings always require `levels`; use `levels: 'inherit'` to inherit root `levels`.
 - `main` matches exactly after trimming.
 - `group` and `message` match exactly unless the pattern contains documented glob syntax. Stable coverage is `*`, `?`, and `[]`; richer picomatch syntax is implementation behavior until covered by tests.
 - `levels` controls non-debug visibility for the matching rule.
+- Preset references use `"<plugin>/<rule>"`; custom rule keys should not contain `/`.
 
 ## Common Patterns
 
 Focus on one package and area:
 
 ```ts
-rules: [
-  {
-    label: 'docs-build',
+rules: {
+  'custom:docs-build': {
     main: '@acme/docs',
     group: 'build.*',
     levels: ['info', 'warn', 'error'],
   },
-];
+};
 ```
 
 Use root `levels` as rule defaults, with extra info for one area:
@@ -78,31 +81,29 @@ Use root `levels` as rule defaults, with extra info for one area:
 ```ts
 setLoggerConfig({
   levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'build-info',
+  rules: {
+    'custom:build-info': {
       group: 'build.pipeline',
       levels: ['info', 'warn', 'error'],
     },
-    {
-      label: 'runtime-defaults',
+    'custom:runtime-defaults': {
       group: 'runtime.*',
+      levels: 'inherit',
     },
-  ],
+  },
 });
 ```
 
-Keep a candidate rule disabled:
+Delete an imported preset rule:
 
 ```ts
-rules: [
-  {
-    enabled: false,
-    label: 'future-devtools',
-    group: 'devtools.*',
-    levels: ['info'],
+setLoggerConfig({
+  plugins: { runtime },
+  extends: ['runtime/recommended'],
+  rules: {
+    'runtime/reactComponentManager': 'off',
   },
-];
+});
 ```
 
 ## Related

@@ -1,4 +1,3 @@
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/utils/logger';
 import type { RenderDirective } from '../types/render';
 import { CORE_RUNTIME_LOG_GROUPS } from './constants/log-groups/runtime';
@@ -13,7 +12,6 @@ const loggerInstance = createLogger({
 });
 
 export const validateLegalRenderElements = (element: Element): boolean => {
-  const validationStartedAt = Date.now();
   const logger = loggerInstance.getLoggerByGroup(
     CORE_RUNTIME_LOG_GROUPS.renderValidation,
   );
@@ -30,7 +28,6 @@ export const validateLegalRenderElements = (element: Element): boolean => {
   if (missingRenderStrategyAttrs.length > 0) {
     logger.warn(
       `The element is missing rendering attributes: ${missingRenderStrategyAttrs.join(', ')}, skipping compilation.`,
-      createElapsedLogOptions(validationStartedAt, Date.now()),
     );
     return false;
   }
@@ -40,7 +37,6 @@ export const validateLegalRenderElements = (element: Element): boolean => {
   if (!/^[\da-f]{8}$/i.test(renderId)) {
     logger.warn(
       `The element with renderId: [${renderId}] is not a valid renderId, skipping compilation.`,
-      createElapsedLogOptions(validationStartedAt, Date.now()),
     );
     return false;
   }
@@ -52,7 +48,6 @@ export const validateLegalRenderElements = (element: Element): boolean => {
   if (!/^[A-Z][\dA-Za-z]*$/.test(renderComponent)) {
     logger.warn(
       `The element with renderComponent: [${renderComponent}] is not a valid component name, component name must be in PascalCase, skipping compilation.`,
-      createElapsedLogOptions(validationStartedAt, Date.now()),
     );
     return false;
   }
@@ -64,7 +59,6 @@ export const validateLegalRenderElements = (element: Element): boolean => {
   if (!ALLOWED_RENDER_DIRECTIVES.includes(renderDirective as RenderDirective)) {
     logger.warn(
       `The element with renderDirective: [${renderDirective}] is not a valid render directive, allowed render directives: ${ALLOWED_RENDER_DIRECTIVES.join(', ')}, skipping compilation.`,
-      createElapsedLogOptions(validationStartedAt, Date.now()),
     );
     return false;
   }

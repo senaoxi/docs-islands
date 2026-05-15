@@ -13,6 +13,7 @@ import {
   getPnpmCommand,
   getSmokeLogger,
   importMpaIntegrationScripts,
+  packLoggerDist,
   packVitepressDist,
   resolveClientEntryFromFixture,
   runVitePressBuild,
@@ -115,22 +116,26 @@ test('MPA dist integration bundle resolves and imports cleanly', async () => {
   const logger = getSmokeLogger('task.mpa-integration-smoke');
   const smokeStartedAt = Date.now();
   let cleanupPackedDist: (() => Promise<void>) | undefined;
+  let cleanupPackedLogger: (() => Promise<void>) | undefined;
   let cleanupFixture: (() => Promise<void>) | undefined;
 
   try {
     const manifest = assertDistArtifacts();
 
-    logger.info(
-      'Packing dist tarball for MPA integration smoke...',
-      elapsedSince(smokeStartedAt),
-    );
+    logger.info('packing vitepress dist tarball for MPA integration smoke');
     const packedDist = await packVitepressDist();
     cleanupPackedDist = packedDist.cleanup;
+    logger.info('packing logger dist tarball for MPA integration smoke');
+    const packedLogger = await packLoggerDist();
+    cleanupPackedLogger = packedLogger.cleanup;
 
     const fixture = await createConsumerFixture({
       fixtureRootPrefix: 'docs-islands-mpa-integration-smoke-',
-      installLogMessage: 'Installing MPA integration smoke dependencies...',
+      installLogMessage: 'installing MPA integration smoke dependencies',
       logger,
+      localDependencyTarballPaths: {
+        '@docs-islands/logger': packedLogger.tarballPath,
+      },
       manifest,
       tarballPath: packedDist.tarballPath,
       writeFiles: writeMpaIntegrationFixtureFiles,
@@ -140,10 +145,7 @@ test('MPA dist integration bundle resolves and imports cleanly', async () => {
     const resolvedClientEntry = await resolveClientEntryFromFixture(
       fixture.fixtureDir,
     );
-    logger.info(
-      `${CLIENT_ENTRY_SPECIFIER} resolved to ${resolvedClientEntry}`,
-      elapsedSince(smokeStartedAt),
-    );
+    logger.info(`${CLIENT_ENTRY_SPECIFIER} resolved to ${resolvedClientEntry}`);
 
     runVitePressBuild({
       fixtureDir: fixture.fixtureDir,
@@ -173,6 +175,9 @@ test('MPA dist integration bundle resolves and imports cleanly', async () => {
     }
     if (cleanupPackedDist) {
       await cleanupPackedDist();
+    }
+    if (cleanupPackedLogger) {
+      await cleanupPackedLogger();
     }
   }
 });

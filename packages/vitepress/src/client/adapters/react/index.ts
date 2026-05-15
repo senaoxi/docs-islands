@@ -20,7 +20,7 @@ import {
   RENDER_STRATEGY_CONSTANTS,
 } from '@docs-islands/core/shared/constants/render-strategy';
 import {
-  createElapsedLogOptions,
+  createElapsedTimer,
   formatDebugMessage,
   formatErrorMessage,
 } from '@docs-islands/logger/helper';
@@ -44,8 +44,6 @@ const loggerInstance = createLogger({
   main: '@docs-islands/vitepress',
 });
 const DebugLogger = createSiteDevToolsLogger('react-hmr');
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, getSiteDevToolsNow());
 /**
  * VitePress still redirects the compiled client entry through vitepress/client.
  * We keep the React-specific entry as an explicit composition layer so users do not
@@ -415,13 +413,13 @@ class ReactIntegration {
     loggerGroup: string,
     failureMessage: string,
   ): void {
-    const taskStartedAt = getSiteDevToolsNow();
+    const taskElapsed = createElapsedTimer();
     task.catch((error) => {
       loggerInstance
         .getLoggerByGroup(loggerGroup)
         .error(
           `${failureMessage}: ${formatErrorMessage(error)}`,
-          elapsedSince(taskStartedAt),
+          taskElapsed(),
         );
     });
   }

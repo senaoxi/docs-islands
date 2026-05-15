@@ -1,8 +1,5 @@
 import { VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS } from '#shared/constants/log-groups/site-devtools';
-import {
-  createElapsedLogOptions,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { formatErrorMessage } from '@docs-islands/logger/helper';
 import { createHash } from 'node:crypto';
 import {
   getSiteDevToolsAiProviderLabel,
@@ -152,12 +149,10 @@ export const formatRequestTraceDetail = (
 
 export const logAiRequestStarted = (
   trace: SiteDevToolsAiRequestTrace,
-  startedAt: number,
   loggerScopeId: string,
 ): void => {
   getSiteDevToolsAiLogger(loggerScopeId).info(
-    `Starting AI analysis: ${formatRequestTraceDetail(trace)}`,
-    createElapsedLogOptions(startedAt, Date.now()),
+    `AI analysis started: ${formatRequestTraceDetail(trace)}`,
   );
 };
 

@@ -1,7 +1,10 @@
 import type { OutputChunk, RollupOutput } from '#dep-types/rollup';
 import type { ConfigType } from '#dep-types/utils';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'pathe';
@@ -15,8 +18,6 @@ import { isOutputChunk, resolveSafeOutputPath } from './shared';
 
 const UI_FRAMEWORK_MPA_VITEPRESS_CLIENT_STUB_PLUGIN_NAME =
   'docs-islands:vitepress:ui-framework-mpa-vitepress-client-stub';
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 /**
  * The MPA integration bundle is shared per framework/config tuple during a
@@ -58,11 +59,15 @@ export const buildUIFrameworkIntegrationInMPA = async (
   }
 
   const buildPromise = (async () => {
-    const buildStartedAt = Date.now();
     const entryBaseName = `${adapter.framework}-integration`;
     const tempEntryPath = resolve(cacheDir, `${entryBaseName}.js`);
+    let buildElapsed = createElapsedTimer();
 
     try {
+      Logger.info(
+        `${adapter.framework} integration build started in MPA mode with Vite`,
+      );
+      buildElapsed = createElapsedTimer();
       /**
        * In MPA mode, it is not necessary to use TLA for the entry module for the following reasons:
        *
@@ -81,11 +86,6 @@ ${adapter.clientEntryImportName()}();
 `;
 
       fs.writeFileSync(tempEntryPath, tempEntryContent, 'utf8');
-
-      Logger.info(
-        `Starting ${adapter.framework} integration build in MPA mode with Vite...`,
-        elapsedSince(buildStartedAt),
-      );
 
       const vitepressTreeShakingPlugin: Plugin = {
         /**
@@ -205,7 +205,7 @@ export const inBrowser = true;
 
         Logger.success(
           `${adapter.framework} integration build completed in MPA mode, entryPoint: ${entryPointChunk ? join('/', entryPointChunk.fileName) : ''}`,
-          elapsedSince(buildStartedAt),
+          buildElapsed(),
         );
 
         return {
@@ -218,23 +218,20 @@ export const inBrowser = true;
       throw new Error('vite did not generate output file');
     } catch (error) {
       Logger.error(
-        `${adapter.framework} integration build failed in MPA mode: ${error}`,
-        elapsedSince(buildStartedAt),
+        `${adapter.framework} integration build failed in MPA mode: ${formatErrorMessage(error)}`,
+        buildElapsed(),
       );
       throw error;
     } finally {
       try {
         if (fs.existsSync(tempEntryPath)) {
           fs.unlinkSync(tempEntryPath);
-          Logger.info(
-            'Temporary files cleaned up',
-            elapsedSince(buildStartedAt),
-          );
+          Logger.info('temporary files cleaned up');
         }
       } catch (cleanupError) {
         Logger.warn(
-          `Failed to clean up temporary files: ${cleanupError}`,
-          elapsedSince(buildStartedAt),
+          `temporary file cleanup failed: ${formatErrorMessage(cleanupError)}`,
+          buildElapsed(),
         );
       }
       buildPromiseByKey.delete(buildKey);

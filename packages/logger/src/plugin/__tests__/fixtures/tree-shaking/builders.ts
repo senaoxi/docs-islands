@@ -84,26 +84,19 @@ const LOGGER_TREE_SHAKING_FIXTURES: LoggerTreeShakingFixture[] = [
     options: {
       config: {
         levels: ['error'],
-        rules: [
-          {
+        rules: {
+          'disabled-success': 'off',
+          'metrics-warn': {
             group: 'tree_shaking.metrics',
-            label: 'disabled-success',
-            levels: ['success'],
-            enabled: false,
-          },
-          {
-            group: 'tree_shaking.metrics',
-            label: 'metrics-warn',
             levels: ['warn'],
             main: '@docs-islands/logger-fixture',
             message: 'fixture rules visible *',
           },
-          {
+          'api-error': {
             group: 'tree_shaking.api',
-            label: 'api-error',
             levels: ['error'],
           },
-        ],
+        },
       },
     },
   },

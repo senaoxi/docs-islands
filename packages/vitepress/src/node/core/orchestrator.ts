@@ -1,7 +1,12 @@
 import { resolveConfig } from '#shared/config';
 import { createLoggerScopeId } from '@docs-islands/logger/core/helper';
+import type { LoggerPluginMap } from '@docs-islands/logger/types';
 import type { PluginOption } from 'vite';
 import type { DefaultTheme, UserConfig } from 'vitepress';
+import {
+  SupportUIFramework,
+  type SupportUIFrameworkType,
+} from '../constants/adapters';
 import {
   SITE_DEVTOOLS_OPTIONAL_DEPENDENCY_BOOTSTRAP_PLUGIN_NAME,
   SITE_DEVTOOLS_SOURCE_PLUGIN_NAME,
@@ -25,10 +30,12 @@ export interface DocsIslandsAdapter {
     vitepressConfig: UserConfig<DefaultTheme.Config>,
     resolvedUserConfig: DocsIslandsResolvedUserConfig,
   ) => void;
-  framework: string;
+  framework: SupportUIFrameworkType;
 }
 
-export interface DocsIslandsOptions extends DocsIslandsSharedOptions {
+export interface DocsIslandsOptions<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+> extends DocsIslandsSharedOptions<TPlugins> {
   adapters: DocsIslandsAdapter[];
 }
 
@@ -51,6 +58,10 @@ function validateAdapters(
     if (frameworks.has(adapter.framework)) {
       throw new Error(
         `createDocsIslands() received multiple adapters for framework "${adapter.framework}".`,
+      );
+    } else if (!SupportUIFramework.includes(adapter.framework)) {
+      throw new Error(
+        `createDocsIslands() received unsupported adapters for framework "${adapter.framework}".`,
       );
     }
 
@@ -143,16 +154,15 @@ function applySiteDevToolsOrchestration(
   }
 }
 
-export default function createDocsIslands(
-  options: DocsIslandsOptions,
-): DocsIslands {
+export default function createDocsIslands<
+  const TPlugins extends LoggerPluginMap = LoggerPluginMap,
+>(options: DocsIslandsOptions<TPlugins>): DocsIslands {
   const adapters = validateAdapters([...options.adapters]);
   const loggerScopeId = createLoggerScopeId();
 
   return {
     apply(vitepressConfig) {
       assertCanApplyDocsIslandsLoggerScope(vitepressConfig, loggerScopeId);
-
       const resolvedUserConfig = applyDocsIslandsUserConfig(
         vitepressConfig,
         loggerScopeId,

@@ -91,7 +91,14 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  globalThis.page.removeAllListeners();
+  await globalThis.page.close();
   await browser.close();
+
+  delete (globalThis as Partial<typeof globalThis>).page;
+  delete (globalThis as Partial<typeof globalThis>).goto;
+  delete (globalThis as Partial<typeof globalThis>).allowBrowserRuntimeFailures;
+
   const originalMarkdownContent =
     '<!-- This file is used to test the HMR of markdown content changes. -->\n';
   const projectRoot = path.resolve(__dirname, '.');

@@ -1,13 +1,11 @@
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { extname } from 'pathe';
 import { getVitePressGroupLogger } from '../logger';
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 export interface SharedClientRuntimeMetafile {
   content: string;
@@ -20,7 +18,7 @@ let sharedClientRuntimeMetafileCache: SharedClientRuntimeMetafile | null = null;
 export const getSharedClientRuntimeMetafile = async (
   loggerScopeId: string,
 ): Promise<SharedClientRuntimeMetafile> => {
-  const metafileBuildStartedAt = Date.now();
+  const metafileElapsed = createElapsedTimer();
   if (sharedClientRuntimeMetafileCache) {
     return sharedClientRuntimeMetafileCache;
   }
@@ -48,7 +46,7 @@ export const getSharedClientRuntimeMetafile = async (
         loggerScopeId,
       ).error(
         'This is developer mode, you need to build the @docs-islands/vitepress project first (pnpm build) to complete the build.',
-        elapsedSince(metafileBuildStartedAt),
+        metafileElapsed(),
       );
       throw new Error(
         'Developer mode detected without built artifacts. Please run "pnpm build" first.',

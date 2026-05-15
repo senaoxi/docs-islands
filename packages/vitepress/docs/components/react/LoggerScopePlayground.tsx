@@ -261,14 +261,10 @@ const createControlledProbe = (): ProbeOutcome => {
   const logLines = captureConsole(() => {
     controlledLogger
       .getLoggerByGroup(CONTROLLED_VISIBLE_GROUP)
-      .info(CONTROLLED_VISIBLE_MESSAGE, {
-        elapsedTimeMs: 12.34,
-      });
+      .info(CONTROLLED_VISIBLE_MESSAGE);
     controlledLogger
       .getLoggerByGroup(CONTROLLED_HIDDEN_GROUP)
-      .info(CONTROLLED_HIDDEN_MESSAGE, {
-        elapsedTimeMs: 23.45,
-      });
+      .info(CONTROLLED_HIDDEN_MESSAGE);
   });
 
   return {

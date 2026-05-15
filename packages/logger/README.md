@@ -51,6 +51,7 @@ Requirements:
 
 ```ts
 import { createLogger, setLoggerConfig } from '@docs-islands/logger';
+import { createElapsedTimer, formatErrorMessage } from '@docs-islands/logger/helper';
 
 setLoggerConfig({
   debug: true,
@@ -61,10 +62,16 @@ const logger = createLogger({
   main: '@acme/docs',
 }).getLoggerByGroup('build.pipeline');
 
-logger.info('build started', { elapsedTimeMs: 12.34 });
-logger.success('build finished', { elapsedTimeMs: 42.8 });
+logger.info('build started');
+const elapsed = createElapsedTimer();
+try {
+  await build();
+  logger.success('build finished', elapsed());
+} catch (error) {
+  logger.error(`build failed: ${formatErrorMessage(error)}`, elapsed());
+  throw error;
+}
 logger.warn('cache is cold');
-logger.error('build failed');
 logger.debug('debug details');
 ```
 
@@ -104,40 +111,87 @@ When a runtime is controlled by `loggerPlugin`, both `setLoggerConfig(...)` and 
 
 ### Rule Mode
 
-Rules make logging an allowlist. When at least one active rule exists, a log is visible only when a matching rule allows its level. There is no fallback to root `levels` for unmatched logs.
+Rules make logging an allowlist. `plugins` only registers rule templates, `extends` imports plugin-provided configs, and `rules` is the final override layer. `rules` is an object map: the key is the rule label or preset reference, and the value is `'off'` or a rule object with `levels`. When at least one resolved rule exists, a log is visible only when a matching rule allows its level. There is no fallback to root `levels` for unmatched logs.
 
 ```ts
 setLoggerConfig({
   debug: true,
   levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'metrics',
+  rules: {
+    'custom:metrics': {
       main: '@acme/docs',
       group: 'userland.metrics',
       levels: ['info', 'warn'],
     },
-    {
-      enabled: false,
-      label: 'noisy-devtools',
-      group: 'devtools.*',
-    },
-  ],
+  },
 });
 ```
 
 Rule fields:
 
-| Field     | Description                                                                 |
-| --------- | --------------------------------------------------------------------------- |
-| `label`   | Required unique label. In debug mode, visible rule-based logs include it.   |
-| `enabled` | Set to `false` to keep a rule declared but inactive.                        |
-| `main`    | Exact package or subsystem match.                                           |
-| `group`   | Exact match by default, or a glob pattern when glob characters are present. |
-| `message` | Exact match by default, or a glob pattern when glob characters are present. |
-| `levels`  | Allowed non-debug levels for this rule.                                     |
+| Field     | Description                                                                   |
+| --------- | ----------------------------------------------------------------------------- |
+| map key   | Required unique label. In debug mode, visible rule-based logs include it.     |
+| `main`    | Exact package or subsystem match.                                             |
+| `group`   | Exact match by default, or a glob pattern when glob characters are present.   |
+| `message` | Exact match by default, or a glob pattern when glob characters are present.   |
+| `levels`  | Required. Use an explicit level array, or `'inherit'` to inherit root levels. |
 
 `levels` accepts `error`, `warn`, `info`, and `success`. `debug` is controlled by `debug: true`, not by `levels`.
+
+### Preset Plugins
+
+Preset plugins register named rule templates, but registration alone does not enable anything. Import a plugin config with `extends`, or enable a preset rule from the same `rules` map using `"<plugin>/<rule>"`.
+
+```ts
+import type { LoggerPresetPlugin } from '@docs-islands/logger/types';
+
+const viteLoggingPlugin = {
+  rules: {
+    build: {
+      main: '@acme/vite',
+      group: 'build.pipeline',
+    },
+    hmr: {
+      main: '@acme/vite',
+      group: 'dev.hmr',
+    },
+  },
+  configs: {
+    recommended: {
+      rules: {
+        build: { levels: 'inherit' },
+        hmr: { levels: 'inherit' },
+      },
+    },
+  },
+} satisfies LoggerPresetPlugin;
+
+setLoggerConfig({
+  plugins: {
+    vite: viteLoggingPlugin,
+  },
+  extends: ['vite/recommended'],
+  rules: {
+    'vite/hmr': {
+      levels: ['warn', 'error'],
+      message: '*slow*',
+    },
+    'custom:api-timeout': {
+      group: 'api.*',
+      message: '*timeout*',
+      levels: ['warn'],
+    },
+  },
+});
+```
+
+Preset rule settings are:
+
+| Setting | Meaning                                                                                               |
+| ------- | ----------------------------------------------------------------------------------------------------- |
+| `'off'` | Delete the preset rule after expansion.                                                               |
+| object  | Enable or override the rule; provided `main`, `group`, `message`, and `levels` override the template. |
 
 ## Bundler Plugin
 
@@ -223,14 +277,20 @@ Kept for runtime filtering:
 Root entry:
 
 ```ts
-import { createLogger, resetLoggerConfig, setLoggerConfig } from '@docs-islands/logger';
+import {
+  createLogger,
+  resetLoggerConfig,
+  resolveLoggerConfig,
+  setLoggerConfig,
+} from '@docs-islands/logger';
 ```
 
-| API                   | Description                                                                                          |
-| --------------------- | ---------------------------------------------------------------------------------------------------- |
-| `createLogger()`      | Creates or reuses a main logger in the default scope. Call `.getLoggerByGroup(group)` to log.        |
-| `setLoggerConfig()`   | Sets the default runtime config for direct non-plugin usage. Throws in plugin-controlled runtimes.   |
-| `resetLoggerConfig()` | Clears the default runtime config for direct non-plugin usage. Throws in plugin-controlled runtimes. |
+| API                     | Description                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `createLogger()`        | Creates or reuses a main logger in the default scope. Call `.getLoggerByGroup(group)` to log.        |
+| `resolveLoggerConfig()` | Resolves public `LoggerConfig` input into the runtime config shape used by host packages.            |
+| `setLoggerConfig()`     | Sets the default runtime config for direct non-plugin usage. Throws in plugin-controlled runtimes.   |
+| `resetLoggerConfig()`   | Clears the default runtime config for direct non-plugin usage. Throws in plugin-controlled runtimes. |
 
 Plugin entry:
 
@@ -276,11 +336,11 @@ Advanced type and helper entries:
 
 ```ts
 import type { LoggerConfig } from '@docs-islands/logger/types';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
-import { createLoggerScopeId, normalizeLoggerConfig } from '@docs-islands/logger/core/helper';
+import { createElapsedLogOptions, createElapsedTimer } from '@docs-islands/logger/helper';
+import { createLoggerScopeId } from '@docs-islands/logger/core/helper';
 ```
 
-Prefer the root entry for application code. Use `@docs-islands/logger/core` only when an integration needs an explicit scope. Use `@docs-islands/logger/helper` for shared formatting, elapsed-time, and error/debug-message utilities. Use `@docs-islands/logger/core/helper` for scope and config normalization helpers.
+Prefer the root entry for application code. Use `@docs-islands/logger/core` only when an integration needs an explicit scope. Use `@docs-islands/logger/helper` for shared formatting, elapsed-time, and error/debug-message utilities. Use `@docs-islands/logger/core/helper` for scope helpers.
 
 ## Documentation
 

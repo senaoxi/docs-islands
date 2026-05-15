@@ -3,13 +3,14 @@
  */
 import {
   resetScopedLoggerConfig,
-  setScopedLoggerConfig as setLoggerConfigForScope,
+  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
 } from '@docs-islands/logger/core';
-import type { LoggerConfig } from '@docs-islands/logger/types';
+import type { ResolvedLoggerConfig } from '@docs-islands/logger/types';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createLoggerTreeShakingPlugin,
   LOGGER_TREE_SHAKING_PLUGIN_NAME,
+  setVitePressLoggerTreeShakingEnabled,
   transformLoggerTreeShaking,
   VITEPRESS_LOGGER_TREE_SHAKING_MODULE_ID,
 } from '../vite-plugin-logger-tree-shaking';
@@ -19,7 +20,7 @@ const TEST_MODULE_ID = '/workspace/docs/components/LoggerProbe.tsx';
 
 const transformCode = async (
   code: string,
-  config?: LoggerConfig,
+  config?: ResolvedLoggerConfig,
 ): Promise<string> => {
   resetScopedLoggerConfig(TEST_LOGGER_SCOPE_ID);
   setLoggerConfigForScope(TEST_LOGGER_SCOPE_ID, config);
@@ -35,6 +36,7 @@ const transformCode = async (
 
 afterEach(() => {
   resetScopedLoggerConfig(TEST_LOGGER_SCOPE_ID);
+  setVitePressLoggerTreeShakingEnabled(TEST_LOGGER_SCOPE_ID, false);
 });
 
 describe('createLoggerTreeShakingPlugin', () => {
@@ -44,7 +46,13 @@ describe('createLoggerTreeShakingPlugin', () => {
     );
   });
 
-  it('is a production build post plugin', () => {
+  it('does not create the production transform by default', () => {
+    expect(createLoggerTreeShakingPlugin(TEST_LOGGER_SCOPE_ID)).toBe(false);
+  });
+
+  it('is a production build post plugin when enabled', () => {
+    setVitePressLoggerTreeShakingEnabled(TEST_LOGGER_SCOPE_ID, true);
+
     const plugin = createLoggerTreeShakingPlugin(TEST_LOGGER_SCOPE_ID);
 
     expect(plugin).toMatchObject({

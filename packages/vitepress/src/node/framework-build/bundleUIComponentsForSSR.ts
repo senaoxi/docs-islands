@@ -4,16 +4,16 @@ import type {
 } from '#dep-types/component';
 import type { ConfigType } from '#dep-types/utils';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import fs from 'node:fs';
 import { join } from 'pathe';
 import { getVitePressGroupLogger } from '../logger';
 import type { UIFrameworkBuildAdapter } from './adapter';
 import { createComponentEntryModules } from './shared';
 import { orchestrateSSRBundle } from './ssr-bundle/ssr-bundle-orchestrator.js';
-
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 export async function bundleUIComponentsForSSR(
   config: ConfigType,
@@ -24,7 +24,6 @@ export async function bundleUIComponentsForSSR(
 ): Promise<{
   renderedComponents: Map<string, string>;
 }> {
-  const bundleStartedAt = Date.now();
   const Logger = getVitePressGroupLogger(
     VITEPRESS_BUILD_LOG_GROUPS.frameworkSsrBundle,
     loggerScopeId,
@@ -40,6 +39,8 @@ export async function bundleUIComponentsForSSR(
     return { renderedComponents: new Map() };
   }
 
+  Logger.info(`bundling ${adapter.framework} SSR components`);
+  const bundleElapsed = createElapsedTimer();
   const preparedEntryModules = createComponentEntryModules({
     cacheDir,
     components: ssrComponents,
@@ -62,8 +63,8 @@ export async function bundleUIComponentsForSSR(
     return { renderedComponents };
   } catch (error) {
     Logger.error(
-      `Failed to bundle ${adapter.framework} SSR components: ${error}`,
-      elapsedSince(bundleStartedAt),
+      `failed to bundle ${adapter.framework} SSR components: ${formatErrorMessage(error)}`,
+      bundleElapsed(),
     );
     throw error;
   } finally {

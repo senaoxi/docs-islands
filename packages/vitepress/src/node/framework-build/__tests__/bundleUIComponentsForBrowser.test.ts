@@ -6,13 +6,14 @@ import type { ConfigType } from '#dep-types/utils';
 import { resolveConfig } from '#shared/config';
 import {
   resetScopedLoggerConfig,
-  setScopedLoggerConfig as setLoggerConfigForScope,
+  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
 } from '@docs-islands/logger/core';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'pathe';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { reactAdapter } from '../../adapters/react/adapter';
+import { setVitePressLoggerTreeShakingEnabled } from '../../core/vite-plugin-logger-tree-shaking';
 import type { UIFrameworkBuildAdapter } from '../adapter';
 import { bundleUIComponentsForBrowser } from '../bundleUIComponentsForBrowser';
 
@@ -178,6 +179,7 @@ describe('bundleUIComponentsForBrowser', () => {
 
   afterEach(() => {
     resetScopedLoggerConfig(TEST_LOGGER_SCOPE_ID);
+    setVitePressLoggerTreeShakingEnabled(TEST_LOGGER_SCOPE_ID, false);
   });
 
   it('should correctly bundle browser assets and validate their contents', async () => {
@@ -451,6 +453,7 @@ describe('bundleUIComponentsForBrowser', () => {
     setLoggerConfigForScope(TEST_LOGGER_SCOPE_ID, {
       levels: ['warn', 'error'],
     });
+    setVitePressLoggerTreeShakingEnabled(TEST_LOGGER_SCOPE_ID, true);
 
     const clientComponents: ComponentBundleInfo[] = [
       {
@@ -499,6 +502,7 @@ describe('bundleUIComponentsForBrowser', () => {
     setLoggerConfigForScope(TEST_LOGGER_SCOPE_ID, {
       levels: ['warn', 'error'],
     });
+    setVitePressLoggerTreeShakingEnabled(TEST_LOGGER_SCOPE_ID, true);
 
     const runtimeLoggerAdapter: UIFrameworkBuildAdapter = {
       browserBundlerPlugins: () => reactAdapter.browserBundlerPlugins(),

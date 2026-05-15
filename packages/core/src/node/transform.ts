@@ -8,7 +8,10 @@ import type {
   ImportSpecifier,
   StringLiteral,
 } from '@babel/types';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import { Parser } from 'htmlparser2';
 import MagicString, { type SourceMap } from 'magic-string';
 import MarkdownIt from 'markdown-it';
@@ -25,6 +28,12 @@ import { getCoreGroupLogger } from './logger';
 const componentTagExtractorMd = new MarkdownIt({ html: true });
 const tagNameRE = /^<\s*([A-Z][\dA-Za-z]*)/;
 const selfClosingRE = /\/\s*>\s*$/;
+
+interface PendingReplacement {
+  absStart: number;
+  absEnd: number;
+  replacement: string;
+}
 
 const parserPlugins: ParserPlugin[] = [
   'jsx',
@@ -123,7 +132,6 @@ export default function transformComponentTags(
   renderIdToRenderDirectiveMap: Map<string, string[]>;
   map: SourceMap | null;
 } {
-  const transformStartedAt = Date.now();
   const logger = getCoreGroupLogger(
     CORE_TRANSFORM_LOG_GROUPS.transformComponentTags,
     loggerScopeId,
@@ -141,12 +149,6 @@ export default function transformComponentTags(
   }
 
   let usedComponentCount = 0;
-
-  interface PendingReplacement {
-    absStart: number;
-    absEnd: number;
-    replacement: string;
-  }
 
   const analyze = (
     attrs: readonly { name: string; value: string }[],
@@ -188,7 +190,6 @@ export default function transformComponentTags(
     if (directive === 'client:only' && useSpaSyncRender) {
       logger.warn(
         `'spa:sync-render' is not supported for 'client:only' directive, disabling 'spa:sync-render'`,
-        createElapsedLogOptions(transformStartedAt, Date.now()),
       );
       useSpaSyncRender = false;
     }
@@ -230,31 +231,42 @@ export default function transformComponentTags(
       start: number;
     }[] = [];
 
-    const parser = new Parser(
-      {
-        onopentag(name, attribs) {
-          if (componentNameSet.has(name)) {
-            found.push({
-              attrs: Object.entries(attribs).map(([key, value]) => ({
-                name: key,
-                value,
-              })),
-              end: parser.endIndex + 1,
-              name,
-              start: parser.startIndex,
-            });
-          }
+    const markdownParserElapsed = createElapsedTimer();
+    try {
+      const parser = new Parser(
+        {
+          onopentag(name, attribs) {
+            if (componentNameSet.has(name)) {
+              found.push({
+                attrs: Object.entries(attribs).map(([key, value]) => ({
+                  name: key,
+                  value,
+                })),
+                end: parser.endIndex + 1,
+                name,
+                start: parser.startIndex,
+              });
+            }
+          },
         },
-      },
-      {
-        lowerCaseAttributeNames: false,
-        lowerCaseTags: false,
-        recognizeSelfClosing: true,
-      },
-    );
+        {
+          lowerCaseAttributeNames: false,
+          lowerCaseTags: false,
+          recognizeSelfClosing: true,
+        },
+      );
 
-    parser.write(rawSlice);
-    parser.end();
+      parser.write(rawSlice);
+      parser.end();
+    } catch (error) {
+      logger.error(
+        `markdown parsing error, error information: ${formatErrorMessage(error)}`,
+        markdownParserElapsed(),
+      );
+      throw new Error(
+        `markdown parsing error, error information: ${formatErrorMessage(error)}`,
+      );
+    }
 
     const pending: PendingReplacement[] = [];
     found.sort((a, b) => a.start - b.start);
@@ -269,7 +281,6 @@ export default function transformComponentTags(
       if (!typedTagName) {
         logger.error(
           `Component name must be in PascalCase. Found "${typedTagName || startTagRaw}" in ${id}, skipping compilation!`,
-          createElapsedLogOptions(transformStartedAt, Date.now()),
         );
         continue;
       }
@@ -277,7 +288,6 @@ export default function transformComponentTags(
       if (typedTagName !== item.name) {
         logger.error(
           `React component tag "${typedTagName}" does not match imported local name "${item.name}" in ${id}, skipping compilation!`,
-          createElapsedLogOptions(transformStartedAt, Date.now()),
         );
         continue;
       }
@@ -285,7 +295,6 @@ export default function transformComponentTags(
       if (!selfClosingRE.test(startTagRaw)) {
         logger.error(
           `React component tag must be self-closing. Use "<${typedTagName} ... />". Found in ${id}, skipping compilation!`,
-          createElapsedLogOptions(transformStartedAt, Date.now()),
         );
         continue;
       }

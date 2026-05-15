@@ -18,16 +18,16 @@ Use `logging` when the integration works but the console is too noisy, or when y
 ```ts [.vitepress/config.ts]
 import { createDocsIslands } from '@docs-islands/vitepress';
 import { react } from '@docs-islands/vitepress/adapters/react';
-import { hmr } from '@docs-islands/vitepress/logger/presets';
+import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 
 const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     levels: ['warn', 'error'],
-    plugins: { hmr },
+    plugins: { vitepress: vitepressLogger },
+    extends: ['vitepress/hmr'],
     rules: {
-      'hmr/markdownUpdate': 'off',
-      'hmr/viteAfterUpdate': {},
+      'vitepress/markdownUpdate': 'off',
     },
   },
 });
@@ -35,7 +35,7 @@ const islands = createDocsIslands({
 islands.apply(vitepressConfig);
 ```
 
-This keeps only `warn` and `error` output from the selected docs-islands HMR stream. `hmr/viteAfterUpdate` uses the preset default matcher, while `hmr/markdownUpdate` is disabled explicitly. `'off'` is shorthand for `{ enabled: false }`.
+This imports the VitePress HMR rule set, lets those rules inherit the root `warn` / `error` levels, and then removes `vitepress/markdownUpdate` from the resolved rules.
 
 ## Mental Model
 
@@ -44,54 +44,63 @@ When `logging.rules` is not configured, the logger uses the default visibility s
 - `debug: false`: `error`, `warn`, `info`, and `success` are visible.
 - `debug: true`: `error`, `warn`, `info`, `success`, and `debug` are visible.
 
-When `logging.rules` is configured, the logger switches to rule mode after any plugin rules are expanded:
+When `logging.extends` or `logging.rules` produces resolved rules, the logger switches to rule mode:
 
-1. Rules with `enabled: false` are filtered out first. They do not match scope, do not allow levels, and do not appear in debug labels.
-2. Every active rule is checked against the log's `main`, `group`, and `message`. Declared fields use AND semantics.
-3. A matching rule uses `rule.levels ?? logging.levels` as its effective levels. If both are omitted, the default non-debug set is used.
-4. A log is visible when at least one matching active rule allows the current level.
-5. If rule mode is active but no active rule matches, nothing is printed. There is no fallback to root levels.
+1. `plugins` only registers rule templates. It does not enable any rule by itself.
+2. `extends` imports plugin configs such as `vitepress/hmr` and expands local rule ids into full rule ids.
+3. `rules` is applied last. An object enables or overrides a rule, and `'off'` deletes that rule so no resolved rule is emitted.
+4. Every resolved rule is checked against the log's `main`, `group`, and `message`. Declared fields use AND semantics.
+5. A matching rule uses `rule.levels ?? logging.levels ?? defaultResolvedLevels` as its effective levels.
+6. A log is visible when at least one matching resolved rule allows the current level. If rule mode is active but no rule matches, nothing is printed.
+
+If every imported rule is deleted and no resolved rules remain, the logger falls back to the default no-rule behavior.
 
 Multiple rules can contribute to the same log. Their allowed levels form a union, and debug labels keep the declaration order from `logging.rules`.
 
 ## Root Options
 
-| Option    | Meaning                                                                                                                                                      |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `debug`   | Enables diagnostic output. Visible `error`, `warn`, `info`, and `success` logs include matching labels and a relative elapsed-time suffix such as `12.34ms`. |
-| `levels`  | Root visibility set. In rule mode, it is the default effective levels for rules that do not define `rule.levels`; it is not a maximum that narrows rules.    |
-| `plugins` | Optional preset-plugin registry. The object key becomes the namespace used by `logging.rules["<plugin>/<rule>"]`.                                            |
-| `rules`   | Either a focused rule array or a plugin-rule object. When present and non-empty after normalization, logging is decided only by active matching rules.       |
+| Option      | Meaning                                                                                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `debug`     | Enables diagnostic output. Visible `error`, `warn`, `info`, and `success` logs include matching labels and a relative elapsed-time suffix such as `12.34ms`. |
+| `levels`    | Root visibility set. In rule mode, it is the default effective levels for rules that use `levels: 'inherit'`; it is not a maximum that narrows rules.        |
+| `plugins`   | Optional preset-plugin registry. The object key becomes the namespace used by `logging.rules["<plugin>/<rule>"]`.                                            |
+| `extends`   | Optional list of plugin configs such as `"vitepress/runtime"` to import before user rule overrides.                                                          |
+| `rules`     | Final rule override map keyed by custom labels or preset references such as `"vitepress/viteAfterUpdate"`. Objects require `levels`; `'off'` deletes a rule. |
+| `treeshake` | Controls the managed VitePress logger tree-shaking transform. Defaults to `false`; set `true` to enable build-time pruning.                                  |
 
 ## Plugin Rules
 
 `logging.plugins` is the recommended entrypoint when you only want to filter docs-islands internal logs.
 
 ```ts
-import { hmr, runtime } from '@docs-islands/vitepress/logger/presets';
+import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 
 const logging = {
   debug: true,
   levels: ['warn'],
-  plugins: { hmr, runtime },
+  plugins: { vitepress: vitepressLogger },
+  extends: ['vitepress/hmr', 'vitepress/runtime'],
   rules: {
-    'hmr/viteAfterUpdate': {},
-    'runtime/reactDevRender': {
+    'vitepress/viteAfterUpdate': {
       levels: ['warn', 'error'],
     },
-    'runtime/renderValidation': 'off',
+    'vitepress/reactDevRender': {
+      levels: ['warn', 'error'],
+    },
+    'vitepress/renderValidation': 'off',
   },
 };
 ```
 
-- `plugins` registers logging preset plugins under a namespace key such as `hmr`.
-- `rules["<plugin>/<rule>"] = {}` enables the preset rule with its default matcher.
-- `rules["<plugin>/<rule>"] = 'off'` disables that preset rule and is equivalent to `{ enabled: false }`.
-- The override object can only override `enabled`, `message`, or `levels`. `group` and `main` always inherit from the preset rule.
+- `plugins` registers the built-in VitePress preset plugin under the `vitepress` namespace.
+- `extends: ["vitepress/<config>"]` imports one of the built-in preset configs.
+- `rules["<plugin>/<rule>"] = { levels: 'inherit' }` enables the preset rule with its template matcher and root levels.
+- `rules["<plugin>/<rule>"] = 'off'` deletes that preset rule from the resolved config.
+- The override object can set `main`, `group`, `message`, and `levels`; provided fields override the preset template fields.
 
 ### Built-in Presets and Coverage
 
-The presets exported by `@docs-islands/vitepress/logger/presets` are predefined `main/group` matchers for built-in docs-islands log streams. The catalog below lists every preset, every rule, and the default range each one constrains.
+The `vitepress` preset exported by `@docs-islands/vitepress/logger/presets` contains predefined `main/group` matchers for built-in docs-islands log streams. It exposes grouped configs such as `vitepress/hmr`, plus `vitepress/recommended` for all rules. The catalog below lists every config, every rule, and its default matcher.
 
 <LoggingPresetCatalog
   client:load
@@ -162,14 +171,13 @@ const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     debug: true,
-    rules: [
-      {
-        label: 'userland-metrics',
+    rules: {
+      'custom:userland-metrics': {
         main: '@acme/custom-docs',
         group: 'userland.metrics',
         levels: ['info'],
       },
-    ],
+    },
   },
 });
 
@@ -196,7 +204,9 @@ With this setup, `userland.metrics` stays visible, while `userland.hidden` is su
 
 ### Logger Tree-Shaking Plugin
 
-In `createDocsIslands()` managed builds, docs-islands already installs the logger tree-shaking transform automatically. This automatic VitePress transform only targets `@docs-islands/vitepress/logger` imports in the managed VitePress module graph, including user component browser/SSR bundles and Vite-bundled runtime modules such as the unified loader. It does not prune framework-agnostic `@docs-islands/logger` imports.
+In `createDocsIslands()` managed builds, docs-islands can install a logger tree-shaking transform when `logging.treeshake` is enabled. This VitePress transform only targets `@docs-islands/vitepress/logger` imports in the managed VitePress module graph, including user component browser/SSR bundles and Vite-bundled runtime modules such as the unified loader. It does not prune framework-agnostic `@docs-islands/logger` imports.
+
+Set `logging.treeshake: true` when you want build-time pruning in addition to the managed VitePress logger facade and runtime filtering.
 
 The shared utils facade participates in this takeover. For example, `@docs-islands/core` imports `@docs-islands/utils/logger`; the VitePress package rewrites that facade to `@docs-islands/vitepress/logger` while building its own output. Keeping the rewritten import external in the VitePress package output is intentional: the final consumer site's Vite pipeline must still see and resolve `@docs-islands/vitepress/logger` so the scope-bound virtual module and VitePress tree-shaking transform can run. Do not externalize `@docs-islands/vitepress/logger` in the consumer site's Vite build.
 
@@ -313,22 +323,21 @@ Unless you explicitly want both streams to share the same filtering space, prefe
 
 :::
 
-## Direct Rule Fields
+## Custom Rule Fields
 
-Array-form `logging.rules` is still supported when you need raw low-level matching outside preset plugins.
+Custom rules live in the same `logging.rules` object map as preset rules. Use a key without `/`; that key becomes the debug label. The public custom rule object does not accept `label`.
 
 | Field     | Meaning                                                                                                                                            |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `label`   | Required stable identifier. When `debug` is enabled, visible logs show contributing labels as `[LabelA][LabelB]`.                                  |
-| `enabled` | Optional pre-filter switch. `false` makes the rule completely inactive; it is not a lower-priority deny rule.                                      |
+| map key   | Required stable identifier. When `debug` is enabled, visible logs show contributing labels as `[LabelA][LabelB]`.                                  |
 | `main`    | Optional exact package match, for example `@docs-islands/vitepress`. Glob patterns are not applied to `main`.                                      |
 | `group`   | Optional logger group matcher. Plain strings are exact; patterns with glob magic use `picomatch`, for example `runtime.react.*` or `test.case.?1`. |
 | `message` | Optional message matcher. Plain strings are exact; patterns with glob magic use `picomatch`, for example `*timeout*`, `request *`, or `task-[ab]`. |
-| `levels`  | Optional effective levels for this rule. It replaces the root levels for this rule and participates in the union with other matching rules.        |
+| `levels`  | Required. Use an explicit level list, or `levels: 'inherit'` to inherit root `logging.levels` and then the default resolved levels.                |
 
 ## Matching Examples
 
-Direct rule arrays remain useful when you want broad wildcards or message-text filtering that is not tied to one preset label.
+Custom rules remain useful when you want broad wildcards or message-text filtering that is not tied to one preset label.
 
 ```ts
 const islands = createDocsIslands({
@@ -336,19 +345,18 @@ const islands = createDocsIslands({
   logging: {
     debug: true,
     levels: ['warn'],
-    rules: [
-      {
-        label: 'react-runtime-warnings',
+    rules: {
+      'custom:react-runtime-warnings': {
         main: '@docs-islands/vitepress',
         group: 'runtime.react.*',
+        levels: 'inherit',
       },
-      {
-        label: 'runtime-timeouts',
+      'custom:runtime-timeouts': {
         group: 'runtime.*',
         message: '*timeout*',
         levels: ['error'],
       },
-    ],
+    },
   },
 });
 ```
@@ -370,13 +378,13 @@ const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     levels: ['warn', 'error'],
-    rules: [
-      {
-        label: 'react-runtime-warn-error',
+    rules: {
+      'custom:react-runtime-warn-error': {
         main: '@docs-islands/vitepress',
         group: 'runtime.react.*',
+        levels: 'inherit',
       },
-    ],
+    },
   },
 });
 ```
@@ -388,47 +396,38 @@ const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     levels: ['warn'],
-    rules: [
-      {
-        label: 'runtime-warnings',
+    rules: {
+      'custom:runtime-warnings': {
         group: 'runtime.*',
+        levels: 'inherit',
       },
-      {
-        label: 'timeout-errors',
+      'custom:timeout-errors': {
         message: '*timeout*',
         levels: ['error'],
       },
-    ],
+    },
   },
 });
 ```
 
 This keeps runtime warnings while also allowing timeout errors anywhere. The two rules do not override each other; they contribute together.
 
-### Temporarily Disable One Rule
+### Temporarily Disable One Preset Rule
 
 ```ts
 const islands = createDocsIslands({
   adapters: [react()],
   logging: {
-    rules: [
-      {
-        label: 'runtime-react',
-        group: 'runtime.react.*',
-        levels: ['warn'],
-      },
-      {
-        label: 'runtime-react-disabled',
-        enabled: false,
-        group: 'runtime.react.component-manager',
-        levels: ['error'],
-      },
-    ],
+    plugins: { vitepress: vitepressLogger },
+    extends: ['vitepress/runtime'],
+    rules: {
+      'vitepress/reactComponentManager': 'off',
+    },
   },
 });
 ```
 
-The disabled rule is ignored completely. It does not silence or override the active `runtime-react` rule, and it never appears in debug labels.
+The deleted preset rule does not emit a resolved rule, so it cannot match, allow levels, or appear in debug labels. Other imported `vitepress/runtime` rules remain active.
 
 ### Filter by Message Text
 
@@ -436,13 +435,12 @@ The disabled rule is ignored completely. It does not silence or override the act
 const islands = createDocsIslands({
   adapters: [react()],
   logging: {
-    rules: [
-      {
-        label: 'hydration-timeouts',
+    rules: {
+      'custom:hydration-timeouts': {
         message: '*hydration*timeout*',
         levels: ['warn', 'error'],
       },
-    ],
+    },
   },
 });
 ```

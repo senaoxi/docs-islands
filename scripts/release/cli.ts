@@ -1,3 +1,7 @@
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import { cac } from 'cac';
 import process from 'node:process';
 import { runChangelogCommand } from './changelog';
@@ -224,13 +228,14 @@ function createChangelogCli() {
 
 async function runReleaseCli(rawArgv = process.argv): Promise<void> {
   const cli = createReleaseCli();
-  cli.parse(rawArgv, { run: false });
-
+  const releaseElapsed = createElapsedTimer();
   try {
+    cli.parse(rawArgv, { run: false });
     await cli.runMatchedCommand();
   } catch (error) {
     ReleaseLogger.error(
-      `Release command failed: ${String(error instanceof Error ? error.stack || error.message : error)}`,
+      `release command failed: ${formatErrorMessage(error)}`,
+      releaseElapsed(),
     );
     process.exitCode = 1;
   }
@@ -238,13 +243,14 @@ async function runReleaseCli(rawArgv = process.argv): Promise<void> {
 
 async function runChangelogCli(rawArgv = process.argv): Promise<void> {
   const cli = createChangelogCli();
-  cli.parse(rawArgv, { run: false });
-
+  const changelogElapsed = createElapsedTimer();
   try {
+    cli.parse(rawArgv, { run: false });
     await cli.runMatchedCommand();
   } catch (error) {
     ChangelogLogger.error(
-      `Changelog command failed: ${String(error instanceof Error ? error.stack || error.message : error)}`,
+      `changelog command failed: ${formatErrorMessage(error)}`,
+      changelogElapsed(),
     );
     process.exitCode = 1;
   }

@@ -6,9 +6,10 @@ The following semantics are considered prerequisites for this test document; if 
 
 ### 1.1 Rule Structure
 
+Runtime matching consumes resolved rules:
+
 ```ts
-export interface LoggerRule {
-  enabled?: boolean;
+export interface ResolvedLoggerRule {
   group?: string;
   label: string;
   levels?: LoggerVisibilityLevel[];
@@ -17,24 +18,38 @@ export interface LoggerRule {
 }
 ```
 
-### 1.2 `enabled` Semantics
-
-- The default value of `enabled` is `true`
-- When the user does not specify `enabled`, it is equivalent to `enabled: true`
-- When `enabled: false`, the rule **has no effect at all**
-- "Has no effect at all" means:
-  1. Does not participate in scope matching
-  2. Does not participate in level pass-through determination
-  3. Does not participate in debug label output
-- Therefore, pre-filtering should be done during rule evaluation:
+Public config normalizes into that array. Public rule settings support only:
 
 ```ts
-const activeRules = logging.rules.filter((rule) => rule.enabled !== false);
+type LoggerRuleSetting = 'off' | LoggerRuleUserConfig;
+
+interface LoggerRuleUserConfig {
+  group?: string;
+  levels: 'inherit' | LoggerVisibilityLevel[];
+  main?: string;
+  message?: string;
+}
+```
+
+### 1.2 `'off'` Deletion Semantics
+
+- `'off'` deletes a configured rule during public config normalization
+- Deleted rules do not appear in `ResolvedLoggerRule[]`
+- Deleted rules therefore:
+  1. Do not participate in scope matching
+  2. Do not participate in level pass-through determination
+  3. Do not participate in debug label output
+- If every public rule is deleted, no resolved rule array is emitted and runtime falls back to default no-rule behavior
+
+```ts
+rules: {
+  'test/hmr': 'off',
+}
 ```
 
 ### 1.3 Effective Levels
 
-When `logging.rules` exists after normalization, calculate for **activeRules**:
+When `logging.rules` exists after normalization, calculate for resolved rules:
 
 ```ts
 effectiveLevels(rule) = rule.levels ?? logging.levels ?? defaultResolvedLevels;
@@ -47,21 +62,21 @@ effectiveLevels(rule) = rule.levels ?? logging.levels ?? defaultResolvedLevels;
 For a log message `(main, group, level, message)`:
 
 1. First normalize `logging.rules`; an empty array is treated as "not configured rules"
-2. Filter out rules with `enabled: false` from normalized `logging.rules` to get `activeRules`
-3. Filter out all **scope-matched** rules from `activeRules`
-4. Scope matching rules:
+2. Filter out all **scope-matched** rules from resolved `logging.rules`
+3. Scope matching rules:
    - If the rule declares `main`, then `main` must match
    - If the rule declares `group`, then `group` must match
    - If the rule declares `message`, then `message` must match
    - Multiple declared fields are combined with **AND**
-5. If the current log `level` matches the `effectiveLevels(rule)` of any matched rule, output
-6. When normalized `logging.rules` exists, output determination **only looks at activeRules**; does not fallback to global default level determination
+4. If the current log `level` matches the `effectiveLevels(rule)` of any matched rule, output
+5. When normalized `logging.rules` exists, output determination **only looks at resolved rules**; does not fallback to global default level determination
 
 > Important:
 >
-> - `logging.rules === undefined` and "rules exist after normalization but all filtered out by `enabled: false`" are not the same semantics
+> - `logging.rules === undefined` and "rules exist but no resolved rule matches this log" are not the same semantics
 > - The former follows "no `rules` default behavior"
-> - The latter follows "has `rules` but no active rule", therefore **no output**
+> - The latter follows rule-mode allowlist behavior, therefore **no output**
+> - If all public rules are deleted with `'off'`, normalization emits no rules and follows "no `rules` default behavior"
 
 ### 1.5 Default Output Behavior (When `logging.rules` Does Not Exist)
 
@@ -83,7 +98,7 @@ When the user **has not configured** `logging.rules`:
 
 - `debug = false`: Output normal log prefix
 - `debug = true`:
-  - If contributing rules exist, prepend **the active rule labels whose scope and level both match the current message** before the normal log prefix
+  - If contributing rules exist, prepend **the resolved rule labels whose scope and level both match the current message** before the normal log prefix
   - For `error | warn | info | success` four types of logs, **additionally append relative elapsed time** at the end of the message
   - Relative elapsed time is displayed in `ms`, for example `12.34ms`
   - Whether `debug` level logs append elapsed time is currently only constrained as supplementary information: **not mandatory**
@@ -142,11 +157,11 @@ This document uniformly adopts the following matching semantics:
 
 This document covers the following rule forms and runtime behaviors:
 
-1. `enabled`
+1. `'off'` deletion
 
-   - Missing (default `true`)
-   - Explicit `true`
-   - Explicit `false`
+   - Deletes a public rule
+   - Does not produce an inactive resolved rule
+   - Falls back to no-rule behavior when no resolved rules remain
 
 2. `main`
 
@@ -202,9 +217,7 @@ The following behaviors are currently **not included in specification commitment
 
 The current test set already covers:
 
-- Default `enabled = true`
-- Explicit `enabled = true`
-- Explicit `enabled = false`
+- Public `'off'` deletion
 - Default `levels` inheritance
 - Default resolved levels fallback
 - `rule.levels` explicit override
@@ -223,7 +236,7 @@ The current test set already covers:
 - Debug label output and order
 - Relative elapsed time suffix under debug, with exact fixed values in strict/supplemental assertions
 - Key behaviors of `success` / `debug` levels
-- Complete blocking of matching, pass-through, and labels by `enabled: false`
+- No matching, pass-through, or labels for deleted rules
 
 ### 2.2 Reliability
 
@@ -238,11 +251,11 @@ The current test set not only verifies "should output" but also verifies "must n
 - Default differences between debug / non-debug when no `rules`
 - Exact normalized output assertions for high-risk and supplemental debug scenarios
 - Smoke verification of picomatch basic magic (`*`, `?`, `[]`)
-- Under `enabled: false`:
-  - Single rule disabled
+- Under `'off'` deletion:
+  - Single custom rule deleted
   - Does not participate in union when multiple rules overlap
   - Does not participate in labels
-  - Still invalid even when all fields match
+  - Does not behave as a deny rule even when a more specific key is deleted
 
 ### 2.3 Combination Coverage Requirements
 
@@ -251,7 +264,7 @@ According to this revision requirements:
 - Both `message` and `group` support **exact matching** and **match matching**
 - `main` only supports **exact matching**
 - Combinations of `main / group / message / levels` must be fully covered
-- Default, explicit true, and explicit false of `enabled` must be covered
+- `'off'` deletion and all-rules-deleted fallback must be covered
 - Under debug mode, `error | warn | info | success` must carry relative elapsed time information
 - When no `rules`, must output according to default level set
 
@@ -2019,7 +2032,7 @@ Verification points:
 
 ```ts [config.ts]
 const logging = {
-  debug: true,
+  debug: false,
 };
 ```
 
@@ -2170,96 +2183,26 @@ When `debug = true`, output:
 
 Verification points:
 
-- Rules with `enabled: false` have no effect at all
-- Even if all other fields match, no output should occur
-- When `rules` exist but activeRules is empty, must not fallback to default output behavior
+- Public `'off'` deletes a rule during normalization
+- If every configured rule is deleted, runtime falls back to no-rule behavior
+- Root `levels` still controls the fallback output
 
 ```ts [config.ts]
 const logging = {
   debug: false,
   levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      group: 'test.case.enabled.off',
-    },
-  ],
-};
-```
-
-Equivalent to:
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      group: 'test.case.enabled.off',
-      levels: ['warn', 'error'],
-    },
-  ],
+  rules: {
+    Test1: 'off',
+  },
 };
 ```
 
 ```ts [user.ts]
 const Logger_A = createLogger({
   main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.enabled.off');
+}).getLoggerByGroup('test.case.off.fallback');
 
-Logger_A.warn('message A_w');
-Logger_A.error('message A_e');
-```
-
-Output:
-
-```bash
-# No output
-```
-
-When `debug = true`, output:
-
-```bash
-# No output
-```
-
----
-
-## Case 29
-
-Verification points:
-
-- Explicit `enabled: true` is equivalent to default enabled
-- Overlapping rules with `enabled: false` do not participate in level union
-- Overlapping rules with `enabled: false` do not participate in debug label
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      group: 'test.case.enabled.mix',
-      levels: ['info', 'warn'],
-    },
-    {
-      label: 'Test2',
-      enabled: true,
-      group: 'test.case.enabled.mix',
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.enabled.mix');
-
+Logger_A.debug('message A_d');
 Logger_A.info('message A_i');
 Logger_A.warn('message A_w');
 Logger_A.error('message A_e');
@@ -2268,15 +2211,84 @@ Logger_A.error('message A_e');
 Output:
 
 ```bash
-@docs-islands/test[test.case.enabled.mix]: message A_w
-@docs-islands/test[test.case.enabled.mix]: message A_e
+@docs-islands/test[test.case.off.fallback]: message A_w
+@docs-islands/test[test.case.off.fallback]: message A_e
 ```
 
 When `debug = true`, output:
 
 ```bash
-[Test2] @docs-islands/test[test.case.enabled.mix]: message A_w <TIME>
-[Test2] @docs-islands/test[test.case.enabled.mix]: message A_e <TIME>
+@docs-islands/test[test.case.off.fallback]: message A_d
+@docs-islands/test[test.case.off.fallback]: message A_w <TIME>
+@docs-islands/test[test.case.off.fallback]: message A_e <TIME>
+```
+
+---
+
+## Case 29
+
+Verification points:
+
+- A user `'off'` override deletes an imported plugin rule
+- Deletion does not create an inactive rule label
+- Other imported rules can still match and allow output
+
+```ts [config.ts]
+const logging = {
+  debug: true,
+  levels: ['warn', 'error'],
+  plugins: {
+    test: {
+      rules: {
+        exact: {
+          main: '@docs-islands/test',
+          group: 'test.case.off.exact',
+        },
+        glob: {
+          main: '@docs-islands/test',
+          group: 'test.case.off.*',
+        },
+      },
+      configs: {
+        recommended: {
+          rules: {
+            exact: {
+              levels: 'inherit',
+            },
+            glob: {
+              levels: ['error'],
+            },
+          },
+        },
+      },
+    },
+  },
+  extends: ['test/recommended'],
+  rules: {
+    'test/exact': 'off',
+  },
+};
+```
+
+```ts [user.ts]
+const Logger_A = createLogger({
+  main: '@docs-islands/test',
+}).getLoggerByGroup('test.case.off.exact');
+
+Logger_A.warn('message A_w');
+Logger_A.error('message A_e');
+```
+
+Output:
+
+```bash
+@docs-islands/test[test.case.off.exact]: message A_e
+```
+
+When `debug = true`, output:
+
+```bash
+[test/glob] @docs-islands/test[test.case.off.exact]: message A_e <TIME>
 ```
 
 ---
@@ -2285,47 +2297,44 @@ When `debug = true`, output:
 
 Verification points:
 
-- More specific rules with `enabled: false` should not override, block, or pollute other active rules
-- Even when disabled rule and active rule both match scope, only the active rule takes effect
+- `'off'` is not a lower-priority deny rule
+- A deleted exact rule does not override, block, or pollute an active glob rule
 
 ```ts [config.ts]
 const logging = {
   debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      group: 'test.case.enabled.exact',
-      levels: ['error'],
+  levels: ['warn', 'error'],
+  rules: {
+    ExactDeleted: 'off',
+    GlobActive: {
+      group: 'test.case.off.*',
+      levels: 'inherit',
     },
-    {
-      label: 'Test2',
-      enabled: true,
-      group: 'test.case.enabled.*',
-      levels: ['error'],
-    },
-  ],
+  },
 };
 ```
 
 ```ts [user.ts]
 const Logger_A = createLogger({
   main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.enabled.exact');
+}).getLoggerByGroup('test.case.off.exact');
 
+Logger_A.warn('message A_w');
 Logger_A.error('message A_e');
 ```
 
 Output:
 
 ```bash
-@docs-islands/test[test.case.enabled.exact]: message A_e
+@docs-islands/test[test.case.off.exact]: message A_w
+@docs-islands/test[test.case.off.exact]: message A_e
 ```
 
 When `debug = true`, output:
 
 ```bash
-[Test2] @docs-islands/test[test.case.enabled.exact]: message A_e <TIME>
+[GlobActive] @docs-islands/test[test.case.off.exact]: message A_w <TIME>
+[GlobActive] @docs-islands/test[test.case.off.exact]: message A_e <TIME>
 ```
 
 ---
@@ -2334,48 +2343,24 @@ When `debug = true`, output:
 
 Verification points:
 
-- When `enabled: false` coexists with all fields `main + group + message`, it still completely fails
-- Disabled rules do not participate in scope AND determination for allowing output
-- Used to reinforce the counterexample of "all fields match but still no output due to enabled=false"
+- Deleting a full-scope custom rule leaves no resolved rule behind
+- With no resolved rules remaining, fallback behavior is used
+- No deleted rule label appears in debug output
 
 ```ts [config.ts]
 const logging = {
   debug: false,
   levels: ['error'],
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      main: '@docs-islands/test',
-      group: 'test.enabled.full.*',
-      message: '*timeout*',
-    },
-  ],
-};
-```
-
-Equivalent to:
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      main: '@docs-islands/test',
-      group: 'test.enabled.full.*',
-      message: '*timeout*',
-      levels: ['error'],
-    },
-  ],
+  rules: {
+    FullScopeDeleted: 'off',
+  },
 };
 ```
 
 ```ts [user.ts]
 const Logger_A = createLogger({
   main: '@docs-islands/test',
-}).getLoggerByGroup('test.enabled.full.1');
+}).getLoggerByGroup('test.off.full.1');
 
 Logger_A.error('request timeout');
 ```
@@ -2383,13 +2368,13 @@ Logger_A.error('request timeout');
 Output:
 
 ```bash
-# No output
+@docs-islands/test[test.off.full.1]: request timeout
 ```
 
 When `debug = true`, output:
 
 ```bash
-# No output
+@docs-islands/test[test.off.full.1]: request timeout <TIME>
 ```
 
 ---
@@ -2602,69 +2587,65 @@ The following table uses "rule form × levels source" as dimensions to confirm t
 
 ---
 
-## 5. `enabled` Gate Control Behavior Coverage Matrix
+## 5. `'off'` Deletion Coverage Matrix
 
-| `enabled` Form                                     | Semantics                                                    | Covered Cases                               |
-| -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------- |
-| Missing                                            | Default equivalent to `true`                                 | Cases 1 ~ 28 rules without explicit enabled |
-| Explicit `true`                                    | Same as default enabled                                      | Case 29 / Test2, Case 30 / Test2            |
-| Explicit `false` (single rule)                     | Rule completely ineffective; no output                       | Case 28                                     |
-| Explicit `false` (overlapping with active rule)    | Does not participate in union, does not participate in label | Case 29                                     |
-| Explicit `false` (more specific rule)              | Does not override, does not block active rule                | Case 30                                     |
-| Explicit `false` (`main+group+message` all fields) | All fields match but still invalid                           | Case 31                                     |
+| `'off'` Form                                 | Semantics                                            | Covered Cases |
+| -------------------------------------------- | ---------------------------------------------------- | ------------- |
+| Custom rule only                             | All rules deleted; fallback to no-rule behavior      | Case 28       |
+| Extended plugin rule                         | Deletes the imported rule and emits no deleted label | Case 29       |
+| More specific rule next to active broad rule | Does not override, block, or pollute the active rule | Case 30       |
+| Full-scope custom rule                       | Deleted rule does not participate in AND matching    | Case 31       |
 
 ---
 
 ## 6. Runtime Behavior Coverage Matrix
 
-| Runtime Behavior                                                                       | Covered Cases                                            |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| When normalized `rules` exist, only determine by activeRules                           | 1 ~ 23, 26, 27, 28, 29, 30, 31, 32, 34, 35               |
-| When normalized `rules` exist but no match, no output                                  | 6, 13, 15, 17, 18, 19, 20, 21, 23, 28, 31, 32            |
-| When normalized `rules` exist and all disabled, no output                              | 28, 31                                                   |
-| `rules: []` normalizes to no-rules default behavior                                    | 33                                                       |
-| No `rules` + `debug = false` default output `error`, `warn`, `info`, `success`         | 24, 33                                                   |
-| No `rules` + `debug = true` default output `error`, `warn`, `info`, `success`, `debug` | 25, 33                                                   |
-| Missing `rule.levels` and `logging.levels` falls back to `defaultResolvedLevels`       | 34                                                       |
-| In debug mode `error`, `warn`, `info`, `success` append `<TIME>`                       | 1 ~ 23, 25, 26, 27, 29, 30, 32, 33, 34, 35               |
-| In debug mode `debug` logs do not force `<TIME>`                                       | 25, 33                                                   |
-| Debug labels include only contributing rules                                           | 2, 29, 30, 35                                            |
-| `success` can be allowed by default / explicit levels in rule mode                     | 26, 34                                                   |
-| picomatch `*`                                                                          | 5, 9, 10, 12, 13, 15, 16, 17, 18, 19, 20, 21, 23, 26, 31 |
-| picomatch `?`                                                                          | 27                                                       |
-| picomatch `[]`                                                                         | 27                                                       |
-| `main` with glob magic remains exact string matching                                   | 32                                                       |
-| debug label order                                                                      | 1, 2, 3, 11, 14, 35                                      |
-| Disabled rules do not participate in label                                             | 29, 30                                                   |
+| Runtime Behavior                                                                       | Covered Cases                                        |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| When normalized `rules` exist, only determine by resolved rules                        | 1 ~ 23, 26, 27, 29, 30, 32, 34, 35                   |
+| When normalized `rules` exist but no match, no output                                  | 6, 13, 15, 17, 18, 19, 20, 21, 23, 32                |
+| All public rules deleted by `'off'` falls back to no-rule behavior                     | 28, 31                                               |
+| `rules: []` normalizes to no-rules default behavior                                    | 33                                                   |
+| No `rules` + `debug = false` default output `error`, `warn`, `info`, `success`         | 24, 33                                               |
+| No `rules` + `debug = true` default output `error`, `warn`, `info`, `success`, `debug` | 25, 33                                               |
+| Missing `rule.levels` and `logging.levels` falls back to `defaultResolvedLevels`       | 34                                                   |
+| In debug mode `error`, `warn`, `info`, `success` append `<TIME>`                       | 1 ~ 23, 25, 26, 27, 29, 30, 32, 33, 34, 35           |
+| In debug mode `debug` logs do not force `<TIME>`                                       | 25, 33                                               |
+| Debug labels include only contributing rules                                           | 2, 29, 30, 35                                        |
+| `success` can be allowed by default / explicit levels in rule mode                     | 26, 34                                               |
+| picomatch `*`                                                                          | 5, 9, 10, 12, 13, 15, 16, 17, 18, 19, 20, 21, 23, 26 |
+| picomatch `?`                                                                          | 27                                                   |
+| picomatch `[]`                                                                         | 27                                                   |
+| `main` with glob magic remains exact string matching                                   | 32                                                   |
+| debug label order                                                                      | 1, 2, 3, 11, 14, 35                                  |
+| Deleted rules do not participate in labels                                             | 29, 30                                               |
 
 ---
 
 ## 7. Capability Point Coverage Matrix (Summary)
 
-| Capability Point                    | Covered Cases                                                                |
-| ----------------------------------- | ---------------------------------------------------------------------------- |
-| Default `enabled = true`            | 1 ~ 27, 32, 34, 35                                                           |
-| Explicit `enabled = true`           | 29, 30                                                                       |
-| Explicit `enabled = false`          | 28, 29, 30, 31                                                               |
-| Default levels inheritance          | 1, 3, 4, 5, 6, 7, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 26, 28, 29, 31, 35 |
-| defaultResolvedLevels fallback      | 34                                                                           |
-| rule.levels override default levels | 2, 3, 5, 7, 8, 9, 10, 15, 16, 17, 18, 19, 20, 21, 22, 23, 26, 27, 29, 30     |
-| No scope global rule                | 1, 2, 8, 9, 11, 14, 16, 27 (message only)                                    |
-| main exact match                    | 3, 7, 10, 13, 17, 20, 21, 23, 31, 32                                         |
-| group exact match                   | 4, 7, 18, 20, 22, 28, 29, 30                                                 |
-| group picomatch match               | 5, 10, 12, 13, 15, 19, 21, 23, 27, 31                                        |
-| message exact match                 | 8, 14, 16, 17, 18, 19, 20, 21, 27                                            |
-| message picomatch match             | 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 26, 31                        |
-| main + group AND                    | 7, 10, 13, 20, 21, 23, 31                                                    |
-| main + message AND                  | 17, 31                                                                       |
-| group + message AND                 | 10, 15, 18, 19, 20, 21, 31                                                   |
-| main + group + message AND          | 10, 13, 20, 21, 31                                                           |
-| No `rules` default output           | 24, 25, 33                                                                   |
-| `rules: []` normalization           | 33                                                                           |
-| `success`                           | 24, 25, 26, 33, 34                                                           |
-| `debug`                             | 25, 33, 34                                                                   |
-| debug relative time suffix          | 1 ~ 23, 25, 26, 27, 29, 30, 32, 33, 34, 35                                   |
-| exact normalized output assertions  | 4, 7, 11, 13, 14, 15, 23, 24, 25, 26, 29, 30, 32, 33, 34, 35                 |
+| Capability Point                    | Covered Cases                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| Public `'off' deletion              | 28, 29, 30, 31                                                           |
+| Default levels inheritance          | 1, 3, 4, 5, 6, 7, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 26, 29, 30, 35 |
+| defaultResolvedLevels fallback      | 34                                                                       |
+| rule.levels override default levels | 2, 3, 5, 7, 8, 9, 10, 15, 16, 17, 18, 19, 20, 21, 22, 23, 26, 27, 29, 30 |
+| No scope global rule                | 1, 2, 8, 9, 11, 14, 16, 27 (message only)                                |
+| main exact match                    | 3, 7, 10, 13, 17, 20, 21, 23, 29, 32                                     |
+| group exact match                   | 4, 7, 18, 20, 22, 29, 30                                                 |
+| group picomatch match               | 5, 10, 12, 13, 15, 19, 21, 23, 27, 29, 30                                |
+| message exact match                 | 8, 14, 16, 17, 18, 19, 20, 21, 27                                        |
+| message picomatch match             | 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 26                        |
+| main + group AND                    | 7, 10, 13, 20, 21, 23, 29                                                |
+| main + message AND                  | 17                                                                       |
+| group + message AND                 | 10, 15, 18, 19, 20, 21                                                   |
+| main + group + message AND          | 10, 13, 20, 21                                                           |
+| No `rules` default output           | 24, 25, 33                                                               |
+| `rules: []` normalization           | 33                                                                       |
+| `success`                           | 24, 25, 26, 33, 34                                                       |
+| `debug`                             | 25, 33, 34                                                               |
+| debug relative time suffix          | 1 ~ 23, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35                       |
+| exact normalized output assertions  | 4, 7, 11, 13, 14, 15, 23, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35     |
 
 ---
 
@@ -2677,14 +2658,14 @@ This test documentation set can now be used as a **standardized test baseline** 
 3. `main` has been explicitly limited to **exact match only**
 4. Runtime requirements from supplementary information have been explicitly incorporated into tests:
    - picomatch
-   - `enabled`
+   - `'off'` deletion
    - debug relative time suffix
    - Default output when no `rules`
    - `rules: []` normalization
    - default level fallback when rule and global levels are both missing
 5. Tests cover both "should output" and "must not output", avoiding only testing happy path
 6. Strict output assertions normalize ANSI escape sequences and compare fixed elapsed time values exactly in the high-risk and supplemental compliance cases; broad matrix cases may still use count/order/pattern assertions
-7. `enabled: false` has been proven to be a true "gate control switch", not a low-priority rule
+7. `'off'` has been proven to be deletion during normalization, not a low-priority deny rule
 
 For future specification enhancements, priority recommendations:
 

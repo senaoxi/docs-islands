@@ -1,3 +1,4 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -574,6 +575,8 @@ export async function runReleaseCommand(
     return;
   }
 
+  ReleaseLogger.info('release started');
+  const releaseElapsed = createElapsedTimer();
   performPreflightChecks(context);
   prepareReleaseFiles(context);
 
@@ -595,5 +598,6 @@ export async function runReleaseCommand(
     `Release completed: ${context.plans
       .map((plan) => `${plan.config.packageName}@${plan.newVersion}`)
       .join(', ')}`,
+    releaseElapsed(),
   );
 }

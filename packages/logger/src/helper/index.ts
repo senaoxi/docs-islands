@@ -1,3 +1,4 @@
-export { formatDebugMessage, sanitizeDebugSummary } from './debug-message';
-export { createElapsedLogOptions, formatElapsedTime } from './elapsed';
+export { createElapsedTimer } from './elapsed';
+
+export { formatDebugMessage } from './debug-message';
 export { formatErrorMessage } from './error-message';

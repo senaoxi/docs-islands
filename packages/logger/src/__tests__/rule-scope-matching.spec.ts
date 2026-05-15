@@ -47,7 +47,10 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [{ label: 'Test1' }, { label: 'Test2' }],
+        rules: {
+          Test1: { levels: 'inherit' },
+          Test2: { levels: 'inherit' },
+        },
       });
 
       const logger = createLogger({
@@ -88,7 +91,10 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [{ label: 'Test1' }, { label: 'Test2' }],
+        rules: {
+          Test1: { levels: 'inherit' },
+          Test2: { levels: 'inherit' },
+        },
       });
 
       const logger2 = createLogger({
@@ -127,10 +133,10 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1' },
-          { label: 'Test2', levels: ['warn', 'info'] },
-        ],
+        rules: {
+          Test1: { levels: 'inherit' },
+          Test2: { levels: ['warn', 'info'] },
+        },
       });
 
       const logger = createLogger({
@@ -180,10 +186,10 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1' },
-          { label: 'Test2', levels: ['warn', 'info'] },
-        ],
+        rules: {
+          Test1: { levels: 'inherit' },
+          Test2: { levels: ['warn', 'info'] },
+        },
       });
 
       const logger2 = createLogger({
@@ -235,16 +241,12 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1', levels: ['warn'] },
-          { label: 'Test2', main: '@docs-islands/test' },
-          {
-            label: 'Test3',
-            levels: ['warn', 'info'],
-            main: '@docs-islands/test_b',
-          },
-          { label: 'Test4', levels: ['error'], main: '@docs-islands/test_b' },
-        ],
+        rules: {
+          Test1: { levels: ['warn'] },
+          Test2: { main: '@docs-islands/test', levels: 'inherit' },
+          Test3: { levels: ['warn', 'info'], main: '@docs-islands/test_b' },
+          Test4: { levels: ['error'], main: '@docs-islands/test_b' },
+        },
       });
 
       const loggerA = createLogger({
@@ -318,16 +320,12 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1', levels: ['warn'] },
-          { label: 'Test2', main: '@docs-islands/test' },
-          {
-            label: 'Test3',
-            levels: ['warn', 'info'],
-            main: '@docs-islands/test_b',
-          },
-          { label: 'Test4', levels: ['error'], main: '@docs-islands/test_b' },
-        ],
+        rules: {
+          Test1: { levels: ['warn'] },
+          Test2: { main: '@docs-islands/test', levels: 'inherit' },
+          Test3: { levels: ['warn', 'info'], main: '@docs-islands/test_b' },
+          Test4: { levels: ['error'], main: '@docs-islands/test_b' },
+        },
       });
 
       const loggerA2 = createLogger({
@@ -400,7 +398,9 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [{ label: 'Test1', group: 'test.case.a' }],
+        rules: {
+          Test1: { group: 'test.case.a', levels: 'inherit' },
+        },
       });
 
       const loggerA = createLogger({
@@ -475,7 +475,9 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [{ label: 'Test1', group: 'test.case.a' }],
+        rules: {
+          Test1: { group: 'test.case.a', levels: 'inherit' },
+        },
       });
 
       const loggerA2 = createLogger({
@@ -519,12 +521,12 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1', group: 'test.case.b*' },
-          { label: 'Test2', group: 'test.case.*', levels: ['warn'] },
-          { label: 'Test3', group: 'test.*', levels: ['info'] },
-          { label: 'Test4', group: 'test.*', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { group: 'test.case.b*', levels: 'inherit' },
+          Test2: { group: 'test.case.*', levels: ['warn'] },
+          Test3: { group: 'test.*', levels: ['info'] },
+          Test4: { group: 'test.*', levels: ['error'] },
+        },
       });
 
       const loggerA = createLogger({
@@ -652,12 +654,12 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1', group: 'test.case.b*' },
-          { label: 'Test2', group: 'test.case.*', levels: ['warn'] },
-          { label: 'Test3', group: 'test.*', levels: ['info'] },
-          { label: 'Test4', group: 'test.*', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { group: 'test.case.b*', levels: 'inherit' },
+          Test2: { group: 'test.case.*', levels: ['warn'] },
+          Test3: { group: 'test.*', levels: ['info'] },
+          Test4: { group: 'test.*', levels: ['error'] },
+        },
       });
 
       const loggerA2 = createLogger({
@@ -785,7 +787,9 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [{ label: 'Test1', group: 'test.case.a' }],
+        rules: {
+          Test1: { group: 'test.case.a', levels: 'inherit' },
+        },
       });
 
       const logger = createLogger({
@@ -809,7 +813,9 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [{ label: 'Test1', group: 'test.case.a' }],
+        rules: {
+          Test1: { group: 'test.case.a', levels: 'inherit' },
+        },
       });
 
       const logger2 = createLogger({
@@ -831,15 +837,18 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1', main: '@docs-islands/test', group: 'test.case.a' },
-          {
-            label: 'Test2',
+        rules: {
+          Test1: {
+            main: '@docs-islands/test',
+            group: 'test.case.a',
+            levels: 'inherit',
+          },
+          Test2: {
             main: '@docs-islands/test_b',
             group: 'test.case.a',
             levels: ['warn'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -886,15 +895,18 @@ describe('Integration: Rule Scope Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1', main: '@docs-islands/test', group: 'test.case.a' },
-          {
-            label: 'Test2',
+        rules: {
+          Test1: {
+            main: '@docs-islands/test',
+            group: 'test.case.a',
+            levels: 'inherit',
+          },
+          Test2: {
             main: '@docs-islands/test_b',
             group: 'test.case.a',
             levels: ['warn'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({

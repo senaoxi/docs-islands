@@ -42,18 +42,10 @@ describe('Integration: Strict Specification Compliance', () => {
   it('keeps main matching exact even when the rule value contains glob magic', () => {
     setLoggerConfig({
       debug: true,
-      rules: [
-        {
-          label: 'WildcardMain',
-          levels: ['warn'],
-          main: '@docs-islands/*',
-        },
-        {
-          label: 'ExactMain',
-          levels: ['error'],
-          main: '@docs-islands/test',
-        },
-      ],
+      rules: {
+        WildcardMain: { levels: ['warn'], main: '@docs-islands/*' },
+        ExactMain: { levels: ['error'], main: '@docs-islands/test' },
+      },
     });
 
     const logger = createLogger({
@@ -76,10 +68,10 @@ describe('Integration: Strict Specification Compliance', () => {
     ]);
   });
 
-  it('treats rules: [] as no rules configured after normalization', () => {
+  it('treats rules: {} as no rules configured after normalization', () => {
     setLoggerConfig({
       debug: false,
-      rules: [],
+      rules: {},
     });
 
     const logger = createLogger({
@@ -112,7 +104,7 @@ describe('Integration: Strict Specification Compliance', () => {
 
     setLoggerConfig({
       debug: true,
-      rules: [],
+      rules: {},
     });
 
     const debugLogger = createLogger({
@@ -143,7 +135,9 @@ describe('Integration: Strict Specification Compliance', () => {
   it('uses the default resolved levels when a rule and logging config omit levels', () => {
     setLoggerConfig({
       debug: true,
-      rules: [{ label: 'DefaultLevels' }],
+      rules: {
+        DefaultLevels: { levels: 'inherit' },
+      },
     });
 
     const logger = createLogger({
@@ -173,11 +167,11 @@ describe('Integration: Strict Specification Compliance', () => {
     setLoggerConfig({
       debug: true,
       levels: ['error'],
-      rules: [
-        { label: 'InheritedError' },
-        { label: 'WarnOnly', levels: ['warn'] },
-        { label: 'WarnAndError', levels: ['warn', 'error'] },
-      ],
+      rules: {
+        InheritedError: { levels: 'inherit' },
+        WarnOnly: { levels: ['warn'] },
+        WarnAndError: { levels: ['warn', 'error'] },
+      },
     });
 
     const logger = createLogger({

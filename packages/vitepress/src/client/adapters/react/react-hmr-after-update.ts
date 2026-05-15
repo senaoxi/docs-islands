@@ -16,10 +16,7 @@ import {
   NEED_PRE_RENDER_DIRECTIVES,
   RENDER_STRATEGY_CONSTANTS,
 } from '@docs-islands/core/shared/constants/render-strategy';
-import {
-  createElapsedLogOptions,
-  formatDebugMessage,
-} from '@docs-islands/logger/helper';
+import { formatDebugMessage } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/vitepress/logger';
 import type React from 'react';
 import type ReactDOM from 'react-dom/client';
@@ -35,8 +32,6 @@ const loggerInstance = createLogger({
   main: '@docs-islands/vitepress',
 });
 const DebugLogger = createSiteDevToolsLogger('react-hmr');
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, getSiteDevToolsNow());
 const renderIdAttr = RENDER_STRATEGY_CONSTANTS.renderId.toLowerCase();
 const renderComponentAttr =
   RENDER_STRATEGY_CONSTANTS.renderComponent.toLowerCase();
@@ -259,7 +254,6 @@ export const applyReactMarkdownAfterUpdate = async (
   memoizedUpdateState: MemoizedReactUpdateState,
   // eslint-disable-next-line complexity
 ): Promise<void> => {
-  const updateStartedAt = getSiteDevToolsNow();
   /**
    * Markdown HMR runs in three stages:
    * 1. Diff the old/new render containers and decide reuse vs rerender.
@@ -311,10 +305,7 @@ export const applyReactMarkdownAfterUpdate = async (
     const pendingState =
       memoizedUpdateState.pendingUpdateState?.[renderComponent];
     if (!pendingState) {
-      Logger.error(
-        `[${renderComponent}] is not found in container script`,
-        elapsedSince(updateStartedAt),
-      );
+      Logger.error(`[${renderComponent}] is not found in container script`);
       continue;
     }
 

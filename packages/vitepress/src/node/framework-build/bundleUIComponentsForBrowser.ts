@@ -23,7 +23,10 @@ import type { ConfigType } from '#dep-types/utils';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
 import { parse, type ParserPlugin } from '@babel/parser';
 import { RENDER_STRATEGY_CONSTANTS } from '@docs-islands/core/shared/constants/render-strategy';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import { isNodeLikeBuiltin } from '@docs-islands/utils/builtin';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -44,9 +47,6 @@ import {
   isOutputChunk,
   resolveSafeOutputPath,
 } from './shared';
-
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 type BuildOutputMetric = BundleAssetMetric & {
   dynamicImports?: string[];
@@ -1018,7 +1018,6 @@ export async function bundleUIComponentsForBrowser(
   cssBundlePaths: string[];
   ssrInjectScript: string;
 }> {
-  const bundleStartedAt = Date.now();
   const Logger = getVitePressGroupLogger(
     VITEPRESS_BUILD_LOG_GROUPS.frameworkBrowserBundle,
     loggerScopeId,
@@ -1042,6 +1041,8 @@ export async function bundleUIComponentsForBrowser(
     };
   }
 
+  Logger.info(`bundling ${adapter.framework} UI components for browser`);
+  const bundleElapsed = createElapsedTimer();
   const preparedEntryModules = createComponentEntryModules({
     cacheDir,
     components,
@@ -1456,7 +1457,7 @@ export async function bundleUIComponentsForBrowser(
 
     Logger.success(
       `Bundled ${adapter.framework} UI components for browser successfully`,
-      elapsedSince(bundleStartedAt),
+      bundleElapsed(),
     );
 
     const aggregatedPageFiles = aggregateUniqueBundleAssetMetrics(
@@ -1483,8 +1484,8 @@ export async function bundleUIComponentsForBrowser(
     };
   } catch (error) {
     Logger.error(
-      `Failed to bundle ${adapter.framework} UI components for browser: ${error}`,
-      elapsedSince(bundleStartedAt),
+      `failed to bundle ${adapter.framework} UI components for browser: ${formatErrorMessage(error)}`,
+      bundleElapsed(),
     );
     throw error;
   } finally {

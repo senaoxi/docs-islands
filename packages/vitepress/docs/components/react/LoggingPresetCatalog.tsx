@@ -1,4 +1,4 @@
-import loggerPresets from '@docs-islands/vitepress/logger/presets';
+import { vitepress as loggerPreset } from '@docs-islands/vitepress/logger/presets';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 
 import './css/logging-preset-catalog.css';
@@ -34,21 +34,27 @@ const presetAccentByName: Record<PresetName, string> = {
 };
 
 type PresetName = (typeof presetOrder)[number];
-type PresetDefinitions = typeof loggerPresets;
-type RuleName<P extends PresetName> = keyof PresetDefinitions[P]['rules'] &
-  string;
+type VitePressLoggerRuleName = keyof typeof loggerPreset.rules & string;
 
 interface RuleCopy {
   purpose: string;
 }
 
-type PresetCopyMap = {
-  [P in PresetName]: {
+interface CatalogRuleDefinition {
+  group?: string;
+  main?: string;
+}
+
+type CatalogRuleEntry = [string, CatalogRuleDefinition];
+
+type PresetCopyMap = Record<
+  PresetName,
+  {
     purpose: string;
     scope: string;
-    rules: Record<RuleName<P>, RuleCopy>;
-  };
-};
+    rules: Partial<Record<VitePressLoggerRuleName, RuleCopy>>;
+  }
+>;
 
 interface LocaleCopy {
   badgeLabel: string;
@@ -487,6 +493,15 @@ const copy: Record<Locale, LocaleCopy> = {
 const normalizeLocale = (locale?: string): Locale =>
   locale === 'zh' ? 'zh' : 'en';
 
+function getPresetRuleEntries(presetName: PresetName): CatalogRuleEntry[] {
+  const configRules = loggerPreset.configs?.[presetName]?.rules ?? {};
+
+  return Object.keys(configRules).map((ruleName) => [
+    ruleName,
+    loggerPreset.rules[ruleName as VitePressLoggerRuleName],
+  ]) as CatalogRuleEntry[];
+}
+
 interface CopyFeedback {
   status: 'success' | 'error';
 }
@@ -571,8 +586,7 @@ export default function LoggingPresetCatalog(props: LoggingPresetCatalogProps) {
     null,
   );
   const totalRuleCount = presetOrder.reduce(
-    (count, presetName) =>
-      count + Object.keys(loggerPresets[presetName].rules).length,
+    (count, presetName) => count + getPresetRuleEntries(presetName).length,
     0,
   );
 
@@ -677,17 +691,16 @@ export default function LoggingPresetCatalog(props: LoggingPresetCatalogProps) {
             <tbody>
               {presetOrder.map((presetName) => {
                 const presetCopy = localized.presets[presetName];
-                const ruleCount = Object.keys(
-                  loggerPresets[presetName].rules,
-                ).length;
+                const presetReference = `vitepress/${presetName}`;
+                const ruleCount = getPresetRuleEntries(presetName).length;
 
                 return (
                   <tr key={`summary:${presetName}`}>
                     <td className="logging-preset-catalog__cell--no-compress">
                       <CopyableCode
-                        value={presetName}
+                        value={presetReference}
                         onCopy={handleCopy}
-                        copyLabel={localized.copyActionLabel(presetName)}
+                        copyLabel={localized.copyActionLabel(presetReference)}
                         className="logging-preset-catalog__code logging-preset-catalog__code--matcher logging-preset-catalog__code--strong"
                       />
                     </td>
@@ -708,14 +721,10 @@ export default function LoggingPresetCatalog(props: LoggingPresetCatalogProps) {
 
       <div className="logging-preset-catalog__stack">
         {presetOrder.map((presetName, index) => {
-          const presetDefinition = loggerPresets[presetName];
           const presetCopy = localized.presets[presetName];
-          const ruleEntries = Object.entries(presetDefinition.rules) as [
-            RuleName<typeof presetName>,
-            PresetDefinitions[typeof presetName]['rules'][RuleName<
-              typeof presetName
-            >],
-          ][];
+          const presetRuleCopy = presetCopy.rules as Record<string, RuleCopy>;
+          const ruleEntries = getPresetRuleEntries(presetName);
+          const presetReference = `vitepress/${presetName}`;
           const mainValues = [
             ...new Set(
               ruleEntries
@@ -747,9 +756,9 @@ export default function LoggingPresetCatalog(props: LoggingPresetCatalogProps) {
                   </div>
                   <h4 className="logging-preset-catalog__section-title">
                     <CopyableCode
-                      value={presetName}
+                      value={presetReference}
                       onCopy={handleCopy}
-                      copyLabel={localized.copyActionLabel(presetName)}
+                      copyLabel={localized.copyActionLabel(presetReference)}
                       className="logging-preset-catalog__code logging-preset-catalog__code--matcher logging-preset-catalog__code--strong"
                     />
                   </h4>
@@ -798,15 +807,15 @@ export default function LoggingPresetCatalog(props: LoggingPresetCatalogProps) {
                       <tr key={`${presetName}/${ruleName}`}>
                         <td className="logging-preset-catalog__cell--no-compress">
                           <CopyableCode
-                            value={`${presetName}/${ruleName}`}
+                            value={`vitepress/${ruleName}`}
                             onCopy={handleCopy}
                             copyLabel={localized.copyActionLabel(
-                              `${presetName}/${ruleName}`,
+                              `vitepress/${ruleName}`,
                             )}
                             className="logging-preset-catalog__code logging-preset-catalog__code--matcher"
                           />
                         </td>
-                        <td>{presetCopy.rules[ruleName].purpose}</td>
+                        <td>{presetRuleCopy[ruleName]?.purpose}</td>
                         <td className="logging-preset-catalog__cell--no-compress">
                           {rule.main ? (
                             <CopyableCode

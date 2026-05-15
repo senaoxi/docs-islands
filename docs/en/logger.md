@@ -4,6 +4,7 @@
 
 ```ts
 import { createLogger, resetLoggerConfig, setLoggerConfig } from '@docs-islands/logger';
+import { createElapsedTimer, formatErrorMessage } from '@docs-islands/logger/helper';
 ```
 
 Use it for framework-agnostic runtime logging, such as standalone scripts, shared packages, examples, or documentation-site utilities.
@@ -44,14 +45,58 @@ setLoggerConfig({
 
 const logger = createLogger({ main: 'my-package' }).getLoggerByGroup('build');
 
-logger.info('build started', { elapsedTimeMs: 12 });
-logger.warn('cache is cold', { elapsedTimeMs: 18 });
+logger.info('build started');
+const elapsed = createElapsedTimer();
+try {
+  await build();
+  logger.success('build finished', elapsed());
+} catch (error) {
+  logger.error(`build failed: ${formatErrorMessage(error)}`, elapsed());
+  throw error;
+}
+logger.warn('cache is cold');
 logger.debug('debug is visible only when debug is enabled');
 
 resetLoggerConfig();
 ```
 
 `setLoggerConfig()` updates the default runtime scope. `resetLoggerConfig()` clears that scope so the runtime falls back to its default visibility policy. Both APIs are intended for direct, non-plugin usage.
+
+### Rules Map
+
+Focused filtering uses the same public `plugins + extends + rules` model as the bundler plugin config. Preset plugins only register rule templates. Import preset configs with `extends`, then use `rules` as the final override layer. Custom rule labels are the map keys.
+
+```ts
+const viteLoggingPlugin = {
+  rules: {
+    build: { main: '@acme/vite', group: 'build.pipeline' },
+    hmr: { main: '@acme/vite', group: 'dev.hmr' },
+  },
+  configs: {
+    recommended: {
+      rules: {
+        build: { levels: 'inherit' },
+        hmr: { levels: 'inherit' },
+      },
+    },
+  },
+};
+
+setLoggerConfig({
+  plugins: {
+    vite: viteLoggingPlugin,
+  },
+  extends: ['vite/recommended'],
+  rules: {
+    'vite/hmr': 'off',
+    'custom:api-timeout': {
+      group: 'api.*',
+      message: '*timeout*',
+      levels: ['warn'],
+    },
+  },
+});
+```
 
 ### Controlled Runtime Behavior
 
@@ -91,7 +136,7 @@ export default {
 
 The docs site uses this plugin during `docs:build`. A small static debug fixture is imported by the demo component, so production builds exercise compile-time pruning without changing the interactive runtime demo.
 
-`loggerPlugin` controls the root `@docs-islands/logger` runtime and enables `treeshake` by default. In build mode, `treeshake: true` lets the plugin remove statically provable logger calls that are hidden by the resolved logger config. Set `treeshake: false` when a build should keep every logger call and only rely on runtime filtering:
+`loggerPlugin` controls the root `@docs-islands/logger` runtime. Tree-shaking is **disabled by default**. To enable build-time pruning, set `treeshake: true` in the plugin options. When enabled, the plugin removes statically provable logger calls that are hidden by the resolved logger config:
 
 ```ts
 import { loggerPlugin } from '@docs-islands/logger/plugin';
@@ -100,7 +145,7 @@ export default {
   vite: {
     plugins: [
       loggerPlugin.vite({
-        treeshake: false,
+        treeshake: true,
       }),
     ],
   },

@@ -1,4 +1,3 @@
-import { formatElapsedTime } from '@docs-islands/logger/helper';
 import type {
   CreateLoggerOptions,
   LoggerLogOptions,
@@ -44,7 +43,11 @@ interface LoggerType {
 
 const getFormatElapsedTime = (options?: LoggerLogOptions): string => {
   if (typeof options?.elapsedTimeMs === 'number') {
-    return formatElapsedTime(options.elapsedTimeMs);
+    const elapsedTimeMs = Number.isFinite(options.elapsedTimeMs)
+      ? Math.max(0, options.elapsedTimeMs)
+      : 0;
+
+    return `${elapsedTimeMs.toFixed(2)}ms`;
   }
   return '';
 };

@@ -5,7 +5,10 @@ import {
   createEmptyCompilationContainer,
   type RenderController,
 } from '@docs-islands/core/node/render-controller';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import MagicString, { type SourceMap } from 'magic-string';
 import MarkdownIt from 'markdown-it';
 import type { Plugin } from 'vite';
@@ -16,8 +19,6 @@ import type {
   RenderingModuleResolution,
   RenderingViteModuleResolver,
 } from './module-resolution';
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 const scriptTagExtractorMd = new MarkdownIt({ html: true });
 const scriptBlockRE =
   /[\t ]*<script\b(?<attrs>[^>]*)>(?<content>.*?)<\/script\s*>/is;
@@ -175,7 +176,7 @@ export class RenderingFrameworkParserManager {
       normalizedId,
       scriptMatchesByFramework,
     );
-    const transformStartedAt = Date.now();
+    const transformElapsed = createElapsedTimer();
     const allRecognizedScriptMatches = [...scriptMatchesByFramework.values()]
       .flat()
       .toSorted((left, right) => left.startIndex - right.startIndex);
@@ -189,7 +190,7 @@ export class RenderingFrameworkParserManager {
       skippedFrameworks.add(framework);
       this.#getFrameworkLogger().error(
         `Single file can contain only one <script lang="${scriptMatches[0].lang}"> element.`,
-        elapsedSince(transformStartedAt),
+        transformElapsed(),
       );
     }
 
@@ -221,10 +222,8 @@ export class RenderingFrameworkParserManager {
       } catch (error) {
         skippedFrameworks.add(parser.framework);
         this.#getFrameworkLogger().error(
-          `Failed to parse <script lang="${parser.lang}"> in ${id}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          elapsedSince(transformStartedAt),
+          `failed to parse <script lang="${parser.lang}"> in ${id}: ${formatErrorMessage(error)}`,
+          transformElapsed(),
         );
       }
     }
@@ -251,7 +250,7 @@ export class RenderingFrameworkParserManager {
         skippedFrameworks.add(parser.framework);
         this.#getFrameworkLogger().error(
           `Duplicate component local name "${componentName}" found across rendering frameworks in ${id}. Rename one of the imports before mixing frameworks on the same page.`,
-          elapsedSince(transformStartedAt),
+          transformElapsed(),
         );
       }
     }

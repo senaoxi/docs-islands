@@ -62,7 +62,10 @@ const __site_debug_metric__ = () => {};
     return `
 import { createRoot as __react_client_render__, hydrateRoot as __react_hydrate__ } from 'react-dom/client';
 import { startTransition as __start_transition__ } from 'react';
-import { formatDebugMessage as __docs_islands_format_debug__ } from '@docs-islands/logger/helper';
+import {
+  formatDebugMessage as __docs_islands_format_debug__,
+  formatErrorMessage as __docs_islands_format_error__
+} from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/vitepress/logger';
 
 ${this.getSiteDevToolsRuntimePrelude()}
@@ -76,8 +79,8 @@ const __get_dev_render_duration_ms__ = (start, end) => {
 const __log_dev_render_debug__ = (payload) => {
   Logger.debug(__docs_islands_format_debug__(payload));
 };
-const __log_dev_render_info__ = (message, elapsedTimeMs) => {
-  Logger.info(message, { elapsedTimeMs });
+const __log_dev_render_info__ = (message) => {
+  Logger.info(message);
 };
 const __log_dev_render_success__ = (message, elapsedTimeMs) => {
   Logger.success(message, { elapsedTimeMs });
@@ -187,17 +190,18 @@ const clientVisibleObserver = new IntersectionObserver((entries) => {
         } catch (error) {
           const renderEnd = __site_debug_now__();
           const renderDurationMs = __get_dev_render_duration_ms__(renderStart, renderEnd);
-          __log_dev_render_error__(\`Component \${renderComponentName} client:visible render failed: \${error instanceof Error ? error.message : String(error)}\`, renderDurationMs);
+          const errorMessage = __docs_islands_format_error__(error);
+          __log_dev_render_error__(\`Component \${renderComponentName} client:visible render failed: \${errorMessage}\`, renderDurationMs);
           __site_debug_log__('react-dev-runtime', 'development lazy render failed', {
             durationMs: renderDurationMs,
-            message: error instanceof Error ? error.message : String(error),
+            message: errorMessage,
             renderComponentName,
             renderId,
             renderMode
           }, 'error');
           __update_render_metric__({
             componentName: renderComponentName,
-            errorMessage: error instanceof Error ? error.message : String(error),
+            errorMessage,
             hasSsrContent: renderMode === 'hydrate',
             renderId,
             renderMode,
@@ -347,8 +351,7 @@ function __renderTarget__(dom) {
         renderMode
       });
       __log_dev_render_info__(
-        \`Component \${renderComponentName} scheduled for client:visible render (\${renderMode})\`,
-        __get_dev_render_duration_ms__(detectedAt, __site_debug_now__())
+        \`Component \${renderComponentName} scheduled for client:visible render (\${renderMode})\`
       );
       __update_render_metric__({
         componentName: renderComponentName,
@@ -429,10 +432,11 @@ function __renderTarget__(dom) {
     } catch (error) {
       const renderEnd = __site_debug_now__();
       const renderDurationMs = __get_dev_render_duration_ms__(renderStart, renderEnd);
-      __log_dev_render_error__(\`Component \${renderComponentName} render failed: \${error instanceof Error ? error.message : String(error)}\`, renderDurationMs);
+      const errorMessage = __docs_islands_format_error__(error);
+      __log_dev_render_error__(\`Component \${renderComponentName} render failed: \${errorMessage}\`, renderDurationMs);
       __site_debug_log__('react-dev-runtime', 'development render failed', {
         durationMs: renderDurationMs,
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage,
         renderComponentName,
         renderDirective,
         renderId,
@@ -440,7 +444,7 @@ function __renderTarget__(dom) {
       }, 'error');
       __update_render_metric__({
         componentName: renderComponentName,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage,
         hasSsrContent,
         renderDirective,
         renderId,

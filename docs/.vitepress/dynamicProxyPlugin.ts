@@ -1,5 +1,5 @@
 import { createLogger } from '@docs-islands/logger';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import type { ScopedLogger } from '@docs-islands/logger/types';
 import httpProxy from 'http-proxy';
 import type { ChildProcess } from 'node:child_process';
@@ -34,8 +34,6 @@ const DEFAULT_CONFIG: ProxyConfig = {
 const logger = createLogger({
   main: '@docs-islands/monorepo-docs',
 }).getLoggerByGroup('plugin.docs.dynamic-proxy');
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 class ProjectManager {
   private runningProjects = new Map<string, ProjectInfo>();
@@ -50,7 +48,7 @@ class ProjectManager {
   }
 
   async getOrStartProject(projectName: string): Promise<ProjectInfo> {
-    const requestStartedAt = Date.now();
+    const requestElapsed = createElapsedTimer();
     const docsPackageName = `${projectName}-docs`;
 
     const existing = this.runningProjects.get(docsPackageName);
@@ -79,7 +77,7 @@ class ProjectManager {
 
     this.logger.info(
       `Lazy starting dev server for: ${this.config.packageScope}/${docsPackageName}...`,
-      elapsedSince(requestStartedAt),
+      requestElapsed(),
     );
     const startPromise = this.startProjectServer(docsPackageName);
     this.startingProjects.set(docsPackageName, startPromise);
@@ -99,7 +97,7 @@ class ProjectManager {
   }
 
   private async startProjectServer(docsPackageName: string): Promise<number> {
-    const serverStartStartedAt = Date.now();
+    const serverStartElapsed = createElapsedTimer();
     return new Promise((resolve, reject) => {
       const projectProcess = spawn(
         'pnpm',
@@ -140,7 +138,7 @@ class ProjectManager {
               clearTimeout(timeout);
               this.logger.info(
                 `✓ ${this.config.packageScope}/${docsPackageName} running on port: ${port}`,
-                elapsedSince(serverStartStartedAt),
+                serverStartElapsed(),
               );
               this.runningProjects.set(docsPackageName, {
                 port,
@@ -151,7 +149,7 @@ class ProjectManager {
             .catch((error) => {
               this.logger.warn(
                 `Port ${port} detected but health check failed: ${error}`,
-                elapsedSince(serverStartStartedAt),
+                serverStartElapsed(),
               );
             });
         }
@@ -162,7 +160,7 @@ class ProjectManager {
         const output = data.toString();
         this.logger.error(
           `[${docsPackageName}] ${output.trim()}`,
-          elapsedSince(serverStartStartedAt),
+          serverStartElapsed(),
         );
         handleOutput(data);
       });
@@ -171,7 +169,7 @@ class ProjectManager {
         clearTimeout(timeout);
         this.logger.info(
           `${this.config.packageScope}/${docsPackageName} server exited with code ${code}`,
-          elapsedSince(serverStartStartedAt),
+          serverStartElapsed(),
         );
         this.runningProjects.delete(docsPackageName);
         if (code !== 0 && !resolved) {
@@ -201,11 +199,7 @@ class ProjectManager {
   }
 
   async cleanup(): Promise<void> {
-    const cleanupStartedAt = Date.now();
-    this.logger.info(
-      'Shutting down child servers...',
-      elapsedSince(cleanupStartedAt),
-    );
+    this.logger.info('Shutting down child servers...');
     const shutdownPromises: Promise<void>[] = [];
 
     for (const [
@@ -224,17 +218,17 @@ class ProjectManager {
     docsPackageName: string,
     childProcess: ChildProcess,
   ): Promise<void> {
-    const shutdownStartedAt = Date.now();
+    const shutdownElapsed = createElapsedTimer();
     return new Promise((resolve) => {
       this.logger.info(
         `Shutting down ${docsPackageName} server...`,
-        elapsedSince(shutdownStartedAt),
+        shutdownElapsed(),
       );
 
       const forceKillTimer = setTimeout(() => {
         this.logger.warn(
           `${docsPackageName} did not exit gracefully, sending SIGKILL`,
-          elapsedSince(shutdownStartedAt),
+          shutdownElapsed(),
         );
         childProcess.kill('SIGKILL');
       }, this.config.shutdownTimeout);
@@ -276,18 +270,19 @@ class ProxyHandler {
   }
 
   private setupProxyErrorHandlers(): void {
+    const proxyElapsed = createElapsedTimer();
+
     this.proxy.on('error', (err, _req, res) => {
-      const proxyErrorStartedAt = Date.now();
       const errorType = this.classifyError(err);
       this.logger.error(
         `Proxy error [${errorType}]: ${err.message}`,
-        elapsedSince(proxyErrorStartedAt),
+        proxyElapsed(),
       );
 
       if ('headersSent' in res && res.headersSent) {
         this.logger.warn(
           'Headers already sent, cannot send error response',
-          elapsedSince(proxyErrorStartedAt),
+          proxyElapsed(),
         );
         return;
       }
@@ -305,7 +300,7 @@ class ProxyHandler {
         } catch (writeError) {
           this.logger.error(
             `Failed to send error response: ${writeError}`,
-            elapsedSince(proxyErrorStartedAt),
+            proxyElapsed(),
           );
         }
       }
@@ -338,7 +333,7 @@ class ProxyHandler {
     res: ServerResponse,
     next: () => void,
   ): Promise<void | boolean> {
-    const requestStartedAt = Date.now();
+    const requestElapsed = createElapsedTimer();
     if (!req.url) return next();
 
     const packageName = this.findMatchingProject(req.url);
@@ -351,7 +346,6 @@ class ProxyHandler {
 
       this.logger.info(
         `HTTP ${req.method} ${originalUrl} -> http://localhost:${projectInfo.port}${originalUrl}`,
-        elapsedSince(requestStartedAt),
       );
 
       this.proxy.web(req, res, {
@@ -363,7 +357,7 @@ class ProxyHandler {
     } catch (error) {
       this.logger.error(
         `Failed to proxy HTTP request for ${packageName}: ${error}`,
-        elapsedSince(requestStartedAt),
+        requestElapsed(),
       );
 
       if (!res.headersSent) {
@@ -382,7 +376,8 @@ class ProxyHandler {
     socket: Socket,
     head: Buffer,
   ): Promise<void> {
-    const requestStartedAt = Date.now();
+    const requestElapsed = createElapsedTimer();
+
     const url = req.url;
     if (!url) return;
 
@@ -395,7 +390,6 @@ class ProxyHandler {
 
       this.logger.info(
         `WebSocket ${url} -> ws://localhost:${projectInfo.port}${url}`,
-        elapsedSince(requestStartedAt),
       );
 
       this.proxy.ws(req, socket, head, {
@@ -406,7 +400,7 @@ class ProxyHandler {
     } catch (error) {
       this.logger.error(
         `Failed to proxy WebSocket for ${packageName}: ${error}`,
-        elapsedSince(requestStartedAt),
+        requestElapsed(),
       );
       socket.destroy();
     }
@@ -437,11 +431,11 @@ export function dynamicProxyPlugin(userConfig?: Partial<ProxyConfig>): Plugin {
     configureServer(server) {
       // HTTP middleware.
       server.middlewares.use((req, res, next) => {
-        const middlewareStartedAt = Date.now();
+        const middlewareElapsed = createElapsedTimer();
         proxyHandler.handleHttpRequest(req, res, next).catch((error) => {
           logger.error(
             `Unexpected error in HTTP middleware: ${error}`,
-            elapsedSince(middlewareStartedAt),
+            middlewareElapsed(),
           );
           next();
         });
@@ -449,13 +443,13 @@ export function dynamicProxyPlugin(userConfig?: Partial<ProxyConfig>): Plugin {
 
       // WebSocket upgrade handler.
       server.httpServer?.on('upgrade', (req, socket, head) => {
-        const upgradeStartedAt = Date.now();
+        const upgradeElapsed = createElapsedTimer();
         proxyHandler
           .handleWebSocketUpgrade(req, socket, head)
           .catch((error) => {
             logger.error(
               `Unexpected error in WebSocket upgrade: ${error}`,
-              elapsedSince(upgradeStartedAt),
+              upgradeElapsed(),
             );
             socket.destroy();
           });
@@ -464,25 +458,22 @@ export function dynamicProxyPlugin(userConfig?: Partial<ProxyConfig>): Plugin {
       // Register cleanup handlers only once.
       if (!cleanupRegistered) {
         cleanupRegistered = true;
+        const shutdownElapsed = createElapsedTimer();
 
         const shutdownHandler = () => {
-          const shutdownStartedAt = Date.now();
           logger.info(
             'Received shutdown signal, cleaning up...',
-            elapsedSince(shutdownStartedAt),
+            shutdownElapsed(),
           );
           projectManager
             .cleanup()
             .then(() => {
               proxyHandler.destroy();
-              logger.info('Cleanup completed', elapsedSince(shutdownStartedAt));
+              logger.info('Cleanup completed', shutdownElapsed());
               process.exit(0);
             })
             .catch((error) => {
-              logger.error(
-                `Error during cleanup: ${error}`,
-                elapsedSince(shutdownStartedAt),
-              );
+              logger.error(`Error during cleanup: ${error}`, shutdownElapsed());
               process.exit(1);
             });
         };

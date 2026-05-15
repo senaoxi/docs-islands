@@ -1,4 +1,5 @@
 import { setLoggerConfig } from '@docs-islands/logger';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import isInCi from 'is-in-ci';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import inspector from 'node:inspector';
@@ -11,9 +12,6 @@ import { findMonorepoRoot, isSubpath } from './path';
 
 let cachedEnv: EnvConfig | null = null;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const elapsedSince = (startTimeMs: number) => ({
-  elapsedTimeMs: Date.now() - startTimeMs,
-});
 
 const environmentSchema: z.ZodDefault<
   z.ZodEnum<{
@@ -371,7 +369,7 @@ const defaultOptions: LoadEnvOptions = {
  * @returns Pre-computed build configuration values.
  */
 export function loadEnv(options: LoadEnvOptions = defaultOptions): EnvConfig {
-  const loadStartedAt = Date.now();
+  const loadElapsed = createElapsedTimer();
   const { force } = options;
 
   if (!force && cachedEnv) {
@@ -389,7 +387,7 @@ export function loadEnv(options: LoadEnvOptions = defaultOptions): EnvConfig {
           mode: cachedEnv.env,
           release: cachedEnv.release,
         },
-        timingMs: Date.now() - loadStartedAt,
+        timingMs: loadElapsed().elapsedTimeMs,
       }),
     );
     return cachedEnv;
@@ -443,12 +441,13 @@ export function loadEnv(options: LoadEnvOptions = defaultOptions): EnvConfig {
 
   // ── Step 5: Validate and map final configuration ──
   let finalEnv: z.infer<typeof processEnvSchema>;
+  const envParserElapsed = createElapsedTimer();
   try {
     finalEnv = processEnvSchema.parse(process.env);
   } catch (error) {
     getEnvLogger().error(
       'Failed to validate docs-islands environment',
-      elapsedSince(loadStartedAt),
+      envParserElapsed(),
     );
     throw error;
   }
@@ -518,13 +517,10 @@ export function loadEnv(options: LoadEnvOptions = defaultOptions): EnvConfig {
         releaseDebugSuppressed,
         runtimeOverrideKeys,
       }),
-      timingMs: Date.now() - loadStartedAt,
+      timingMs: loadElapsed().elapsedTimeMs,
     }),
   );
-  getEnvLogger().success(
-    `Loaded ${mode} environment`,
-    elapsedSince(loadStartedAt),
-  );
+  getEnvLogger().success(`Loaded ${mode} environment`, loadElapsed());
 
   return cachedEnv;
 }

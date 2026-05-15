@@ -1,13 +1,14 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { test as base } from '@playwright/test';
 import { type ChildProcess, execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   createConsumerFixture,
-  elapsedSince,
   formatUnknownError,
   getPnpmCommand,
   getSmokeLogger,
+  packLoggerDist,
   packVitepressDist,
   readDistManifest,
   reserveTcpPort,
@@ -167,8 +168,9 @@ export const test = base.extend<
         );
       }
       const logger = getSmokeLogger('task.consumer-smoke');
-      const smokeStartedAt = Date.now();
+      const smokeElapsed = createElapsedTimer();
       let cleanupPackedDist: (() => Promise<void>) | undefined;
+      let cleanupPackedLogger: (() => Promise<void>) | undefined;
       let cleanupFixture: (() => Promise<void>) | undefined;
       let childProcess: ChildProcess | undefined;
       let serverLogs: string[] = [];
@@ -176,17 +178,20 @@ export const test = base.extend<
       try {
         const manifest = readDistManifest();
 
-        logger.info(
-          'Packing dist tarball for consumer smoke...',
-          elapsedSince(smokeStartedAt),
-        );
+        logger.info('packing vitepress dist tarball for consumer smoke');
         const packedDist = await packVitepressDist();
         cleanupPackedDist = packedDist.cleanup;
+        logger.info('packing logger dist tarball for consumer smoke');
+        const packedLogger = await packLoggerDist();
+        cleanupPackedLogger = packedLogger.cleanup;
 
         const fixture = await createConsumerFixture({
           fixtureRootPrefix: 'docs-islands-consumer-smoke-',
-          installLogMessage: 'Installing consumer fixture dependencies...',
+          installLogMessage: 'installing consumer fixture dependencies',
           logger,
+          localDependencyTarballPaths: {
+            '@docs-islands/logger': packedLogger.tarballPath,
+          },
           manifest,
           tarballPath: packedDist.tarballPath,
           writeFiles: writeConsumerSmokeFixtureFiles,
@@ -210,7 +215,7 @@ export const test = base.extend<
           port,
           serverLogs: server.logs,
         });
-        logger.success('Consumer smoke passed', elapsedSince(smokeStartedAt));
+        logger.success('Consumer smoke passed', smokeElapsed());
       } catch (error) {
         const renderedLogs =
           serverLogs.length > 0
@@ -218,7 +223,7 @@ export const test = base.extend<
             : '';
         logger.error(
           `Consumer smoke failed: ${formatUnknownError(error)}${renderedLogs}`,
-          elapsedSince(smokeStartedAt),
+          smokeElapsed(),
         );
         throw error;
       } finally {
@@ -230,6 +235,9 @@ export const test = base.extend<
         }
         if (cleanupPackedDist) {
           await cleanupPackedDist();
+        }
+        if (cleanupPackedLogger) {
+          await cleanupPackedLogger();
         }
       }
     },

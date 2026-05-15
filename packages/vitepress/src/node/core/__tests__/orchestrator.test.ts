@@ -181,7 +181,7 @@ describe('createDocsIslands', () => {
           apply(config) {
             defineSnapshots.push({ ...config.vite?.define });
           },
-          framework: 'noop',
+          framework: 'react',
         },
       ],
       logging: {
@@ -208,7 +208,7 @@ describe('createDocsIslands', () => {
         vitepressConfig.vite?.plugins,
         LOGGER_TREE_SHAKING_PLUGIN_NAME,
       ),
-    ).toBeTruthy();
+    ).toBeFalsy();
   });
 
   it('keeps loggerScopeId stable per createDocsIslands instance and isolated across instances', async () => {
@@ -248,7 +248,7 @@ describe('createDocsIslands', () => {
       adapters: [
         {
           apply() {},
-          framework: 'first',
+          framework: 'react',
         },
       ],
     }).apply(vitepressConfig);
@@ -258,7 +258,7 @@ describe('createDocsIslands', () => {
         adapters: [
           {
             apply() {},
-            framework: 'second',
+            framework: 'react',
           },
         ],
       }).apply(vitepressConfig),

@@ -1,4 +1,8 @@
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
+import type { LoggerLogOptions } from '@docs-islands/logger/types';
 import { createLogger } from '@docs-islands/utils/logger';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -11,15 +15,13 @@ const loggerInstance = createLogger({
   main: 'docs-islands-monorepo',
 });
 
-const loggerStartedAt = Date.now();
-
 type BaseLogger = ReturnType<typeof loggerInstance.getLoggerByGroup>;
 
 interface LoggerFacade {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string): void;
-  success(message: string): void;
+  error(message: string, options?: LoggerLogOptions): void;
+  info(message: string, options?: LoggerLogOptions): void;
+  success(message: string, options?: LoggerLogOptions): void;
+  warn(message: string, options?: LoggerLogOptions): void;
 }
 
 interface PromptInterface {
@@ -29,29 +31,17 @@ interface PromptInterface {
 
 function createScriptLogger(baseLogger: BaseLogger): LoggerFacade {
   return {
-    info(message) {
-      baseLogger.info(
-        message,
-        createElapsedLogOptions(loggerStartedAt, Date.now()),
-      );
+    info(message, options) {
+      baseLogger.info(message, options);
     },
-    warn(message) {
-      baseLogger.warn(
-        message,
-        createElapsedLogOptions(loggerStartedAt, Date.now()),
-      );
+    warn(message, options) {
+      baseLogger.warn(message, options);
     },
-    error(message) {
-      baseLogger.error(
-        message,
-        createElapsedLogOptions(loggerStartedAt, Date.now()),
-      );
+    error(message, options) {
+      baseLogger.error(message, options);
     },
-    success(message) {
-      baseLogger.success(
-        message,
-        createElapsedLogOptions(loggerStartedAt, Date.now()),
-      );
+    success(message, options) {
+      baseLogger.success(message, options);
     },
   };
 }
@@ -570,6 +560,9 @@ export function runCommand(
     allowFailure = false,
     logger = ReleaseLogger,
   } = options;
+  const commandText = [command, ...args].join(' ');
+  logger.info(`command started: ${commandText}`);
+  const commandElapsed = createElapsedTimer();
 
   try {
     return execFileSync(command, args, {
@@ -583,7 +576,8 @@ export function runCommand(
       return '';
     }
     logger.error(
-      `Command failed: ${[command, ...args].join(' ')}\n${String(error)}`,
+      `command failed: ${commandText}\nreason: ${formatErrorMessage(error)}`,
+      commandElapsed(),
     );
     throw error;
   }

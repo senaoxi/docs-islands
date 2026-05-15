@@ -1,4 +1,4 @@
-import type { LoggerConfig, LogKind } from '@docs-islands/logger/types';
+import type { LogKind, ResolvedLoggerConfig } from '@docs-islands/logger/types';
 
 export const LOGGER_SPEC_CASE_COUNT = 31;
 export const LOGGER_SPEC_ELAPSED = '42.00ms';
@@ -15,7 +15,7 @@ interface LoggerOperation {
 }
 
 export interface LoggerSpecCase {
-  config: LoggerConfig;
+  config: ResolvedLoggerConfig;
   expected: string[];
   expectedDebug?: string[];
   loggers: Record<string, LoggerFixture>;
@@ -1352,41 +1352,14 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     ],
   },
   {
-    name: 'Case 28 - disabled only rule produces no fallback',
+    name: 'Case 28 - empty resolved rules fall back to root levels',
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [
-        { label: 'Test1', enabled: false, group: 'test.case.enabled.off' },
-      ],
+      rules: [],
     },
     loggers: {
-      A: { group: 'test.case.enabled.off', main: TEST_MAIN },
-    },
-    operations: [
-      op('A', 'warn', 'message A_w'),
-      op('A', 'error', 'message A_e'),
-    ],
-    expected: [],
-    expectedDebug: [],
-  },
-  {
-    name: 'Case 29 - disabled overlapping rule is ignored',
-    config: {
-      debug: false,
-      levels: ['warn', 'error'],
-      rules: [
-        {
-          label: 'Test1',
-          enabled: false,
-          group: 'test.case.enabled.mix',
-          levels: ['info', 'warn'],
-        },
-        { label: 'Test2', enabled: true, group: 'test.case.enabled.mix' },
-      ],
-    },
-    loggers: {
-      A: { group: 'test.case.enabled.mix', main: TEST_MAIN },
+      A: { group: 'test.case.off.empty', main: TEST_MAIN },
     },
     operations: [
       op('A', 'info', 'message A_i'),
@@ -1394,62 +1367,73 @@ export const loggerSpecCases: LoggerSpecCase[] = [
       op('A', 'error', 'message A_e'),
     ],
     expected: [
-      line(TEST_MAIN, 'test.case.enabled.mix', 'message A_w'),
-      line(TEST_MAIN, 'test.case.enabled.mix', 'message A_e'),
+      line(TEST_MAIN, 'test.case.off.empty', 'message A_w'),
+      line(TEST_MAIN, 'test.case.off.empty', 'message A_e'),
     ],
     expectedDebug: [
-      debugLine(['Test2'], TEST_MAIN, 'test.case.enabled.mix', 'message A_w'),
-      debugLine(['Test2'], TEST_MAIN, 'test.case.enabled.mix', 'message A_e'),
+      debugLine([], TEST_MAIN, 'test.case.off.empty', 'message A_w'),
+      debugLine([], TEST_MAIN, 'test.case.off.empty', 'message A_e'),
     ],
   },
   {
-    name: 'Case 30 - disabled specific rule does not block active glob rule',
+    name: 'Case 29 - active overlap remains after off deletion',
+    config: {
+      debug: false,
+      levels: ['warn', 'error'],
+      rules: [{ label: 'Test2', group: 'test.case.off.mix' }],
+    },
+    loggers: {
+      A: { group: 'test.case.off.mix', main: TEST_MAIN },
+    },
+    operations: [
+      op('A', 'info', 'message A_i'),
+      op('A', 'warn', 'message A_w'),
+      op('A', 'error', 'message A_e'),
+    ],
+    expected: [
+      line(TEST_MAIN, 'test.case.off.mix', 'message A_w'),
+      line(TEST_MAIN, 'test.case.off.mix', 'message A_e'),
+    ],
+    expectedDebug: [
+      debugLine(['Test2'], TEST_MAIN, 'test.case.off.mix', 'message A_w'),
+      debugLine(['Test2'], TEST_MAIN, 'test.case.off.mix', 'message A_e'),
+    ],
+  },
+  {
+    name: 'Case 30 - deleted exact rule does not block active glob rule',
     config: {
       debug: false,
       rules: [
         {
-          label: 'Test1',
-          enabled: false,
-          group: 'test.case.enabled.exact',
-          levels: ['error'],
-        },
-        {
           label: 'Test2',
-          enabled: true,
-          group: 'test.case.enabled.*',
+          group: 'test.case.off.*',
           levels: ['error'],
         },
       ],
     },
     loggers: {
-      A: { group: 'test.case.enabled.exact', main: TEST_MAIN },
+      A: { group: 'test.case.off.exact', main: TEST_MAIN },
     },
     operations: [op('A', 'error', 'message A_e')],
-    expected: [line(TEST_MAIN, 'test.case.enabled.exact', 'message A_e')],
+    expected: [line(TEST_MAIN, 'test.case.off.exact', 'message A_e')],
     expectedDebug: [
-      debugLine(['Test2'], TEST_MAIN, 'test.case.enabled.exact', 'message A_e'),
+      debugLine(['Test2'], TEST_MAIN, 'test.case.off.exact', 'message A_e'),
     ],
   },
   {
-    name: 'Case 31 - disabled full-scope rule is fully inactive',
+    name: 'Case 31 - empty resolved rules do not synthesize labels',
     config: {
       debug: false,
       levels: ['error'],
-      rules: [
-        {
-          label: 'Test1',
-          enabled: false,
-          main: TEST_MAIN,
-          group: 'test.enabled.full.*',
-          message: '*timeout*',
-        },
-      ],
+      rules: [],
     },
     loggers: {
-      A: { group: 'test.enabled.full.1', main: TEST_MAIN },
+      A: { group: 'test.off.full.1', main: TEST_MAIN },
     },
     operations: [op('A', 'error', 'request timeout')],
-    expected: [],
-    expectedDebug: [],
+    expected: [line(TEST_MAIN, 'test.off.full.1', 'request timeout')],
+    expectedDebug: [
+      debugLine([], TEST_MAIN, 'test.off.full.1', 'request timeout'),
+    ],
   },
 ];

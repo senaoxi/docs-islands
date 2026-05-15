@@ -1,16 +1,13 @@
 /**
  * @vitest-environment node
  */
-import {
-  createLogger,
-  resetLoggerConfig,
-  setLoggerConfig,
-} from '@docs-islands/logger';
+import { createLogger, resetLoggerConfig } from '@docs-islands/logger';
 import {
   createScopedLogger as createLoggerWithScopeId,
   getScopedLoggerConfig as getLoggerConfigForScope,
   resetScopedLoggerConfig,
-  setScopedLoggerConfig as setLoggerConfigForScope,
+  setResolvedLoggerConfig as setLoggerConfig,
+  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
 } from '@docs-islands/logger/core';
 import {
   formatDebugMessage,

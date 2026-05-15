@@ -98,21 +98,19 @@ const scenarios: ScenarioDefinition[] = [
     config: {
       debug: true,
       levels: ['error'],
-      rules: [
-        {
+      rules: {
+        'docs-demo-flow': {
           group: 'runtime.demo',
-          label: 'docs-demo-flow',
           levels: ['info', 'warn'],
           main: 'docs.logger',
         },
-        {
+        'docs-demo-error': {
           group: 'runtime.demo',
-          label: 'docs-demo-error',
           levels: ['error'],
           main: 'docs.logger',
           message: 'error survives strict filters',
         },
-      ],
+      },
     },
     id: 'rules',
     labels: {

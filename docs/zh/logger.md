@@ -4,6 +4,7 @@
 
 ```ts
 import { createLogger, resetLoggerConfig, setLoggerConfig } from '@docs-islands/logger';
+import { createElapsedTimer, formatErrorMessage } from '@docs-islands/logger/helper';
 ```
 
 当你需要框架无关的 runtime logging 时，使用这个入口，例如独立脚本、共享包、示例代码或文档站点工具。
@@ -44,14 +45,58 @@ setLoggerConfig({
 
 const logger = createLogger({ main: 'my-package' }).getLoggerByGroup('build');
 
-logger.info('build started', { elapsedTimeMs: 12 });
-logger.warn('cache is cold', { elapsedTimeMs: 18 });
+logger.info('build started');
+const elapsed = createElapsedTimer();
+try {
+  await build();
+  logger.success('build finished', elapsed());
+} catch (error) {
+  logger.error(`build failed: ${formatErrorMessage(error)}`, elapsed());
+  throw error;
+}
+logger.warn('cache is cold');
 logger.debug('debug is visible only when debug is enabled');
 
 resetLoggerConfig();
 ```
 
 `setLoggerConfig()` 会更新默认 runtime scope。`resetLoggerConfig()` 会清空这个 scope，让 runtime 回到默认可见性策略。这两个 API 都面向直接、非 plugin 接管的用法。
+
+### Rules Map
+
+精确过滤使用统一的 public `plugins + extends + rules` 模型。preset plugin 只注册 rule template，不会自动启用任何规则；通过 `extends` 导入 preset config，再用 `rules` 作为最后覆盖层。custom rule 的 label 来自 map key。
+
+```ts
+const viteLoggingPlugin = {
+  rules: {
+    build: { main: '@acme/vite', group: 'build.pipeline' },
+    hmr: { main: '@acme/vite', group: 'dev.hmr' },
+  },
+  configs: {
+    recommended: {
+      rules: {
+        build: { levels: 'inherit' },
+        hmr: { levels: 'inherit' },
+      },
+    },
+  },
+};
+
+setLoggerConfig({
+  plugins: {
+    vite: viteLoggingPlugin,
+  },
+  extends: ['vite/recommended'],
+  rules: {
+    'vite/hmr': 'off',
+    'custom:api-timeout': {
+      group: 'api.*',
+      message: '*timeout*',
+      levels: ['warn'],
+    },
+  },
+});
+```
 
 ### 受控 runtime 行为
 
@@ -91,7 +136,7 @@ export default {
 
 当前 docs 站点会在 `docs:build` 阶段使用这个插件。演示组件额外导入了一个静态 debug fixture，因此生产构建会实际经过 compile-time pruning，同时不会影响页面上的 runtime 交互演示。
 
-`loggerPlugin` 会接管 root `@docs-islands/logger` runtime，并默认开启 `treeshake`。在 build 模式下，`treeshake: true` 会让插件删除那些根据已解析 logger 配置可以静态证明为隐藏的 logger 调用。构建产物需要保留所有 logger 调用、只依赖 runtime 过滤时，可以设置 `treeshake: false`：
+`loggerPlugin` 会接管 root `@docs-islands/logger` runtime。Tree-shaking **默认关闭**。要启用构建期裁剪，需要在插件选项中设置 `treeshake: true`。启用后，插件会删除那些根据已解析 logger 配置可以静态证明为隐藏的 logger 调用：
 
 ```ts
 import { loggerPlugin } from '@docs-islands/logger/plugin';
@@ -100,7 +145,7 @@ export default {
   vite: {
     plugins: [
       loggerPlugin.vite({
-        treeshake: false,
+        treeshake: true,
       }),
     ],
   },

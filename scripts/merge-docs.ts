@@ -1,4 +1,7 @@
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import { scanFiles } from '@docs-islands/utils/fs-utils';
 import { createLogger } from '@docs-islands/utils/logger';
 import { existsSync, readFileSync } from 'node:fs';
@@ -16,8 +19,6 @@ const projectRoot = resolve(__dirname, '..');
 const MergeDocsLogger = createLogger({
   main: 'docs-islands-monorepo',
 }).getLoggerByGroup('task.docs.merge');
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 interface PackageInfo {
   name: string;
@@ -27,7 +28,7 @@ interface PackageInfo {
 }
 
 async function findDocsPackages(): Promise<PackageInfo[]> {
-  const findStartedAt = Date.now();
+  const findElapsed = createElapsedTimer();
   const packages: PackageInfo[] = [];
 
   const packageJsonPaths = await glob(
@@ -46,9 +47,9 @@ async function findDocsPackages(): Promise<PackageInfo[]> {
     },
   );
 
-  MergeDocsLogger.info(
-    `Found ${packageJsonPaths.length} package.json files to check`,
-    elapsedSince(findStartedAt),
+  MergeDocsLogger.success(
+    `found ${packageJsonPaths.length} package.json files to check`,
+    findElapsed(),
   );
 
   for (const packageJsonPath of packageJsonPaths) {
@@ -62,7 +63,7 @@ async function processPackageJson(
   packageJsonPath: string,
   packages: PackageInfo[],
 ): Promise<void> {
-  const processStartedAt = Date.now();
+  const processElapsed = createElapsedTimer();
 
   try {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
@@ -75,18 +76,9 @@ async function processPackageJson(
       const packageDir = dirname(packageJsonPath);
       const distPath = join(packageDir, '.vitepress/dist');
 
-      MergeDocsLogger.info(
-        `Checking docs package: ${packageName}`,
-        elapsedSince(processStartedAt),
-      );
-      MergeDocsLogger.info(
-        `  Package path: ${packageDir}`,
-        elapsedSince(processStartedAt),
-      );
-      MergeDocsLogger.info(
-        `  Expected dist path: ${distPath}`,
-        elapsedSince(processStartedAt),
-      );
+      MergeDocsLogger.info(`checking docs package: ${packageName}`);
+      MergeDocsLogger.info(`  package path: ${packageDir}`);
+      MergeDocsLogger.info(`  expected dist path: ${distPath}`);
 
       if (existsSync(distPath)) {
         packages.push({
@@ -96,31 +88,31 @@ async function processPackageJson(
           targetName,
         });
         MergeDocsLogger.success(
-          `Found docs package: ${packageName} -> ${targetName}`,
-          elapsedSince(processStartedAt),
+          `docs package found: ${packageName} -> ${targetName}`,
+          processElapsed(),
         );
       } else {
         MergeDocsLogger.warn(
           `${packageName} dist directory not found: ${distPath}`,
-          elapsedSince(processStartedAt),
+          processElapsed(),
         );
       }
     } else if (packageName?.startsWith('@docs-islands/')) {
       MergeDocsLogger.warn(
         `Skipping @docs-islands package (not docs): ${packageName}`,
-        elapsedSince(processStartedAt),
+        processElapsed(),
       );
     }
   } catch (error) {
     MergeDocsLogger.error(
-      `Failed to parse ${packageJsonPath}: ${error}`,
-      elapsedSince(processStartedAt),
+      `failed to parse ${packageJsonPath}: ${formatErrorMessage(error)}`,
+      processElapsed(),
     );
   }
 }
 
 async function mergeDistDirectories(packages: PackageInfo[]): Promise<void> {
-  const mergeStartedAt = Date.now();
+  const mergeElapsed = createElapsedTimer();
   const mainPackage = packages.find(
     (pkg) => pkg.name === '@docs-islands/monorepo-docs',
   );
@@ -128,7 +120,7 @@ async function mergeDistDirectories(packages: PackageInfo[]): Promise<void> {
   if (!mainPackage) {
     MergeDocsLogger.error(
       'Main package(@docs-islands/monorepo-docs) not found',
-      elapsedSince(mergeStartedAt),
+      mergeElapsed(),
     );
     return;
   }
@@ -137,14 +129,10 @@ async function mergeDistDirectories(packages: PackageInfo[]): Promise<void> {
 
   await mkdir(mainDistPath, { recursive: true });
 
-  MergeDocsLogger.info(
-    `Main dist directory: ${mainDistPath}`,
-    elapsedSince(mergeStartedAt),
-  );
+  MergeDocsLogger.info(`main dist directory: ${mainDistPath}`);
 
   for (const pkg of packages) {
-    const packageMergeStartedAt = Date.now();
-
+    const packageMergeElapsed = createElapsedTimer();
     try {
       const targetPath = join(mainDistPath, pkg.targetName);
 
@@ -158,33 +146,20 @@ async function mergeDistDirectories(packages: PackageInfo[]): Promise<void> {
       const srcStat = await stat(pkg.distPath);
       if (!srcStat.isDirectory()) {
         MergeDocsLogger.info(
-          `Skip ${pkg.name}: source path is not a directory`,
-          elapsedSince(packageMergeStartedAt),
+          `skip ${pkg.name}: source path is not a directory`,
         );
         continue;
       }
 
       const srcFiles = await readdir(pkg.distPath);
       if (srcFiles.length === 0) {
-        MergeDocsLogger.info(
-          `Skip ${pkg.name}: source directory is empty`,
-          elapsedSince(packageMergeStartedAt),
-        );
+        MergeDocsLogger.info(`skip ${pkg.name}: source directory is empty`);
         continue;
       }
 
-      MergeDocsLogger.info(
-        `Merging ${pkg.name}`,
-        elapsedSince(packageMergeStartedAt),
-      );
-      MergeDocsLogger.info(
-        `  Source: ${pkg.distPath}`,
-        elapsedSince(packageMergeStartedAt),
-      );
-      MergeDocsLogger.info(
-        `  Target: ${targetPath}`,
-        elapsedSince(packageMergeStartedAt),
-      );
+      MergeDocsLogger.info(`merging ${pkg.name}`);
+      MergeDocsLogger.info(`  source: ${pkg.distPath}`);
+      MergeDocsLogger.info(`  target: ${targetPath}`);
 
       await scanFiles(pkg.distPath, async (relativePath, absolutePath) => {
         const destPath = join(targetPath, relativePath);
@@ -194,63 +169,45 @@ async function mergeDistDirectories(packages: PackageInfo[]): Promise<void> {
       });
 
       MergeDocsLogger.success(
-        `Successfully merged ${pkg.name} to ${pkg.targetName}`,
-        elapsedSince(packageMergeStartedAt),
+        `merged ${pkg.name} to ${pkg.targetName}`,
+        packageMergeElapsed(),
       );
     } catch (error) {
       MergeDocsLogger.error(
-        `Failed to merge ${pkg.name}: ${error}`,
-        elapsedSince(packageMergeStartedAt),
+        `failed to merge ${pkg.name}: ${formatErrorMessage(error)}`,
+        packageMergeElapsed(),
       );
     }
   }
 }
 
 async function main(): Promise<void> {
-  const mergeStartedAt = Date.now();
-
+  let totalElapsed = createElapsedTimer();
   try {
-    MergeDocsLogger.info(
-      'Starting docs merge...',
-      elapsedSince(mergeStartedAt),
-    );
-    MergeDocsLogger.info(
-      `Project root: ${projectRoot}`,
-      elapsedSince(mergeStartedAt),
-    );
+    MergeDocsLogger.info('docs merge started');
+    totalElapsed = createElapsedTimer();
+    MergeDocsLogger.info(`project root: ${projectRoot}`);
 
     const packages = await findDocsPackages();
 
     if (packages.length === 0) {
-      MergeDocsLogger.info(
-        'No @docs-islands/xxx-docs packages found',
-        elapsedSince(mergeStartedAt),
-      );
+      MergeDocsLogger.info('no @docs-islands/xxx-docs packages found');
       return;
     }
 
-    MergeDocsLogger.info(
-      `Found ${packages.length} docs packages:`,
-      elapsedSince(mergeStartedAt),
-    );
+    MergeDocsLogger.info(`found ${packages.length} docs packages:`);
     for (const pkg of packages) {
-      MergeDocsLogger.info(
-        `  - ${pkg.name} (${pkg.targetName})`,
-        elapsedSince(mergeStartedAt),
-      );
+      MergeDocsLogger.info(`  - ${pkg.name} (${pkg.targetName})`);
     }
 
-    MergeDocsLogger.info(
-      'Starting dist directory merge...',
-      elapsedSince(mergeStartedAt),
-    );
+    MergeDocsLogger.info('dist directory merge started');
     await mergeDistDirectories(packages);
 
-    MergeDocsLogger.info('Docs merge completed!', elapsedSince(mergeStartedAt));
+    MergeDocsLogger.success('docs merge finished', totalElapsed());
   } catch (error) {
     MergeDocsLogger.error(
-      `Error during merge process: ${error}`,
-      elapsedSince(mergeStartedAt),
+      `docs merge failed: ${formatErrorMessage(error)}`,
+      totalElapsed(),
     );
     process.exit(1);
   }

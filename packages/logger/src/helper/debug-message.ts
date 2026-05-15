@@ -120,9 +120,32 @@ const formatDebugTiming = (timingMs: number | null | undefined): string => {
 };
 
 /**
- * Debug logs explain how the system reached a conclusion-oriented info/warn/error
- * outcome. The canonical shape is:
+ * Formats debug message options into a standardized debug output string.
+ *
+ * This function creates a debug log message with the canonical format:
  * `context=... | decision=... | summary=... | timing=...`
+ *
+ * It sanitizes all input values to prevent excessively long output and ensures
+ * complex objects are safely serialized for logging. Each field is validated
+ * and formatted for readability.
+ *
+ * @param options - Debug message configuration
+ * @param options.context - The context or phase of execution (e.g., "build phase")
+ * @param options.decision - The conclusion or decision made (e.g., "skipping optimization")
+ * @param options.summary - Optional data or object providing additional context
+ * @param options.timingMs - Optional elapsed time in milliseconds
+ * @returns A formatted debug message string ready for logging
+ *
+ * @example
+ * ```ts
+ * const message = formatDebugMessage({
+ *   context: 'resolve dependencies',
+ *   decision: 'using cached version',
+ *   summary: { version: '1.2.3', cacheAge: 120 },
+ *   timingMs: 45.5,
+ * });
+ * // Returns: "context=resolve dependencies | decision=using cached version | summary={...} | timing=45.50ms"
+ * ```
  */
 export const formatDebugMessage = ({
   context,

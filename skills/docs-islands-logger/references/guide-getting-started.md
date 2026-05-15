@@ -36,11 +36,11 @@ setLoggerConfig({
 
 const logger = createLogger({ main: '@acme/docs' }).getLoggerByGroup('build.pipeline');
 
-logger.info('Build started');
-logger.success('Build finished');
-logger.warn('Cache is cold');
-logger.error('Build failed');
-logger.debug('Resolved build config');
+logger.info('build started');
+logger.success('build finished');
+logger.warn('cache is cold');
+logger.error('build failed');
+logger.debug('resolved build config');
 ```
 
 `main` identifies the package or subsystem. `group` identifies the area inside it and must be a lowercase dot namespace such as `build.pipeline` or `runtime.react`.
@@ -55,7 +55,7 @@ import { createLogger } from '@docs-islands/logger';
 const logger = createLogger({ main: '@acme/library' }).getLoggerByGroup('runtime.core');
 
 export function runFeature() {
-  logger.info('Feature started');
+  logger.info('feature started');
 }
 ```
 
@@ -65,15 +65,22 @@ Logger methods do not accept arbitrary metadata objects. Format context into the
 
 ```ts
 import { createLogger } from '@docs-islands/logger';
-import { formatErrorMessage, formatDebugMessage } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+  formatDebugMessage,
+} from '@docs-islands/logger/helper';
 
 const logger = createLogger({ main: '@acme/docs' }).getLoggerByGroup('build.pipeline');
 
+logger.info('build started');
+const elapsed = createElapsedTimer();
 try {
   await build();
-  logger.success('Build complete');
+  logger.success('build finished', elapsed());
 } catch (error) {
-  logger.error(`Build failed: ${formatErrorMessage(error)}`);
+  logger.error(`build failed: ${formatErrorMessage(error)}`, elapsed());
+  throw error;
 }
 
 logger.debug(
@@ -87,14 +94,15 @@ logger.debug(
 
 ## Elapsed Time
 
-`createElapsedLogOptions(startTimeMs, endTimeMs?)` computes elapsed time from a start timestamp. The elapsed suffix is rendered for visible non-debug logs when debug diagnostics are enabled and elapsed options are provided.
+`createElapsedTimer()` records a start timestamp and returns a function that produces elapsed log options. `createElapsedLogOptions(elapsedTimeMs)` wraps a precomputed elapsed value. The elapsed suffix is rendered for visible non-debug logs when debug diagnostics are enabled and elapsed options are provided.
 
 ```ts
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 
-const startTimeMs = performance.now();
+logger.info('build started');
+const elapsed = createElapsedTimer();
 await build();
-logger.success('Build finished', createElapsedLogOptions(startTimeMs));
+logger.success('build finished', elapsed());
 ```
 
 ## Tests

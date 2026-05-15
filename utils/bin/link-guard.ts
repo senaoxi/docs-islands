@@ -13,6 +13,7 @@
  * Distributed as a bin via @docs-islands/utils.
  * Relies on pnpm setting npm_package_json to the calling package's package.json path.
  */
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { execSync, spawn } from 'node:child_process';
 import path from 'node:path';
 import { createLogger } from '../logger';
@@ -20,10 +21,7 @@ import { createLogger } from '../logger';
 const Log = createLogger({
   main: '@docs-islands/utils',
 }).getLoggerByGroup('task.link.guard');
-const scriptStartedAt = Date.now();
-const elapsedSince = (startTimeMs: number) => ({
-  elapsedTimeMs: Date.now() - startTimeMs,
-});
+const runnerElapsed = createElapsedTimer();
 
 // ---------------------------------------------------------------------------
 // 1. Parse arguments
@@ -31,7 +29,7 @@ const elapsedSince = (startTimeMs: number) => ({
 
 const innerScript = process.argv[2];
 if (!innerScript) {
-  Log.error('Usage: link-guard <script-name>', elapsedSince(scriptStartedAt));
+  Log.error('Usage: link-guard <script-name>', runnerElapsed());
   process.exit(1);
 }
 
@@ -43,7 +41,7 @@ const packageJsonPath = process.env.npm_package_json;
 if (!packageJsonPath) {
   Log.error(
     'npm_package_json is not set. This script must be invoked via a pnpm script.',
-    elapsedSince(scriptStartedAt),
+    runnerElapsed(),
   );
   process.exit(1);
 }
@@ -115,15 +113,15 @@ function popStash(): void {
 
 function revertFiles(files: string[]): void {
   for (const file of files) {
-    const revertStartedAt = Date.now();
+    const revertElapsed = createElapsedTimer();
     try {
       execSync(`git checkout HEAD -- "${file}"`, {
         cwd: gitRoot,
         stdio: 'pipe',
       });
-      Log.success(`Reverted: ${file}`, elapsedSince(revertStartedAt));
+      Log.success(`Reverted: ${file}`, revertElapsed());
     } catch {
-      Log.warn(`Failed to revert: ${file}`, elapsedSince(revertStartedAt));
+      Log.warn(`Failed to revert: ${file}`, revertElapsed());
     }
   }
 }
@@ -134,7 +132,7 @@ function revertFiles(files: string[]): void {
 
 function runScript(name: string, cwd: string): Promise<number> {
   return new Promise((resolve) => {
-    const runStartedAt = Date.now();
+    const runnerElapsed = createElapsedTimer();
     const child = spawn('pnpm', ['run', name], {
       cwd,
       stdio: 'inherit',
@@ -143,10 +141,7 @@ function runScript(name: string, cwd: string): Promise<number> {
 
     child.on('close', (code) => resolve(code ?? 1));
     child.on('error', (err) => {
-      Log.error(
-        `Failed to run "${name}": ${err.message}`,
-        elapsedSince(runStartedAt),
-      );
+      Log.error(`Failed to run "${name}": ${err.message}`, runnerElapsed());
       resolve(1);
     });
   });
@@ -160,15 +155,12 @@ let stashed = false;
 
 function installSignalHandlers(): void {
   const cleanup = (signal: NodeJS.Signals): void => {
-    const cleanupStartedAt = Date.now();
-    Log.warn(
-      `Received ${signal}, reverting guarded files...`,
-      elapsedSince(cleanupStartedAt),
-    );
+    Log.warn(`Received ${signal}, reverting guarded files...`);
+    const cleanupElapsed = createElapsedTimer();
     const dirty = findDirtyGuardedFiles();
     if (dirty.length > 0) revertFiles(dirty);
     if (stashed) {
-      Log.info('Restoring stashed changes...', elapsedSince(cleanupStartedAt));
+      Log.info('Restoring stashed changes...', cleanupElapsed());
       popStash();
     }
     process.exit(128 + (signal === 'SIGINT' ? 2 : 15));
@@ -182,20 +174,16 @@ function installSignalHandlers(): void {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const mainStartedAt = Date.now();
-  Log.info(`Guard activated for: ${innerScript}`, elapsedSince(mainStartedAt));
-  Log.info(`Package directory: ${packageDir}`, elapsedSince(mainStartedAt));
+  Log.info(`Guard activated for: ${innerScript}`);
+  Log.info(`Package directory: ${packageDir}`);
 
   const dirtyBefore = findDirtyGuardedFiles();
   if (dirtyBefore.length > 0) {
-    Log.info(
-      `Stashing uncommitted changes: ${dirtyBefore.join(', ')}`,
-      elapsedSince(mainStartedAt),
-    );
-    const stashStartedAt = Date.now();
+    Log.info(`Stashing uncommitted changes: ${dirtyBefore.join(', ')}`);
+    const stashElapsed = createElapsedTimer();
     stashFiles(dirtyBefore);
     stashed = true;
-    Log.success('Changes stashed', elapsedSince(stashStartedAt));
+    Log.success('Changes stashed', stashElapsed());
   }
 
   installSignalHandlers();
@@ -206,38 +194,29 @@ async function main(): Promise<void> {
   } finally {
     const dirtyAfter = findDirtyGuardedFiles();
     if (dirtyAfter.length > 0) {
-      Log.info(
-        `Reverting guarded files: ${dirtyAfter.join(', ')}`,
-        elapsedSince(mainStartedAt),
-      );
+      Log.info(`Reverting guarded files: ${dirtyAfter.join(', ')}`);
       revertFiles(dirtyAfter);
     }
     if (stashed) {
-      Log.info('Restoring stashed changes...', elapsedSince(mainStartedAt));
-      const restoreStartedAt = Date.now();
+      Log.info('Restoring stashed changes...');
+      const restoreElapsed = createElapsedTimer();
       popStash();
-      Log.success('Stashed changes restored', elapsedSince(restoreStartedAt));
+      Log.success('Stashed changes restored', restoreElapsed());
     }
   }
 
   if (exitCode !== 0) {
-    Log.error(
-      `"${innerScript}" exited with code ${exitCode}`,
-      elapsedSince(scriptStartedAt),
-    );
+    Log.error(`"${innerScript}" exited with code ${exitCode}`);
     process.exit(exitCode);
   }
 
-  Log.success(
-    `"${innerScript}" completed successfully`,
-    elapsedSince(scriptStartedAt),
-  );
+  Log.success(`"${innerScript}" completed successfully`);
 }
 
 main().catch((error: unknown) => {
   Log.error(
     `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
-    elapsedSince(scriptStartedAt),
+    runnerElapsed(),
   );
   process.exit(1);
 });

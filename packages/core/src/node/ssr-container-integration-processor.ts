@@ -4,7 +4,7 @@ import type { NodePath } from '@babel/traverse';
 import babelTraverse from '@babel/traverse';
 import * as t from '@babel/types';
 import {
-  createElapsedLogOptions,
+  createElapsedTimer,
   formatErrorMessage,
 } from '@docs-islands/logger/helper';
 import { CORE_TRANSFORM_LOG_GROUPS } from '../shared/constants/log-groups/transform';
@@ -58,16 +58,8 @@ const traverse: typeof babelTraverse =
     }
   ).default ?? babelTraverse;
 
-const getProcessorNow = (): number =>
-  typeof performance !== 'undefined' && typeof performance.now === 'function'
-    ? performance.now()
-    : Date.now();
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, getProcessorNow());
-
 class SSRContainerIntegrationProcessor {
   private readonly callback: SSRContainerIntegrationCallback;
-  private readonly createdAt = getProcessorNow();
   private readonly loggerScopeId?: string;
   private readonly Logger: ReturnType<typeof getCoreGroupLogger>;
   private readonly sourceCode: string;
@@ -90,6 +82,7 @@ class SSRContainerIntegrationProcessor {
   process(): ProcessResult {
     this.transformations = [];
 
+    const astParserElapsed = createElapsedTimer();
     try {
       const ast = this.parseCode();
 
@@ -114,7 +107,7 @@ class SSRContainerIntegrationProcessor {
     } catch (error) {
       this.Logger.error(
         `AST processing failed: ${formatErrorMessage(error)}`,
-        elapsedSince(this.createdAt),
+        astParserElapsed(),
       );
       return {
         code: this.sourceCode,
@@ -141,12 +134,12 @@ class SSRContainerIntegrationProcessor {
   }
 
   private traverseAndTransform(ast: t.Node): void {
-    const traverseStartedAt = getProcessorNow();
     const extraInjectCssPaths = new Set<string>();
     let extraClientRuntimeFileName: string | null = null;
 
     traverse(ast, {
       CallExpression: (path: NodePath<t.CallExpression>) => {
+        const transformElapsed = createElapsedTimer();
         try {
           if (!this.isTargetFunctionCall(path.node)) {
             return;
@@ -181,7 +174,7 @@ class SSRContainerIntegrationProcessor {
         } catch (error) {
           this.Logger.error(
             `Transform error, catch error: ${formatErrorMessage(error)}`,
-            elapsedSince(traverseStartedAt),
+            transformElapsed(),
           );
         }
       },
@@ -269,7 +262,7 @@ class SSRContainerIntegrationProcessor {
   private processTargetNode(
     path: NodePath<t.CallExpression>,
   ): TransformationRecord | null {
-    const transformStartedAt = getProcessorNow();
+    const transformElapsed = createElapsedTimer();
     try {
       const props = this.extractProps(path.node.arguments[1]);
 
@@ -285,7 +278,6 @@ class SSRContainerIntegrationProcessor {
       if (typeof injectedContent.ssrHtml !== 'string') {
         this.Logger.error(
           'Failed to inject pre-rendered content, callback return value is not a string.',
-          elapsedSince(transformStartedAt),
         );
         return null;
       }
@@ -301,7 +293,7 @@ class SSRContainerIntegrationProcessor {
         `Failed to inject pre-rendered content, catch error: ${formatErrorMessage(
           error,
         )}`,
-        elapsedSince(transformStartedAt),
+        transformElapsed(),
       );
       return null;
     }
@@ -428,7 +420,6 @@ class SSRContainerIntegrationProcessor {
     ssrCssBundlePaths: Set<string>,
     clientRuntimeFileName: string,
   ): void {
-    const cssInjectionStartedAt = getProcessorNow();
     const Logger = getCoreGroupLogger(
       CORE_TRANSFORM_LOG_GROUPS.ssrCssInjection,
       this.loggerScopeId,
@@ -439,10 +430,7 @@ class SSRContainerIntegrationProcessor {
     }
 
     if (!ast) {
-      Logger.warn(
-        'Invalid AST provided, skipping CSS injection',
-        elapsedSince(cssInjectionStartedAt),
-      );
+      Logger.warn('Invalid AST provided, skipping CSS injection');
       return;
     }
 
@@ -450,27 +438,20 @@ class SSRContainerIntegrationProcessor {
 
     const validCssPaths = cssPathsArray.filter((path) => {
       if (typeof path !== 'string' || path.trim().length === 0) {
-        Logger.warn(
-          `Invalid CSS path detected: ${path}, skipping`,
-          elapsedSince(cssInjectionStartedAt),
-        );
+        Logger.warn(`Invalid CSS path detected: ${path}, skipping`);
         return false;
       }
       return true;
     });
 
     if (validCssPaths.length === 0) {
-      Logger.warn(
-        'No valid CSS paths found, skipping injection',
-        elapsedSince(cssInjectionStartedAt),
-      );
+      Logger.warn('No valid CSS paths found, skipping injection');
       return;
     }
 
     if (validCssPaths.length !== cssPathsArray.length) {
       Logger.warn(
         `Filtered out ${cssPathsArray.length - validCssPaths.length} invalid CSS paths`,
-        elapsedSince(cssInjectionStartedAt),
       );
     }
 
@@ -487,7 +468,6 @@ class SSRContainerIntegrationProcessor {
       if (!programNode || !t.isProgram(programNode)) {
         Logger.warn(
           'No valid Program node found in AST, skipping CSS injection',
-          elapsedSince(cssInjectionStartedAt),
         );
         return;
       }
@@ -501,16 +481,12 @@ class SSRContainerIntegrationProcessor {
         const insertIndex = this.findImportInsertPosition(validProgramNode);
 
         validProgramNode.body.splice(insertIndex, 0, importDeclaration);
-        Logger.success(
-          'CSS loading runtime import statement injected',
-          elapsedSince(cssInjectionStartedAt),
-        );
+        Logger.success('CSS loading runtime import statement injected');
       }
 
       if (this.hasExistingCSSRuntimeCall(validProgramNode)) {
         Logger.info(
           'CSS loading runtime call already exists, skipping injection',
-          elapsedSince(cssInjectionStartedAt),
         );
       } else {
         const awaitStatement = this.createCSSRuntimeCall(validCssPaths);
@@ -519,13 +495,11 @@ class SSRContainerIntegrationProcessor {
         validProgramNode.body.splice(insertPosition, 0, awaitStatement);
         Logger.success(
           `CSS loading runtime call injected for ${validCssPaths.length} CSS files`,
-          elapsedSince(cssInjectionStartedAt),
         );
       }
     } catch (error) {
       Logger.error(
         `Failed to inject CSS loading transformation: ${formatErrorMessage(error)}`,
-        elapsedSince(cssInjectionStartedAt),
       );
     }
   }

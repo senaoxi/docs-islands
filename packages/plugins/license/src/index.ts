@@ -1,3 +1,4 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/utils/logger';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,9 +14,6 @@ type PluginContext = ThisParameterType<GetHandler<NonNullable<LoadPlugin>>>;
 const LicenseLogger = createLogger({
   main: '@docs-islands/plugin-license',
 }).getLoggerByGroup('plugin.license');
-const elapsedSince = (startTimeMs: number) => ({
-  elapsedTimeMs: Date.now() - startTimeMs,
-});
 
 // Keep in sync with github ci workflow: https://github.com/XiSenao/docs-islands/blob/main/.github/workflows/dependency-review.yml
 const ALLOWED_LICENSES = new Set([
@@ -57,6 +55,7 @@ export default function licensePlugin(
     throw new Error('Monorepo root not found');
   }
   const coreLicenseFilePath = path.resolve(monorepoRootPath, 'LICENSE');
+  const updateElapsed = createElapsedTimer();
   const originalPlugin = license({
     thirdParty(dependencies) {
       // https://github.com/rollup/rollup/blob/master/build-plugins/generate-license-file.js
@@ -143,6 +142,10 @@ export default function licensePlugin(
         dependencyLicenseTexts += text;
       }
 
+      const bundledLicensesText =
+        licenses.length > 0 ? `\n${licenses.join(', ')}\n` : '';
+      const bundledDependenciesText =
+        dependencyLicenseTexts.length > 0 ? `\n${dependencyLicenseTexts}` : '';
       const licenseText = `<!-- markdownlint-disable MD003 MD009 MD025 MD035 MD026 -->
 # ${licenseTitle}
 
@@ -152,20 +155,17 @@ ${coreLicense}
 # Licenses of bundled dependencies
 
 The published ${packageName} artifact additionally contains code with the following licenses:
-
-${licenses.join(', ')}
-
-# Bundled dependencies:
-
-${dependencyLicenseTexts}`;
+${bundledLicensesText}
+# Bundled dependencies:${bundledDependenciesText}
+`;
 
       const existingLicenseText = fs.readFileSync(licenseFilePath, 'utf8');
       if (existingLicenseText !== licenseText) {
-        const updateStartedAt = Date.now();
+        LicenseLogger.info('LICENSE.md update started');
         fs.writeFileSync(licenseFilePath, licenseText);
-        LicenseLogger.warn(
+        LicenseLogger.success(
           'LICENSE.md updated. You should commit the updated file.',
-          elapsedSince(updateStartedAt),
+          updateElapsed(),
         );
       }
     },

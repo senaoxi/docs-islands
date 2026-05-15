@@ -8,7 +8,7 @@ import {
 import { DocsComponentManager } from '@docs-islands/core/client';
 import type { DocsComponentManagerInitializeOptions } from '@docs-islands/core/types/client';
 import {
-  createElapsedLogOptions,
+  createElapsedTimer,
   formatDebugMessage,
   formatErrorMessage,
 } from '@docs-islands/logger/helper';
@@ -23,8 +23,6 @@ const Logger = loggerInstance.getLoggerByGroup(
   VITEPRESS_RUNTIME_LOG_GROUPS.reactComponentManager,
 );
 const DebugLogger = createSiteDevToolsLogger('react-component-manager');
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, getSiteDevToolsNow());
 
 type ReactComponentRecord = React.ComponentType<Record<string, string>>;
 
@@ -46,6 +44,7 @@ export class ReactComponentManager {
   private initializationMode: 'dev' | 'prod' | null = null;
   private reactLoadPromise: Promise<boolean> | null = null;
   private reactLoaded = false;
+  private elapsed = createElapsedTimer();
 
   public constructor() {
     /**
@@ -143,17 +142,15 @@ export class ReactComponentManager {
   }
 
   private async performReactLoad(): Promise<boolean> {
-    const loadStartedAt = getSiteDevToolsNow();
-
     if (globalThis.window === undefined) {
       Logger.warn(
         'React can only be loaded in browser environment',
-        elapsedSince(loadStartedAt),
+        this.elapsed(),
       );
       return false;
     }
 
-    const loadStart = loadStartedAt;
+    const loadUIFrameWorkElapsed = createElapsedTimer();
 
     try {
       Logger.debug(
@@ -185,13 +182,12 @@ export class ReactComponentManager {
       if (!this.isReactAvailable()) {
         Logger.error(
           'Failed to load React or ReactDOM',
-          elapsedSince(loadStart),
+          loadUIFrameWorkElapsed(),
         );
         return false;
       }
 
       this.reactLoaded = true;
-      const loadCompletedAt = getSiteDevToolsNow();
       Logger.debug(
         formatDebugMessage({
           context: 'react framework runtime load',
@@ -201,21 +197,21 @@ export class ReactComponentManager {
             reactAvailable: this.isReactAvailable(),
             reactVersion: globalThis.React?.version ?? null,
           },
-          timingMs: Number((loadCompletedAt - loadStart).toFixed(2)),
+          timingMs: Number(loadUIFrameWorkElapsed().elapsedTimeMs.toFixed(2)),
         }),
       );
       DebugLogger.info('react runtime load completed', {
-        durationMs: Number((loadCompletedAt - loadStart).toFixed(2)),
+        durationMs: Number(loadUIFrameWorkElapsed().elapsedTimeMs.toFixed(2)),
         reactVersion: globalThis.React?.version ?? null,
       });
       return true;
     } catch (error) {
       Logger.error(
         `React lazy loading failed, message: ${formatErrorMessage(error)}`,
-        elapsedSince(loadStart),
+        loadUIFrameWorkElapsed(),
       );
       DebugLogger.error('react runtime load failed', {
-        durationMs: Number((getSiteDevToolsNow() - loadStart).toFixed(2)),
+        durationMs: Number(loadUIFrameWorkElapsed().elapsedTimeMs).toFixed(2),
         message: formatErrorMessage(error),
       });
       this.reactLoadPromise = null;

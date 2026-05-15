@@ -1,7 +1,7 @@
 import { loadEnv } from '@docs-islands/utils/env';
 import { createDocsIslands } from '@docs-islands/vitepress';
 import { react } from '@docs-islands/vitepress/adapters/react';
-import loggerPresets from '@docs-islands/vitepress/logger/presets';
+import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 import { claude, doubao } from '@docs-islands/vitepress/models';
 import vitepressRenderingStrategiesPackageJson from '@docs-islands/vitepress/package.json' with { type: 'json' };
 import isInCi from 'is-in-ci';
@@ -50,6 +50,7 @@ const docsLoggerProbePreset = {
   rules: {
     controlledVisible: {
       group: 'docs.logger.injected.visible',
+      levels: 'inherit',
       main: '@docs-islands/vitepress-docs/logger-scope-playground',
     },
   },
@@ -142,34 +143,27 @@ createDocsIslands({
   adapters: [react()],
   logging: {
     debug: true,
+    treeshake: true,
     levels: release ? ['warn', 'error'] : ['info', 'success', 'warn', 'error'],
     plugins: {
-      ...loggerPresets,
       docsLoggerProbe: docsLoggerProbePreset,
+      vitepress: vitepressLogger,
     },
+    extends: ['vitepress/runtime'],
     rules: {
       'docsLoggerProbe/controlledVisible': {
         levels: ['info'],
       },
-      'siteDevtools/aiBuildReports': {
+      'vitepress/aiBuildReports': {
         levels: ['info', 'success', 'warn', 'error'],
       },
-      'siteDevtools/aiServer': {
+      'vitepress/aiServer': {
         levels: ['info', 'success', 'warn', 'error'],
       },
-      'hmr/markdownUpdate': {
+      'vitepress/markdownUpdate': {
         levels: ['info', 'success', 'warn', 'error'],
         message: '*changed, container script content will be re-parsed...*',
       },
-      'runtime/coreReactComponentManager': {},
-      'runtime/coreReactRenderStrategy': {},
-      'runtime/reactClientLoader': {},
-      'runtime/reactComponentManager': {},
-      'runtime/reactDevContentUpdated': {},
-      'runtime/reactDevMountFallback': {},
-      'runtime/reactDevMountRender': {},
-      'runtime/reactDevRender': {},
-      'runtime/reactDevRuntimeLoader': {},
     },
   },
   siteDevtools: {

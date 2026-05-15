@@ -63,7 +63,7 @@ describe('Basic Site Functionality', () => {
       const catchStartedAt = Date.now();
       TestLogger.info(
         `Expected 404 error: ${String(error)}`,
-        createElapsedLogOptions(catchStartedAt, Date.now()),
+        createElapsedLogOptions(Date.now() - catchStartedAt),
       );
     }
   });

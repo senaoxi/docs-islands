@@ -34,7 +34,7 @@ setLoggerConfig({
 });
 ```
 
-Read [Simple Config](config-simple.md) for presets and [Rule Config](config-rules.md) for focused allowlists.
+Read [Simple Config](config-simple.md) for global visibility and [Rule Config](config-rules.md) for focused allowlists and preset plugin rules.
 
 ## Bundler-Controlled Config
 

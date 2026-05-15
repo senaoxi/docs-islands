@@ -27,7 +27,10 @@ import {
   RENDER_STRATEGY_ATTRS,
   RENDER_STRATEGY_CONSTANTS,
 } from '@docs-islands/core/shared/constants/render-strategy';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  createElapsedTimer,
+  formatErrorMessage,
+} from '@docs-islands/logger/helper';
 import type { CheerioAPI } from 'cheerio';
 import { load } from 'cheerio';
 import fs from 'node:fs';
@@ -51,8 +54,6 @@ import {
 } from './page-metafile';
 import { getComponentBundleKey } from './shared';
 import { getSharedClientRuntimeMetafile } from './shared-client-runtime';
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 const wrapBundleAssetMetrics = (
   metrics: BundleAssetMetric[],
@@ -153,7 +154,7 @@ const writeSpaSyncRenderedPageClientChunks = ({
     markdownModuleId,
     spaSyncRender,
   ] of markdownModuleIdToSpaSyncRenderMap.entries()) {
-    const transformStartedAt = Date.now();
+    const transformElapsed = createElapsedTimer();
     const { outputPath, code, renderIdToSpaSyncRenderMap } = spaSyncRender;
     const { code: transformedCode, stats } =
       transformSSRContainerIntegrationCode(
@@ -191,15 +192,14 @@ const writeSpaSyncRenderedPageClientChunks = ({
 
           ${stats.transformedNodes.map((node) => `- Line ${node.line}, Column ${node.column}`).join('\n')}
         `,
-        elapsedSince(transformStartedAt),
+        transformElapsed(),
       );
       fs.writeFileSync(join(outDir, outputPath), transformedCode);
       continue;
     }
 
     Logger.info(
-      `No transformations performed, preserve original code for ${framework} page ${markdownModuleId}.`,
-      elapsedSince(transformStartedAt),
+      `no transformations performed, preserving original code for ${framework} page ${markdownModuleId}`,
     );
   }
 };
@@ -233,7 +233,7 @@ const collectPageComponentBundles = ({
   ssrComponentsToBundle: Map<string, ComponentBundleInfo>;
   usedSnippetContainer: Map<string, UsedSnippetContainerType>;
 } => {
-  const collectStartedAt = Date.now();
+  const collectElapsed = createElapsedTimer();
   const Logger = getVitePressGroupLogger(
     VITEPRESS_BUILD_LOG_GROUPS.frameworkBuildTransformHtml,
     loggerScopeId,
@@ -275,7 +275,7 @@ const collectPageComponentBundles = ({
     if (!importReference) {
       Logger.warn(
         `${framework} component "${componentName}" import not found for page ${id}.`,
-        elapsedSince(collectStartedAt),
+        collectElapsed(),
       );
       continue;
     }
@@ -494,7 +494,7 @@ export function registerUIFrameworkBuildHooks(
 
     // Complete SSR first to enable `spa:sync-render` optimizations in the client script.
     if (ssrComponentsToBundle.size > 0) {
-      const ssrBundleStartedAt = Date.now();
+      const ssrBundleElapsed = createElapsedTimer();
       try {
         const { renderedComponents } = await bundleUIComponentsForSSR(
           config,
@@ -512,20 +512,20 @@ export function registerUIFrameworkBuildHooks(
             targetElement.html(html);
             Logger.success(
               `Injected ${framework} SSR HTML for render ID: ${renderId}`,
-              elapsedSince(ssrBundleStartedAt),
+              ssrBundleElapsed(),
             );
           }
         }
       } catch (error) {
         Logger.error(
-          `Failed to bundle and render ${framework} SSR components for page ${id}, error: ${error}`,
-          elapsedSince(ssrBundleStartedAt),
+          `failed to bundle and render ${framework} SSR components for page ${id}: ${formatErrorMessage(error)}`,
+          ssrBundleElapsed(),
         );
       }
     }
 
     if (clientComponentsToBundle.size > 0) {
-      const clientBundleStartedAt = Date.now();
+      const clientElapsed = createElapsedTimer();
       try {
         const {
           buildMetrics,
@@ -591,8 +591,8 @@ export function registerUIFrameworkBuildHooks(
         }
       } catch (error) {
         Logger.error(
-          `Failed to bundle ${framework} components for page ${id}, error: ${error}`,
-          elapsedSince(clientBundleStartedAt),
+          `failed to bundle ${framework} components for page ${id}: ${formatErrorMessage(error)}`,
+          clientElapsed(),
         );
       }
     }
@@ -647,7 +647,7 @@ export function registerUIFrameworkBuildHooks(
   };
 
   vitepressConfig.buildEnd = async () => {
-    const buildFinalizeStartedAt = Date.now();
+    const buildFinalizeElapsed = createElapsedTimer();
     const {
       assetsDir,
       cacheDir,
@@ -787,9 +787,9 @@ export function registerUIFrameworkBuildHooks(
         outDir,
       });
 
-      Logger.info(
+      Logger.success(
         `Generated hashed page metafile manifest with ${Object.keys(transformedPageMetafileMap).length} ${framework} pages`,
-        elapsedSince(buildFinalizeStartedAt),
+        buildFinalizeElapsed(),
       );
     }
   };

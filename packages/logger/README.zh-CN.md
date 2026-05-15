@@ -51,6 +51,7 @@ bun add @docs-islands/logger
 
 ```ts
 import { createLogger, setLoggerConfig } from '@docs-islands/logger';
+import { createElapsedTimer, formatErrorMessage } from '@docs-islands/logger/helper';
 
 setLoggerConfig({
   debug: true,
@@ -61,10 +62,16 @@ const logger = createLogger({
   main: '@acme/docs',
 }).getLoggerByGroup('build.pipeline');
 
-logger.info('build started', { elapsedTimeMs: 12.34 });
-logger.success('build finished', { elapsedTimeMs: 42.8 });
+logger.info('build started');
+const elapsed = createElapsedTimer();
+try {
+  await build();
+  logger.success('build finished', elapsed());
+} catch (error) {
+  logger.error(`build failed: ${formatErrorMessage(error)}`, elapsed());
+  throw error;
+}
 logger.warn('cache is cold');
-logger.error('build failed');
 logger.debug('debug details');
 ```
 
@@ -104,40 +111,87 @@ resetLoggerConfig();
 
 ### 规则模式
 
-规则会把日志策略切换成 allowlist。只要存在至少一个 active rule，日志就必须命中某条规则，并且该规则允许当前级别，才会输出。未命中的日志不会回退到 root `levels`。
+规则会把日志策略切换成 allowlist。`plugins` 只注册 rule template，`extends` 导入 plugin 提供的 config，`rules` 是最终覆盖层。`rules` 是对象 map：key 是规则 label 或 preset 引用，value 只能是 `'off'` 或带 `levels` 的规则对象。只要存在至少一个 resolved rule，日志就必须命中某条规则，并且该规则允许当前级别，才会输出。未命中的日志不会回退到 root `levels`。
 
 ```ts
 setLoggerConfig({
   debug: true,
   levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'metrics',
+  rules: {
+    'custom:metrics': {
       main: '@acme/docs',
       group: 'userland.metrics',
       levels: ['info', 'warn'],
     },
-    {
-      enabled: false,
-      label: 'noisy-devtools',
-      group: 'devtools.*',
-    },
-  ],
+  },
 });
 ```
 
 规则字段：
 
-| 字段      | 说明                                                         |
-| --------- | ------------------------------------------------------------ |
-| `label`   | 必填且必须唯一。debug 模式下，可见的规则日志会显示该 label。 |
-| `enabled` | 设置为 `false` 后，规则保留但不参与匹配。                    |
-| `main`    | 精确匹配 package 或子系统。                                  |
-| `group`   | 默认精确匹配；包含 glob 字符时按 glob pattern 匹配。         |
-| `message` | 默认精确匹配；包含 glob 字符时按 glob pattern 匹配。         |
-| `levels`  | 当前规则允许的非 debug 级别。                                |
+| 字段      | 说明                                                           |
+| --------- | -------------------------------------------------------------- |
+| map key   | 必填且必须唯一。debug 模式下，可见的规则日志会显示该 key。     |
+| `main`    | 精确匹配 package 或子系统。                                    |
+| `group`   | 默认精确匹配；包含 glob 字符时按 glob pattern 匹配。           |
+| `message` | 默认精确匹配；包含 glob 字符时按 glob pattern 匹配。           |
+| `levels`  | 必填。可以写显式级别数组，也可以写 `'inherit'` 继承根 levels。 |
 
 `levels` 只接受 `error`、`warn`、`info` 和 `success`。`debug` 由 `debug: true` 控制，不放进 `levels`。
+
+### Preset 插件
+
+Preset plugin 只负责注册命名 rule template，注册本身不会启用任何规则。可以通过 `extends` 导入 plugin config，也可以在同一个 `rules` map 里使用 `"<plugin>/<rule>"` 启用或覆盖 preset rule。
+
+```ts
+import type { LoggerPresetPlugin } from '@docs-islands/logger/types';
+
+const viteLoggingPlugin = {
+  rules: {
+    build: {
+      main: '@acme/vite',
+      group: 'build.pipeline',
+    },
+    hmr: {
+      main: '@acme/vite',
+      group: 'dev.hmr',
+    },
+  },
+  configs: {
+    recommended: {
+      rules: {
+        build: { levels: 'inherit' },
+        hmr: { levels: 'inherit' },
+      },
+    },
+  },
+} satisfies LoggerPresetPlugin;
+
+setLoggerConfig({
+  plugins: {
+    vite: viteLoggingPlugin,
+  },
+  extends: ['vite/recommended'],
+  rules: {
+    'vite/hmr': {
+      levels: ['warn', 'error'],
+      message: '*slow*',
+    },
+    'custom:api-timeout': {
+      group: 'api.*',
+      message: '*timeout*',
+      levels: ['warn'],
+    },
+  },
+});
+```
+
+Preset rule setting 支持：
+
+| setting | 说明                                                                          |
+| ------- | ----------------------------------------------------------------------------- |
+| `'off'` | 展开后删除该 preset rule。                                                    |
+| object  | 启用或覆盖规则；显式 `main`、`group`、`message` 和 `levels` 会覆盖 template。 |
 
 ## 构建插件
 
@@ -223,14 +277,20 @@ logger.debug('static metric details');
 Root 入口：
 
 ```ts
-import { createLogger, resetLoggerConfig, setLoggerConfig } from '@docs-islands/logger';
+import {
+  createLogger,
+  resetLoggerConfig,
+  resolveLoggerConfig,
+  setLoggerConfig,
+} from '@docs-islands/logger';
 ```
 
-| API                   | 说明                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------- |
-| `createLogger()`      | 在默认 scope 中创建或复用 main logger。继续调用 `.getLoggerByGroup(group)` 后写日志。 |
-| `setLoggerConfig()`   | 为直接、非插件用法设置默认 runtime config。插件接管 runtime 中会抛错。                |
-| `resetLoggerConfig()` | 为直接、非插件用法清空默认 runtime config。插件接管 runtime 中会抛错。                |
+| API                     | 说明                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| `createLogger()`        | 在默认 scope 中创建或复用 main logger。继续调用 `.getLoggerByGroup(group)` 后写日志。 |
+| `resolveLoggerConfig()` | 将公开 `LoggerConfig` 输入解析成宿主包使用的 runtime 配置形态。                       |
+| `setLoggerConfig()`     | 为直接、非插件用法设置默认 runtime config。插件接管 runtime 中会抛错。                |
+| `resetLoggerConfig()`   | 为直接、非插件用法清空默认 runtime config。插件接管 runtime 中会抛错。                |
 
 插件入口：
 
@@ -276,11 +336,11 @@ resetScopedLoggerConfig(scopeId);
 
 ```ts
 import type { LoggerConfig } from '@docs-islands/logger/types';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
-import { createLoggerScopeId, normalizeLoggerConfig } from '@docs-islands/logger/core/helper';
+import { createElapsedLogOptions, createElapsedTimer } from '@docs-islands/logger/helper';
+import { createLoggerScopeId } from '@docs-islands/logger/core/helper';
 ```
 
-应用代码优先使用 root 入口。只有集成侧需要显式 scope 时才使用 `@docs-islands/logger/core`。共享的格式化、elapsed-time、error/debug-message 工具从 `@docs-islands/logger/helper` 导入；scope 与 config normalize 工具从 `@docs-islands/logger/core/helper` 导入。
+应用代码优先使用 root 入口。只有集成侧需要显式 scope 时才使用 `@docs-islands/logger/core`。共享的格式化、elapsed-time、error/debug-message 工具从 `@docs-islands/logger/helper` 导入；scope helper 从 `@docs-islands/logger/core/helper` 导入。
 
 ## 文档
 

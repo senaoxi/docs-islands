@@ -2,6 +2,23 @@ import type { LoggerScopeId } from '../../types';
 
 export const DEFAULT_LOGGER_SCOPE_ID = '__default__';
 
+/**
+ * Creates a unique logger scope identifier.
+ *
+ * This function generates a unique scope ID using a combination of timestamp
+ * and cryptographic or pseudo-random entropy. The resulting ID is guaranteed
+ * to be unique within the application's lifetime and is useful for creating
+ * isolated logger scopes with independent configurations.
+ *
+ * @returns A unique logger scope identifier string
+ *
+ * @example
+ * ```ts
+ * const scopeId = createLoggerScopeId();
+ * setScopedLoggerConfig(scopeId, { levels: ['error'] });
+ * const logger = createScopedLogger({ main: 'app' }, scopeId);
+ * ```
+ */
 export const createLoggerScopeId = (): LoggerScopeId => {
   const timestamp = Date.now().toString(36);
   const entropy =

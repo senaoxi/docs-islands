@@ -5,34 +5,43 @@ import type {
   SiteDevToolsUserConfig,
 } from '#dep-types/utils';
 import { VITEPRESS_CONFIG_LOG_GROUPS } from '#shared/constants/log-groups/config';
-import { setScopedLoggerConfig } from '@docs-islands/logger/core';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import {
+  resolveLoggerConfig,
+  setScopedLoggerConfig,
+} from '@docs-islands/logger/core';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { LOGGER_TREE_SHAKING_PLUGIN_NAME } from '@docs-islands/logger/plugin';
+import type {
+  LoggerPluginMap,
+  ResolvedLoggerConfig,
+} from '@docs-islands/logger/types';
 import type { DefaultTheme, UserConfig } from 'vitepress';
 import { LOGGER_FACADE_PLUGIN_NAME } from '../constants/core/plugin-names';
 import { getVitePressGroupLogger } from '../logger';
 import { mergeAnalysisConfig } from './config-merge-helpers';
 import { ensureVitepressViteConfig } from './integration-plugin';
-import type { LoggerConfig } from './logging-config';
-import { resolveLoggingConfig } from './logging-config';
 import { createVitePressLoggerFacadePlugin } from './vite-plugin-logger-facade';
-import { createLoggerTreeShakingPlugin } from './vite-plugin-logger-tree-shaking';
+import {
+  createLoggerTreeShakingPlugin,
+  setVitePressLoggerTreeShakingEnabled,
+} from './vite-plugin-logger-tree-shaking';
 
 const getConfigLogger = (scopeId: string) =>
   getVitePressGroupLogger(VITEPRESS_CONFIG_LOG_GROUPS.nodeVersion, scopeId);
 
-export interface DocsIslandsSharedOptions {
-  logging?: LoggingUserConfig;
+export interface DocsIslandsSharedOptions<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+> {
+  logging?: LoggingUserConfig<TPlugins>;
   siteDevtools?: SiteDevToolsUserConfig;
 }
 
 export interface DocsIslandsResolvedUserConfig {
   loggerScopeId: string;
-  logging?: LoggerConfig;
+  loggerTreeShakingEnabled: boolean;
+  logging?: ResolvedLoggerConfig;
   siteDevtoolsEnabled: boolean;
 }
-
-export { resolveLoggingConfig } from './logging-config';
 
 const mergeSiteDevToolsAnalysisConfig = (
   base: SiteDevToolsAnalysisUserConfig | undefined,
@@ -106,8 +115,8 @@ function hasVitePluginNamed(
 
 const LOGGER_SCOPE_STATE = Symbol.for('docs-islands.vitepress.loggerScopeId');
 
-type ViteConfigWithLoggerScopeState = NonNullable<
-  UserConfig<DefaultTheme.Config>['vite']
+type VitePressConfigWithLoggerScopeState = NonNullable<
+  UserConfig<DefaultTheme.Config>
 > & {
   [LOGGER_SCOPE_STATE]?: string;
 };
@@ -116,15 +125,14 @@ export function assertCanApplyDocsIslandsLoggerScope(
   vitepressConfig: UserConfig<DefaultTheme.Config>,
   loggerScopeId: string,
 ): void {
-  const viteConfig = vitepressConfig.vite as
-    | ViteConfigWithLoggerScopeState
-    | undefined;
-  const existingLoggerScopeId = viteConfig?.[LOGGER_SCOPE_STATE];
+  const config = vitepressConfig as VitePressConfigWithLoggerScopeState;
+  const existingLoggerScopeId = config[LOGGER_SCOPE_STATE];
 
   if (
     existingLoggerScopeId === undefined ||
     existingLoggerScopeId === loggerScopeId
   ) {
+    config[LOGGER_SCOPE_STATE] = loggerScopeId;
     return;
   }
 
@@ -135,7 +143,7 @@ export function assertCanApplyDocsIslandsLoggerScope(
 }
 
 export function warnIfUnsupportedNodeVersion(loggerScopeId: string): void {
-  const warningStartedAt = Date.now();
+  const warningElapsed = createElapsedTimer();
 
   if (checkNodeVersion(process.versions.node)) {
     return;
@@ -145,32 +153,42 @@ export function warnIfUnsupportedNodeVersion(loggerScopeId: string): void {
     `You are using Node.js ${process.versions.node}. ` +
       `@docs-islands/vitepress requires Node.js version 20.19+ or 22.12+. ` +
       `Please upgrade your Node.js version.`,
-    createElapsedLogOptions(warningStartedAt, Date.now()),
+    warningElapsed(),
   );
 }
 
-export function applyDocsIslandsUserConfig(
+export function applyDocsIslandsUserConfig<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+>(
   vitepressConfig: UserConfig<DefaultTheme.Config>,
   loggerScopeId: string,
-  options?: DocsIslandsSharedOptions,
+  options?: DocsIslandsSharedOptions<TPlugins>,
 ): DocsIslandsResolvedUserConfig {
-  const logging = resolveLoggingConfig(options?.logging);
+  const { treeshake: loggerTreeShaking, ...loggerConfig } =
+    options?.logging ?? {};
 
-  setScopedLoggerConfig(loggerScopeId, logging ?? {});
+  // Complete the logger configuration initialization as early as possible to ensure subsequent logs are controlled.
+  setScopedLoggerConfig(loggerScopeId, loggerConfig);
+
   warnIfUnsupportedNodeVersion(loggerScopeId);
 
+  const loggerTreeShakingEnabled = loggerTreeShaking === true;
+  setVitePressLoggerTreeShakingEnabled(loggerScopeId, loggerTreeShakingEnabled);
+
   const mergedSiteDevTools = mergeSiteDevToolsConfig(
-    vitepressConfig.siteDevtools,
+    vitepressConfig.siteDevtools as SiteDevToolsUserConfig | undefined,
     options?.siteDevtools,
   );
 
   if (mergedSiteDevTools) {
-    vitepressConfig.siteDevtools = mergedSiteDevTools;
+    vitepressConfig.siteDevtools =
+      mergedSiteDevTools as typeof vitepressConfig.siteDevtools;
   }
 
   return {
     loggerScopeId,
-    logging,
+    loggerTreeShakingEnabled,
+    logging: resolveLoggerConfig(loggerConfig),
     siteDevtoolsEnabled: mergedSiteDevTools !== undefined,
   };
 }
@@ -183,8 +201,6 @@ export function applyDocsIslandsViteBaseConfig(
   assertCanApplyDocsIslandsLoggerScope(vitepressConfig, options.loggerScopeId);
 
   const viteConfig = ensureVitepressViteConfig(vitepressConfig);
-  const scopedViteConfig = viteConfig as ViteConfigWithLoggerScopeState;
-  scopedViteConfig[LOGGER_SCOPE_STATE] = options.loggerScopeId;
 
   viteConfig.define!.__BASE__ = JSON.stringify(siteConfig.base);
   viteConfig.define!.__CLEAN_URLS__ = JSON.stringify(siteConfig.cleanUrls);
@@ -202,11 +218,16 @@ export function applyDocsIslandsViteBaseConfig(
   }
 
   if (
+    options.loggerTreeShakingEnabled &&
     !hasVitePluginNamed(viteConfig.plugins, LOGGER_TREE_SHAKING_PLUGIN_NAME)
   ) {
-    viteConfig.plugins!.push(
-      createLoggerTreeShakingPlugin(options.loggerScopeId),
+    const loggerTreeShakingPlugin = createLoggerTreeShakingPlugin(
+      options.loggerScopeId,
     );
+
+    if (loggerTreeShakingPlugin) {
+      viteConfig.plugins!.push(loggerTreeShakingPlugin);
+    }
   }
 
   if (!options.siteDevtoolsEnabled) {

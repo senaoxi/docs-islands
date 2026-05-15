@@ -1,16 +1,13 @@
 import type { ConfigType } from '#dep-types/utils';
 import { VITEPRESS_HMR_LOG_GROUPS } from '#shared/constants/log-groups/hmr';
 import type { RenderController } from '@docs-islands/core/node/render-controller';
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { join } from 'pathe';
 import type { Plugin } from 'vite';
 import { normalizePath } from 'vite';
 import type { RenderingFrameworkParserManager } from '../core/framework-parser';
 import type { RenderingModuleResolution } from '../core/module-resolution';
 import { getVitePressGroupLogger } from '../logger';
-
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 export function createFrameworkMarkdownHmrPlugin({
   framework,
@@ -38,7 +35,7 @@ export function createFrameworkMarkdownHmrPlugin({
     handleHotUpdate: {
       order: 'pre',
       async handler(ctx) {
-        const updateStartedAt = Date.now();
+        const updateElapsed = createElapsedTimer();
         const { file, modules, server, read } = ctx;
         const Logger = getVitePressGroupLogger(
           VITEPRESS_HMR_LOG_GROUPS.markdownUpdate,
@@ -103,7 +100,7 @@ export function createFrameworkMarkdownHmrPlugin({
         const relativeId = normalizedId.replace(siteConfig.srcDir, '');
         Logger.success(
           `${relativeId} changed, container script content will be re-parsed...`,
-          elapsedSince(updateStartedAt),
+          updateElapsed(),
         );
 
         const updates: Record<

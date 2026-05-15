@@ -54,7 +54,7 @@ Format context into strings before logging.
 ```ts
 import { formatErrorMessage, formatDebugMessage } from '@docs-islands/logger/helper';
 
-logger.error(`Build failed: ${formatErrorMessage(error)}`);
+logger.error(`build failed: ${formatErrorMessage(error)}`);
 
 logger.debug(
   formatDebugMessage({
@@ -68,11 +68,12 @@ logger.debug(
 Use elapsed timing for visible operational milestones.
 
 ```ts
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 
-const startTimeMs = performance.now();
+logger.info('build started');
+const elapsed = createElapsedTimer();
 await build();
-logger.success('Build finished', createElapsedLogOptions(startTimeMs));
+logger.success('build finished', elapsed());
 ```
 
 ## Related

@@ -10,6 +10,7 @@ export const LOG_KIND_TO_LEVEL: Record<
   warn: 'warn',
 };
 
+// All log information is allowed by default.
 export const DEFAULT_RESOLVED_LEVELS: ReadonlySet<LoggerVisibilityLevel> =
   new Set<LoggerVisibilityLevel>(['error', 'warn', 'info', 'success']);
 

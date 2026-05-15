@@ -1,7 +1,8 @@
 import {
-  createElapsedLogOptions,
+  createElapsedTimer,
   formatErrorMessage,
 } from '@docs-islands/logger/helper';
+import type { LoggerElapsedLogOptions } from '@docs-islands/logger/types';
 import { createLogger } from '@docs-islands/utils/logger';
 import { getFrameworkComponentManagerLogGroup } from '../shared/constants/log-groups/runtime';
 import { PAGE_METAFILE_META_NAMES } from '../shared/constants/page-metafile';
@@ -24,13 +25,13 @@ declare const __BASE__: string | undefined;
 interface ComponentSubscription {
   reject: (error: Error) => void;
   resolve: (value: boolean) => void;
-  timestamp: number;
+  elapsed: () => LoggerElapsedLogOptions;
 }
 
 interface RuntimeSubscription {
   reject: (error: Error) => void;
   resolve: (value: boolean) => void;
-  timestamp: number;
+  elapsed: () => LoggerElapsedLogOptions;
 }
 
 export interface DocsComponentManagerOptions<TBuildMetrics = unknown> {
@@ -53,8 +54,6 @@ type DocsRuntimeWindow<TComponent> = Window & {
 const loggerInstance = createLogger({
   main: '@docs-islands/core',
 });
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
   private readonly loadedComponents = new Map<
@@ -87,12 +86,12 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
     level: 'error' | 'info' | 'warn',
     message: string,
     payload?: unknown,
-    startedAt: number = Date.now(),
+    elapsed?: () => LoggerElapsedLogOptions,
   ): void {
     if (level === 'error') {
-      this.Logger.error(message, elapsedSince(startedAt));
+      this.Logger.error(message, elapsed?.());
     } else {
-      this.Logger[level](message, elapsedSince(startedAt));
+      this.Logger[level](message, elapsed?.());
     }
     this.options.hooks?.onEvent?.({
       level,
@@ -397,7 +396,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
       } catch (rejectionError) {
         this.Logger.error(
           `Subscription rejection handling error, message: ${formatErrorMessage(rejectionError)}`,
-          elapsedSince(subscriber.timestamp),
+          subscriber.elapsed(),
         );
       }
     }
@@ -419,7 +418,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
       } catch (rejectionError) {
         this.Logger.error(
           `Runtime subscription rejection handling error, message: ${formatErrorMessage(rejectionError)}`,
-          elapsedSince(subscriber.timestamp),
+          subscriber.elapsed(),
         );
       }
     }
@@ -428,7 +427,6 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
   public async initialize(
     initializeOptions: DocsComponentManagerInitializeOptions,
   ): Promise<void> {
-    const initializeStartedAt = Date.now();
     if (initializeOptions.mode === 'prod' && globalThis.window === undefined) {
       return;
     }
@@ -436,10 +434,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
     this.ensureGlobalBindings();
 
     if (this.isInitialized) {
-      this.Logger.warn(
-        'Already initialized',
-        elapsedSince(initializeStartedAt),
-      );
+      this.Logger.warn('Already initialized');
       return;
     }
 
@@ -614,7 +609,6 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
   public async loadPageComponents(
     pageId: string = this.options.getCurrentPageId(),
   ): Promise<boolean> {
-    const loadStartedAt = Date.now();
     const componentInfo = await this.ensurePageMetafile(pageId);
     if (!componentInfo) {
       this.emitEvent('info', 'page component load skipped', {
@@ -630,6 +624,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
       ...this.summarizePageMetafile(componentInfo),
     });
 
+    const loadElapsed = createElapsedTimer();
     try {
       if (cssBundlePaths?.length > 0) {
         const syncResult = synchronizePageCssBundles(cssBundlePaths);
@@ -688,7 +683,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
           message: formatErrorMessage(error),
           pageId,
         },
-        loadStartedAt,
+        loadElapsed,
       );
       return false;
     }
@@ -729,7 +724,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
           clearTimeout(timeoutId);
           resolve(value);
         },
-        timestamp: Date.now(),
+        elapsed: createElapsedTimer(),
       });
     });
   }
@@ -759,7 +754,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
           clearTimeout(timeoutId);
           resolve(value);
         },
-        timestamp: Date.now(),
+        elapsed: createElapsedTimer(),
       });
     });
   }
@@ -780,17 +775,17 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
       } catch (error) {
         this.Logger.error(
           `Runtime subscription callback execution error, message: ${formatErrorMessage(error)}`,
-          elapsedSince(subscriber.timestamp),
+          subscriber.elapsed(),
         );
       }
     }
   }
 
   public notifyComponentLoaded(pageId: string, componentName: string): void {
-    const notifyStartedAt = Date.now();
     const key = `${pageId}-${componentName}`;
     const runtimeWindow = this.getRuntimeWindow();
 
+    const notifyElapsed = createElapsedTimer();
     try {
       const component =
         runtimeWindow?.[RENDER_STRATEGY_CONSTANTS.injectComponent]?.[pageId]?.[
@@ -814,7 +809,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
         } catch (error) {
           this.Logger.error(
             `Subscription callback execution error, message: ${formatErrorMessage(error)}`,
-            elapsedSince(subscriber.timestamp),
+            subscriber.elapsed(),
           );
         }
       }
@@ -823,7 +818,7 @@ export class DocsComponentManager<TComponent, TBuildMetrics = unknown> {
     } catch (error) {
       this.Logger.error(
         `Component load notification failed, message: ${formatErrorMessage(error)}`,
-        elapsedSince(notifyStartedAt),
+        notifyElapsed(),
       );
       this.rejectSubscriptions(key, new Error('Component loading failed'));
     }

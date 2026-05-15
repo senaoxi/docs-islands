@@ -38,5 +38,5 @@ Use this for the fastest first checks before deeper troubleshooting.
 ## Logs Are Too Noisy
 
 - Configure top-level `logging`.
-- Prefer preset plugins before broad direct rules.
+- Prefer preset plugins before broad custom rules.
 - Use Site DevTools Debug Logs when runtime evidence matters.

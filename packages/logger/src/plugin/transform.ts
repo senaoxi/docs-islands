@@ -7,6 +7,12 @@ import MagicString, { type SourceMap } from 'magic-string';
 import { shouldSuppressLog } from '../core/config';
 import type { LoggerScopeId, LogKind } from '../types';
 
+/**
+ * The name identifier for the logger tree-shaking plugin.
+ *
+ * Used internally to identify the tree-shaking transformation plugin
+ * in the plugin pipeline.
+ */
 export const LOGGER_TREE_SHAKING_PLUGIN_NAME =
   'docs-islands:logger-tree-shaking';
 
@@ -276,6 +282,38 @@ const readStaticLogCall = (
   };
 };
 
+/**
+ * Performs build-time tree-shaking of logger calls based on configuration.
+ *
+ * This function analyzes source code and removes logger calls that are statically
+ * determined to be suppressed by the active logger configuration. It uses Babel
+ * AST analysis to:
+ *
+ * 1. Identify static `createLogger()` calls and their logger bindings
+ * 2. Track logger.getLoggerByGroup() expressions to extract group information
+ * 3. Find logger method calls with static string messages
+ * 4. Check if each call would be suppressed using shouldSuppressLog()
+ * 5. Remove suppressed calls from the generated code
+ *
+ * Returns null if no transformations were made or if parsing/analysis fails.
+ *
+ * @param code - The source code to analyze and transform
+ * @param id - The file identifier/path for source map generation
+ * @param options - Configuration including logger module ID and scope ID
+ * @returns Transformed code with source map if changes were made, null otherwise
+ *
+ * @example
+ * ```ts
+ * const result = await transformLoggerTreeShaking(code, 'app.ts', {
+ *   loggerModuleId: '@docs-islands/logger',
+ *   loggerScopeId: 'build',
+ * });
+ *
+ * if (result) {
+ *   // Use result.code and result.map
+ * }
+ * ```
+ */
 export async function transformLoggerTreeShaking(
   code: string,
   id: string,

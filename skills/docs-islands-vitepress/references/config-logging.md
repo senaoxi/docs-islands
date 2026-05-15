@@ -7,16 +7,16 @@ Use this when controlling package-owned logs or adding logs inside modules handl
 ```ts
 import { createDocsIslands } from '@docs-islands/vitepress';
 import { react } from '@docs-islands/vitepress/adapters/react';
-import { hmr } from '@docs-islands/vitepress/logger/presets';
+import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 
 const islands = createDocsIslands({
   adapters: [react()],
   logging: {
     levels: ['warn', 'error'],
-    plugins: { hmr },
+    plugins: { vitepress: vitepressLogger },
+    extends: ['vitepress/hmr'],
     rules: {
-      'hmr/markdownUpdate': 'off',
-      'hmr/viteAfterUpdate': {},
+      'vitepress/markdownUpdate': 'off',
     },
   },
 });
@@ -26,55 +26,59 @@ const islands = createDocsIslands({
 
 ## Root Options
 
-| Option    | Meaning                                                                                                  |
-| --------- | -------------------------------------------------------------------------------------------------------- |
-| `debug`   | Enables diagnostic labels and elapsed-time suffixes; also allows debug logs when no rules are configured |
-| `levels`  | Root visible levels, used directly or as rule fallback                                                   |
-| `plugins` | Preset plugin registry, e.g. `{ hmr, runtime }`                                                          |
-| `rules`   | Either object-form preset rules or array-form direct rules                                               |
+| Option      | Meaning                                                                                                  |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| `debug`     | Enables diagnostic labels and elapsed-time suffixes; also allows debug logs when no rules are configured |
+| `levels`    | Root visible levels, used directly or by rules with `levels: 'inherit'`                                  |
+| `plugins`   | Preset plugin registry, e.g. `{ vitepress: vitepressLogger }`                                            |
+| `extends`   | Imports preset configs such as `vitepress/runtime`                                                       |
+| `rules`     | Final object map keyed by preset references or custom labels; values are `'off'` or objects with levels  |
+| `treeshake` | Controls managed logger build-time pruning; defaults to `false`; set `true` to opt in                    |
 
 Visible levels are `error`, `warn`, `info`, and `success`. `debug` output is controlled by the `debug` gate.
 
 ## Preset Rule Form
 
 ```ts
-import { hmr, runtime } from '@docs-islands/vitepress/logger/presets';
+import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 
 const logging = {
   debug: true,
   levels: ['warn'],
-  plugins: { hmr, runtime },
+  plugins: { vitepress: vitepressLogger },
+  extends: ['vitepress/hmr', 'vitepress/runtime'],
   rules: {
-    'hmr/viteAfterUpdate': {},
-    'runtime/reactDevRender': {
+    'vitepress/viteAfterUpdate': {
       levels: ['warn', 'error'],
     },
-    'runtime/renderValidation': 'off',
+    'vitepress/reactDevRender': {
+      levels: ['warn', 'error'],
+    },
+    'vitepress/renderValidation': 'off',
   },
 };
 ```
 
-`{}` enables a preset rule with its default matcher. `'off'` is equivalent to `{ enabled: false }`. Preset overrides can set only `enabled`, `message`, and `levels`.
+`plugins` only registers preset templates. `extends` imports a preset config. Rule objects enable or override rules and must declare `levels`; use `levels: 'inherit'` to inherit root levels. `'off'` deletes a rule from the resolved config.
 
-Built-in preset exports include `build`, `config`, `hmr`, `parser`, `plugin`, `resolver`, `runtime`, `siteDevtools`, and `transform`.
+The built-in preset export is `vitepress`; its configs include `recommended`, `build`, `config`, `hmr`, `parser`, `plugin`, `resolver`, `runtime`, `siteDevtools`, and `transform`.
 
-## Direct Rule Form
+## Custom Rule Form
 
 ```ts
 const logging = {
   debug: true,
-  rules: [
-    {
-      label: 'userland-metrics',
+  rules: {
+    'custom:userland-metrics': {
       main: '@acme/custom-docs',
       group: 'userland.metrics',
       levels: ['info'],
     },
-  ],
+  },
 };
 ```
 
-Direct rules support `label`, `enabled`, `main`, `group`, `message`, and `levels`. `main` is exact-match. `group` and `message` support exact strings or glob patterns.
+Custom rules support `main`, `group`, `message`, and required `levels`. The map key is the label, and public rule objects do not accept `label`. `main` is exact-match. `group` and `message` support exact strings or glob patterns.
 
 ## Logger Facade
 

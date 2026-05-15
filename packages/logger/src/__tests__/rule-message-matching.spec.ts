@@ -46,10 +46,10 @@ describe('Integration: Rule Message Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1', message: 'request timeout', levels: ['error'] },
-          { label: 'Test2', message: 'slow query', levels: ['warn'] },
-        ],
+        rules: {
+          Test1: { message: 'request timeout', levels: ['error'] },
+          Test2: { message: 'slow query', levels: ['warn'] },
+        },
       });
 
       const logger = createLogger({
@@ -88,10 +88,10 @@ describe('Integration: Rule Message Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [
-          { label: 'Test1', message: 'request timeout', levels: ['error'] },
-          { label: 'Test2', message: 'slow query', levels: ['warn'] },
-        ],
+        rules: {
+          Test1: { message: 'request timeout', levels: ['error'] },
+          Test2: { message: 'slow query', levels: ['warn'] },
+        },
       });
 
       const logger2 = createLogger({
@@ -127,12 +127,12 @@ describe('Integration: Rule Message Matching', () => {
       // Test with debug: false
       setLoggerConfig({
         debug: false,
-        rules: [
-          { label: 'Test1', message: 'timeout:*', levels: ['warn'] },
-          { label: 'Test2', message: '*database*', levels: ['error'] },
-          { label: 'Test3', message: 'worker * finished', levels: ['info'] },
-          { label: 'Test4', message: 'timeout:*', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { message: 'timeout:*', levels: ['warn'] },
+          Test2: { message: '*database*', levels: ['error'] },
+          Test3: { message: 'worker * finished', levels: ['info'] },
+          Test4: { message: 'timeout:*', levels: ['error'] },
+        },
       });
 
       const logger = createLogger({
@@ -181,12 +181,12 @@ describe('Integration: Rule Message Matching', () => {
       // Test with debug: true
       setLoggerConfig({
         debug: true,
-        rules: [
-          { label: 'Test1', message: 'timeout:*', levels: ['warn'] },
-          { label: 'Test2', message: '*database*', levels: ['error'] },
-          { label: 'Test3', message: 'worker * finished', levels: ['info'] },
-          { label: 'Test4', message: 'timeout:*', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { message: 'timeout:*', levels: ['warn'] },
+          Test2: { message: '*database*', levels: ['error'] },
+          Test3: { message: 'worker * finished', levels: ['info'] },
+          Test4: { message: 'timeout:*', levels: ['error'] },
+        },
       });
 
       const logger2 = createLogger({
@@ -230,11 +230,11 @@ describe('Integration: Rule Message Matching', () => {
     it('Case 11: Multiple message rules matching same message, label order', () => {
       setLoggerConfig({
         debug: false,
-        rules: [
-          { label: 'Test1', message: '*timeout*', levels: ['error'] },
-          { label: 'Test2', message: 'request *', levels: ['error'] },
-          { label: 'Test3', message: '*user*', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { message: '*timeout*', levels: ['error'] },
+          Test2: { message: 'request *', levels: ['error'] },
+          Test3: { message: '*user*', levels: ['error'] },
+        },
       });
 
       const logger = createLogger({
@@ -256,11 +256,11 @@ describe('Integration: Rule Message Matching', () => {
 
       setLoggerConfig({
         debug: true,
-        rules: [
-          { label: 'Test1', message: '*timeout*', levels: ['error'] },
-          { label: 'Test2', message: 'request *', levels: ['error'] },
-          { label: 'Test3', message: '*user*', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { message: '*timeout*', levels: ['error'] },
+          Test2: { message: 'request *', levels: ['error'] },
+          Test3: { message: '*user*', levels: ['error'] },
+        },
       });
 
       const logger2 = createLogger({
@@ -278,20 +278,14 @@ describe('Integration: Rule Message Matching', () => {
       // Test with debug: false
       setLoggerConfig({
         debug: false,
-        rules: [
-          {
-            label: 'Test1',
-            group: 'test.audit.*',
-            message: '*',
-            levels: ['error'],
-          },
-          {
-            label: 'Test2',
+        rules: {
+          Test1: { group: 'test.audit.*', message: '*', levels: ['error'] },
+          Test2: {
             group: 'test.audit.login',
             message: '*failed*',
             levels: ['warn'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -338,20 +332,14 @@ describe('Integration: Rule Message Matching', () => {
       // Test with debug: true
       setLoggerConfig({
         debug: true,
-        rules: [
-          {
-            label: 'Test1',
-            group: 'test.audit.*',
-            message: '*',
-            levels: ['error'],
-          },
-          {
-            label: 'Test2',
+        rules: {
+          Test1: { group: 'test.audit.*', message: '*', levels: ['error'] },
+          Test2: {
             group: 'test.audit.login',
             message: '*failed*',
             levels: ['warn'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({
@@ -393,11 +381,11 @@ describe('Integration: Rule Message Matching', () => {
     it('Case 14: Exact and wildcard coexist', () => {
       setLoggerConfig({
         debug: false,
-        rules: [
-          { label: 'Test1', message: 'request timeout', levels: ['error'] },
-          { label: 'Test2', message: '*timeout*', levels: ['error'] },
-          { label: 'Test3', message: 'request *', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { message: 'request timeout', levels: ['error'] },
+          Test2: { message: '*timeout*', levels: ['error'] },
+          Test3: { message: 'request *', levels: ['error'] },
+        },
       });
 
       const logger = createLogger({
@@ -421,11 +409,11 @@ describe('Integration: Rule Message Matching', () => {
 
       setLoggerConfig({
         debug: true,
-        rules: [
-          { label: 'Test1', message: 'request timeout', levels: ['error'] },
-          { label: 'Test2', message: '*timeout*', levels: ['error'] },
-          { label: 'Test3', message: 'request *', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { message: 'request timeout', levels: ['error'] },
+          Test2: { message: '*timeout*', levels: ['error'] },
+          Test3: { message: 'request *', levels: ['error'] },
+        },
       });
 
       const logger2 = createLogger({
@@ -447,28 +435,25 @@ describe('Integration: Rule Message Matching', () => {
       // Test with debug: false
       setLoggerConfig({
         debug: false,
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.api.*',
             message: 'retry *',
             levels: ['warn'],
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             group: 'test.api.fetch',
             message: '*timeout*',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             group: 'test.api.fetch',
             message: '*timeout*',
             levels: ['warn'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -531,28 +516,25 @@ describe('Integration: Rule Message Matching', () => {
       // Test with debug: true
       setLoggerConfig({
         debug: true,
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.api.*',
             message: 'retry *',
             levels: ['warn'],
           },
-          {
-            label: 'Test2',
+          Test2: {
             main: '@docs-islands/test',
             group: 'test.api.fetch',
             message: '*timeout*',
             levels: ['error'],
           },
-          {
-            label: 'Test3',
+          Test3: {
             group: 'test.api.fetch',
             message: '*timeout*',
             levels: ['warn'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({
@@ -612,15 +594,14 @@ describe('Integration: Rule Message Matching', () => {
       setLoggerConfig({
         debug: false,
         levels: ['warn', 'error'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.payment.*',
             message: '*timeout*',
             levels: ['error'],
           },
-        ],
+        },
       });
 
       const loggerA = createLogger({
@@ -654,15 +635,14 @@ describe('Integration: Rule Message Matching', () => {
       setLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             main: '@docs-islands/test',
             group: 'test.payment.*',
             message: '*timeout*',
             levels: ['error'],
           },
-        ],
+        },
       });
 
       const loggerA2 = createLogger({
@@ -691,20 +671,18 @@ describe('Integration: Rule Message Matching', () => {
       // Test with debug: false
       setLoggerConfig({
         debug: false,
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             group: 'test.notify.*',
             message: '*failed*',
             levels: ['warn'],
           },
-          {
-            label: 'Test2',
+          Test2: {
             group: 'test.notify.*',
             message: '*timeout*',
             levels: ['error'],
           },
-        ],
+        },
       });
 
       const logger = createLogger({
@@ -733,20 +711,18 @@ describe('Integration: Rule Message Matching', () => {
       // Test with debug: true
       setLoggerConfig({
         debug: true,
-        rules: [
-          {
-            label: 'Test1',
+        rules: {
+          Test1: {
             group: 'test.notify.*',
             message: '*failed*',
             levels: ['warn'],
           },
-          {
-            label: 'Test2',
+          Test2: {
             group: 'test.notify.*',
             message: '*timeout*',
             levels: ['error'],
           },
-        ],
+        },
       });
 
       const logger2 = createLogger({

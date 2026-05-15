@@ -3,7 +3,7 @@
  */
 import {
   resetScopedLoggerConfig,
-  setScopedLoggerConfig as setLoggerConfigForScope,
+  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
 } from '@docs-islands/logger/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRenderingModuleResolution } from '../module-resolution';

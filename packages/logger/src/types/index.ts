@@ -11,8 +11,79 @@ export type LoggerVisibilityLevel = 'error' | 'warn' | 'info' | 'success';
 
 export type LoggerScopeId = string;
 
-export interface LoggerRule {
-  enabled?: boolean;
+export type LoggerRuleLevelsUserConfig = 'inherit' | LoggerVisibilityLevel[];
+
+export interface LoggerRuleUserConfig {
+  group?: string;
+  levels: LoggerRuleLevelsUserConfig;
+  main?: string;
+  message?: string;
+}
+
+export interface LoggerPresetRuleUserConfig {
+  group?: string;
+  levels?: LoggerRuleLevelsUserConfig;
+  main?: string;
+  message?: string;
+}
+
+export type LoggerRuleSetting = 'off' | LoggerRuleUserConfig;
+
+export interface LoggerPresetConfig<
+  TRules extends Record<string, LoggerPresetRuleUserConfig> = Record<
+    string,
+    LoggerPresetRuleUserConfig
+  >,
+> {
+  rules?: Partial<Record<keyof TRules & string, LoggerRuleSetting>>;
+}
+
+export interface LoggerPresetPlugin<
+  TRules extends Record<string, LoggerPresetRuleUserConfig> = Record<
+    string,
+    LoggerPresetRuleUserConfig
+  >,
+  TConfigs extends Record<string, LoggerPresetConfig<TRules>> = Record<
+    string,
+    LoggerPresetConfig<TRules>
+  >,
+> {
+  configs?: TConfigs;
+  rules: TRules;
+}
+
+export type LoggerPluginMap = Record<string, LoggerPresetPlugin>;
+
+export type LoggerPresetRuleKey<TPlugins extends LoggerPluginMap> = {
+  [Namespace in keyof TPlugins &
+    string]: TPlugins[Namespace] extends LoggerPresetPlugin<infer TRules>
+    ? `${Namespace}/${keyof TRules & string}`
+    : never;
+}[keyof TPlugins & string];
+
+export type LoggerPresetConfigKey<TPlugins extends LoggerPluginMap> = {
+  [Namespace in keyof TPlugins & string]: `${Namespace}/${keyof NonNullable<
+    TPlugins[Namespace]['configs']
+  > &
+    string}`;
+}[keyof TPlugins & string];
+
+export type LoggerRulesUserConfig<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+> = Partial<Record<LoggerPresetRuleKey<TPlugins>, LoggerRuleSetting>> &
+  Record<string, LoggerRuleSetting | undefined>;
+
+export interface LoggerConfig<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+> {
+  debug?: boolean;
+  extends?: LoggerPresetConfigKey<TPlugins>[];
+  levels?: LoggerVisibilityLevel[];
+  plugins?: TPlugins;
+  rules?: LoggerRulesUserConfig<TPlugins>;
+}
+
+export interface ResolvedLoggerRule {
   group?: string;
   label: string;
   levels?: LoggerVisibilityLevel[];
@@ -20,10 +91,10 @@ export interface LoggerRule {
   message?: string;
 }
 
-export interface LoggerConfig {
+export interface ResolvedLoggerConfig {
   debug?: boolean;
-  levels?: LoggerVisibilityLevel[];
-  rules?: LoggerRule[];
+  levels: LoggerVisibilityLevel[];
+  rules?: ResolvedLoggerRule[];
 }
 
 export interface DebugMessageOptions {
@@ -43,6 +114,18 @@ export interface CreateLoggerOptions {
   main: string;
 }
 
+export interface ScopedLogger {
+  debug(message: string): void;
+  error(message: string, options?: LoggerLogOptions): void;
+  info(message: string, options?: LoggerLogOptions): void;
+  success(message: string, options?: LoggerLogOptions): void;
+  warn(message: string, options?: LoggerLogOptions): void;
+}
+
+export interface Logger {
+  getLoggerByGroup(group: string): ScopedLogger;
+}
+
 export interface LoggerContext {
   group: string;
   kind: LogKind;
@@ -51,7 +134,6 @@ export interface LoggerContext {
 }
 
 export interface NormalizedLoggerRule {
-  enabled?: boolean;
   groupMatcher?: (value: string) => boolean;
   label: string;
   levels?: ReadonlySet<LoggerVisibilityLevel>;
@@ -66,7 +148,7 @@ export interface NormalizedLoggerConfig {
 }
 
 export interface LoggerConfigRegistryEntry {
-  config: LoggerConfig | undefined;
+  config: ResolvedLoggerConfig | undefined;
   compiledConfig: NormalizedLoggerConfig | null;
 }
 
@@ -76,11 +158,20 @@ export interface ResolvedLoggerContext {
   suppress: boolean;
 }
 
-export type { Logger, ScopedLogger } from '../core/factory';
-export type { LoggerTreeShakingTransformResult } from '../plugin/transform';
-
-declare global {
-  var __DOCS_ISLANDS_LOGGER_CONFIG_REGISTRY__:
-    | Map<LoggerScopeId, LoggerConfigRegistryEntry>
-    | undefined;
+export interface LoggerTreeShakingSourceMap {
+  file: string;
+  mappings: string;
+  names: string[];
+  sources: string[];
+  sourcesContent?: string[];
+  toString(): string;
+  toUrl(): string;
+  version: number;
 }
+
+export interface LoggerTreeShakingTransformResult {
+  code: string;
+  map: LoggerTreeShakingSourceMap;
+}
+
+export type { ResolvedLoggerRule as LoggerRule };

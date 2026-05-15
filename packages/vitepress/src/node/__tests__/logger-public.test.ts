@@ -1,9 +1,11 @@
 import { resetScopedLoggerConfig } from '@docs-islands/logger/core';
-import type { LoggerConfig } from '@docs-islands/logger/types';
+import type { ResolvedLoggerConfig } from '@docs-islands/logger/types';
 import * as vitepressPublicModule from '@docs-islands/vitepress';
 import * as publicLoggerModule from '@docs-islands/vitepress/logger';
 import { createLogger } from '@docs-islands/vitepress/logger';
-import presets, { hmr, runtime } from '@docs-islands/vitepress/logger/presets';
+import loggerPreset, {
+  vitepress as vitepressLogger,
+} from '@docs-islands/vitepress/logger/presets';
 import type { Plugin } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -72,7 +74,7 @@ describe('public vitepress logger api', () => {
           main: '@docs-islands/vitepress',
         },
       ],
-    } satisfies LoggerConfig;
+    } satisfies ResolvedLoggerConfig;
     const plugin = createVitePressLoggerFacadePlugin(
       TEST_RUNTIME_LOGGER_SCOPE_ID,
       loggingConfig,
@@ -91,7 +93,7 @@ describe('public vitepress logger api', () => {
     expect(sourceCode).toContain(
       `const loggerScopeId = ${JSON.stringify(TEST_RUNTIME_LOGGER_SCOPE_ID)};`,
     );
-    expect(sourceCode).toContain('setScopedLoggerConfig(loggerScopeId');
+    expect(sourceCode).toContain('setResolvedScopedLoggerConfig(loggerScopeId');
     expect(sourceCode).toContain(
       `const loggerConfig = ${JSON.stringify(loggingConfig)};`,
     );
@@ -128,14 +130,18 @@ describe('public vitepress logger api', () => {
   });
 
   it('exposes the public logging preset plugins through the logger presets subpath', () => {
-    expect(presets.hmr).toBe(hmr);
-    expect(hmr.rules.viteAfterUpdate).toEqual({
+    expect(loggerPreset).toBe(vitepressLogger);
+    expect(vitepressLogger.rules.viteAfterUpdate).toEqual({
       group: 'hmr.vite.after-update',
       main: '@docs-islands/vitepress',
     });
-    expect(runtime.rules.renderValidation).toEqual({
+    expect(vitepressLogger.rules.renderValidation).toEqual({
       group: 'runtime.render.validation',
       main: '@docs-islands/core',
     });
+    expect(vitepressLogger.configs.recommended.rules).toHaveProperty(
+      'viteAfterUpdate',
+    );
+    expect(vitepressLogger.configs.hmr.rules).toHaveProperty('viteAfterUpdate');
   });
 });

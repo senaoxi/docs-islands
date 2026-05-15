@@ -34,7 +34,7 @@ describe('ReactRenderController', () => {
     expect(code).toContain('@docs-islands/vitepress/logger');
     expect(code).toContain('@docs-islands/logger/helper');
     expect(code).toContain(
-      "import { formatDebugMessage as __docs_islands_format_debug__ } from '@docs-islands/logger/helper';",
+      'formatDebugMessage as __docs_islands_format_debug__,\n  formatErrorMessage as __docs_islands_format_error__',
     );
     expect(code).toContain(
       "import { createLogger } from '@docs-islands/vitepress/logger';",
@@ -55,9 +55,7 @@ describe('ReactRenderController', () => {
       'const __get_dev_render_duration_ms__ = (start, end)',
     );
     expect(code).toContain('const __log_dev_render_debug__ = (payload)');
-    expect(code).toContain(
-      'const __log_dev_render_info__ = (message, elapsedTimeMs)',
-    );
+    expect(code).toContain('const __log_dev_render_info__ = (message)');
     expect(code).toContain(
       'const __log_dev_render_success__ = (message, elapsedTimeMs)',
     );
@@ -67,13 +65,10 @@ describe('ReactRenderController', () => {
     expect(code).toContain(
       'const __log_dev_render_error__ = (message, elapsedTimeMs)',
     );
-    expect(code).toContain('Logger.info(message, { elapsedTimeMs })');
+    expect(code).toContain('Logger.info(message)');
     expect(code).toContain('Logger.success(message, { elapsedTimeMs })');
     expect(code).toContain('Logger.warn(message, { elapsedTimeMs })');
     expect(code).toContain('Logger.error(message, { elapsedTimeMs })');
-    expect(code).toContain(
-      '__get_dev_render_duration_ms__(detectedAt, __site_debug_now__())',
-    );
     expect(code).toContain(
       '__log_dev_render_success__(`Component ${renderComponentName} render completed (${renderMode})`, renderDurationMs)',
     );
@@ -85,7 +80,13 @@ describe('ReactRenderController', () => {
       '__get_dev_render_duration_ms__(retryWarningStartedAt, __site_debug_now__())',
     );
     expect(code).toContain(
-      '__log_dev_render_error__(`Component ${renderComponentName} render failed: ${error instanceof Error ? error.message : String(error)}`, renderDurationMs)',
+      'const errorMessage = __docs_islands_format_error__(error);',
+    );
+    expect(code).toContain(
+      '__log_dev_render_error__(`Component ${renderComponentName} client:visible render failed: ${errorMessage}`, renderDurationMs)',
+    );
+    expect(code).toContain(
+      '__log_dev_render_error__(`Component ${renderComponentName} render failed: ${errorMessage}`, renderDurationMs)',
     );
     expect(code).toContain('not found`, renderDurationMs);');
     expect(code).toContain(

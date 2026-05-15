@@ -1,7 +1,8 @@
 import {
-  createElapsedLogOptions,
+  createElapsedTimer,
   formatErrorMessage,
 } from '@docs-islands/logger/helper';
+import type { LoggerElapsedLogOptions } from '@docs-islands/logger/types';
 import { createLogger } from '@docs-islands/utils/logger';
 import { getFrameworkRenderStrategyLogGroup } from '../shared/constants/log-groups/runtime';
 import type {
@@ -22,8 +23,6 @@ const getRuntimeNow = (): number =>
   typeof performance !== 'undefined' && typeof performance.now === 'function'
     ? performance.now()
     : Date.now();
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, getRuntimeNow());
 
 export interface DocsRenderStrategyOptions<
   TComponent,
@@ -70,12 +69,12 @@ export class DocsRenderStrategy<TComponent, TBuildMetrics = unknown> {
     level: 'error' | 'info' | 'warn',
     message: string,
     payload?: unknown,
-    startedAt: number = getRuntimeNow(),
+    elapsed?: () => LoggerElapsedLogOptions,
   ): void {
     if (level === 'error') {
-      this.Logger.error(message, elapsedSince(startedAt));
+      this.Logger.error(message, elapsed?.());
     } else {
-      this.Logger[level](message, elapsedSince(startedAt));
+      this.Logger[level](message, elapsed?.());
     }
     this.options.hooks?.onEvent?.({
       level,
@@ -359,7 +358,6 @@ export class DocsRenderStrategy<TComponent, TBuildMetrics = unknown> {
         })[0];
 
         if (info) {
-          const visibleAt = getRuntimeNow();
           this.updateRenderState(info, {
             hasSsrContent: element.innerHTML.trim().length > 0,
             renderMode: this.getRenderMode(
@@ -367,9 +365,10 @@ export class DocsRenderStrategy<TComponent, TBuildMetrics = unknown> {
               element.innerHTML.trim().length > 0,
             ),
             status: 'subscribing',
-            visibleAt,
+            visibleAt: getRuntimeNow(),
           });
 
+          const renderVisibleElapsed = createElapsedTimer();
           this.renderVisibleContainer(info).catch((error) => {
             this.emitEvent(
               'error',
@@ -377,7 +376,7 @@ export class DocsRenderStrategy<TComponent, TBuildMetrics = unknown> {
               {
                 message: formatErrorMessage(error),
               },
-              visibleAt,
+              renderVisibleElapsed,
             );
           });
         }
@@ -465,7 +464,6 @@ export class DocsRenderStrategy<TComponent, TBuildMetrics = unknown> {
   }
 
   public async executeRuntime(context: DocsRuntimeContext): Promise<void> {
-    const executeStartedAt = getRuntimeNow();
     this.renderContext = context;
     const renderContainers = this.collectRenderContainers();
 
@@ -480,6 +478,7 @@ export class DocsRenderStrategy<TComponent, TBuildMetrics = unknown> {
       return;
     }
 
+    const runtimeElapsed = createElapsedTimer();
     try {
       if (context.isInitialLoad) {
         await this.executeInitialRenderStrategy(renderContainers);
@@ -514,7 +513,7 @@ export class DocsRenderStrategy<TComponent, TBuildMetrics = unknown> {
           message: formatErrorMessage(error),
           pageId: context.pageId,
         },
-        executeStartedAt,
+        runtimeElapsed,
       );
     }
   }

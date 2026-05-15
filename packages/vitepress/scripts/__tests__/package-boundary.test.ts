@@ -64,13 +64,13 @@ describe('auditPublishedPackageBoundaries', () => {
 import { defineConfig } from 'vite';
 import { formatDebugMessage } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/vitepress/logger';
-import loggerPresets from '@docs-islands/vitepress/logger/presets';
+import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 import { loggerPlugin } from '@docs-islands/logger/plugin';
 
 export {
   path,
   defineConfig,
-  loggerPresets,
+  vitepressLogger,
   loggerPlugin,
   formatDebugMessage,
   createLogger,
@@ -94,7 +94,7 @@ export const createLogger = () => React;
     );
     writeTextFile(
       path.join(distDir, 'shared', 'logger/presets.js'),
-      `export const hmr = {
+      `export const vitepress = {
   rules: {
     viteAfterUpdate: {
       group: 'hmr.vite.after-update',
@@ -102,8 +102,6 @@ export const createLogger = () => React;
     },
   },
 };
-
-export default { hmr };
 `,
     );
     writeTextFile(

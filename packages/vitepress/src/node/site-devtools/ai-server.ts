@@ -2,6 +2,7 @@ import type {
   SiteDevToolsAnalysisResolvedBuildReportModelConfig,
   SiteDevToolsAnalysisResolvedUserConfig,
 } from '#dep-types/utils';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import {
   buildSiteDevToolsAiAnalysisPrompt,
   getSiteDevToolsAiProviderLabel,
@@ -439,7 +440,6 @@ const runDoubaoAnalysis = async (
     target,
     timeoutMs,
   });
-  const startedAt = Date.now();
 
   if (!capability.available || !providerConfig?.apiKey || !providerModel) {
     throw createExecutionFailure({
@@ -449,7 +449,7 @@ const runDoubaoAnalysis = async (
     });
   }
 
-  logAiRequestStarted(trace, startedAt, loggerScopeId);
+  logAiRequestStarted(trace, loggerScopeId);
 
   const providerApiKey = providerConfig.apiKey;
 
@@ -460,6 +460,7 @@ const runDoubaoAnalysis = async (
       }, timeoutMs)
     : null;
 
+  const elapsed = createElapsedTimer();
   try {
     const response = await fetch(
       `${resolveDoubaoBaseUrl(config)}/chat/completions`,
@@ -524,7 +525,7 @@ const runDoubaoAnalysis = async (
     }
 
     logAiRequestSucceeded({
-      elapsedMs: Date.now() - startedAt,
+      elapsedMs: elapsed().elapsedTimeMs,
       loggerScopeId,
       result: content,
       trace,
@@ -537,7 +538,7 @@ const runDoubaoAnalysis = async (
     };
   } catch (error) {
     logAiRequestFailed({
-      elapsedMs: Date.now() - startedAt,
+      elapsedMs: elapsed().elapsedTimeMs,
       error,
       loggerScopeId,
       trace,
@@ -585,8 +586,6 @@ const runClaudeAnalysis = async (
     target,
     timeoutMs,
   });
-  const startedAt = Date.now();
-
   if (!capability.available || !providerConfig?.apiKey || !providerModel) {
     throw createExecutionFailure({
       detail: formatRequestTraceDetail(trace),
@@ -595,7 +594,7 @@ const runClaudeAnalysis = async (
     });
   }
 
-  logAiRequestStarted(trace, startedAt, loggerScopeId);
+  logAiRequestStarted(trace, loggerScopeId);
 
   const controller = new AbortController();
   const timeout = Number.isFinite(timeoutMs)
@@ -604,6 +603,7 @@ const runClaudeAnalysis = async (
       }, timeoutMs)
     : null;
 
+  const elapsed = createElapsedTimer();
   try {
     const response = await fetch(`${resolveClaudeBaseUrl(config)}/messages`, {
       body: JSON.stringify({
@@ -658,7 +658,7 @@ const runClaudeAnalysis = async (
     }
 
     logAiRequestSucceeded({
-      elapsedMs: Date.now() - startedAt,
+      elapsedMs: elapsed().elapsedTimeMs,
       loggerScopeId,
       result: content,
       trace,
@@ -671,7 +671,7 @@ const runClaudeAnalysis = async (
     };
   } catch (error) {
     logAiRequestFailed({
-      elapsedMs: Date.now() - startedAt,
+      elapsedMs: elapsed().elapsedTimeMs,
       error,
       loggerScopeId,
       trace,

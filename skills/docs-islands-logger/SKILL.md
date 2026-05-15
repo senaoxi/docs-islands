@@ -33,7 +33,7 @@ Use this skill to make production-safe decisions for `@docs-islands/logger`.
 
 - `levels` is an explicit allowlist for `error`, `warn`, `info`, and `success`.
 - `debug` is not a level. In simple config, `debug: true` emits `logger.debug()`.
-- When a normalized `rules` config exists, non-debug logs become allowlisted by enabled rules whose scope and effective levels both match; unmatched logs do not fall back to root `levels`.
+- When normalized rules exist, non-debug logs become allowlisted by resolved rules whose scope and effective levels both match; unmatched logs do not fall back to root `levels`.
 - In current runtime behavior, `logger.debug()` is suppressed when rule mode is active. `debug: true` in rule mode adds contributing rule labels to visible non-debug logs and renders elapsed timing when `{ elapsedTimeMs }` is provided.
 - `info()`, `success()`, `warn()`, and `error()` accept `message` plus optional `{ elapsedTimeMs }`; `debug()` accepts only `message`.
 - Use `formatErrorMessage()` and `formatDebugMessage()` from `@docs-islands/logger/helper` to turn structured data into strings before logging.

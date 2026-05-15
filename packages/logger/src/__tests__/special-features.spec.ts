@@ -45,10 +45,10 @@ describe('Integration: Special Features', () => {
       setLoggerConfig({
         debug: false,
         levels: ['success'],
-        rules: [
-          { label: 'Test1', group: 'test.success.default' },
-          { label: 'Test2', message: '*completed*', levels: ['success'] },
-        ],
+        rules: {
+          Test1: { group: 'test.success.default', levels: 'inherit' },
+          Test2: { message: '*completed*', levels: ['success'] },
+        },
       });
 
       const loggerA = createLogger({
@@ -77,10 +77,10 @@ describe('Integration: Special Features', () => {
       setLoggerConfig({
         debug: true,
         levels: ['success'],
-        rules: [
-          { label: 'Test1', group: 'test.success.default' },
-          { label: 'Test2', message: '*completed*', levels: ['success'] },
-        ],
+        rules: {
+          Test1: { group: 'test.success.default', levels: 'inherit' },
+          Test2: { message: '*completed*', levels: ['success'] },
+        },
       });
 
       const loggerA2 = createLogger({
@@ -108,10 +108,10 @@ describe('Integration: Special Features', () => {
       // Test with debug: false
       setLoggerConfig({
         debug: false,
-        rules: [
-          { label: 'Test1', group: 'test.case.?1', levels: ['warn'] },
-          { label: 'Test2', message: 'task-[ab]', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { group: 'test.case.?1', levels: ['warn'] },
+          Test2: { message: 'task-[ab]', levels: ['error'] },
+        },
       });
 
       const loggerA = createLogger({
@@ -150,10 +150,10 @@ describe('Integration: Special Features', () => {
       // Test with debug: true
       setLoggerConfig({
         debug: true,
-        rules: [
-          { label: 'Test1', group: 'test.case.?1', levels: ['warn'] },
-          { label: 'Test2', message: 'task-[ab]', levels: ['error'] },
-        ],
+        rules: {
+          Test1: { group: 'test.case.?1', levels: ['warn'] },
+          Test2: { message: 'task-[ab]', levels: ['error'] },
+        },
       });
 
       const loggerA2 = createLogger({

@@ -145,6 +145,26 @@ export class ScopedLogger {
 
 export default Logger;
 
+/**
+ * Creates a logger instance for a specific scope with a given main module identifier.
+ *
+ * This function returns a Logger instance that can create scoped loggers by group,
+ * filtered according to the configuration registered for the given scope. If no
+ * configuration exists for the scope, an error is thrown.
+ *
+ * @param options - Logger creation options containing the main module name
+ * @param scopeId - The identifier for the logger scope; determines which configuration is used
+ * @returns A logger instance for the specified scope
+ * @throws {Error} If no logger configuration is registered for the provided scope ID
+ *
+ * @example
+ * ```ts
+ * // Create a logger for a custom scope
+ * const customLogger = createScopedLogger({ main: 'analyzer' }, 'custom-scope');
+ * const groupLogger = customLogger.getLoggerByGroup('vitepress');
+ * groupLogger.info('Message');
+ * ```
+ */
 export const createScopedLogger = (
   options: CreateLoggerOptions,
   scopeId: LoggerScopeId,
@@ -154,6 +174,23 @@ export const createScopedLogger = (
   return Logger.getOrCreate(options.main, normalizedScopeId);
 };
 
+/**
+ * Creates a logger instance using the default logger scope.
+ *
+ * This is a convenience wrapper around createScopedLogger() that automatically
+ * uses the default scope. Use this for general-purpose logging in applications
+ * that don't require multiple logger scopes.
+ *
+ * @param options - Logger creation options containing the main module name
+ * @returns A logger instance for the default scope
+ *
+ * @example
+ * ```ts
+ * const logger = createLogger({ main: 'app' });
+ * const groupLogger = logger.getLoggerByGroup('startup');
+ * groupLogger.info('Application initialized');
+ * ```
+ */
 export function createLogger(options: CreateLoggerOptions): Logger {
   return createScopedLogger(options, DEFAULT_LOGGER_SCOPE_ID);
 }

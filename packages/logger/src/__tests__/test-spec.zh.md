@@ -1,2693 +1,1301 @@
-# Logger 规则匹配测试规范
+# Logger 测试规范（packages/logger 最新实现范式，中文）
 
-## 1. 规范前提
+> 目标：本文档作为 `docs-islands` monorepo 中 `packages/logger` 子项目的测试规范样本。后续新增或迁移测试必须遵守本文档定义的 public config / resolved config 分层、rule allowlist 语义、debug 诊断语义、scoped API、preset plugin merge、输出格式以及构建期 tree-shaking 约束。
+>
+> 范围：本文只覆盖 logger 的核心能力。`@docs-islands/logger/helper` 中的通用工具函数（例如 `formatElapsedTime`、`createElapsedLogOptions`、`formatDebugMessage`、`formatErrorMessage`）不单独设计工具函数测试；只在 runtime 输出测试中验证 elapsed time 的可观察效果。
 
-以下语义被视为本测试文档的前提；若实现与此前提不一致，则测试应视为失败或规范待修订。
+## 0. 源码基线
 
-### 1.1 Rule 结构
+本规范以 `XiSenao/docs-islands` 仓库 commit `a8389948688e538df82ee510fb30ed2dec983e86` 的实现为基线。核心实现文件：
+
+| 文件                                                                | 覆盖能力                                                                                |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `packages/logger/src/types/index.ts`                                | public / resolved 配置类型、日志级别、core API 类型                                     |
+| `packages/logger/src/core/helper/normalize.ts`                      | public config 标准化、resolved config 标准化、输入校验、preset plugin merge、`off` 删除 |
+| `packages/logger/src/core/config.ts`                                | 配置注册表、scope 解析、rule-mode allowlist、debug 判定、`shouldSuppressLog`            |
+| `packages/logger/src/core/factory.ts`                               | `createLogger` / `createScopedLogger`、main/group 规范化、logger cache                  |
+| `packages/logger/src/core/console.ts` 与 `src/constants/console.ts` | Node / Browser 输出格式、console method 映射                                            |
+| `packages/logger/src/plugin/index.ts`                               | unplugin 适配器、runtime define 注入、build/dev tree-shaking 开关                       |
+| `packages/logger/src/plugin/transform.ts`                           | 静态日志裁剪 AST 识别与保守保留策略                                                     |
+| `packages/logger/package.json`                                      | package exports 与测试导入路径                                                          |
+
+## 1. API 与导入边界
+
+测试必须按实际 package export 选择入口：
 
 ```ts
-export interface LoggerRule {
-  enabled?: boolean;
+// Root public API
+import { createLogger, resetLoggerConfig, setLoggerConfig } from '@docs-islands/logger';
+
+// Core integration API
+import {
+  createScopedLogger,
+  getScopedLoggerConfig,
+  resetScopedLoggerConfig,
+  resolveLoggerConfig,
+  setResolvedLoggerConfig,
+  setResolvedScopedLoggerConfig,
+  setScopedLoggerConfig,
+  shouldSuppressLog,
+} from '@docs-islands/logger/core';
+
+// Build plugin API
+import { loggerPlugin, transformLoggerTreeShaking } from '@docs-islands/logger/plugin';
+
+// Types
+import type {
+  LoggerConfig,
+  LoggerPresetPlugin,
+  ResolvedLoggerConfig,
+} from '@docs-islands/logger/types';
+```
+
+不应从内部文件路径导入私有 helper 来写核心测试。测试可以使用 `@docs-islands/logger/core/helper` 验证 exported normalization API，但不为非核心工具函数创建独立规范用例。
+
+## 2. 配置模型规范
+
+### 2.1 Public `LoggerConfig`
+
+Public config 被 `setLoggerConfig`、`setScopedLoggerConfig`、`resolveLoggerConfig` 和 `loggerPlugin({ config })` 消费。
+
+```ts
+type LoggerVisibilityLevel = 'error' | 'warn' | 'info' | 'success';
+type LoggerRuleLevelsUserConfig = 'inherit' | LoggerVisibilityLevel[];
+type LoggerRuleSetting = 'off' | LoggerRuleUserConfig;
+
+interface LoggerRuleUserConfig {
+  group?: string;
+  levels: LoggerRuleLevelsUserConfig;
+  main?: string;
+  message?: string;
+}
+
+interface LoggerConfig {
+  debug?: boolean;
+  extends?: string[];
+  levels?: LoggerVisibilityLevel[];
+  plugins?: LoggerPluginMap;
+  rules?: Record<string, LoggerRuleSetting | undefined>;
+}
+```
+
+约束：
+
+1. public `rules` 必须是 object map，不能是 array。
+2. public rule label 来自 `rules` 的 key，不来自 rule body。
+3. public rule object 只允许 `main`、`group`、`message`、`levels`。
+4. public rule object 必须显式声明 `levels`。
+5. 要继承根 `levels`，必须写 `levels: 'inherit'`。
+6. `'off'` 是 merge / 标准化阶段的删除操作，不是 runtime deny rule。
+7. public `levels` 省略时，`resolveLoggerConfig({})` 会生成默认 visible levels：`['error', 'warn', 'info', 'success']`。默认 runtime scope 在未显式配置时使用 `DEFAULT_LOGGER_CONFIG`，其显式顺序为 `['info', 'success', 'warn', 'error']`；运行时以 `Set` 判定，顺序不影响可见性。
+
+标准 public 范式：
+
+```ts
+const logging = {
+  debug: true,
+  levels: ['warn', 'error'],
+  rules: {
+    BuildWarn: {
+      group: 'build.pipeline',
+      levels: 'inherit',
+    },
+    TimeoutError: {
+      message: '*timeout*',
+      levels: ['error'],
+    },
+  },
+} satisfies LoggerConfig;
+```
+
+禁止旧范式：
+
+```ts
+const logging = {
+  rules: [
+    {
+      label: 'BuildWarn',
+      group: 'build.pipeline',
+    },
+  ],
+};
+```
+
+### 2.2 Resolved `ResolvedLoggerConfig`
+
+Resolved config 被 `setResolvedLoggerConfig`、`setResolvedScopedLoggerConfig` 和内部标准化结果消费。
+
+```ts
+interface ResolvedLoggerRule {
   group?: string;
   label: string;
   levels?: LoggerVisibilityLevel[];
   main?: string;
   message?: string;
 }
+
+interface ResolvedLoggerConfig {
+  debug?: boolean;
+  levels?: LoggerVisibilityLevel[];
+  rules?: ResolvedLoggerRule[];
+}
 ```
 
-### 1.2 `enabled` 语义
+约束：
 
-- `enabled` 默认值为 `true`
-- 当用户未指定 `enabled` 时，等价于 `enabled: true`
-- 当 `enabled: false` 时，该 rule **完全不起作用**
-- “完全不起作用”的含义是：
-  1. 不参与 scope 匹配
-  2. 不参与 level 放行判定
-  3. 不参与 debug label 输出
-- 因此，在规则求值时应先做预过滤：
+1. resolved `rules` 必须是 array；object map 非法。
+2. 每条 resolved rule 必须有非空 `label`。
+3. `label: '<root>'` 是保留值，非法。
+4. resolved rule label 必须唯一。
+5. resolved rule 的 `levels` 可以省略；省略时 runtime 按 `rule.levels ?? config.levels ?? defaultResolvedLevels` 计算。
+6. resolved `rules: []` 会标准化为无 active rules；若同时没有 `debug` 与 `levels`，整个 resolved config 会标准化为 `undefined`。
+
+### 2.3 生效 level 与 debug 判定
+
+对日志 `(main, group, kind, message)`：
 
 ```ts
-const activeRules = logging.rules.filter((rule) => rule.enabled !== false);
+effectiveLevels(rule) = rule.levels ?? config.levels ?? defaultResolvedLevels;
+defaultResolvedLevels = new Set(['error', 'warn', 'info', 'success']);
 ```
 
-### 1.3 生效 levels
+运行时输出决策：
 
-当 `logging.rules` 经过标准化后存在时，对 **activeRules** 计算：
+1. `kind === 'debug'`：只有“无 active rules 且 `debug === true`”时输出；只要存在 active rules，`debug` 日志始终 suppressed。
+2. `kind` 为 `error | warn | info | success` 且无 active rules：只按根 `levels` 判定；`debug: true` 只决定是否追加 elapsed time。
+3. `kind` 为 `error | warn | info | success` 且存在 active rules：进入 allowlist rule-mode。
+   - 先筛 scope 命中的 rules。
+   - `main`、`group`、`message` 条件为 AND。
+   - 当前 level 命中任一 scope 命中 rule 的 `effectiveLevels(rule)` 才输出。
+   - 无 contributing rule 时不输出，且不会 fallback 到根 `levels`。
+   - `debug: true` 时，输出只包含 contributing rules 的 labels。
+
+### 2.4 匹配语义
+
+| 字段      | 规则                                                                                                            |
+| --------- | --------------------------------------------------------------------------------------------------------------- |
+| `main`    | trim 后的字符串精确匹配；不支持 glob。即使含 `*` 也按字面量匹配。                                               |
+| `group`   | rule pattern 先 trim；空字符串视为未声明。无 glob magic 时精确匹配；有 glob magic 时使用 `picomatch(pattern)`。 |
+| `message` | 与 `group` 相同；未传 message 的 helper 判定按空字符串处理。                                                    |
+
+当前 glob magic 检测字符集：`! ( ) * + ? [ ] { }`。稳定测试必须覆盖 `*`、`?`、`[]`；补充测试应覆盖当前 picomatch 支持的 `{}` 与 extglob `@(...)`。
+
+### 2.5 Logger 命名约束
+
+`createLogger({ main })` 会 trim `main`，trim 后不能为空；不强制必须是 npm package 名，因此 `@docs-islands/*` 这类字符串可作为字面量 main 参与精确匹配。
+
+`getLoggerByGroup(group)` 会 trim `group`，trim 后不能为空，并要求 group 是小写点分命名空间：
+
+```txt
+segment(.segment)*
+segment = lowercase letters / digits，并允许内部 `_` 或 `-`
+```
+
+合法：`build.pipeline`、`runtime.react_dom`、`test.case.b_1`。非法：`@scope/pkg`、`test:case`、`Test.Case`、`test.`、`test._bad`。
+
+### 2.6 输出格式
+
+Node 环境输出应先剥离 ANSI escape codes 再断言：
+
+```txt
+[label-prefix] main[group]: message [elapsed]
+```
+
+Browser 环境输出 styled console：
 
 ```ts
-effectiveLevels(rule) = rule.levels ?? logging.levels ?? defaultResolvedLevels;
+console[level](
+  '[Label] %cmain%c[%cgroup%c]: %cmessage 42.00ms',
+  mainStyle,
+  dimStyle,
+  groupStyle,
+  dimStyle,
+  messageStyle,
+);
 ```
 
-`defaultResolvedLevels` 为 `error | warn | info | success`。
+Console method 映射：
 
-### 1.4 输出判定（存在 `logging.rules` 时）
+| kind      | console method  |
+| --------- | --------------- |
+| `info`    | `console.log`   |
+| `success` | `console.log`   |
+| `warn`    | `console.warn`  |
+| `error`   | `console.error` |
+| `debug`   | `console.debug` |
 
-对于一条日志消息 `(main, group, level, message)`：
+### 2.7 测试公共约定
 
-1. 先标准化 `logging.rules`；空数组按“未配置 rules”处理
-2. 从标准化后的 `logging.rules` 中滤掉 `enabled: false` 的 rule，得到 `activeRules`
-3. 从 `activeRules` 中筛选出所有 **scope 命中**的 rule
-4. scope 命中规则：
-   - 若 rule 声明了 `main`，则 `main` 必须命中
-   - 若 rule 声明了 `group`，则 `group` 必须命中
-   - 若 rule 声明了 `message`，则 `message` 必须命中
-   - 多个已声明字段之间为 **AND**
-5. 若当前日志 `level` 命中任意一条已命中 rule 的 `effectiveLevels(rule)`，则输出
-6. 当标准化后的 `logging.rules` 存在时，是否输出**只看 activeRules**；不会 fallback 到全局默认 level 判定
+```ts
+const ELAPSED = { elapsedTimeMs: 42 };
+const TIME = '42.00ms';
+```
 
-> 重要：
->
-> - `logging.rules === undefined` 与 “标准化后存在 `rules` 但全部被 `enabled: false` 过滤掉” 不是同一语义
-> - 前者走“无 `rules` 默认行为”
-> - 后者走“有 `rules` 但无 active rule”，因此**不输出**
+`<TIME>` 在预期输出中等价于 `42.00ms`。只有当当前日志可见、`debug: true` 触发 `appendElapsedTime`，并且调用传入 `options.elapsedTimeMs` 时，才追加 `<TIME>`。`logger.debug(message)` 不接收 options，也不追加 elapsed time。
 
-### 1.5 默认输出行为（不存在 `logging.rules` 时）
+每个测试应隔离全局状态：
 
-当用户**没有配置** `logging.rules` 时：
+```ts
+afterEach(() => {
+  resetLoggerConfig();
+  resetScopedLoggerConfig('scope-a');
+  resetScopedLoggerConfig('scope-b');
+  vi.restoreAllMocks();
+  delete (globalThis as any).window;
+  delete (globalThis as any).document;
+});
+```
 
-- 如果也没有配置 `logging.levels`：
-  - `debug = false`：默认输出 `error | warn | info | success`
-  - `debug = true`：默认输出 `error | warn | info | success | debug`
-- 如果配置了 `logging.levels`：
-  - 非 debug 日志输出遵循 `logging.levels`
-  - `debug` 级别输出由 `debug = true` 控制
+建议使用唯一 scope id，避免全局 registry 与 logger cache 对跨用例断言产生干扰。
 
-> 注：
->
-> - 本文档按“未配置 `logging.rules`”理解为标准化后的 `logging.rules === undefined`
-> - `rules: []` 会标准化为“未配置 rules”，因此与 `rules === undefined` 走相同默认行为
+## 3. 完整测试用例目录
 
-### 1.6 debug 语义
+### A. Config 标准化与校验
 
-- `debug = false`：输出普通日志前缀
-- `debug = true`：
-  - 若存在 contributing rules，则在普通日志前缀前附加**当前这条消息 scope 与 level 都命中的 active rule labels**
-  - 对 `error | warn | info | success` 四类日志，在**消息末尾额外附加相对耗时**
-  - 相对耗时以 `ms` 展示，例如 `12.34ms`
-  - `debug` 级别日志是否附加耗时，当前仅按补充信息约束为：**不强制要求**
+#### Case A1：public empty config 标准化
 
-### 1.7 测试中的耗时固定方式
+验证：`resolveLoggerConfig({})` 返回默认 levels；`rules` 省略；`debug` 省略。
 
-为保证 debug 场景可重复断言，本文档统一要求：
+```ts
+expect(resolveLoggerConfig({})).toEqual({
+  levels: ['error', 'warn', 'info', 'success'],
+});
+```
 
-- 所有预期包含 `<TIME>` 的 debug 用例都必须提供确定性的 logger 相对耗时
-- 预期输出中的 `<TIME>` 为相对耗时字段的占位符
-- 实现应以 `ms` 格式输出该字段，例如 `42.00ms`
-- 测试可以通过 `LoggerLogOptions.elapsedTimeMs` 直接提供确定性数值，也可以在使用耗时 helper 时通过 fake timers / mock monotonic clock 间接提供
-- 高风险与补充性合规测试应通过**标准化完整输出断言**校验该值
-- Node.js 场景中，测试应先剥离 ANSI 颜色转义序列，再进行完整输出比较
+同时验证默认 runtime fallback：未调用 `setLoggerConfig` 时创建 default logger，`info/success/warn/error` 可见，`debug` 不可见。
 
-> 也就是说：本文档关注的是“**需要携带确定性的相对耗时**”，并要求以 `ms` 展示。宽矩阵用例仍可使用调用次数、顺序、模式断言；新增的严格覆盖应优先使用标准化完整输出断言。
+#### Case A2：public root levels 校验
 
-### 1.8 匹配语义
+验证：
 
-本文档统一采用如下匹配语义：
+```ts
+expect(() => resolveLoggerConfig({ levels: 'warn' as any })).toThrow(
+  'The root-level "levels" field should either be undefined or filled with an array format.',
+);
+expect(() => resolveLoggerConfig({ levels: ['warn', 'warn'] as any })).toThrow(
+  'Duplicate level warn are present.',
+);
+expect(() => resolveLoggerConfig({ levels: ['debug'] as any })).toThrow(
+  'Not supported to parse debug.',
+);
+expect(resolveLoggerConfig({ levels: [] })).toEqual({ levels: [] });
+```
 
-- `main`：**仅支持准确匹配**
-- `group`：支持**准确匹配**与 **match 匹配**
-- `message`：支持**准确匹配**与 **match 匹配**
+#### Case A3：public rules 必须是 object map
 
-#### 1.8.1 `main`
+```ts
+expect(() => resolveLoggerConfig({ rules: [] as any })).toThrow(TypeError);
+expect(() => resolveLoggerConfig({ rules: [] as any })).toThrow(
+  'logger.rules must be an object map, not an array.',
+);
+expect(() => resolveLoggerConfig({ rules: null as any })).toThrow(
+  'logger.rules must be an object map.',
+);
+```
 
-- `main` 不支持 picomatch
-- 仅按字符串全等匹配
+#### Case A4：public rule body 校验
 
-#### 1.8.2 `group` / `message`
+```ts
+expect(() =>
+  resolveLoggerConfig({
+    rules: {
+      MissingLevels: { group: 'build.pipeline' } as any,
+    },
+  }),
+).toThrow('logger.rules["MissingLevels"] rule objects must declare "levels".');
 
-- 当 pattern 中**不包含 glob magic** 时，按**准确匹配**
-- 当 pattern 中包含 glob magic 时，按 **picomatch** 语义匹配
-- 本文档显式覆盖的 glob magic 包括：
-  - `*`
-  - `?`
-  - 字符类 `[]`
+expect(() =>
+  resolveLoggerConfig({
+    rules: {
+      ExtraKey: { group: 'build.pipeline', levels: 'inherit', label: 'x' } as any,
+    },
+  }),
+).toThrow('rule objects only support "main", "group", "message", and "levels".');
 
-> 注：
->
-> - 实际实现既然基于 picomatch，理论上还支持更丰富的 glob 语法
-> - 但本测试文档只对已显式覆盖的语法承担规范承诺
-> - 对 extglob、brace expansion 等高级能力，若实现要作为稳定行为暴露，建议再补独立 case
+expect(() =>
+  resolveLoggerConfig({
+    rules: {
+      BadLevels: { levels: 'warn' as any },
+    },
+  }),
+).toThrow('levels must be "inherit" or an array of logger visibility levels.');
+```
 
-#### 1.8.3 示例
+#### Case A5：`levels: 'inherit'` 与显式 rule levels
 
-- `group = 'test.case.a'` 仅匹配 `test.case.a`
-- `group = 'test.case.*'` 匹配 `test.case.a`、`test.case.b_1`
-- `message = 'request timeout'` 仅匹配 `request timeout`
-- `message = '*timeout*'` 匹配 `request timeout`
-- `group = 'test.case.?1'` 可匹配 `test.case.a1`
-- `message = 'task-[ab]'` 可匹配 `task-a`、`task-b`
-
-### 1.9 本文档的覆盖承诺
-
-本文档覆盖以下规则形态与运行时行为：
-
-1. `enabled`
-
-   - 缺失（默认 `true`）
-   - 显式 `true`
-   - 显式 `false`
-
-2. `main`
-
-   - 缺失
-   - 准确匹配
-
-3. `group`
-
-   - 缺失
-   - 准确匹配
-   - picomatch match 匹配
-
-4. `message`
-
-   - 缺失
-   - 准确匹配
-   - picomatch match 匹配
-
-5. `levels` 来源
-
-   - 继承 `logging.levels`
-   - 使用 `rule.levels`
-   - `rule.levels` 与 `logging.levels` 均缺失时 fallback 到 `defaultResolvedLevels`
-   - 无 `rules` 时走默认输出行为
-
-6. level 类型
-
-   - `error`
-   - `warn`
-   - `info`
-   - `success`
-   - `debug`（仅无 `rules` 且 `debug = true` 的默认行为）
-
-7. debug 输出增强
-   - rule labels
-   - 相对耗时 `<TIME>`
-
-### 1.10 未在本文档中定义的行为
-
-以下行为当前**不纳入规范承诺**，只能视为待补充测试前的开放项：
-
-- `main` 是否未来会支持 match
-- `message` / `group` 的大小写敏感性
-- `*` / `?` / `[]` 在多行字符串 message 上的行为
-- 空字符串 `message` 的匹配行为
-- 超出已显式覆盖的 `*`、`?`、`[]` 之外的 picomatch 语法稳定语义
-
----
-
-## 2. 审查结论
-
-### 2.1 完整性
-
-当前测试集已经覆盖：
-
-- 默认 `enabled = true`
-- 显式 `enabled = true`
-- 显式 `enabled = false`
-- 默认 `levels` 继承
-- 默认 resolved levels fallback
-- `rule.levels` 显式覆盖
-- 无 scope rule
-- `main` 准确匹配
-- `group` 准确匹配
-- `group` picomatch 匹配
-- `message` 准确匹配
-- `message` picomatch 匹配
-- `main + group`
-- `main + message`
-- `group + message`
-- `main + group + message`
-- 无 `rules` 时的默认输出
-- `rules: []` 标准化为无 rules 行为
-- debug label 输出与顺序
-- debug 下相对耗时后缀，以及严格/补充断言中的固定值
-- `success` / `debug` 级别的关键行为
-- `enabled: false` 对匹配、放行、label 的全面屏蔽
-
-### 2.2 可靠性
-
-当前测试集不仅验证“应该输出”，也验证“不得输出”，覆盖了：
-
-- scope 不命中
-- level 不命中
-- message 不命中
-- group 不命中
-- main 不命中
-- 多条件组合中任一字段不命中的反例
-- 无 `rules` 时 debug / non-debug 的默认差异
-- 高风险与补充 debug 场景的标准化完整输出断言
-- picomatch 基础 magic（`*`, `?`, `[]`）的冒烟验证
-- `enabled: false` 下：
-  - 单 rule 失效
-  - 多 rule 重叠时不参与 union
-  - 不参与 label
-  - 全字段命中仍无效
-
-### 2.3 组合覆盖要求
-
-按本次修订要求：
-
-- `message` 与 `group` 均支持 **准确匹配** 与 **match 匹配**
-- `main` 仅支持 **准确匹配**
-- `main / group / message / levels` 的组合项必须完全覆盖
-- `enabled` 的默认、显式 true、显式 false 必须被覆盖
-- debug 模式下 `error | warn | info | success` 必须携带相对耗时信息
-- 无 `rules` 时必须按默认级别集合输出
-
-本文档末尾的覆盖矩阵已对上述要求进行逐项映射。
-
----
-
-## 3. 测试用例
-
-## Case 1
-
-验证点：
-
-- 无 scope 限制的 rule 命中全部日志
-- `rule.levels` 缺失时继承 `logging.levels`
-- 多个 rule 同时命中时，debug label 全部展示
-
-```ts [config.ts]
-const logging = {
-  debug: false,
+```ts
+expect(
+  resolveLoggerConfig({
+    levels: ['warn', 'error'],
+    rules: {
+      Inherit: { group: 'build.pipeline', levels: 'inherit' },
+      Explicit: { message: '*timeout*', levels: ['error'] },
+    },
+  }),
+).toEqual({
   levels: ['warn', 'error'],
   rules: [
-    {
-      label: 'Test1',
-    },
-    {
-      label: 'Test2',
-    },
+    { label: 'Inherit', group: 'build.pipeline' },
+    { label: 'Explicit', message: '*timeout*', levels: ['error'] },
   ],
-};
+});
 ```
 
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.a');
+#### Case A6：`off` 删除语义
 
-Logger_A.info('message A_a');
-Logger_A.warn('message A_b_1');
-Logger_A.warn('message A_b_2');
-Logger_A.error('message A_c');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.a]: message A_b_1
-@docs-islands/test[test.case.a]: message A_b_2
-@docs-islands/test[test.case.a]: message A_c
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1][Test2] @docs-islands/test[test.case.a]: message A_b_1 <TIME>
-[Test1][Test2] @docs-islands/test[test.case.a]: message A_b_2 <TIME>
-[Test1][Test2] @docs-islands/test[test.case.a]: message A_c <TIME>
-```
-
----
-
-## Case 2
-
-验证点：
-
-- `rule.levels` 可覆盖默认 `logging.levels`
-- 最终允许 level 来自所有命中 rule 的并集
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-    },
-    {
-      label: 'Test2',
-      levels: ['warn', 'info'],
-    },
-  ],
-};
-```
-
-等价于：
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      levels: ['warn', 'error'],
-    },
-    {
-      label: 'Test2',
-      levels: ['warn', 'info'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.a');
-
-Logger_A.info('message A_a');
-Logger_A.warn('message A_b_1');
-Logger_A.warn('message A_b_2');
-Logger_A.error('message A_c');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.a]: message A_a
-@docs-islands/test[test.case.a]: message A_b_1
-@docs-islands/test[test.case.a]: message A_b_2
-@docs-islands/test[test.case.a]: message A_c
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test2] @docs-islands/test[test.case.a]: message A_a <TIME>
-[Test1][Test2] @docs-islands/test[test.case.a]: message A_b_1 <TIME>
-[Test1][Test2] @docs-islands/test[test.case.a]: message A_b_2 <TIME>
-[Test1] @docs-islands/test[test.case.a]: message A_c <TIME>
-```
-
----
-
-## Case 3
-
-验证点：
-
-- `main` 支持 scope 匹配
-- 未声明 `main` 的 rule 为全局 rule
-- 多 rule 命中时按 union 放行
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      levels: ['warn'],
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test',
-    },
-    {
-      label: 'Test3',
-      levels: ['warn', 'info'],
-      main: '@docs-islands/test_b',
-    },
-    {
-      label: 'Test4',
-      levels: ['error'],
-      main: '@docs-islands/test_b',
-    },
-  ],
-};
-```
-
-等价于：
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      levels: ['warn'],
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test',
-      levels: ['warn', 'error'],
-    },
-    {
-      label: 'Test3',
-      levels: ['warn', 'info'],
-      main: '@docs-islands/test_b',
-    },
-    {
-      label: 'Test4',
-      levels: ['error'],
-      main: '@docs-islands/test_b',
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.a');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.case.b');
-
-Logger_A.info('message A_a');
-Logger_A.warn('message A_b_1');
-Logger_A.warn('message A_b_2');
-Logger_A.error('message A_c');
-
-Logger_B.info('message B_a');
-Logger_B.warn('message B_b_1');
-Logger_B.warn('message B_b_2');
-Logger_B.error('message B_c');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.a]: message A_b_1
-@docs-islands/test[test.case.a]: message A_b_2
-@docs-islands/test[test.case.a]: message A_c
-@docs-islands/test_b[test.case.b]: message B_a
-@docs-islands/test_b[test.case.b]: message B_b_1
-@docs-islands/test_b[test.case.b]: message B_b_2
-@docs-islands/test_b[test.case.b]: message B_c
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1][Test2] @docs-islands/test[test.case.a]: message A_b_1 <TIME>
-[Test1][Test2] @docs-islands/test[test.case.a]: message A_b_2 <TIME>
-[Test2] @docs-islands/test[test.case.a]: message A_c <TIME>
-[Test3] @docs-islands/test_b[test.case.b]: message B_a <TIME>
-[Test1][Test3] @docs-islands/test_b[test.case.b]: message B_b_1 <TIME>
-[Test1][Test3] @docs-islands/test_b[test.case.b]: message B_b_2 <TIME>
-[Test4] @docs-islands/test_b[test.case.b]: message B_c <TIME>
-```
-
----
-
-## Case 4
-
-验证点：
-
-- `group` 支持 scope 匹配
-- `group` 匹配与 `main` 无关，除非 rule 同时声明 `main`
-- `group` 不命中时无输出
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.a',
-    },
-  ],
-};
-```
-
-等价于：
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.a',
-      levels: ['warn', 'error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.a');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.case.a');
-
-const Logger_A_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.b');
-
-Logger_A.info('message A_a');
-Logger_A.warn('message A_b_1');
-Logger_A.warn('message A_b_2');
-Logger_A.error('message A_c');
-
-Logger_B.info('message B_a');
-Logger_B.warn('message B_b_1');
-Logger_B.warn('message B_b_2');
-Logger_B.error('message B_c');
-
-Logger_A_B.info('message A_B_a');
-Logger_A_B.warn('message A_B_b_1');
-Logger_A_B.warn('message A_B_b_2');
-Logger_A_B.error('message A_B_c');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.a]: message A_b_1
-@docs-islands/test[test.case.a]: message A_b_2
-@docs-islands/test[test.case.a]: message A_c
-@docs-islands/test_b[test.case.a]: message B_b_1
-@docs-islands/test_b[test.case.a]: message B_b_2
-@docs-islands/test_b[test.case.a]: message B_c
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.a]: message A_b_1 <TIME>
-[Test1] @docs-islands/test[test.case.a]: message A_b_2 <TIME>
-[Test1] @docs-islands/test[test.case.a]: message A_c <TIME>
-[Test1] @docs-islands/test_b[test.case.a]: message B_b_1 <TIME>
-[Test1] @docs-islands/test_b[test.case.a]: message B_b_2 <TIME>
-[Test1] @docs-islands/test_b[test.case.a]: message B_c <TIME>
-```
-
----
-
-## Case 5
-
-验证点：
-
-- `group` 支持 `*` 通配
-- 多个 group rule 可同时命中
-- `message` 未参与限制时，不影响放行
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.b*',
-    },
-    {
-      label: 'Test2',
-      group: 'test.case.*',
-      levels: ['warn'],
-    },
-    {
-      label: 'Test3',
-      group: 'test.*',
-      levels: ['info'],
-    },
-    {
-      label: 'Test4',
-      group: 'test.*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-等价于：
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.b*',
-      levels: ['warn', 'error'],
-    },
-    {
-      label: 'Test2',
-      group: 'test.case.*',
-      levels: ['warn'],
-    },
-    {
-      label: 'Test3',
-      group: 'test.*',
-      levels: ['info'],
-    },
-    {
-      label: 'Test4',
-      group: 'test.*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.a');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.case.b_1');
-
-const Logger_A_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.b_2');
-
-const Logger_A_B_C = createLogger({
-  main: '@docs-islands/test_c',
-}).getLoggerByGroup('test.c');
-
-Logger_A.info('message A_a');
-Logger_A.warn('message A_b_1');
-Logger_A.warn('message A_b_2');
-Logger_A.error('message A_c');
-
-Logger_B.info('message B_a');
-Logger_B.warn('message B_b_1');
-Logger_B.warn('message B_b_2');
-Logger_B.error('message B_c');
-
-Logger_A_B.info('message A_B_a');
-Logger_A_B.warn('message A_B_b_1');
-Logger_A_B.warn('message A_B_b_2');
-Logger_A_B.error('message A_B_c');
-
-Logger_A_B_C.info('message A_B_C_a');
-Logger_A_B_C.warn('message A_B_C_b_1');
-Logger_A_B_C.warn('message A_B_C_b_2');
-Logger_A_B_C.error('message A_B_C_c');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.a]: message A_a
-@docs-islands/test[test.case.a]: message A_b_1
-@docs-islands/test[test.case.a]: message A_b_2
-@docs-islands/test[test.case.a]: message A_c
-@docs-islands/test_b[test.case.b_1]: message B_a
-@docs-islands/test_b[test.case.b_1]: message B_b_1
-@docs-islands/test_b[test.case.b_1]: message B_b_2
-@docs-islands/test_b[test.case.b_1]: message B_c
-@docs-islands/test[test.case.b_2]: message A_B_a
-@docs-islands/test[test.case.b_2]: message A_B_b_1
-@docs-islands/test[test.case.b_2]: message A_B_b_2
-@docs-islands/test[test.case.b_2]: message A_B_c
-@docs-islands/test_c[test.c]: message A_B_C_a
-@docs-islands/test_c[test.c]: message A_B_C_c
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test3] @docs-islands/test[test.case.a]: message A_a <TIME>
-[Test2] @docs-islands/test[test.case.a]: message A_b_1 <TIME>
-[Test2] @docs-islands/test[test.case.a]: message A_b_2 <TIME>
-[Test4] @docs-islands/test[test.case.a]: message A_c <TIME>
-[Test3] @docs-islands/test_b[test.case.b_1]: message B_a <TIME>
-[Test1][Test2] @docs-islands/test_b[test.case.b_1]: message B_b_1 <TIME>
-[Test1][Test2] @docs-islands/test_b[test.case.b_1]: message B_b_2 <TIME>
-[Test1][Test4] @docs-islands/test_b[test.case.b_1]: message B_c <TIME>
-[Test3] @docs-islands/test[test.case.b_2]: message A_B_a <TIME>
-[Test1][Test2] @docs-islands/test[test.case.b_2]: message A_B_b_1 <TIME>
-[Test1][Test2] @docs-islands/test[test.case.b_2]: message A_B_b_2 <TIME>
-[Test1][Test4] @docs-islands/test[test.case.b_2]: message A_B_c <TIME>
-[Test3] @docs-islands/test_c[test.c]: message A_B_C_a <TIME>
-[Test4] @docs-islands/test_c[test.c]: message A_B_C_c <TIME>
-```
-
----
-
-## Case 6
-
-验证点：
-
-- 当 `rules` 存在但没有任何 rule 命中时，不输出
-- 不会 fallback 到 `logging.levels`
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.a',
-    },
-  ],
-};
-```
-
-等价于：
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.a',
-      levels: ['warn', 'error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.b');
-
-Logger_A.info('message A_a');
-Logger_A.warn('message A_b');
-Logger_A.error('message A_c');
-```
-
-输出结果：
-
-```bash
-# 无输出
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-# 无输出
-```
-
----
-
-## Case 7
-
-验证点：
-
-- `main` 和 `group` 同时存在时按 AND 匹配
-- 部分字段命中不足以放行
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      main: '@docs-islands/test',
-      group: 'test.case.a',
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test_b',
-      group: 'test.case.a',
-      levels: ['warn'],
-    },
-  ],
-};
-```
-
-等价于：
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      main: '@docs-islands/test',
-      group: 'test.case.a',
-      levels: ['warn', 'error'],
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test_b',
-      group: 'test.case.a',
-      levels: ['warn'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.a');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.case.a');
-
-const Logger_C = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.b');
-
-Logger_A.warn('message A_b');
-Logger_A.error('message A_c');
-
-Logger_B.warn('message B_b');
-Logger_B.error('message B_c');
-
-Logger_C.warn('message C_b');
-Logger_C.error('message C_c');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.a]: message A_b
-@docs-islands/test[test.case.a]: message A_c
-@docs-islands/test_b[test.case.a]: message B_b
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.a]: message A_b <TIME>
-[Test1] @docs-islands/test[test.case.a]: message A_c <TIME>
-[Test2] @docs-islands/test_b[test.case.a]: message B_b <TIME>
-```
-
----
-
-## Case 8
-
-验证点：
-
-- `message` 支持精确匹配
-- `message` 命中后仍需同时满足 level
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      message: 'request timeout',
-      levels: ['error'],
-    },
-    {
-      label: 'Test2',
-      message: 'slow query',
-      levels: ['warn'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.message');
-
-Logger_A.info('slow query');
-Logger_A.warn('slow query');
-Logger_A.warn('slow query 123');
-Logger_A.error('request timeout');
-Logger_A.error('request timeout on user api');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.message]: slow query
-@docs-islands/test[test.case.message]: request timeout
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test2] @docs-islands/test[test.case.message]: slow query <TIME>
-[Test1] @docs-islands/test[test.case.message]: request timeout <TIME>
-```
-
----
-
-## Case 9
-
-验证点：
-
-- `message` 支持 `*` 通配
-- 支持 prefix / contains / 中间通配
-- 一条消息可以同时命中多个 message rule
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      message: 'timeout:*',
-      levels: ['warn'],
-    },
-    {
-      label: 'Test2',
-      message: '*database*',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      message: 'worker * finished',
-      levels: ['info'],
-    },
-    {
-      label: 'Test4',
-      message: 'timeout:*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.message.match');
-
-Logger_A.info('worker sync finished');
-Logger_A.warn('timeout: fetch user');
-Logger_A.error('primary database unavailable');
-Logger_A.error('timeout: database unavailable');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.message.match]: worker sync finished
-@docs-islands/test[test.case.message.match]: timeout: fetch user
-@docs-islands/test[test.case.message.match]: primary database unavailable
-@docs-islands/test[test.case.message.match]: timeout: database unavailable
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test3] @docs-islands/test[test.case.message.match]: worker sync finished <TIME>
-[Test1] @docs-islands/test[test.case.message.match]: timeout: fetch user <TIME>
-[Test2] @docs-islands/test[test.case.message.match]: primary database unavailable <TIME>
-[Test2][Test4] @docs-islands/test[test.case.message.match]: timeout: database unavailable <TIME>
-```
-
----
-
-## Case 10
-
-验证点：
-
-- `main + group + message` 可以组合使用
-- 所有已声明条件按 AND 生效
-- 不同 rule 可只声明部分条件
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      main: '@docs-islands/test',
-      group: 'test.api.*',
-      message: 'retry *',
-      levels: ['warn'],
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test',
-      group: 'test.api.fetch',
-      message: '*timeout*',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      group: 'test.api.fetch',
-      message: '*timeout*',
-      levels: ['warn'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.api.fetch');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.api.fetch');
-
-const Logger_C = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.api.update');
-
-Logger_A.warn('retry request');
-Logger_A.warn('request timeout');
-Logger_A.error('request timeout');
-
-Logger_B.warn('request timeout');
-Logger_B.error('request timeout');
-
-Logger_C.warn('retry request');
-Logger_C.error('request timeout');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.api.fetch]: retry request
-@docs-islands/test[test.api.fetch]: request timeout
-@docs-islands/test[test.api.fetch]: request timeout
-@docs-islands/test_b[test.api.fetch]: request timeout
-@docs-islands/test[test.api.update]: retry request
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.api.fetch]: retry request <TIME>
-[Test3] @docs-islands/test[test.api.fetch]: request timeout <TIME>
-[Test2] @docs-islands/test[test.api.fetch]: request timeout <TIME>
-[Test3] @docs-islands/test_b[test.api.fetch]: request timeout <TIME>
-[Test1] @docs-islands/test[test.api.update]: retry request <TIME>
-```
-
----
-
-## Case 11
-
-验证点：
-
-- 多个 message rule 同时命中时，label 顺序按 rules 声明顺序输出
-- 该顺序不受匹配字段类型影响
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      message: '*timeout*',
-      levels: ['error'],
-    },
-    {
-      label: 'Test2',
-      message: 'request *',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      message: '*user*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.message.order');
-
-Logger_A.error('request timeout user api');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.message.order]: request timeout user api
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1][Test2][Test3] @docs-islands/test[test.case.message.order]: request timeout user api <TIME>
-```
-
----
-
-## Case 12
-
-验证点：
-
-- `message: '*'` 视为匹配所有消息
-- message match-all 仍需受其它 scope 与 level 约束
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.audit.*',
-      message: '*',
-      levels: ['error'],
-    },
-    {
-      label: 'Test2',
-      group: 'test.audit.login',
-      message: '*failed*',
-      levels: ['warn'],
+```ts
+expect(
+  resolveLoggerConfig({
+    levels: ['warn', 'error'],
+    rules: {
+      Deleted: 'off',
     },
-  ],
-};
+  }),
+).toEqual({ levels: ['warn', 'error'] });
 ```
 
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.audit.login');
+Runtime 预期：无 active rules，fallback 到根 `levels`；debug true 时不会出现 `[Deleted]` label。
 
-const Logger_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.audit.logout');
+#### Case A7：resolved config 标准化
 
-Logger_A.warn('login failed');
-Logger_A.error('login failed');
-Logger_B.warn('logout failed');
-Logger_B.error('logout failed');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.audit.login]: login failed
-@docs-islands/test[test.audit.login]: login failed
-@docs-islands/test[test.audit.logout]: logout failed
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test2] @docs-islands/test[test.audit.login]: login failed <TIME>
-[Test1] @docs-islands/test[test.audit.login]: login failed <TIME>
-[Test1] @docs-islands/test[test.audit.logout]: logout failed <TIME>
-```
-
----
-
-## Case 13
-
-验证点：
-
-- `main + group + message` 全部同时存在时按严格 AND 匹配
-- 任一条件不命中都不得输出
-- 有 `rules` 时，不会 fallback 到全局 levels
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      main: '@docs-islands/test',
-      group: 'test.payment.*',
-      message: '*timeout*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.payment.charge');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.payment.charge');
-
-const Logger_C = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.payment.refund');
-
-Logger_A.warn('request timeout');
-Logger_A.error('request timeout');
-Logger_A.error('request failed');
-
-Logger_B.error('request timeout');
-Logger_C.error('request success');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.payment.charge]: request timeout
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.payment.charge]: request timeout <TIME>
-```
-
----
-
-## Case 14
-
-验证点：
-
-- 多条 rule 可同时命中同一条 message
-- 同一 message 上 exact match 与 wildcard match 可并存
-- debug label 顺序仍按 rules 声明顺序
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      message: 'request timeout',
-      levels: ['error'],
-    },
-    {
-      label: 'Test2',
-      message: '*timeout*',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      message: 'request *',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.message.mix');
-
-Logger_A.error('request timeout');
-Logger_A.error('request timeout downstream');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.message.mix]: request timeout
-@docs-islands/test[test.case.message.mix]: request timeout downstream
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1][Test2][Test3] @docs-islands/test[test.case.message.mix]: request timeout <TIME>
-[Test2][Test3] @docs-islands/test[test.case.message.mix]: request timeout downstream <TIME>
-```
-
----
-
-## Case 15
-
-验证点：
-
-- scope 命中但 message 不命中时，不输出
-- message 命中但 level 不命中时，不输出
-- 该 case 用于补强 message 维度的反例覆盖
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.notify.*',
-      message: '*failed*',
-      levels: ['warn'],
-    },
-    {
-      label: 'Test2',
-      group: 'test.notify.*',
-      message: '*timeout*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.notify.email');
-
-Logger_A.info('delivery failed');
-Logger_A.warn('delivery success');
-Logger_A.warn('delivery failed');
-Logger_A.error('delivery failed');
-Logger_A.error('request timeout');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.notify.email]: delivery failed
-@docs-islands/test[test.notify.email]: request timeout
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.notify.email]: delivery failed <TIME>
-[Test2] @docs-islands/test[test.notify.email]: request timeout <TIME>
-```
-
----
-
----
-
-## Case 16
-
-验证点：
-
-- `message` 单独作为过滤条件时，支持准确匹配与 match 匹配
-- `message` 单独过滤时，同时覆盖默认 `levels` 与显式 `levels`
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn'],
-  rules: [
-    {
-      label: 'Test1',
-      message: 'msg.exact.default',
-    },
-    {
-      label: 'Test2',
-      message: 'msg.exact.explicit',
-      levels: ['info'],
-    },
-    {
-      label: 'Test3',
-      message: 'msg.match.default.*',
-    },
-    {
-      label: 'Test4',
-      message: 'msg.match.explicit.*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.message.cover');
-
-Logger_A.warn('msg.exact.default');
-Logger_A.info('msg.exact.explicit');
-Logger_A.warn('msg.match.default.1');
-Logger_A.error('msg.match.explicit.1');
-
-Logger_A.info('msg.exact.default');
-Logger_A.warn('msg.exact.explicit');
-Logger_A.info('msg.match.default.1');
-Logger_A.warn('msg.match.explicit.1');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.message.cover]: msg.exact.default
-@docs-islands/test[test.case.message.cover]: msg.exact.explicit
-@docs-islands/test[test.case.message.cover]: msg.match.default.1
-@docs-islands/test[test.case.message.cover]: msg.match.explicit.1
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.message.cover]: msg.exact.default <TIME>
-[Test2] @docs-islands/test[test.case.message.cover]: msg.exact.explicit <TIME>
-[Test3] @docs-islands/test[test.case.message.cover]: msg.match.default.1 <TIME>
-[Test4] @docs-islands/test[test.case.message.cover]: msg.match.explicit.1 <TIME>
-```
-
----
-
-## Case 17
-
-验证点：
-
-- `main + message` 组合支持准确匹配与 match 匹配
-- 同时覆盖默认 `levels` 与显式 `levels`
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn'],
-  rules: [
-    {
-      label: 'Test1',
-      main: '@docs-islands/test',
-      message: 'main-message.exact.default',
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test',
-      message: 'main-message.exact.explicit',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      main: '@docs-islands/test',
-      message: 'main-message.match.default.*',
-    },
-    {
-      label: 'Test4',
-      main: '@docs-islands/test',
-      message: 'main-message.match.explicit.*',
-      levels: ['info'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.main.message');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.case.main.message');
-
-Logger_A.warn('main-message.exact.default');
-Logger_A.error('main-message.exact.explicit');
-Logger_A.warn('main-message.match.default.1');
-Logger_A.info('main-message.match.explicit.1');
-
-Logger_B.warn('main-message.exact.default');
-Logger_B.error('main-message.exact.explicit');
-Logger_B.warn('main-message.match.default.1');
-Logger_B.info('main-message.match.explicit.1');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.main.message]: main-message.exact.default
-@docs-islands/test[test.case.main.message]: main-message.exact.explicit
-@docs-islands/test[test.case.main.message]: main-message.match.default.1
-@docs-islands/test[test.case.main.message]: main-message.match.explicit.1
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.main.message]: main-message.exact.default <TIME>
-[Test2] @docs-islands/test[test.case.main.message]: main-message.exact.explicit <TIME>
-[Test3] @docs-islands/test[test.case.main.message]: main-message.match.default.1 <TIME>
-[Test4] @docs-islands/test[test.case.main.message]: main-message.match.explicit.1 <TIME>
-```
-
----
-
-## Case 18
-
-验证点：
-
-- `group(准确匹配) + message` 组合支持准确匹配与 match 匹配
-- 同时覆盖默认 `levels` 与显式 `levels`
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn'],
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.gx',
-      message: 'group-exact-message-exact.default',
-    },
-    {
-      label: 'Test2',
-      group: 'test.case.gx',
-      message: 'group-exact-message-exact.explicit',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      group: 'test.case.gx',
-      message: 'group-exact-message-match.default.*',
-    },
-    {
-      label: 'Test4',
-      group: 'test.case.gx',
-      message: 'group-exact-message-match.explicit.*',
-      levels: ['info'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.gx');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.gy');
-
-Logger_A.warn('group-exact-message-exact.default');
-Logger_A.error('group-exact-message-exact.explicit');
-Logger_A.warn('group-exact-message-match.default.1');
-Logger_A.info('group-exact-message-match.explicit.1');
-
-Logger_B.warn('group-exact-message-exact.default');
-Logger_B.error('group-exact-message-exact.explicit');
-Logger_B.warn('group-exact-message-match.default.1');
-Logger_B.info('group-exact-message-match.explicit.1');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.gx]: group-exact-message-exact.default
-@docs-islands/test[test.case.gx]: group-exact-message-exact.explicit
-@docs-islands/test[test.case.gx]: group-exact-message-match.default.1
-@docs-islands/test[test.case.gx]: group-exact-message-match.explicit.1
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.gx]: group-exact-message-exact.default <TIME>
-[Test2] @docs-islands/test[test.case.gx]: group-exact-message-exact.explicit <TIME>
-[Test3] @docs-islands/test[test.case.gx]: group-exact-message-match.default.1 <TIME>
-[Test4] @docs-islands/test[test.case.gx]: group-exact-message-match.explicit.1 <TIME>
-```
-
----
-
-## Case 19
-
-验证点：
-
-- `group(match) + message` 组合支持准确匹配与 match 匹配
-- 同时覆盖默认 `levels` 与显式 `levels`
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn'],
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.gm*',
-      message: 'group-match-message-exact.default',
-    },
-    {
-      label: 'Test2',
-      group: 'test.case.gm*',
-      message: 'group-match-message-exact.explicit',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      group: 'test.case.gm*',
-      message: 'group-match-message-match.default.*',
-    },
-    {
-      label: 'Test4',
-      group: 'test.case.gm*',
-      message: 'group-match-message-match.explicit.*',
-      levels: ['info'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.gm1');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.other');
-
-Logger_A.warn('group-match-message-exact.default');
-Logger_A.error('group-match-message-exact.explicit');
-Logger_A.warn('group-match-message-match.default.1');
-Logger_A.info('group-match-message-match.explicit.1');
-
-Logger_B.warn('group-match-message-exact.default');
-Logger_B.error('group-match-message-exact.explicit');
-Logger_B.warn('group-match-message-match.default.1');
-Logger_B.info('group-match-message-match.explicit.1');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.gm1]: group-match-message-exact.default
-@docs-islands/test[test.case.gm1]: group-match-message-exact.explicit
-@docs-islands/test[test.case.gm1]: group-match-message-match.default.1
-@docs-islands/test[test.case.gm1]: group-match-message-match.explicit.1
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.gm1]: group-match-message-exact.default <TIME>
-[Test2] @docs-islands/test[test.case.gm1]: group-match-message-exact.explicit <TIME>
-[Test3] @docs-islands/test[test.case.gm1]: group-match-message-match.default.1 <TIME>
-[Test4] @docs-islands/test[test.case.gm1]: group-match-message-match.explicit.1 <TIME>
-```
-
----
-
-## Case 20
-
-验证点：
-
-- `main + group(准确匹配) + message` 组合支持准确匹配与 match 匹配
-- 同时覆盖默认 `levels` 与显式 `levels`
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn'],
-  rules: [
-    {
-      label: 'Test1',
-      main: '@docs-islands/test',
-      group: 'test.case.mgx',
-      message: 'mgx-message-exact.default',
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test',
-      group: 'test.case.mgx',
-      message: 'mgx-message-exact.explicit',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      main: '@docs-islands/test',
-      group: 'test.case.mgx',
-      message: 'mgx-message-match.default.*',
-    },
-    {
-      label: 'Test4',
-      main: '@docs-islands/test',
-      group: 'test.case.mgx',
-      message: 'mgx-message-match.explicit.*',
-      levels: ['info'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.mgx');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.case.mgx');
-
-const Logger_C = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.other');
-
-Logger_A.warn('mgx-message-exact.default');
-Logger_A.error('mgx-message-exact.explicit');
-Logger_A.warn('mgx-message-match.default.1');
-Logger_A.info('mgx-message-match.explicit.1');
-
-Logger_B.warn('mgx-message-exact.default');
-Logger_B.error('mgx-message-exact.explicit');
-Logger_B.warn('mgx-message-match.default.1');
-Logger_B.info('mgx-message-match.explicit.1');
-
-Logger_C.warn('mgx-message-exact.default');
-Logger_C.error('mgx-message-exact.explicit');
-Logger_C.warn('mgx-message-match.default.1');
-Logger_C.info('mgx-message-match.explicit.1');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.mgx]: mgx-message-exact.default
-@docs-islands/test[test.case.mgx]: mgx-message-exact.explicit
-@docs-islands/test[test.case.mgx]: mgx-message-match.default.1
-@docs-islands/test[test.case.mgx]: mgx-message-match.explicit.1
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.mgx]: mgx-message-exact.default <TIME>
-[Test2] @docs-islands/test[test.case.mgx]: mgx-message-exact.explicit <TIME>
-[Test3] @docs-islands/test[test.case.mgx]: mgx-message-match.default.1 <TIME>
-[Test4] @docs-islands/test[test.case.mgx]: mgx-message-match.explicit.1 <TIME>
-```
-
----
-
-## Case 21
-
-验证点：
-
-- `main + group(match) + message` 组合支持准确匹配与 match 匹配
-- 同时覆盖默认 `levels` 与显式 `levels`
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn'],
-  rules: [
-    {
-      label: 'Test1',
-      main: '@docs-islands/test',
-      group: 'test.case.mgm*',
-      message: 'mgm-message-exact.default',
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test',
-      group: 'test.case.mgm*',
-      message: 'mgm-message-exact.explicit',
-      levels: ['error'],
-    },
-    {
-      label: 'Test3',
-      main: '@docs-islands/test',
-      group: 'test.case.mgm*',
-      message: 'mgm-message-match.default.*',
-    },
-    {
-      label: 'Test4',
-      main: '@docs-islands/test',
-      group: 'test.case.mgm*',
-      message: 'mgm-message-match.explicit.*',
-      levels: ['info'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.mgm1');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.case.mgm1');
+```ts
+expect(setResolvedLoggerConfig(undefined)).not.toThrow();
+expect(setResolvedLoggerConfig(null)).not.toThrow();
 
-const Logger_C = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.other');
+expect(() => setResolvedLoggerConfig({ rules: { A: { levels: ['warn'] } } as any })).toThrow(
+  'Resolved logger config rules must be an array.',
+);
 
-Logger_A.warn('mgm-message-exact.default');
-Logger_A.error('mgm-message-exact.explicit');
-Logger_A.warn('mgm-message-match.default.1');
-Logger_A.info('mgm-message-match.explicit.1');
+expect(() => setResolvedLoggerConfig({ rules: [{ levels: ['warn'] } as any] })).toThrow(
+  'Every logger rule must provide a non-empty label.',
+);
 
-Logger_B.warn('mgm-message-exact.default');
-Logger_B.error('mgm-message-exact.explicit');
-Logger_B.warn('mgm-message-match.default.1');
-Logger_B.info('mgm-message-match.explicit.1');
+expect(() => setResolvedLoggerConfig({ rules: [{ label: '<root>', levels: ['warn'] }] })).toThrow(
+  'Logger rule label "<root>" is reserved for the root logging baseline.',
+);
 
-Logger_C.warn('mgm-message-exact.default');
-Logger_C.error('mgm-message-exact.explicit');
-Logger_C.warn('mgm-message-match.default.1');
-Logger_C.info('mgm-message-match.explicit.1');
+expect(() =>
+  setResolvedLoggerConfig({
+    rules: [
+      { label: 'Dup', levels: ['warn'] },
+      { label: 'Dup', levels: ['error'] },
+    ],
+  }),
+).toThrow('Logger rule label "Dup" must be unique within logger.rules.');
 ```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.mgm1]: mgm-message-exact.default
-@docs-islands/test[test.case.mgm1]: mgm-message-exact.explicit
-@docs-islands/test[test.case.mgm1]: mgm-message-match.default.1
-@docs-islands/test[test.case.mgm1]: mgm-message-match.explicit.1
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.mgm1]: mgm-message-exact.default <TIME>
-[Test2] @docs-islands/test[test.case.mgm1]: mgm-message-exact.explicit <TIME>
-[Test3] @docs-islands/test[test.case.mgm1]: mgm-message-match.default.1 <TIME>
-[Test4] @docs-islands/test[test.case.mgm1]: mgm-message-match.explicit.1 <TIME>
-```
-
----
-
-## Case 22
-
-验证点：
-
-- `group` 单独作为过滤条件时，准确匹配同时覆盖默认 `levels` 与显式 `levels`
-- 该 case 用于补齐 `group(准确匹配)` 在显式 `rule.levels` 下的独立覆盖
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn'],
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.only.exact.default',
-    },
-    {
-      label: 'Test2',
-      group: 'test.only.exact.explicit',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.only.exact.default');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.only.exact.explicit');
-
-Logger_A.warn('group exact default');
-Logger_A.error('group exact default');
-
-Logger_B.warn('group exact explicit');
-Logger_B.error('group exact explicit');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.only.exact.default]: group exact default
-@docs-islands/test[test.only.exact.explicit]: group exact explicit
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.only.exact.default]: group exact default <TIME>
-[Test2] @docs-islands/test[test.only.exact.explicit]: group exact explicit <TIME>
-```
-
----
-
-## Case 23
-
-验证点：
-
-- `main + group(match)` 在**不带 message 条件**时，覆盖默认 `levels` 与显式 `levels`
-- 该 case 用于补齐 `main + group(match)` 的独立覆盖
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn'],
-  rules: [
-    {
-      label: 'Test1',
-      main: '@docs-islands/test',
-      group: 'test.combo.match.default.*',
-    },
-    {
-      label: 'Test2',
-      main: '@docs-islands/test',
-      group: 'test.combo.match.explicit.*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.combo.match.default.1');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.combo.match.explicit.1');
-
-const Logger_C = createLogger({
-  main: '@docs-islands/test_b',
-}).getLoggerByGroup('test.combo.match.explicit.1');
-
-Logger_A.warn('main group match default');
-Logger_A.error('main group match default');
-
-Logger_B.warn('main group match explicit');
-Logger_B.error('main group match explicit');
-
-Logger_C.error('main group match explicit');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.combo.match.default.1]: main group match default
-@docs-islands/test[test.combo.match.explicit.1]: main group match explicit
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.combo.match.default.1]: main group match default <TIME>
-[Test2] @docs-islands/test[test.combo.match.explicit.1]: main group match explicit <TIME>
-```
-
----
-
-## Case 24
-
-验证点：
-
-- 当 `logging.rules` 未配置时，非 debug 模式默认输出 `error | warn | info | success`
-- 同场景下默认不输出 `debug`
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.default');
-
-Logger_A.debug('message A_d');
-Logger_A.info('message A_i');
-Logger_A.success('message A_s');
-Logger_A.warn('message A_w');
-Logger_A.error('message A_e');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.default]: message A_i
-@docs-islands/test[test.case.default]: message A_s
-@docs-islands/test[test.case.default]: message A_w
-@docs-islands/test[test.case.default]: message A_e
-```
-
----
-
-## Case 25
-
-验证点：
 
-- 当 `logging.rules` 未配置时，debug 模式默认输出 `error | warn | info | success | debug`
-- 其中 `error | warn | info | success` 需附带 `<TIME>`
-- `debug` 级别是否附带耗时当前不作强制要求；本规范按“不要求”断言
+#### Case A8：resolved rule default levels fallback
 
-```ts [config.ts]
-const logging = {
+```ts
+setResolvedLoggerConfig({
   debug: true,
-};
+  rules: [{ label: 'DefaultLevels' }],
+});
 ```
 
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.default');
-
-Logger_A.debug('message A_d');
-Logger_A.info('message A_i');
-Logger_A.success('message A_s');
-Logger_A.warn('message A_w');
-Logger_A.error('message A_e');
+```ts
+const logger = createLogger({ main: '@docs-islands/test' }).getLoggerByGroup('test.default.levels');
+logger.debug('hidden');
+logger.info('info visible', ELAPSED);
+logger.success('success visible', ELAPSED);
+logger.warn('warn visible', ELAPSED);
+logger.error('error visible', ELAPSED);
 ```
 
-输出结果：
+输出：
 
 ```bash
-@docs-islands/test[test.case.default]: message A_d
-@docs-islands/test[test.case.default]: message A_i <TIME>
-@docs-islands/test[test.case.default]: message A_s <TIME>
-@docs-islands/test[test.case.default]: message A_w <TIME>
-@docs-islands/test[test.case.default]: message A_e <TIME>
+[DefaultLevels] @docs-islands/test[test.default.levels]: info visible <TIME>
+[DefaultLevels] @docs-islands/test[test.default.levels]: success visible <TIME>
+[DefaultLevels] @docs-islands/test[test.default.levels]: warn visible <TIME>
+[DefaultLevels] @docs-islands/test[test.default.levels]: error visible <TIME>
 ```
 
----
+#### Case A9：rule 字符串字段 trim 与空值省略
 
-## Case 26
+```ts
+expect(
+  resolveLoggerConfig({
+    rules: {
+      Trimmed: {
+        main: '  @docs-islands/test  ',
+        group: '   ',
+        message: '   ',
+        levels: 'inherit',
+      },
+    },
+  }),
+).toEqual({
+  levels: ['error', 'warn', 'info', 'success'],
+  rules: [{ label: 'Trimmed', main: '@docs-islands/test' }],
+});
 
-验证点：
+expect(() =>
+  resolveLoggerConfig({
+    rules: {
+      BadMain: { main: '   ', levels: 'inherit' },
+    },
+  }),
+).toThrow('Logger main must be a non-empty package name.');
+```
 
-- 在存在 `rules` 时，`success` 与其它 level 一样参与 rule-level 判定
-- 同时覆盖：
-  - 继承 `logging.levels` 的 `success`
-  - 显式 `rule.levels = ['success']`
+### B. Runtime rule-mode 与输出判定
 
-```ts [config.ts]
-const logging = {
-  debug: false,
+#### Case B1：无 rules + debug false 默认行为
+
+```ts
+setLoggerConfig({ debug: false });
+const logger = createLogger({ main: '@docs-islands/test' }).getLoggerByGroup('test.default');
+logger.debug('debug hidden');
+logger.info('info visible', ELAPSED);
+logger.success('success visible', ELAPSED);
+logger.warn('warn visible', ELAPSED);
+logger.error('error visible', ELAPSED);
+```
+
+输出：
+
+```bash
+@docs-islands/test[test.default]: info visible
+@docs-islands/test[test.default]: success visible
+@docs-islands/test[test.default]: warn visible
+@docs-islands/test[test.default]: error visible
+```
+
+#### Case B2：无 rules + debug true
+
+```ts
+setLoggerConfig({ debug: true });
+```
+
+输出：
+
+```bash
+@docs-islands/test[test.default]: debug visible
+@docs-islands/test[test.default]: info visible <TIME>
+@docs-islands/test[test.default]: success visible <TIME>
+@docs-islands/test[test.default]: warn visible <TIME>
+@docs-islands/test[test.default]: error visible <TIME>
+```
+
+#### Case B3：root `levels: []`
+
+```ts
+setLoggerConfig({ debug: true, levels: [] });
+```
+
+`info/success/warn/error` 全部 suppressed；`debug` 在无 rules 且 `debug: true` 时仍输出：
+
+```bash
+@docs-islands/test[test.empty.levels]: debug visible
+```
+
+#### Case B4：rule-mode 中 debug 始终 suppressed
+
+```ts
+setLoggerConfig({
+  debug: true,
+  rules: {
+    AllWarn: { levels: ['warn'] },
+  },
+});
+```
+
+`logger.debug('hidden')` 不输出；`logger.warn('visible', ELAPSED)` 输出：
+
+```bash
+[AllWarn] @docs-islands/test[test.rule.debug]: visible <TIME>
+```
+
+#### Case B5：无 scope 限制 rule + contributing labels
+
+```ts
+setLoggerConfig({
+  debug: true,
+  levels: ['warn', 'error'],
+  rules: {
+    Inherit: { levels: 'inherit' },
+    WarnInfo: { levels: ['warn', 'info'] },
+  },
+});
+```
+
+输出：
+
+```bash
+[WarnInfo] @docs-islands/test[test.global]: info <TIME>
+[Inherit][WarnInfo] @docs-islands/test[test.global]: warn <TIME>
+[Inherit] @docs-islands/test[test.global]: error <TIME>
+```
+
+#### Case B6：contributing label 只包含 scope 与 level 同时命中的 rule
+
+```ts
+setLoggerConfig({
+  debug: true,
+  levels: ['error'],
+  rules: {
+    InheritedError: { levels: 'inherit' },
+    WarnOnly: { levels: ['warn'] },
+    WarnAndError: { levels: ['warn', 'error'] },
+  },
+});
+```
+
+输出：
+
+```bash
+[WarnOnly][WarnAndError] @docs-islands/test[test.labels]: warn path <TIME>
+[InheritedError][WarnAndError] @docs-islands/test[test.labels]: error path <TIME>
+```
+
+#### Case B7：`main` 精确匹配且不支持 glob
+
+```ts
+setLoggerConfig({
+  debug: true,
+  rules: {
+    WildcardLiteral: { main: '@docs-islands/*', levels: ['warn'] },
+    ExactMain: { main: '@docs-islands/test', levels: ['error'] },
+  },
+});
+```
+
+输出：
+
+```bash
+[ExactMain] @docs-islands/test[test.main]: exact main <TIME>
+[WildcardLiteral] @docs-islands/*[test.main]: literal wildcard main <TIME>
+```
+
+`@docs-islands/test` 的 warn 不应被 `main: '@docs-islands/*'` 放行。
+
+#### Case B8：`group` exact 与 glob 匹配
+
+```ts
+setLoggerConfig({
+  debug: true,
+  levels: ['warn', 'error'],
+  rules: {
+    ExactGroup: { group: 'test.group.exact', levels: 'inherit' },
+    GlobGroup: { group: 'test.group.*', levels: ['info'] },
+  },
+});
+```
+
+输出：
+
+```bash
+[GlobGroup] @docs-islands/test[test.group.exact]: info exact group <TIME>
+[ExactGroup] @docs-islands/test[test.group.exact]: warn exact group <TIME>
+[GlobGroup] @docs-islands/test[test.group.other]: info glob group <TIME>
+```
+
+#### Case B9：`message` exact 与 glob 匹配
+
+```ts
+setLoggerConfig({
+  debug: true,
+  rules: {
+    ExactMessage: { message: 'request timeout', levels: ['error'] },
+    GlobMessage: { message: '*database*', levels: ['warn', 'error'] },
+    MatchAll: { message: '*', levels: ['success'] },
+  },
+});
+```
+
+输出：
+
+```bash
+[ExactMessage] @docs-islands/test[test.message]: request timeout <TIME>
+[GlobMessage] @docs-islands/test[test.message]: primary database slow <TIME>
+[MatchAll] @docs-islands/test[test.message]: any success message <TIME>
+```
+
+#### Case B10：`main + group + message` 三元 AND
+
+```ts
+setLoggerConfig({
+  debug: true,
+  rules: {
+    ApiTimeout: {
+      main: '@docs-islands/api',
+      group: 'api.fetch',
+      message: '*timeout*',
+      levels: ['error'],
+    },
+  },
+});
+```
+
+只有 `main='@docs-islands/api'`、`group='api.fetch'`、`message` 包含 `timeout` 且 kind 为 `error` 时输出：
+
+```bash
+[ApiTimeout] @docs-islands/api[api.fetch]: request timeout <TIME>
+```
+
+#### Case B11：active rules 存在但无命中时不 fallback
+
+```ts
+setLoggerConfig({
+  debug: true,
+  levels: ['warn', 'error'],
+  rules: {
+    OnlyBuild: { group: 'build.pipeline', levels: 'inherit' },
+  },
+});
+```
+
+`test.other` group 下的 warn/error 均不输出，即使根 `levels` 允许。
+
+#### Case B12：`success` 在 rule-mode 中参与判定
+
+```ts
+setLoggerConfig({
+  debug: true,
   levels: ['success'],
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.success.default',
-    },
-    {
-      label: 'Test2',
-      message: '*completed*',
-      levels: ['success'],
-    },
-  ],
-};
+  rules: {
+    InheritedSuccess: { group: 'build.done', levels: 'inherit' },
+    ExplicitSuccess: { message: '*completed*', levels: ['success'] },
+  },
+});
 ```
 
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.success.default');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.success.other');
-
-Logger_A.success('task done');
-Logger_A.warn('task done');
-
-Logger_B.success('job completed');
-Logger_B.info('job completed');
-```
-
-输出结果：
+输出：
 
 ```bash
-@docs-islands/test[test.success.default]: task done
-@docs-islands/test[test.success.other]: job completed
+[InheritedSuccess] @docs-islands/test[build.done]: task done <TIME>
+[ExplicitSuccess] @docs-islands/test[build.other]: job completed <TIME>
 ```
 
-当 `debug = true` 时，输出结果：
+#### Case B13：glob magic `?` 与 `[]`
+
+```ts
+setLoggerConfig({
+  debug: true,
+  rules: {
+    QuestionGroup: { group: 'test.case.?1', levels: ['warn'] },
+    CharMessage: { message: 'task-[ab]', levels: ['error'] },
+  },
+});
+```
+
+输出：
 
 ```bash
-[Test1] @docs-islands/test[test.success.default]: task done <TIME>
-[Test2] @docs-islands/test[test.success.other]: job completed <TIME>
+[QuestionGroup] @docs-islands/test[test.case.a1]: noop <TIME>
+[CharMessage] @docs-islands/test[test.case.a1]: task-a <TIME>
+[CharMessage] @docs-islands/test[test.case.ab1]: task-b <TIME>
 ```
 
----
+#### Case B14：brace expansion 与 extglob 冒烟
 
-## Case 27
+```ts
+setLoggerConfig({
+  debug: true,
+  rules: {
+    BraceGroup: { group: 'test.glob.{a,b}', levels: ['warn'] },
+    ExtglobMessage: { message: '@(build|render) failed', levels: ['error'] },
+  },
+});
+```
 
-验证点：
+输出：
 
-- `group` / `message` 的 match 语义由 picomatch 实现，而不是仅支持 `*`
-- 本 case 对 `?` 与 `[]` 做基础冒烟验证
+```bash
+[BraceGroup] @docs-islands/test[test.glob.a]: noop <TIME>
+[ExtglobMessage] @docs-islands/test[test.glob.a]: build failed <TIME>
+```
 
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      group: 'test.case.?1',
+#### Case B15：rule explicit `levels: []` 与 root empty inheritance
+
+```ts
+setLoggerConfig({
+  debug: true,
+  levels: [],
+  rules: {
+    InheritEmpty: { levels: 'inherit' },
+    ExplicitEmpty: { group: 'test.empty.rule', levels: [] },
+    ErrorOnly: { group: 'test.empty.rule', levels: ['error'] },
+  },
+});
+```
+
+只有 `ErrorOnly` 对 `error` 贡献 label：
+
+```bash
+[ErrorOnly] @docs-islands/test[test.empty.rule]: visible error <TIME>
+```
+
+#### Case B16：debug label 顺序按 resolved rules 顺序
+
+```ts
+setLoggerConfig({
+  debug: true,
+  rules: {
+    First: { message: '*timeout*', levels: ['error'] },
+    Second: { message: 'request *', levels: ['error'] },
+    Third: { message: '*user*', levels: ['error'] },
+  },
+});
+```
+
+输出：
+
+```bash
+[First][Second][Third] @docs-islands/test[test.order]: request timeout user api <TIME>
+```
+
+### C. Logger factory、scope 与 runtime registry
+
+#### Case C1：`main` / `group` 输入校验
+
+```ts
+expect(() => createLogger({ main: '   ' })).toThrow(
+  'Logger main must be a non-empty package name.',
+);
+
+const logger = createLogger({ main: '  @docs-islands/test  ' });
+
+expect(() => logger.getLoggerByGroup('   ')).toThrow('Logger group must be a non-empty string.');
+expect(() => logger.getLoggerByGroup('Test.Case')).toThrow(
+  'must use lowercase dot namespaces without package identifiers',
+);
+expect(() => logger.getLoggerByGroup('@docs-islands/test')).toThrow(
+  'must use lowercase dot namespaces without package identifiers',
+);
+expect(() => logger.getLoggerByGroup('test:case')).toThrow(
+  'must use lowercase dot namespaces without package identifiers',
+);
+expect(() => logger.getLoggerByGroup('runtime.react_dom')).not.toThrow();
+```
+
+#### Case C2：logger cache
+
+```ts
+setScopedLoggerConfig(' cache-scope ', { levels: ['warn'] });
+
+const loggerA = createScopedLogger({ main: ' @docs-islands/test ' }, 'cache-scope');
+const loggerB = createScopedLogger({ main: '@docs-islands/test' }, ' cache-scope ');
+expect(loggerA).toBe(loggerB);
+
+const groupA = loggerA.getLoggerByGroup(' test.cache.a ');
+const groupB = loggerB.getLoggerByGroup('test.cache.a');
+const groupC = loggerB.getLoggerByGroup('test.cache.b');
+expect(groupA).toBe(groupB);
+expect(groupA).not.toBe(groupC);
+```
+
+#### Case C3：scoped config 注册、查询、重置
+
+```ts
+const scopeId = 'test-scope-a';
+expect(getScopedLoggerConfig(scopeId)).toBeUndefined();
+expect(() => createScopedLogger({ main: '@docs-islands/test' }, scopeId)).toThrow(
+  'Logger config for scope "test-scope-a" is not registered in this runtime.',
+);
+
+setScopedLoggerConfig(scopeId, { levels: ['error'] });
+expect(getScopedLoggerConfig(scopeId)).toEqual({ levels: ['error'] });
+
+const logger = createScopedLogger({ main: '@docs-islands/test' }, scopeId).getLoggerByGroup(
+  'test.scope.a',
+);
+logger.warn('hidden', ELAPSED);
+logger.error('visible', ELAPSED);
+
+resetScopedLoggerConfig(scopeId);
+expect(getScopedLoggerConfig(scopeId)).toBeUndefined();
+```
+
+输出：
+
+```bash
+@docs-islands/test[test.scope.a]: visible
+```
+
+#### Case C4：scope 隔离
+
+```ts
+setScopedLoggerConfig('scope-warn', { levels: ['warn'] });
+setScopedLoggerConfig('scope-error', { levels: ['error'] });
+```
+
+同一 main/group 在不同 scope 下按各自配置输出：
+
+```bash
+@docs-islands/test[test.scope.same]: warn scope visible
+@docs-islands/test[test.scope.same]: error scope visible
+```
+
+#### Case C5：resolved scoped `null` 注册为 fallback config
+
+```ts
+setResolvedScopedLoggerConfig('resolved-null-scope', null);
+expect(getScopedLoggerConfig('resolved-null-scope')).toBeUndefined();
+expect(() =>
+  createScopedLogger({ main: '@docs-islands/test' }, 'resolved-null-scope'),
+).not.toThrow();
+```
+
+该 scope 已注册但 compiled config 为 `null`，runtime 使用默认 no-rules 行为：`info/success/warn/error` 可见，`debug` 不可见。
+
+#### Case C6：`shouldSuppressLog` 与 runtime 判定一致
+
+```ts
+setScopedLoggerConfig('suppress-scope', {
+  debug: true,
+  levels: ['warn', 'error'],
+  rules: {
+    WarnOnly: {
+      group: 'test.suppress',
+      message: '*visible*',
       levels: ['warn'],
     },
+  },
+});
+
+expect(
+  shouldSuppressLog(
+    'warn',
     {
-      label: 'Test2',
-      message: 'task-[ab]',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.a1');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.ab1');
-
-Logger_A.warn('noop');
-Logger_A.error('task-a');
-Logger_A.error('task-c');
-
-Logger_B.warn('noop');
-Logger_B.error('task-b');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.a1]: noop
-@docs-islands/test[test.case.a1]: task-a
-@docs-islands/test[test.case.ab1]: task-b
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test1] @docs-islands/test[test.case.a1]: noop <TIME>
-[Test2] @docs-islands/test[test.case.a1]: task-a <TIME>
-[Test2] @docs-islands/test[test.case.ab1]: task-b <TIME>
-```
-
----
-
-## Case 28
-
-验证点：
-
-- `enabled: false` 的 rule 完全不起作用
-- 即使其它字段全部命中，也不得输出
-- 存在 `rules` 但 activeRules 为空时，不得 fallback 到默认输出行为
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      group: 'test.case.enabled.off',
-    },
-  ],
-};
-```
-
-等价于：
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      group: 'test.case.enabled.off',
-      levels: ['warn', 'error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.enabled.off');
-
-Logger_A.warn('message A_w');
-Logger_A.error('message A_e');
-```
-
-输出结果：
-
-```bash
-# 无输出
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-# 无输出
-```
-
----
-
-## Case 29
-
-验证点：
-
-- `enabled: true` 显式声明时等价于默认启用
-- `enabled: false` 的重叠 rule 不参与 level 并集
-- `enabled: false` 的重叠 rule 不参与 debug label
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['warn', 'error'],
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      group: 'test.case.enabled.mix',
-      levels: ['info', 'warn'],
-    },
-    {
-      label: 'Test2',
-      enabled: true,
-      group: 'test.case.enabled.mix',
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.enabled.mix');
-
-Logger_A.info('message A_i');
-Logger_A.warn('message A_w');
-Logger_A.error('message A_e');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.enabled.mix]: message A_w
-@docs-islands/test[test.case.enabled.mix]: message A_e
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test2] @docs-islands/test[test.case.enabled.mix]: message A_w <TIME>
-[Test2] @docs-islands/test[test.case.enabled.mix]: message A_e <TIME>
-```
-
----
-
-## Case 30
-
-验证点：
-
-- `enabled: false` 的更具体 rule 不应覆盖、阻断或污染其它 active rule
-- 即使 disabled rule 与 active rule 同时 scope 命中，最终只按 active rule 生效
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
-      group: 'test.case.enabled.exact',
-      levels: ['error'],
-    },
-    {
-      label: 'Test2',
-      enabled: true,
-      group: 'test.case.enabled.*',
-      levels: ['error'],
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.enabled.exact');
-
-Logger_A.error('message A_e');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.enabled.exact]: message A_e
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-[Test2] @docs-islands/test[test.case.enabled.exact]: message A_e <TIME>
-```
-
----
-
-## Case 31
-
-验证点：
-
-- `enabled: false` 与 `main + group + message` 全字段组合同时存在时仍完全失效
-- disabled rule 不参与 scope AND 判定后的放行
-- 用于补强“全字段都命中但因 enabled=false 仍不输出”的反例
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  levels: ['error'],
-  rules: [
-    {
-      label: 'Test1',
-      enabled: false,
       main: '@docs-islands/test',
-      group: 'test.enabled.full.*',
-      message: '*timeout*',
+      group: 'test.suppress',
+      message: 'visible path',
     },
-  ],
-};
-```
+    'suppress-scope',
+  ),
+).toBe(false);
 
-等价于：
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [
+expect(
+  shouldSuppressLog(
+    'error',
     {
-      label: 'Test1',
-      enabled: false,
       main: '@docs-islands/test',
-      group: 'test.enabled.full.*',
-      message: '*timeout*',
-      levels: ['error'],
+      group: 'test.suppress',
+      message: 'visible path',
     },
-  ],
-};
+    'suppress-scope',
+  ),
+).toBe(true);
+
+expect(
+  shouldSuppressLog(
+    'warn',
+    {
+      main: '@docs-islands/test',
+      group: 'test.suppress',
+    },
+    'suppress-scope',
+  ),
+).toBe(true);
+
+expect(
+  shouldSuppressLog(
+    'debug',
+    {
+      main: '@docs-islands/test',
+      group: 'test.suppress',
+      message: 'visible path',
+    },
+    'suppress-scope',
+  ),
+).toBe(true);
 ```
 
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.enabled.full.1');
+### D. Console 输出
 
-Logger_A.error('request timeout');
+#### Case D1：console method 映射
+
+```ts
+setLoggerConfig({ debug: true });
+const logger = createLogger({ main: '@docs-islands/test' }).getLoggerByGroup('test.console');
+
+logger.debug('debug message');
+logger.info('info message', ELAPSED);
+logger.success('success message', ELAPSED);
+logger.warn('warn message', ELAPSED);
+logger.error('error message', ELAPSED);
+
+expect(console.debug).toHaveBeenCalledTimes(1);
+expect(console.log).toHaveBeenCalledTimes(2);
+expect(console.warn).toHaveBeenCalledTimes(1);
+expect(console.error).toHaveBeenCalledTimes(1);
 ```
 
-输出结果：
+#### Case D2：Node 输出格式与 elapsed append 条件
 
-```bash
-# 无输出
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-# 无输出
-```
-
----
-
-## Case 32
-
-验证点：
-
-- 即使 rule 的 `main` 值包含 glob magic，`main` 仍只做准确匹配
-- `main: '@docs-islands/*'` 不会匹配 `main: '@docs-islands/test'`
-- 但该 rule 仍可匹配字面量 `main` 为 `@docs-islands/*` 的 logger
-
-```ts [config.ts]
-const logging = {
+```ts
+setLoggerConfig({
   debug: true,
-  rules: [
-    {
-      label: 'WildcardMain',
-      main: '@docs-islands/*',
+  rules: {
+    Label: { levels: ['warn'] },
+  },
+});
+```
+
+输出：
+
+```bash
+[Label] @docs-islands/test[test.node.format]: without elapsed
+[Label] @docs-islands/test[test.node.format]: with elapsed <TIME>
+```
+
+断言前必须 strip ANSI。未传 `elapsedTimeMs` 时不追加耗时。
+
+#### Case D3：Browser styled console 输出格式
+
+```ts
+(globalThis as any).window = {};
+(globalThis as any).document = {};
+
+setLoggerConfig({
+  debug: true,
+  rules: {
+    BrowserLabel: { levels: ['error'] },
+  },
+});
+```
+
+断言：
+
+```ts
+expect(console.error).toHaveBeenCalledWith(
+  '[BrowserLabel] %c@docs-islands/test%c[%ctest.browser.format%c]: %cbrowser error 42.00ms',
+  expect.any(String),
+  expect.any(String),
+  expect.any(String),
+  expect.any(String),
+  expect.any(String),
+);
+```
+
+### E. Preset plugin merge
+
+#### Case E1：`extends` 导入 plugin config
+
+```ts
+const plugin = {
+  rules: {
+    api: { main: '@docs-islands/api', group: 'api.fetch' },
+  },
+  configs: {
+    recommended: {
+      rules: {
+        api: { levels: 'inherit' },
+      },
+    },
+  },
+} satisfies LoggerPresetPlugin;
+
+setLoggerConfig({
+  debug: true,
+  levels: ['warn', 'error'],
+  plugins: { test: plugin },
+  extends: ['test/recommended'],
+});
+```
+
+输出 label 使用 `<plugin>/<rule>`：
+
+```bash
+[test/api] @docs-islands/api[api.fetch]: warn visible <TIME>
+[test/api] @docs-islands/api[api.fetch]: error visible <TIME>
+```
+
+#### Case E2：导入后用户可覆盖 `levels` / `message`，但不能覆盖 `main` / `group`
+
+```ts
+setLoggerConfig({
+  debug: true,
+  levels: ['warn', 'error'],
+  plugins: { test: plugin },
+  extends: ['test/recommended'],
+  rules: {
+    'test/api': {
+      message: '*failed*',
+      levels: ['error'],
+    },
+  },
+});
+```
+
+只有 failed error 输出：
+
+```bash
+[test/api] @docs-islands/api[api.fetch]: request failed <TIME>
+```
+
+非法覆盖：
+
+```ts
+expect(() =>
+  resolveLoggerConfig({
+    plugins: { test: plugin },
+    extends: ['test/recommended'],
+    rules: {
+      'test/api': { main: '@docs-islands/other', levels: ['warn'] },
+    },
+  }),
+).toThrow('The user rule cannot override "test/api" plugin rule\'s main and group fields.');
+
+expect(() =>
+  resolveLoggerConfig({
+    plugins: { test: plugin },
+    extends: ['test/recommended'],
+    rules: {
+      'test/api': { group: 'api.other', levels: ['warn'] },
+    },
+  }),
+).toThrow('The user rule cannot override "test/api" plugin rule\'s main and group fields.');
+```
+
+#### Case E3：多个 `extends` 按声明顺序 merge，后者覆盖或删除前者
+
+```ts
+const plugin = {
+  rules: { api: { main: '@docs-islands/api', group: 'api.fetch' } },
+  configs: {
+    warn: { rules: { api: { levels: ['warn'], message: '*slow*' } } },
+    error: { rules: { api: { levels: ['error'], message: '*failed*' } } },
+    off: { rules: { api: 'off' } },
+  },
+} satisfies LoggerPresetPlugin;
+```
+
+`extends: ['test/warn', 'test/error']` 时只输出 failed error；`extends: ['test/warn', 'test/off']` 时无 active rules，回到 root fallback。
+
+#### Case E4：直接启用 plugin rule 可覆盖 template 的 `main` / `group`
+
+当 plugin rule 之前没有通过 `extends` 进入 merge map，直接在 public `rules` 中启用时，当前实现允许 body 覆盖 template scope：
+
+```ts
+setLoggerConfig({
+  debug: true,
+  plugins: {
+    test: {
+      rules: {
+        api: { main: '@docs-islands/api', group: 'api.fetch' },
+      },
+    },
+  },
+  rules: {
+    'test/api': {
+      main: '@docs-islands/override',
+      group: 'api.override',
       levels: ['warn'],
     },
-    {
-      label: 'ExactMain',
-      main: '@docs-islands/test',
-      levels: ['error'],
-    },
-  ],
-};
+  },
+});
 ```
 
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.main.literal');
-
-const Logger_B = createLogger({
-  main: '@docs-islands/*',
-}).getLoggerByGroup('test.case.main.literal');
-
-Logger_A.warn('wildcard should not match');
-Logger_A.error('exact main match');
-Logger_B.warn('literal wildcard main');
-```
-
-输出结果：
+输出：
 
 ```bash
-[ExactMain] @docs-islands/test[test.case.main.literal]: exact main match <TIME>
-[WildcardMain] @docs-islands/*[test.case.main.literal]: literal wildcard main <TIME>
+[test/api] @docs-islands/override[api.override]: override visible <TIME>
 ```
 
----
+#### Case E5：plugin rule template 的 `levels` 被忽略
 
-## Case 33
-
-验证点：
-
-- `rules: []` 会标准化为“未配置 rules”
-- 因此 `rules: []` 走默认 level 集合，而不是“存在 rules 但无 active rule”
-
-```ts [config.ts]
-const logging = {
-  debug: false,
-  rules: [],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.empty.rules');
-
-Logger_A.debug('debug hidden');
-Logger_A.info('info visible');
-Logger_A.success('success visible');
-Logger_A.warn('warn visible');
-Logger_A.error('error visible');
-```
-
-输出结果：
-
-```bash
-@docs-islands/test[test.case.empty.rules]: info visible
-@docs-islands/test[test.case.empty.rules]: success visible
-@docs-islands/test[test.case.empty.rules]: warn visible
-@docs-islands/test[test.case.empty.rules]: error visible
-```
-
-当 `debug = true` 时，输出结果：
-
-```bash
-@docs-islands/test[test.case.empty.rules]: debug visible
-@docs-islands/test[test.case.empty.rules]: info visible <TIME>
-@docs-islands/test[test.case.empty.rules]: success visible <TIME>
-@docs-islands/test[test.case.empty.rules]: warn visible <TIME>
-@docs-islands/test[test.case.empty.rules]: error visible <TIME>
-```
-
----
-
-## Case 34
-
-验证点：
-
-- 当 `rule.levels` 与 `logging.levels` 均缺失时，rule 使用 `defaultResolvedLevels`
-- rule 模式下，`debug` level 日志仍被抑制
-
-```ts [config.ts]
-const logging = {
-  debug: true,
-  rules: [
-    {
-      label: 'DefaultLevels',
-    },
-  ],
-};
-```
-
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.default.levels');
-
-Logger_A.debug('debug remains rule-suppressed');
-Logger_A.info('info visible');
-Logger_A.success('success visible');
-Logger_A.warn('warn visible');
-Logger_A.error('error visible');
-```
-
-输出结果：
-
-```bash
-[DefaultLevels] @docs-islands/test[test.case.default.levels]: info visible <TIME>
-[DefaultLevels] @docs-islands/test[test.case.default.levels]: success visible <TIME>
-[DefaultLevels] @docs-islands/test[test.case.default.levels]: warn visible <TIME>
-[DefaultLevels] @docs-islands/test[test.case.default.levels]: error visible <TIME>
-```
-
----
-
-## Case 35
-
-验证点：
-
-- debug label 来自 contributing rules，而不是仅 scope 命中的 rules
-- rule 只有在 scope 与 `effectiveLevels(rule)` 同时命中当前日志时才参与贡献
-- 耗时断言应比较标准化后的完整输出，包括固定的 `ms` 值
-
-```ts [config.ts]
-const logging = {
+```ts
+setLoggerConfig({
   debug: true,
   levels: ['error'],
-  rules: [
-    {
-      label: 'InheritedError',
+  plugins: {
+    test: {
+      rules: {
+        api: {
+          main: '@docs-islands/api',
+          group: 'api.fetch',
+          levels: ['warn'],
+        },
+      },
     },
-    {
-      label: 'WarnOnly',
-      levels: ['warn'],
-    },
-    {
-      label: 'WarnAndError',
-      levels: ['warn', 'error'],
-    },
-  ],
-};
+  },
+  rules: {
+    'test/api': { levels: 'inherit' },
+  },
+});
 ```
 
-```ts [user.ts]
-const Logger_A = createLogger({
-  main: '@docs-islands/test',
-}).getLoggerByGroup('test.case.contributing.labels');
-
-Logger_A.warn('warn path');
-Logger_A.error('error path');
-```
-
-输出结果：
+输出：
 
 ```bash
-[WarnOnly][WarnAndError] @docs-islands/test[test.case.contributing.labels]: warn path <TIME>
-[InheritedError][WarnAndError] @docs-islands/test[test.case.contributing.labels]: error path <TIME>
+[test/api] @docs-islands/api[api.fetch]: root inherited error <TIME>
 ```
 
-## 4. 规则形态组合覆盖矩阵
+`template levels ignored` 的 warn 不输出。
 
-下表以“规则形态 × levels 来源”为维度，确认 `main / group / message / levels` 的组合项均已落到具体测试。
+#### Case E6：plugin / extends 输入错误
 
-| 规则形态                                     | 默认 levels 继承覆盖 | 显式 rule.levels 覆盖 |
-| -------------------------------------------- | -------------------- | --------------------- |
-| 无 `main/group/message`                      | Case 1 / Test1       | Case 2 / Test2        |
-| `main`                                       | Case 3 / Test2       | Case 3 / Test3        |
-| `group(准确匹配)`                            | Case 4 / Test1       | Case 22 / Test2       |
-| `group(match)`                               | Case 5 / Test1       | Case 5 / Test2        |
-| `message(准确匹配)`                          | Case 16 / Test1      | Case 16 / Test2       |
-| `message(match)`                             | Case 16 / Test3      | Case 16 / Test4       |
-| `main + group(准确匹配)`                     | Case 7 / Test1       | Case 7 / Test2        |
-| `main + group(match)`                        | Case 23 / Test1      | Case 23 / Test2       |
-| `main + message(准确匹配)`                   | Case 17 / Test1      | Case 17 / Test2       |
-| `main + message(match)`                      | Case 17 / Test3      | Case 17 / Test4       |
-| `group(准确匹配) + message(准确匹配)`        | Case 18 / Test1      | Case 18 / Test2       |
-| `group(准确匹配) + message(match)`           | Case 18 / Test3      | Case 18 / Test4       |
-| `group(match) + message(准确匹配)`           | Case 19 / Test1      | Case 19 / Test2       |
-| `group(match) + message(match)`              | Case 19 / Test3      | Case 19 / Test4       |
-| `main + group(准确匹配) + message(准确匹配)` | Case 20 / Test1      | Case 20 / Test2       |
-| `main + group(准确匹配) + message(match)`    | Case 20 / Test3      | Case 20 / Test4       |
-| `main + group(match) + message(准确匹配)`    | Case 21 / Test1      | Case 21 / Test2       |
-| `main + group(match) + message(match)`       | Case 21 / Test3      | Case 21 / Test4       |
+必须覆盖以下错误：
 
----
+```ts
+expect(() => resolveLoggerConfig({ plugins: [] as any })).toThrow(
+  'logger.plugins must be an object map.',
+);
+expect(() => resolveLoggerConfig({ plugins: { 'bad/name': { rules: {} } } as any })).toThrow(
+  'cannot contain "/".',
+);
+expect(() => resolveLoggerConfig({ plugins: { test: {} as any } })).toThrow(
+  'must be a logger preset plugin with a rules object.',
+);
+expect(() =>
+  resolveLoggerConfig({
+    plugins: { test: { rules: {} } },
+    extends: ['missing/recommended'] as any,
+  }),
+).toThrow('references unknown logger plugin');
+expect(() =>
+  resolveLoggerConfig({ plugins: { test: { rules: {} } }, extends: ['test/missing'] as any }),
+).toThrow('references unknown logger plugin config');
+expect(() =>
+  resolveLoggerConfig({
+    plugins: { test: { rules: {} } },
+    rules: { 'test/missing': { levels: ['warn'] } },
+  }),
+).toThrow('references unknown logger plugin rule');
+```
 
-## 5. `enabled` 门控行为覆盖矩阵
+### F. Build plugin 与 tree-shaking
 
-| `enabled` 形态                              | 语义                       | 已覆盖 Case                           |
-| ------------------------------------------- | -------------------------- | ------------------------------------- |
-| 缺失                                        | 默认等价于 `true`          | Case 1 ~ 28 之前的未显式 enabled 规则 |
-| 显式 `true`                                 | 与默认启用一致             | Case 29 / Test2, Case 30 / Test2      |
-| 显式 `false`（单 rule）                     | rule 完全失效；不输出      | Case 28                               |
-| 显式 `false`（与 active rule 重叠）         | 不参与 union，不参与 label | Case 29                               |
-| 显式 `false`（更具体 rule）                 | 不覆盖、不阻断 active rule | Case 30                               |
-| 显式 `false`（`main+group+message` 全字段） | 全字段命中仍无效           | Case 31                               |
+#### Case F1：`loggerPlugin` 注入 runtime defines 并注册默认 scope
 
----
+对 `loggerPlugin.vite({ config })`：
 
-## 6. 运行时行为覆盖矩阵
+1. `vite.config` hook 应向 `config.define` 写入：
+   - `__DOCS_ISLANDS_DEFAULT_LOGGER_CONTROLLED__ = 'true'`
+   - `__DOCS_ISLANDS_DEFAULT_LOGGER_CONFIG__ = JSON.stringify(config)`
+2. plugin factory 会对 default scope 调用 `setScopedLoggerConfig('__default__', config)`，因此 transform 阶段的 `shouldSuppressLog` 可读取同一配置。
+3. `config` 省略或显式传 `null` 时，当前实现都使用 `DEFAULT_LOGGER_CONFIG`，而不是注入 `null`。
+4. runtime 被 define 标记为 controlled 后，`setLoggerConfig`、`setResolvedLoggerConfig`、`resetLoggerConfig` 都应抛出 controlled runtime 错误。该断言需要在经过 define 替换的模块评估环境中执行，不要尝试通过 `globalThis` 模拟 declared compile-time constants。
 
-| 运行时行为                                                                       | 已覆盖 Case                                              |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| 标准化后有 `rules` 时仅按 activeRules 判定                                       | 1 ~ 23, 26, 27, 28, 29, 30, 31, 32, 34, 35               |
-| 标准化后有 `rules` 但无命中不输出                                                | 6, 13, 15, 17, 18, 19, 20, 21, 23, 28, 31, 32            |
-| 标准化后有 `rules` 且全部 disabled 不输出                                        | 28, 31                                                   |
-| `rules: []` 标准化为无 rules 默认行为                                            | 33                                                       |
-| 无 `rules` + `debug = false` 默认输出 `error`、`warn`、`info`、`success`         | 24, 33                                                   |
-| 无 `rules` + `debug = true` 默认输出 `error`、`warn`、`info`、`success`、`debug` | 25, 33                                                   |
-| 缺失 `rule.levels` 与 `logging.levels` 时 fallback 到 `defaultResolvedLevels`    | 34                                                       |
-| debug 下 `error`、`warn`、`info`、`success` 追加 `<TIME>`                        | 1 ~ 23, 25, 26, 27, 29, 30, 32, 33, 34, 35               |
-| debug 下 `debug` 日志不强制带 `<TIME>`                                           | 25, 33                                                   |
-| debug label 只包含 contributing rules                                            | 2, 29, 30, 35                                            |
-| `success` 在 rule 模式下可被默认 / 显式 levels 放行                              | 26, 34                                                   |
-| picomatch `*`                                                                    | 5, 9, 10, 12, 13, 15, 16, 17, 18, 19, 20, 21, 23, 26, 31 |
-| picomatch `?`                                                                    | 27                                                       |
-| picomatch `[]`                                                                   | 27                                                       |
-| 包含 glob magic 的 `main` 仍按字面量准确匹配                                     | 32                                                       |
-| debug label 顺序                                                                 | 1, 2, 3, 11, 14, 35                                      |
-| disabled rule 不参与 label                                                       | 29, 30                                                   |
+#### Case F2：tree-shaking 移除静态可证明 suppressed 的独立调用
 
----
+```ts
+setScopedLoggerConfig('__default__', { levels: ['error'] });
 
-## 7. 能力点覆盖矩阵（摘要）
+const input = `
+import { createLogger } from '@docs-islands/logger';
+const logger = createLogger({ main: '@docs-islands/test' }).getLoggerByGroup('tree.static');
+logger.info('hidden info');
+logger.warn('hidden warn');
+logger.error('visible error');
+`;
 
-| 能力点                         | 已覆盖 Case                                                                  |
-| ------------------------------ | ---------------------------------------------------------------------------- |
-| 默认 `enabled = true`          | 1 ~ 27, 32, 34, 35                                                           |
-| 显式 `enabled = true`          | 29, 30                                                                       |
-| 显式 `enabled = false`         | 28, 29, 30, 31                                                               |
-| 默认 levels 继承               | 1, 3, 4, 5, 6, 7, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 26, 28, 29, 31, 35 |
-| defaultResolvedLevels fallback | 34                                                                           |
-| rule.levels 覆盖默认 levels    | 2, 3, 5, 7, 8, 9, 10, 15, 16, 17, 18, 19, 20, 21, 22, 23, 26, 27, 29, 30     |
-| 无 scope 全局 rule             | 1, 2, 8, 9, 11, 14, 16, 27(仅 message)                                       |
-| main 准确匹配                  | 3, 7, 10, 13, 17, 20, 21, 23, 31, 32                                         |
-| group 准确匹配                 | 4, 7, 18, 20, 22, 28, 29, 30                                                 |
-| group picomatch 匹配           | 5, 10, 12, 13, 15, 19, 21, 23, 27, 31                                        |
-| message 准确匹配               | 8, 14, 16, 17, 18, 19, 20, 21, 27                                            |
-| message picomatch 匹配         | 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 26, 31                        |
-| main + group AND               | 7, 10, 13, 20, 21, 23, 31                                                    |
-| main + message AND             | 17, 31                                                                       |
-| group + message AND            | 10, 15, 18, 19, 20, 21, 31                                                   |
-| main + group + message AND     | 10, 13, 20, 21, 31                                                           |
-| 无 `rules` 默认输出            | 24, 25, 33                                                                   |
-| `rules: []` 标准化             | 33                                                                           |
-| `success`                      | 24, 25, 26, 33, 34                                                           |
-| `debug`                        | 25, 33, 34                                                                   |
-| debug 相对耗时后缀             | 1 ~ 23, 25, 26, 27, 29, 30, 32, 33, 34, 35                                   |
-| 标准化完整输出断言             | 4, 7, 11, 13, 14, 15, 23, 24, 25, 26, 29, 30, 32, 33, 34, 35                 |
+const result = await transformLoggerTreeShaking(input, 'input.ts', {
+  loggerModuleId: '@docs-islands/logger',
+  loggerScopeId: '__default__',
+});
 
----
+expect(result?.code).not.toContain("logger.info('hidden info');");
+expect(result?.code).not.toContain("logger.warn('hidden warn');");
+expect(result?.code).toContain("logger.error('visible error');");
+expect(result?.map).toBeDefined();
+```
 
-## 8. 最终结论
+#### Case F3：tree-shaking 在 rule-mode 中也移除静态 suppressed 调用
 
-这组测试文档现在可以作为**规范化测试基线**使用，理由如下：
+```ts
+setScopedLoggerConfig('__default__', {
+  debug: true,
+  rules: {
+    ErrorOnly: { group: 'tree.rule', levels: ['error'] },
+  },
+});
+```
 
-1. `main`、`group`、`message`、`levels` 的规则组合已通过矩阵方式落地
-2. `group` 与 `message` 的**准确匹配 / picomatch 匹配**均已有正例与反例
-3. `main` 已被明确限定为**仅支持准确匹配**
-4. 补充信息中的运行时要求已被显式纳入测试：
-   - picomatch
-   - `enabled`
-   - debug 相对耗时后缀
-   - 无 `rules` 时的默认输出
-   - `rules: []` 标准化
-   - rule 与全局 levels 均缺失时的默认 level fallback
-5. 测试同时覆盖“应输出”和“不得输出”，避免只测 happy path
-6. 高风险与补充性合规用例中的严格输出断言会标准化 ANSI 转义序列，并精确比较固定耗时值；宽矩阵用例仍可使用调用次数、顺序、模式断言
-7. `enabled: false` 已被证明是一个真正的“门控开关”，而不是低优先级 rule
+`logger.debug('hidden debug')`、`logger.warn('hidden warn')`、`logger.error('visible error')` 中，前两个被移除，error 保留。
 
-若后续继续增强规范，优先建议再补：
+#### Case F4：tree-shaking 保守保留动态或不安全调用
 
-- `main` 若未来支持 match，需新增独立矩阵
-- 大小写敏感性
-- 空字符串 `message`
+以下形态均必须保留；没有移除时返回 `null`：
+
+```ts
+import { createLogger as makeLogger } from '@docs-islands/logger';
+import { createLogger } from '@docs-islands/logger';
+
+const main = '@docs-islands/test';
+const group = 'tree.dynamic';
+const message = 'hidden info';
+
+const aliasLogger = makeLogger({ main: '@docs-islands/test' }).getLoggerByGroup('tree.alias');
+const dynamicMainLogger = createLogger({ main }).getLoggerByGroup('tree.dynamic');
+const dynamicGroupLogger = createLogger({ main: '@docs-islands/test' }).getLoggerByGroup(group);
+const dynamicMessageLogger = createLogger({ main: '@docs-islands/test' }).getLoggerByGroup(
+  'tree.dynamic',
+);
+let mutableLogger = createLogger({ main: '@docs-islands/test' }).getLoggerByGroup('tree.mutable');
+
+aliasLogger.info('hidden info');
+dynamicMainLogger.info('hidden info');
+dynamicGroupLogger.info('hidden info');
+dynamicMessageLogger.info(message);
+mutableLogger.info('hidden info');
+const result = dynamicMessageLogger.info('hidden info');
+dynamicMessageLogger['info']('hidden info');
+```
+
+#### Case F5：tree-shaking 无关输入与参数错误
+
+```ts
+await expect(
+  transformLoggerTreeShaking('const x = 1;', 'input.ts', {
+    loggerModuleId: '@docs-islands/logger',
+    loggerScopeId: '__default__',
+  }),
+).resolves.toBeNull();
+
+await expect(
+  transformLoggerTreeShaking('import { createLogger } from "other";', 'input.ts', {
+    loggerModuleId: '@docs-islands/logger',
+    loggerScopeId: '__default__',
+  }),
+).resolves.toBeNull();
+
+await expect(
+  transformLoggerTreeShaking(
+    'import { createLogger as createLogger } from "@docs-islands/logger"; syntax ?',
+    'input.ts',
+    {
+      loggerModuleId: '@docs-islands/logger',
+      loggerScopeId: '__default__',
+    },
+  ),
+).resolves.toBeNull();
+
+await expect(
+  transformLoggerTreeShaking('', 'input.ts', {
+    loggerModuleId: '   ',
+    loggerScopeId: '__default__',
+  }),
+).rejects.toThrow('logger tree-shaking requires a non-empty loggerModuleId.');
+```
+
+## 4. 覆盖矩阵
+
+| 能力                                         | Cases                           |
+| -------------------------------------------- | ------------------------------- |
+| public config 标准化                         | A1-A6, A9                       |
+| resolved config 标准化                       | A7-A8, C5                       |
+| root levels / rule levels / default fallback | A1, A2, A5, A8, B1-B6, B12, B15 |
+| `off` 删除                                   | A6, E3                          |
+| rule-mode allowlist 与 no fallback           | B4-B11, B15-B16                 |
+| main/group/message 匹配                      | B7-B14                          |
+| debug labels 与 elapsed time                 | B2, B4-B6, B8-B16, D2-D3        |
+| logger main/group 校验与 cache               | C1-C2                           |
+| scoped API 与 registry                       | C3-C6                           |
+| console method 与 Node/Browser 格式          | D1-D3                           |
+| preset plugin merge                          | E1-E6                           |
+| build plugin runtime defines                 | F1                              |
+| static tree-shaking                          | F2-F5                           |
+
+## 5. 维护规则
+
+1. 新增测试必须先声明使用 public config 还是 resolved config，不能混用规则形态。
+2. public rules 永远写 object map；resolved rules 才写 array。
+3. public rule object 永远显式写 `levels`，继承根 levels 时写 `levels: 'inherit'`。
+4. 对 runtime 输出断言，Node 环境必须先 strip ANSI；Browser 环境断言 `%c` 模板与 style 参数个数。
+5. 对 `<TIME>` 的预期必须由 `logger.warn('msg', { elapsedTimeMs: 42 })` 这类调用触发。
+6. 只测试工具函数的 runtime 可观察效果；不要为 helper formatter 增加独立规范用例。
+7. 修改 rule matching 时至少运行 A、B、C6、F2-F4；修改 plugin merge 时至少运行 E；修改 console 输出时至少运行 D；修改 build plugin 或 transform 时至少运行 F。

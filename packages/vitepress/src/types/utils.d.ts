@@ -2,6 +2,17 @@
  * Configuration and utility types
  */
 
+import type {
+  LoggerConfig,
+  LoggerPluginMap,
+  LoggerPresetPlugin,
+  LoggerPresetRuleUserConfig,
+  LoggerRuleSetting,
+  LoggerRulesUserConfig,
+  LoggerRuleUserConfig,
+  LoggerVisibilityLevel,
+} from '@docs-islands/logger/types';
+
 export type ConsoleThemeValue =
   | 'red'
   | 'green'
@@ -612,61 +623,29 @@ export interface SiteDevToolsResolvedUserConfig {
   analysis?: SiteDevToolsAnalysisResolvedUserConfig;
 }
 
-export type LoggingVisibilityLevel = 'error' | 'warn' | 'info' | 'success';
-
-export interface LoggingRuleUserConfig {
-  enabled?: boolean;
-  group?: string;
+export type LoggingVisibilityLevel = LoggerVisibilityLevel;
+export type LoggingRuleUserConfig = LoggerRuleUserConfig;
+export type LoggingPresetRuleUserConfig = LoggerPresetRuleUserConfig;
+export type LoggingPresetPlugin<
+  TRules extends Record<string, LoggingPresetRuleUserConfig> = Record<
+    string,
+    LoggingPresetRuleUserConfig
+  >,
+> = LoggerPresetPlugin<TRules>;
+export type LoggingRuleSetting = LoggerRuleSetting;
+export type LoggingRulesUserConfig<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+> = LoggerRulesUserConfig<TPlugins>;
+export type LoggingUserConfig<
+  TPlugins extends LoggerPluginMap = LoggerPluginMap,
+> = LoggerConfig<TPlugins> & {
   /**
-   * Stable unique identifier for this rule.
+   * Enable managed VitePress logger tree-shaking during production builds.
    *
-   * When `logging.debug` is enabled, emitted logs surface the matched rule label
-   * as `[rule:<label>]` before the message body so it is clear which rule won.
+   * @default false
    */
-  label: string;
-  levels?: LoggingVisibilityLevel[];
-  main?: string;
-  message?: string;
-}
-
-export interface LoggingPresetRuleUserConfig {
-  group?: string;
-  levels?: LoggingVisibilityLevel[];
-  main?: string;
-  message?: string;
-}
-
-export interface LoggingPresetPlugin {
-  rules: Record<string, LoggingPresetRuleUserConfig>;
-}
-
-export interface LoggingPresetRuleOverrideUserConfig {
-  enabled?: boolean;
-  levels?: LoggingVisibilityLevel[];
-  message?: string;
-}
-
-export type LoggingPresetRuleSetting =
-  | false
-  | 'off'
-  | LoggingPresetRuleOverrideUserConfig;
-
-export type LoggingPresetRulesUserConfig = Record<
-  string,
-  LoggingPresetRuleSetting
->;
-
-export interface LoggingUserConfig {
-  /**
-   * Global debug gate for project-owned debug logs.
-   *
-   * When omitted, debug logs stay disabled.
-   */
-  debug?: boolean;
-  levels?: LoggingVisibilityLevel[];
-  plugins?: Record<string, LoggingPresetPlugin>;
-  rules?: LoggingRuleUserConfig[] | LoggingPresetRulesUserConfig;
-}
+  treeshake?: boolean;
+};
 
 export interface ConfigType {
   root: string;

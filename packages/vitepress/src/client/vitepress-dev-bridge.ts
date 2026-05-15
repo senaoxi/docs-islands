@@ -12,7 +12,7 @@ import {
   requiresPreRenderDirective,
 } from '@docs-islands/core/client';
 import {
-  createElapsedLogOptions,
+  createElapsedTimer,
   formatDebugMessage,
   formatErrorMessage,
 } from '@docs-islands/logger/helper';
@@ -27,8 +27,6 @@ const DEV_MOUNT_PREPARATION_RETRY_LIMIT = 10;
 const DEV_RUNTIME_FALLBACK_DELAY_MS = 1200;
 const DEV_MOUNT_RENDER_REPLAY_INTERVAL_MS = 32;
 const DEV_MOUNT_PREPARATION_DELAY_MS = 32;
-const elapsedSince = (startTimeMs: number) =>
-  createElapsedLogOptions(startTimeMs, Date.now());
 
 export interface CreateVitePressDevBridgeOptions {
   createDevRuntimeUrl: (pathname: string, timestamp: number) => string;
@@ -90,13 +88,13 @@ export class VitePressDevBridge<
     loggerGroup: string,
     failureMessage: string,
   ): void {
-    const taskStartedAt = Date.now();
+    const taskElapsed = createElapsedTimer();
     task.catch((error) => {
       loggerInstance
         .getLoggerByGroup(loggerGroup)
         .error(
           `${failureMessage}: ${formatErrorMessage(error)}`,
-          elapsedSince(taskStartedAt),
+          taskElapsed(),
         );
     });
   }

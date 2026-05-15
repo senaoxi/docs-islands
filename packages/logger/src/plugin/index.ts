@@ -58,6 +58,15 @@ const ROLLUP_REPLACE_PLUGIN_OPTIONS = {
 
 export interface LoggerPluginOptions {
   config?: LoggerConfig | null;
+  /**
+   * Enable build-time tree-shaking of logger calls.
+   *
+   * When enabled, the plugin removes statically provable logger calls that are hidden by the resolved logger config.
+   *
+   * Only applies during build mode; has no effect in dev/watch mode.
+   *
+   * @default false
+   */
   treeshake?: boolean;
 }
 
@@ -323,7 +332,7 @@ const factory: UnpluginFactory<LoggerPluginOptions | undefined> = (
   const loggerScopeId = DEFAULT_LOGGER_SCOPE_ID;
   const loggerConfig = options.config ?? DEFAULT_LOGGER_CONFIG;
   const defines = createLoggerPluginDefines(loggerConfig);
-  const shouldTreeshake = options.treeshake !== false;
+  const shouldTreeshake = options.treeshake === true;
   let isBuild = readInitialIsBuild(meta);
 
   setScopedLoggerConfig(loggerScopeId, loggerConfig);
@@ -395,6 +404,42 @@ const factory: UnpluginFactory<LoggerPluginOptions | undefined> = (
   };
 };
 
+/**
+ * Universal bundler plugin for logger configuration and optimization.
+ *
+ * This plugin integrates with multiple build systems (Vite, Webpack, Rollup, esbuild, Rolldown, Farm, rspack)
+ * to:
+ *
+ * 1. **Inject logger configuration** - Embeds the resolved logger config as compile-time constants,
+ *    enabling build-time optimization and controlling which logs are shown at runtime
+ * 2. **Perform tree-shaking** (when enabled) - Removes logger calls that would be suppressed by the
+ *    current configuration, reducing bundle size and improving performance
+ *
+ * The plugin automatically detects the build environment (development vs production) and adjusts
+ * tree-shaking behavior accordingly. Tree-shaking only runs during production builds.
+ *
+ * @param options - Configuration options
+ * @param options.config - The logger configuration to use (defaults to DEFAULT_LOGGER_CONFIG)
+ * @param options.treeshake - Enable build-time tree-shaking of suppressed logger calls (default: false)
+ * @returns A universal plugin compatible with Vite, Webpack, Rollup, and other bundlers
+ *
+ * @example
+ * ```ts
+ * // Vite configuration
+ * import { loggerPlugin } from '@docs-islands/logger';
+ *
+ * export default {
+ *   plugins: [
+ *     loggerPlugin({
+ *       config: {
+ *         levels: ['error', 'warn'],
+ *       },
+ *       treeshake: true,
+ *     }),
+ *   ],
+ * };
+ * ```
+ */
 export const loggerPlugin = createUnplugin(factory);
 
 export {
