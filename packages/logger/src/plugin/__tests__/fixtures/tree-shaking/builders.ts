@@ -66,6 +66,13 @@ export interface LoggerTreeShakingFixtureBuild {
 const createFixtureEntryPath = (fixtureDirectory: string): string =>
   path.join(TREE_SHAKING_FIXTURES_ROOT, fixtureDirectory, 'entry.ts');
 
+const resolveFixturePluginOptions = (
+  fixture: LoggerTreeShakingFixture,
+): LoggerPluginOptions => ({
+  treeshake: true,
+  ...fixture.options,
+});
+
 const LOGGER_TREE_SHAKING_FIXTURES: LoggerTreeShakingFixture[] = [
   {
     entry: createFixtureEntryPath('tree-shaking-levels'),
@@ -256,7 +263,7 @@ const buildViteFixture = async (
     },
     configFile: false,
     logLevel: 'silent',
-    plugins: [loggerPlugin.vite(fixture.options)],
+    plugins: [loggerPlugin.vite(resolveFixturePluginOptions(fixture))],
   })) as RollupOutput[];
 
   const outputs = Array.isArray(output) ? output : [output];
@@ -273,7 +280,7 @@ const buildRollupFixture = async (
   const bundle = await rollup({
     external: [LOGGER_MODULE_ID],
     input: fixture.entry,
-    plugins: [loggerPlugin.rollup(fixture.options)],
+    plugins: [loggerPlugin.rollup(resolveFixturePluginOptions(fixture))],
   });
 
   try {
@@ -296,7 +303,7 @@ const buildRolldownFixture = async (
   const bundle = await rolldown({
     external: [LOGGER_MODULE_ID],
     input: fixture.entry,
-    plugins: [loggerPlugin.rolldown(fixture.options)],
+    plugins: [loggerPlugin.rolldown(resolveFixturePluginOptions(fixture))],
   });
 
   try {
@@ -321,7 +328,7 @@ const buildEsbuildFixture = async (
     entryPoints: [fixture.entry],
     external: [LOGGER_MODULE_ID],
     format: 'esm',
-    plugins: [loggerPlugin.esbuild(fixture.options)],
+    plugins: [loggerPlugin.esbuild(resolveFixturePluginOptions(fixture))],
     write: false,
   });
 
@@ -349,7 +356,7 @@ const buildWebpackFixture = async (
           filename: `${fixture.name}.js`,
           path: outputDirectory,
         },
-        plugins: [loggerPlugin.webpack(fixture.options)],
+        plugins: [loggerPlugin.webpack(resolveFixturePluginOptions(fixture))],
         resolve: {
           extensions: ['.ts', '.js'],
         },
@@ -383,7 +390,7 @@ const buildRspackFixture = async (
           filename: `${fixture.name}.js`,
           path: outputDirectory,
         },
-        plugins: [loggerPlugin.rspack(fixture.options)],
+        plugins: [loggerPlugin.rspack(resolveFixturePluginOptions(fixture))],
         resolve: {
           extensions: ['.ts', '.js'],
         },
@@ -407,7 +414,7 @@ const buildFarmFixture = async (
         clearScreen: false,
         configFile: false,
         mode: 'production',
-        plugins: [loggerPlugin.farm(fixture.options)],
+        plugins: [loggerPlugin.farm(resolveFixturePluginOptions(fixture))],
         root: path.dirname(fixture.entry),
         compilation: {
           external: [LOGGER_MODULE_ID],

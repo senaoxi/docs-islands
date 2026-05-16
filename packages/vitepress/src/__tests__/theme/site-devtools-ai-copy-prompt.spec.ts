@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { SiteDevToolsAiAnalysisTarget } from '../../../src/shared/site-devtools-ai';
-import { buildSiteDevToolsAiAnalysisPrompt } from '../../../src/shared/site-devtools-ai';
 import { resolveSiteDevToolsAiCopyPrompt } from '../../../theme/site-devtools-ai-copy-prompt';
+import type { SiteDevToolsAiAnalysisTarget } from '../../shared/site-devtools-ai';
+import { buildSiteDevToolsAiAnalysisPrompt } from '../../shared/site-devtools-ai';
 
 const createAnalysisTarget = (
   overrides: Partial<SiteDevToolsAiAnalysisTarget> = {},

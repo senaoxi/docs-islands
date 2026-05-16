@@ -1,12 +1,12 @@
-/**
- * @vitest-environment node
- */
 import {
   resetScopedLoggerConfig,
-  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
+  setScopedLoggerConfig,
 } from '@docs-islands/logger/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createRenderingModuleResolution } from '../module-resolution';
+import {
+  createRenderingModuleResolution,
+  type RenderingModuleResolution,
+} from '../module-resolution';
 
 const TEST_LOGGER_SCOPE_ID = 'module-resolution-test-scope';
 const getTestLoggerScopeId = () => TEST_LOGGER_SCOPE_ID;
@@ -27,6 +27,64 @@ afterEach(() => {
   resetScopedLoggerConfig(TEST_LOGGER_SCOPE_ID);
   vi.restoreAllMocks();
 });
+
+const callResolveId = (
+  plugin: ReturnType<RenderingModuleResolution['createVitePlugin']>,
+  id: string,
+) => {
+  const hook = plugin.resolveId;
+
+  if (!hook) {
+    return null;
+  }
+
+  return typeof hook === 'function'
+    ? hook.call({} as never, id, undefined, {
+        attributes: {},
+        custom: {},
+        isEntry: false,
+      })
+    : hook.handler.call({} as never, id, undefined, {
+        attributes: {},
+        custom: {},
+        isEntry: false,
+      });
+};
+
+const callConfigResolved = (
+  plugin: ReturnType<RenderingModuleResolution['createVitePlugin']>,
+  config: unknown,
+) => {
+  const hook = plugin.configResolved;
+
+  if (!hook) {
+    return;
+  }
+
+  if (typeof hook === 'function') {
+    hook.call({} as never, config as never);
+    return;
+  }
+
+  hook.handler.call({} as never, config as never);
+};
+
+const callHandleHotUpdate = async (
+  plugin: ReturnType<RenderingModuleResolution['createVitePlugin']>,
+  context: unknown,
+) => {
+  const hook = plugin.handleHotUpdate;
+
+  if (!hook) {
+    return;
+  }
+
+  if (typeof hook === 'function') {
+    hook.call({} as never, context as never);
+  } else {
+    hook.handler.call({} as never, context as never);
+  }
+};
 
 describe('rendering module resolution', () => {
   it('resolves routes and document module ids through the shared static resolver', () => {
@@ -61,7 +119,7 @@ describe('rendering module resolution', () => {
   });
 
   it('refreshes cached route mappings when the shared vite plugin receives config updates', async () => {
-    setLoggerConfigForScope(TEST_LOGGER_SCOPE_ID, undefined);
+    setScopedLoggerConfig(TEST_LOGGER_SCOPE_ID, {});
 
     const resolution = createRenderingModuleResolution(getTestLoggerScopeId);
     const plugin = resolution.createVitePlugin();
@@ -82,12 +140,12 @@ describe('rendering module resolution', () => {
       },
     };
 
-    plugin.configResolved?.({
+    callConfigResolved(plugin, {
       vitepress: initialConfig,
-    } as any);
+    });
 
-    const resolveHandler = (plugin.resolveId as any).handler;
-    const initialResolvedId = resolveHandler(
+    const initialResolvedId = callResolveId(
+      plugin,
       resolution.createInlinePageRequest(
         '/docs-islands/vitepress/core-concepts',
       ),
@@ -97,7 +155,7 @@ describe('rendering module resolution', () => {
       /packages\/vitepress\/docs\/en\/core-concepts\.md$/,
     );
 
-    await plugin.handleHotUpdate?.({
+    await callHandleHotUpdate(plugin, {
       server: {
         config: {
           vitepress: {
@@ -113,9 +171,10 @@ describe('rendering module resolution', () => {
           },
         },
       },
-    } as any);
+    });
 
-    const refreshedResolvedId = resolveHandler(
+    const refreshedResolvedId = callResolveId(
+      plugin,
       resolution.createInlinePageRequest(
         '/docs-islands/vitepress/core-concepts',
       ),

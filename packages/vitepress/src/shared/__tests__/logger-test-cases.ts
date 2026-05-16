@@ -1,4 +1,4 @@
-import type { LogKind, ResolvedLoggerConfig } from '@docs-islands/logger/types';
+import type { LoggerConfig, LogKind } from '@docs-islands/logger/types';
 
 export const LOGGER_SPEC_CASE_COUNT = 31;
 export const LOGGER_SPEC_ELAPSED = '42.00ms';
@@ -15,7 +15,7 @@ interface LoggerOperation {
 }
 
 export interface LoggerSpecCase {
-  config: ResolvedLoggerConfig;
+  config: LoggerConfig;
   expected: string[];
   expectedDebug?: string[];
   loggers: Record<string, LoggerFixture>;
@@ -68,7 +68,10 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [{ label: 'Test1' }, { label: 'Test2' }],
+      rules: {
+        Test1: { levels: 'inherit' },
+        Test2: { levels: 'inherit' },
+      },
     },
     loggers: commonA,
     operations: commonAOps,
@@ -88,7 +91,10 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [{ label: 'Test1' }, { label: 'Test2', levels: ['warn', 'info'] }],
+      rules: {
+        Test1: { levels: 'inherit' },
+        Test2: { levels: ['warn', 'info'] },
+      },
     },
     loggers: commonA,
     operations: commonAOps,
@@ -110,12 +116,12 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [
-        { label: 'Test1', levels: ['warn'] },
-        { label: 'Test2', main: TEST_MAIN },
-        { label: 'Test3', levels: ['warn', 'info'], main: TEST_MAIN_B },
-        { label: 'Test4', levels: ['error'], main: TEST_MAIN_B },
-      ],
+      rules: {
+        Test1: { levels: ['warn'] },
+        Test2: { main: TEST_MAIN, levels: 'inherit' },
+        Test3: { main: TEST_MAIN_B, levels: ['warn', 'info'] },
+        Test4: { main: TEST_MAIN_B, levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.a', main: TEST_MAIN },
@@ -162,7 +168,9 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [{ label: 'Test1', group: 'test.case.a' }],
+      rules: {
+        Test1: { group: 'test.case.a', levels: 'inherit' },
+      },
     },
     loggers: {
       A: { group: 'test.case.a', main: TEST_MAIN },
@@ -202,12 +210,12 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [
-        { label: 'Test1', group: 'test.case.b*' },
-        { label: 'Test2', group: 'test.case.*', levels: ['warn'] },
-        { label: 'Test3', group: 'test.*', levels: ['info'] },
-        { label: 'Test4', group: 'test.*', levels: ['error'] },
-      ],
+      rules: {
+        Test1: { group: 'test.case.b*', levels: 'inherit' },
+        Test2: { group: 'test.case.*', levels: ['warn'] },
+        Test3: { group: 'test.*', levels: ['info'] },
+        Test4: { group: 'test.*', levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.a', main: TEST_MAIN },
@@ -298,7 +306,9 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [{ label: 'Test1', group: 'test.case.a' }],
+      rules: {
+        Test1: { group: 'test.case.a', levels: 'inherit' },
+      },
     },
     loggers: {
       A: { group: 'test.case.b', main: TEST_MAIN },
@@ -316,15 +326,10 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [
-        { label: 'Test1', main: TEST_MAIN, group: 'test.case.a' },
-        {
-          label: 'Test2',
-          main: TEST_MAIN_B,
-          group: 'test.case.a',
-          levels: ['warn'],
-        },
-      ],
+      rules: {
+        Test1: { main: TEST_MAIN, group: 'test.case.a', levels: 'inherit' },
+        Test2: { main: TEST_MAIN_B, group: 'test.case.a', levels: ['warn'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.a', main: TEST_MAIN },
@@ -355,10 +360,10 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [
-        { label: 'Test1', message: 'request timeout', levels: ['error'] },
-        { label: 'Test2', message: 'slow query', levels: ['warn'] },
-      ],
+      rules: {
+        Test1: { message: 'request timeout', levels: ['error'] },
+        Test2: { message: 'slow query', levels: ['warn'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.message', main: TEST_MAIN },
@@ -383,12 +388,12 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     name: 'Case 9 - message glob matching',
     config: {
       debug: false,
-      rules: [
-        { label: 'Test1', message: 'timeout:*', levels: ['warn'] },
-        { label: 'Test2', message: '*database*', levels: ['error'] },
-        { label: 'Test3', message: 'worker * finished', levels: ['info'] },
-        { label: 'Test4', message: 'timeout:*', levels: ['error'] },
-      ],
+      rules: {
+        Test1: { message: 'timeout:*', levels: ['warn'] },
+        Test2: { message: '*database*', levels: ['error'] },
+        Test3: { message: 'worker * finished', levels: ['info'] },
+        Test4: { message: 'timeout:*', levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.message.match', main: TEST_MAIN },
@@ -444,28 +449,25 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     name: 'Case 10 - partial and full scope rules compose',
     config: {
       debug: false,
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           main: TEST_MAIN,
           group: 'test.api.*',
           message: 'retry *',
           levels: ['warn'],
         },
-        {
-          label: 'Test2',
+        Test2: {
           main: TEST_MAIN,
           group: 'test.api.fetch',
           message: '*timeout*',
           levels: ['error'],
         },
-        {
-          label: 'Test3',
+        Test3: {
           group: 'test.api.fetch',
           message: '*timeout*',
           levels: ['warn'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.api.fetch', main: TEST_MAIN },
@@ -500,11 +502,11 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     name: 'Case 11 - multiple message labels keep declaration order',
     config: {
       debug: false,
-      rules: [
-        { label: 'Test1', message: '*timeout*', levels: ['error'] },
-        { label: 'Test2', message: 'request *', levels: ['error'] },
-        { label: 'Test3', message: '*user*', levels: ['error'] },
-      ],
+      rules: {
+        Test1: { message: '*timeout*', levels: ['error'] },
+        Test2: { message: 'request *', levels: ['error'] },
+        Test3: { message: '*user*', levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.message.order', main: TEST_MAIN },
@@ -526,20 +528,18 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     name: 'Case 12 - message match-all still respects other fields',
     config: {
       debug: false,
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           group: 'test.audit.*',
           message: '*',
           levels: ['error'],
         },
-        {
-          label: 'Test2',
+        Test2: {
           group: 'test.audit.login',
           message: '*failed*',
           levels: ['warn'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.audit.login', main: TEST_MAIN },
@@ -567,15 +567,14 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           main: TEST_MAIN,
           group: 'test.payment.*',
           message: '*timeout*',
           levels: ['error'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.payment.charge', main: TEST_MAIN },
@@ -598,11 +597,11 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     name: 'Case 14 - exact and wildcard message rules can overlap',
     config: {
       debug: false,
-      rules: [
-        { label: 'Test1', message: 'request timeout', levels: ['error'] },
-        { label: 'Test2', message: '*timeout*', levels: ['error'] },
-        { label: 'Test3', message: 'request *', levels: ['error'] },
-      ],
+      rules: {
+        Test1: { message: 'request timeout', levels: ['error'] },
+        Test2: { message: '*timeout*', levels: ['error'] },
+        Test3: { message: 'request *', levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.message.mix', main: TEST_MAIN },
@@ -634,20 +633,18 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     name: 'Case 15 - message negative cases',
     config: {
       debug: false,
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           group: 'test.notify.*',
           message: '*failed*',
           levels: ['warn'],
         },
-        {
-          label: 'Test2',
+        Test2: {
           group: 'test.notify.*',
           message: '*timeout*',
           levels: ['error'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.notify.email', main: TEST_MAIN },
@@ -673,12 +670,12 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn'],
-      rules: [
-        { label: 'Test1', message: 'msg.exact.default' },
-        { label: 'Test2', message: 'msg.exact.explicit', levels: ['info'] },
-        { label: 'Test3', message: 'msg.match.default.*' },
-        { label: 'Test4', message: 'msg.match.explicit.*', levels: ['error'] },
-      ],
+      rules: {
+        Test1: { message: 'msg.exact.default', levels: 'inherit' },
+        Test2: { message: 'msg.exact.explicit', levels: ['info'] },
+        Test3: { message: 'msg.match.default.*', levels: 'inherit' },
+        Test4: { message: 'msg.match.explicit.*', levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.message.cover', main: TEST_MAIN },
@@ -731,30 +728,28 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn'],
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           main: TEST_MAIN,
           message: 'main-message.exact.default',
+          levels: 'inherit',
         },
-        {
-          label: 'Test2',
+        Test2: {
           main: TEST_MAIN,
           message: 'main-message.exact.explicit',
           levels: ['error'],
         },
-        {
-          label: 'Test3',
+        Test3: {
           main: TEST_MAIN,
           message: 'main-message.match.default.*',
+          levels: 'inherit',
         },
-        {
-          label: 'Test4',
+        Test4: {
           main: TEST_MAIN,
           message: 'main-message.match.explicit.*',
           levels: ['info'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.case.main.message', main: TEST_MAIN },
@@ -812,30 +807,28 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn'],
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           group: 'test.case.gx',
           message: 'group-exact-message-exact.default',
+          levels: 'inherit',
         },
-        {
-          label: 'Test2',
+        Test2: {
           group: 'test.case.gx',
           message: 'group-exact-message-exact.explicit',
           levels: ['error'],
         },
-        {
-          label: 'Test3',
+        Test3: {
           group: 'test.case.gx',
           message: 'group-exact-message-match.default.*',
+          levels: 'inherit',
         },
-        {
-          label: 'Test4',
+        Test4: {
           group: 'test.case.gx',
           message: 'group-exact-message-match.explicit.*',
           levels: ['info'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.case.gx', main: TEST_MAIN },
@@ -889,30 +882,28 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn'],
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           group: 'test.case.gm*',
           message: 'group-match-message-exact.default',
+          levels: 'inherit',
         },
-        {
-          label: 'Test2',
+        Test2: {
           group: 'test.case.gm*',
           message: 'group-match-message-exact.explicit',
           levels: ['error'],
         },
-        {
-          label: 'Test3',
+        Test3: {
           group: 'test.case.gm*',
           message: 'group-match-message-match.default.*',
+          levels: 'inherit',
         },
-        {
-          label: 'Test4',
+        Test4: {
           group: 'test.case.gm*',
           message: 'group-match-message-match.explicit.*',
           levels: ['info'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.case.gm1', main: TEST_MAIN },
@@ -966,34 +957,32 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn'],
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           main: TEST_MAIN,
           group: 'test.case.mgx',
           message: 'mgx-message-exact.default',
+          levels: 'inherit',
         },
-        {
-          label: 'Test2',
+        Test2: {
           main: TEST_MAIN,
           group: 'test.case.mgx',
           message: 'mgx-message-exact.explicit',
           levels: ['error'],
         },
-        {
-          label: 'Test3',
+        Test3: {
           main: TEST_MAIN,
           group: 'test.case.mgx',
           message: 'mgx-message-match.default.*',
+          levels: 'inherit',
         },
-        {
-          label: 'Test4',
+        Test4: {
           main: TEST_MAIN,
           group: 'test.case.mgx',
           message: 'mgx-message-match.explicit.*',
           levels: ['info'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.case.mgx', main: TEST_MAIN },
@@ -1052,34 +1041,32 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn'],
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           main: TEST_MAIN,
           group: 'test.case.mgm*',
           message: 'mgm-message-exact.default',
+          levels: 'inherit',
         },
-        {
-          label: 'Test2',
+        Test2: {
           main: TEST_MAIN,
           group: 'test.case.mgm*',
           message: 'mgm-message-exact.explicit',
           levels: ['error'],
         },
-        {
-          label: 'Test3',
+        Test3: {
           main: TEST_MAIN,
           group: 'test.case.mgm*',
           message: 'mgm-message-match.default.*',
+          levels: 'inherit',
         },
-        {
-          label: 'Test4',
+        Test4: {
           main: TEST_MAIN,
           group: 'test.case.mgm*',
           message: 'mgm-message-match.explicit.*',
           levels: ['info'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.case.mgm1', main: TEST_MAIN },
@@ -1138,14 +1125,10 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn'],
-      rules: [
-        { label: 'Test1', group: 'test.only.exact.default' },
-        {
-          label: 'Test2',
-          group: 'test.only.exact.explicit',
-          levels: ['error'],
-        },
-      ],
+      rules: {
+        Test1: { group: 'test.only.exact.default', levels: 'inherit' },
+        Test2: { group: 'test.only.exact.explicit', levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.only.exact.default', main: TEST_MAIN },
@@ -1181,19 +1164,18 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn'],
-      rules: [
-        {
-          label: 'Test1',
+      rules: {
+        Test1: {
           main: TEST_MAIN,
           group: 'test.combo.match.default.*',
+          levels: 'inherit',
         },
-        {
-          label: 'Test2',
+        Test2: {
           main: TEST_MAIN,
           group: 'test.combo.match.explicit.*',
           levels: ['error'],
         },
-      ],
+      },
     },
     loggers: {
       A: { group: 'test.combo.match.default.1', main: TEST_MAIN },
@@ -1296,10 +1278,10 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['success'],
-      rules: [
-        { label: 'Test1', group: 'test.success.default' },
-        { label: 'Test2', message: '*completed*', levels: ['success'] },
-      ],
+      rules: {
+        Test1: { group: 'test.success.default', levels: 'inherit' },
+        Test2: { message: '*completed*', levels: ['success'] },
+      },
     },
     loggers: {
       A: { group: 'test.success.default', main: TEST_MAIN },
@@ -1324,10 +1306,10 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     name: 'Case 27 - picomatch question mark and character class',
     config: {
       debug: false,
-      rules: [
-        { label: 'Test1', group: 'test.case.?1', levels: ['warn'] },
-        { label: 'Test2', message: 'task-[ab]', levels: ['error'] },
-      ],
+      rules: {
+        Test1: { group: 'test.case.?1', levels: ['warn'] },
+        Test2: { message: 'task-[ab]', levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.a1', main: TEST_MAIN },
@@ -1356,7 +1338,7 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [],
+      rules: {},
     },
     loggers: {
       A: { group: 'test.case.off.empty', main: TEST_MAIN },
@@ -1380,7 +1362,9 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['warn', 'error'],
-      rules: [{ label: 'Test2', group: 'test.case.off.mix' }],
+      rules: {
+        Test2: { group: 'test.case.off.mix', levels: 'inherit' },
+      },
     },
     loggers: {
       A: { group: 'test.case.off.mix', main: TEST_MAIN },
@@ -1403,13 +1387,9 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     name: 'Case 30 - deleted exact rule does not block active glob rule',
     config: {
       debug: false,
-      rules: [
-        {
-          label: 'Test2',
-          group: 'test.case.off.*',
-          levels: ['error'],
-        },
-      ],
+      rules: {
+        Test2: { group: 'test.case.off.*', levels: ['error'] },
+      },
     },
     loggers: {
       A: { group: 'test.case.off.exact', main: TEST_MAIN },
@@ -1425,7 +1405,7 @@ export const loggerSpecCases: LoggerSpecCase[] = [
     config: {
       debug: false,
       levels: ['error'],
-      rules: [],
+      rules: {},
     },
     loggers: {
       A: { group: 'test.off.full.1', main: TEST_MAIN },

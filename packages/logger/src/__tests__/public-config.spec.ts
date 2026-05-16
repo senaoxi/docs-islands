@@ -1,8 +1,7 @@
 /**
  * @vitest-environment node
  */
-import { resolveLoggerConfig } from '@docs-islands/logger';
-import { normalizeLoggerConfig } from '@docs-islands/logger/core/helper';
+import { resolveLoggerConfig } from '@docs-islands/logger/core';
 import type { LoggerPresetPlugin } from '@docs-islands/logger/types';
 import { describe, expect, it } from 'vitest';
 
@@ -80,7 +79,7 @@ describe('public logger config', () => {
 
   it('normalizes rules maps into resolved rule arrays', () => {
     expect(
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         debug: true,
         levels: ['warn', 'error'],
         plugins: {
@@ -129,7 +128,7 @@ describe('public logger config', () => {
 
   it('treats off as deletion instead of a resolved disabled rule', () => {
     expect(
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         plugins: {
           test: testPreset,
         },
@@ -145,7 +144,7 @@ describe('public logger config', () => {
 
   it('does not enable plugin rules by registration alone', () => {
     expect(
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         plugins: {
           test: testPreset,
         },
@@ -157,7 +156,7 @@ describe('public logger config', () => {
 
   it('extends plugin configs and applies top-level rules last', () => {
     expect(
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         debug: true,
         extends: ['test/all'],
         levels: ['warn', 'error'],
@@ -203,7 +202,7 @@ describe('public logger config', () => {
 
   it('supports ordered extends overrides', () => {
     expect(
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test/inheritLevels', 'test/strict'],
         plugins: {
           test: testPreset,
@@ -229,7 +228,7 @@ describe('public logger config', () => {
 
   it('lets rule bodies override plugin template scope fields', () => {
     expect(
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         plugins: {
           test: testPreset,
         },
@@ -258,13 +257,13 @@ describe('public logger config', () => {
 
   it('rejects removed and invalid public rule forms', () => {
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         rules: [{ label: 'legacy-array' }],
       } as never),
     ).toThrow('logger.rules must be an object map, not an array.');
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         rules: {
           'custom:false': false,
         },
@@ -272,7 +271,7 @@ describe('public logger config', () => {
     ).toThrow('logger.rules["custom:false"] must be "off" or a rule object.');
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         rules: {
           'custom:true': true,
         },
@@ -280,7 +279,7 @@ describe('public logger config', () => {
     ).toThrow('logger.rules["custom:true"] must be "off" or a rule object.');
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         rules: {
           'custom:empty': {},
         },
@@ -290,7 +289,7 @@ describe('public logger config', () => {
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         rules: {
           'custom:enabled': {
             enabled: false,
@@ -305,7 +304,7 @@ describe('public logger config', () => {
 
   it('rejects unknown preset references', () => {
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         rules: {
           'test/build': {
             levels: 'inherit',
@@ -317,7 +316,7 @@ describe('public logger config', () => {
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         plugins: {
           test: testPreset,
         },
@@ -334,7 +333,7 @@ describe('public logger config', () => {
 
   it('rejects invalid extends references and preset config shapes', () => {
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: 'test/recommended',
       } as never),
     ).toThrow(
@@ -342,37 +341,37 @@ describe('public logger config', () => {
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test'],
-      }),
+      } as never),
     ).toThrow(
       'logger.extends entry "test" must use "<plugin>/<config>" format.',
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['missing/recommended'],
         plugins: {
           test: testPreset,
         },
-      }),
+      } as never),
     ).toThrow(
       'logger.extends entry "missing/recommended" references unknown logger plugin "missing".',
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test/missing'],
         plugins: {
           test: testPreset,
         },
-      }),
+      } as never),
     ).toThrow(
       'logger.extends entry "test/missing" references unknown logger plugin config "missing".',
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test/recommended'],
         plugins: {
           test: {
@@ -388,7 +387,7 @@ describe('public logger config', () => {
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test/recommended'],
         plugins: {
           test: {
@@ -407,7 +406,7 @@ describe('public logger config', () => {
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test/recommended'],
         plugins: {
           test: {
@@ -426,7 +425,7 @@ describe('public logger config', () => {
 
   it('rejects invalid plugin rule templates and config rule keys', () => {
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         plugins: {
           test: {
             rules: {
@@ -443,7 +442,7 @@ describe('public logger config', () => {
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test/recommended'],
         plugins: {
           test: {
@@ -469,7 +468,7 @@ describe('public logger config', () => {
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test/recommended'],
         plugins: {
           test: {
@@ -495,7 +494,7 @@ describe('public logger config', () => {
     );
 
     expect(() =>
-      normalizeLoggerConfig({
+      resolveLoggerConfig({
         extends: ['test/recommended'],
         plugins: {
           test: {

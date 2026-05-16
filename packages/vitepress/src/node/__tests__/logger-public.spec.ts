@@ -24,8 +24,16 @@ const callResolveId = async (plugin: Plugin, id: string): Promise<unknown> => {
   }
 
   return typeof hook === 'function'
-    ? hook.call({} as never, id)
-    : hook.handler.call({} as never, id);
+    ? hook.call({} as never, id, undefined, {
+        attributes: {},
+        custom: {},
+        isEntry: false,
+      })
+    : hook.handler.call({} as never, id, undefined, {
+        attributes: {},
+        custom: {},
+        isEntry: false,
+      });
 };
 
 const callLoad = async (plugin: Plugin, id: string): Promise<unknown> => {
@@ -66,6 +74,7 @@ describe('public vitepress logger api', () => {
 
   it('generates a scope-bound virtual logger facade in managed builds', async () => {
     const loggingConfig = {
+      levels: ['info'],
       rules: [
         {
           group: 'runtime.allowed',
@@ -93,7 +102,7 @@ describe('public vitepress logger api', () => {
     expect(sourceCode).toContain(
       `const loggerScopeId = ${JSON.stringify(TEST_RUNTIME_LOGGER_SCOPE_ID)};`,
     );
-    expect(sourceCode).toContain('setResolvedScopedLoggerConfig(loggerScopeId');
+    expect(sourceCode).toContain('setScopedLoggerConfig(loggerScopeId');
     expect(sourceCode).toContain(
       `const loggerConfig = ${JSON.stringify(loggingConfig)};`,
     );
@@ -139,9 +148,11 @@ describe('public vitepress logger api', () => {
       group: 'runtime.render.validation',
       main: '@docs-islands/core',
     });
-    expect(vitepressLogger.configs.recommended.rules).toHaveProperty(
+    expect(vitepressLogger.configs?.recommended.rules).toHaveProperty(
       'viteAfterUpdate',
     );
-    expect(vitepressLogger.configs.hmr.rules).toHaveProperty('viteAfterUpdate');
+    expect(vitepressLogger.configs?.hmr.rules).toHaveProperty(
+      'viteAfterUpdate',
+    );
   });
 });

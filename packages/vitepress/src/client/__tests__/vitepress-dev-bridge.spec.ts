@@ -59,6 +59,7 @@ describe('VitePressDevBridge', () => {
           renderWithSpaSync: false,
         },
       ]),
+      cleanup: vi.fn(),
       executeRuntime: vi.fn(),
     };
     const bridge = new VitePressDevBridge({
@@ -77,7 +78,10 @@ describe('VitePressDevBridge', () => {
 
     expect(lifecycle.onContentUpdated).toHaveBeenCalledTimes(1);
 
-    onContentUpdatedHandler?.();
+    const handleContentUpdated =
+      onContentUpdatedHandler as unknown as () => void;
+
+    handleContentUpdated();
     await vi.advanceTimersByTimeAsync(32);
     await Promise.resolve();
 
@@ -103,6 +107,7 @@ describe('VitePressDevBridge', () => {
           renderWithSpaSync: false,
         },
       ]),
+      cleanup: vi.fn(),
       executeRuntime: vi.fn(),
     };
     const bridge = new VitePressDevBridge({
@@ -146,6 +151,7 @@ describe('VitePressDevBridge', () => {
         .fn<() => RenderContainerInfo[]>()
         .mockReturnValueOnce([])
         .mockReturnValue([renderContainer]),
+      cleanup: vi.fn(),
       executeRuntime: vi.fn(),
     };
     const bridge = new VitePressDevBridge({
@@ -193,6 +199,7 @@ describe('VitePressDevBridge', () => {
           renderWithSpaSync: false,
         },
       ]),
+      cleanup: vi.fn(),
       executeRuntime: vi.fn(),
     };
     const bridge = new VitePressDevBridge({
@@ -234,6 +241,7 @@ describe('VitePressDevBridge', () => {
           renderWithSpaSync: false,
         },
       ]),
+      cleanup: vi.fn(),
       executeRuntime: vi.fn(),
     };
     const bridge = new VitePressDevBridge({

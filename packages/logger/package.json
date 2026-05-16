@@ -30,6 +30,7 @@
     "lint:package:attw": "tsx scripts/lint-package.ts --tool attw",
     "lint:package:boundary": "tsx scripts/lint-package.ts --tool boundary",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "test": "vitest run",

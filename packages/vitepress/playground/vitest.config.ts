@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig({
   root,
   test: {
-    include: ['**/*.test.ts'],
+    include: ['**/*.spec.ts'],
     setupFiles: ['vitestSetup.ts'],
     globalSetup: ['vitestGlobalSetup.ts'],
     testTimeout: timeout,

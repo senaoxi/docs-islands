@@ -1,14 +1,20 @@
 /**
- * @vitest-environment jsdom
+ * @vitest-environment node
  */
-import { createLogger, resetLoggerConfig } from '@docs-islands/logger';
+import {
+  createLogger,
+  resetLoggerConfig,
+  setLoggerConfig,
+} from '@docs-islands/logger';
 import {
   createScopedLogger as createLoggerWithScopeId,
   getScopedLoggerConfig as getLoggerConfigForScope,
   resetScopedLoggerConfig,
-  setResolvedLoggerConfig as setLoggerConfig,
-  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
+  setScopedLoggerConfig,
 } from '@docs-islands/logger/core';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VITEPRESS_RUNTIME_LOG_GROUPS } from '../constants/log-groups/runtime';
 import {
@@ -18,8 +24,57 @@ import {
   loggerSpecCases,
 } from './logger-test-cases';
 
+const ANSI_ESCAPE_RE = new RegExp(
+  `${String.fromCodePoint(27)}\\[[\\d;]*m`,
+  'g',
+);
+const currentTestFile = fileURLToPath(import.meta.url);
+const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
+const vitePressCacheDirectoryRe =
+  /(?:^|[/\\])\.vitepress[/\\]cache(?:[/\\]|$)/i;
+const vitePressGeneratedConfigModuleRe =
+  /(?:^|[/\\])\.vitepress[/\\]config\.ts\.timestamp-\d+-[\da-f]+\.mjs$/i;
+
+const stripAnsi = (value: string) => value.replaceAll(ANSI_ESCAPE_RE, '');
+const isTransientSourceArtifact = (filePath: string) =>
+  vitePressCacheDirectoryRe.test(filePath) ||
+  vitePressGeneratedConfigModuleRe.test(filePath);
+
+const collectSourceFiles = (directory: string): string[] => {
+  const entries = fs.readdirSync(directory, {
+    withFileTypes: true,
+  });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    if (
+      entry.name === '.git' ||
+      entry.name === 'dist' ||
+      entry.name === 'node_modules'
+    ) {
+      continue;
+    }
+
+    const nextPath = path.join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      files.push(...collectSourceFiles(nextPath));
+      continue;
+    }
+
+    if (
+      /\.(?:cjs|js|mjs|ts|tsx)$/.test(entry.name) &&
+      !isTransientSourceArtifact(nextPath)
+    ) {
+      files.push(nextPath);
+    }
+  }
+
+  return files;
+};
+
 const normalizeConsoleMessage = (value: unknown): string =>
-  String(value).replaceAll('%c', '');
+  stripAnsi(String(value)).replaceAll('%c', '');
 
 const captureConsoleOutput = (): string[] => {
   const output: string[] = [];
@@ -84,7 +139,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('logger browser behavior', () => {
+describe('logger node behavior', () => {
   it('keeps the markdown logger spec as the complete visibility baseline', () => {
     expect(loggerSpecCases).toHaveLength(LOGGER_SPEC_CASE_COUNT);
   });
@@ -150,29 +205,27 @@ describe('logger browser behavior', () => {
     expect(sameGroupNameDifferentMain).not.toBe(groupLogger);
   });
 
-  it('isolates browser logger caches and configs across scopes', () => {
-    const scopeA = 'browser-scope-a';
-    const scopeB = 'browser-scope-b';
+  it('isolates logger caches and configs across scopes', () => {
+    const scopeA = 'scope-a';
+    const scopeB = 'scope-b';
 
-    setLoggerConfigForScope(scopeA, {
-      rules: [
-        {
+    setScopedLoggerConfig(scopeA, {
+      rules: {
+        'scope-a-only': {
           group: VITEPRESS_RUNTIME_LOG_GROUPS.reactDevRender,
-          label: 'scope-a-only',
           levels: ['info'],
           main: '@docs-islands/vitepress',
         },
-      ],
+      },
     });
-    setLoggerConfigForScope(scopeB, {
-      rules: [
-        {
+    setScopedLoggerConfig(scopeB, {
+      rules: {
+        'scope-b-only': {
           group: VITEPRESS_RUNTIME_LOG_GROUPS.reactComponentManager,
-          label: 'scope-b-only',
           levels: ['warn'],
           main: '@docs-islands/vitepress',
         },
-      ],
+      },
     });
 
     const scopeALogger = createLoggerWithScopeId(
@@ -199,6 +252,7 @@ describe('logger browser behavior', () => {
       ),
     );
     expect(getLoggerConfigForScope(scopeA)).toEqual({
+      levels: ['error', 'warn', 'info', 'success'],
       rules: [
         {
           group: VITEPRESS_RUNTIME_LOG_GROUPS.reactDevRender,
@@ -212,6 +266,7 @@ describe('logger browser behavior', () => {
     resetScopedLoggerConfig(scopeA);
     expect(getLoggerConfigForScope(scopeA)).toBeUndefined();
     expect(getLoggerConfigForScope(scopeB)).toEqual({
+      levels: ['error', 'warn', 'info', 'success'],
       rules: [
         {
           group: VITEPRESS_RUNTIME_LOG_GROUPS.reactComponentManager,
@@ -224,10 +279,10 @@ describe('logger browser behavior', () => {
   });
 
   it('keeps instant scoped logger output on the plain message body', () => {
-    const scopeId = 'browser-instant-output-scope';
+    const scopeId = 'instant-output-scope';
     const output = captureConsoleOutput();
 
-    setLoggerConfigForScope(scopeId, undefined);
+    setScopedLoggerConfig(scopeId, {});
 
     createLoggerWithScopeId(
       {
@@ -241,5 +296,64 @@ describe('logger browser behavior', () => {
     expect(output).toEqual([
       `@docs-islands/vitepress[${VITEPRESS_RUNTIME_LOG_GROUPS.reactComponentManager}]: runtime warning`,
     ]);
+  });
+
+  it('keeps non-test debug call sites on the structured debug helper', () => {
+    const targetRoot = path.join(repoRoot, 'packages');
+    const offenders = collectSourceFiles(targetRoot)
+      .filter(
+        (filePath) =>
+          !filePath.includes(`${path.sep}__tests__${path.sep}`) &&
+          !/\.test\.[cm]?[jt]sx?$/.test(filePath) &&
+          !filePath.includes(`${path.sep}playground${path.sep}`),
+      )
+      .flatMap((filePath) => {
+        const source = fs.readFileSync(filePath, 'utf8');
+        const matches = [...source.matchAll(/\.debug\(/g)];
+
+        return matches
+          .filter(({ index }) => typeof index === 'number')
+          .map(({ index }) => {
+            const occurrenceIndex = index ?? 0;
+            const snippet = source.slice(
+              occurrenceIndex,
+              occurrenceIndex + 260,
+            );
+            return {
+              filePath,
+              snippet,
+            };
+          })
+          .filter(
+            ({ snippet }) =>
+              !snippet.includes('formatDebugMessage(') &&
+              !snippet.includes('__docs_islands_format_debug__('),
+          )
+          .map(({ filePath }) => path.relative(repoRoot, filePath));
+      });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('forbids raw new Logger or ScopedLogger construction outside the logger implementation', () => {
+    const targetRoots = ['packages', 'scripts', 'utils'].map((segment) =>
+      path.join(repoRoot, segment),
+    );
+    const loggerImplementationFiles = new Set([
+      path.join(repoRoot, 'packages', 'logger', 'src', 'core', 'factory.ts'),
+    ]);
+    const offenders = targetRoots
+      .flatMap((targetRoot) => collectSourceFiles(targetRoot))
+      .filter(
+        (filePath) =>
+          !loggerImplementationFiles.has(filePath) &&
+          filePath !== currentTestFile &&
+          /new (?:Logger|ScopedLogger)\(/.test(
+            fs.readFileSync(filePath, 'utf8'),
+          ),
+      )
+      .map((filePath) => path.relative(repoRoot, filePath));
+
+    expect(offenders).toEqual([]);
   });
 });

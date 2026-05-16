@@ -43,6 +43,51 @@ function getHotUpdateHandler(plugin: Plugin) {
   return hook.handler;
 }
 
+function callTransform(plugin: Plugin, code: string, id: string) {
+  const hook = plugin.transform;
+
+  if (!hook) {
+    return null;
+  }
+
+  return typeof hook === 'function'
+    ? hook.call({} as never, code, id)
+    : hook.handler.call({} as never, code, id);
+}
+
+function callConfigResolved(plugin: Plugin, config: unknown) {
+  const hook = plugin.configResolved;
+
+  if (!hook) {
+    return;
+  }
+
+  if (typeof hook === 'function') {
+    hook.call({} as never, config as never);
+    return;
+  }
+
+  hook.handler.call({} as never, config as never);
+}
+
+function callGenerateBundle(
+  plugin: Plugin,
+  bundle: Record<string, Rollup.OutputAsset | Rollup.OutputChunk>,
+) {
+  const hook = plugin.generateBundle;
+
+  if (!hook) {
+    return;
+  }
+
+  if (typeof hook === 'function') {
+    hook.call({} as never, {} as never, bundle, false);
+    return;
+  }
+
+  hook.handler.call({} as never, {} as never, bundle, false);
+}
+
 describe('node/plugins', () => {
   it('injects dirname references through the shared Vite transform plugin', () => {
     const plugin = createDirnameVarInjectionPlugin({
@@ -50,7 +95,8 @@ describe('node/plugins', () => {
       variableName: '__DIRNAME__',
     });
 
-    const result = plugin.transform?.handler?.(
+    const result = callTransform(
+      plugin,
       'export const dir = __DIRNAME__;',
       '/workspace/src/demo.ts',
     );
@@ -270,22 +316,18 @@ describe('node/plugins', () => {
       renderController,
     });
 
-    plugin.configResolved?.({
+    callConfigResolved(plugin, {
       build: {
         ssr: false,
       },
-    } as never);
-    plugin.generateBundle?.(
-      {},
-      {
-        'assets/page.js': {
-          type: 'chunk',
-          facadeModuleId: '/workspace/docs/page.md',
-          code: 'export {};',
-        } as Rollup.OutputChunk & { facadeModuleId: string },
-      },
-      false,
-    );
+    });
+    callGenerateBundle(plugin, {
+      'assets/page.js': {
+        type: 'chunk',
+        facadeModuleId: '/workspace/docs/page.md',
+        code: 'export {};',
+      } as Rollup.OutputChunk & { facadeModuleId: string },
+    });
 
     expect(
       renderController.getClientChunkByFacadeModuleId(

@@ -2,6 +2,7 @@
  * @vitest-environment node
  */
 import type { PageMetafile } from '#dep-types/page';
+import type { SiteDevToolsAnalysisBuildReportsPageContext } from '#dep-types/utils';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,6 +27,7 @@ vi.mock('../../logger', () => ({
 
 const tempDirectories: string[] = [];
 const TEST_DOUBAO_PROVIDER_ID = 'doubao-default';
+const TEST_LOGGER_SCOPE_ID = 'site-devtools-ai-build-reports-test-scope';
 
 const resolveAvailableDoubaoCapabilities = async () => ({
   ok: true as const,
@@ -398,14 +400,16 @@ const normalizeTestAiConfig = (aiConfig: Record<string, any> | undefined) => {
 const generateSiteDevToolsAiBuildReports = (
   options: Omit<
     Parameters<typeof generateSiteDevToolsAiBuildReportsImpl>[0],
-    'aiConfig'
+    'aiConfig' | 'loggerScopeId'
   > & {
     aiConfig: Record<string, any>;
+    loggerScopeId?: string;
   },
 ) =>
   generateSiteDevToolsAiBuildReportsImpl({
     ...options,
     aiConfig: normalizeTestAiConfig(options.aiConfig),
+    loggerScopeId: options.loggerScopeId ?? TEST_LOGGER_SCOPE_ID,
   });
 
 afterEach(() => {
@@ -1170,7 +1174,11 @@ describe('generateSiteDevToolsAiBuildReports', () => {
               providerKey: 'intl',
             },
           ],
-          resolvePage: ({ page }) => {
+          resolvePage: ({
+            page,
+          }: {
+            page: SiteDevToolsAnalysisBuildReportsPageContext;
+          }) => {
             let result:
               | {
                   modelId?: string;
@@ -1302,7 +1310,11 @@ describe('generateSiteDevToolsAiBuildReports', () => {
               providerKey: 'intl',
             },
           ],
-          resolvePage: ({ page }) =>
+          resolvePage: ({
+            page,
+          }: {
+            page: SiteDevToolsAnalysisBuildReportsPageContext;
+          }) =>
             page.routePath === '/guide/claude'
               ? { modelId: 'claude-intl' }
               : {},
@@ -1422,7 +1434,7 @@ describe('generateSiteDevToolsAiBuildReports', () => {
     const dependencies = {
       analyzeTarget,
       resolveCapabilities: async () => ({
-        ok: true,
+        ok: true as const,
         providers: {
           claude: {
             available: true,
@@ -2160,9 +2172,9 @@ describe('generateSiteDevToolsAiBuildReports', () => {
         }),
       }),
     );
-    expect(
-      pageMetafiles['/guide/plain-page'].buildMetrics?.components[0]?.aiReports,
-    ).toBeUndefined();
+    expect(pageMetafiles['/guide/plain-page'].buildMetrics?.components).toEqual(
+      [],
+    );
   });
 
   it('generates page-grouped reports for docs-islands pages that only expose spa-sync page signals', async () => {

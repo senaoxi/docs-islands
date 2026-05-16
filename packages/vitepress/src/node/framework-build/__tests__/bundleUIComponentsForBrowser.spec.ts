@@ -6,12 +6,12 @@ import type { ConfigType } from '#dep-types/utils';
 import { resolveConfig } from '#shared/config';
 import {
   resetScopedLoggerConfig,
-  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
+  setScopedLoggerConfig as setLoggerConfigForScope,
 } from '@docs-islands/logger/core';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'pathe';
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { reactAdapter } from '../../adapters/react/adapter';
 import { setVitePressLoggerTreeShakingEnabled } from '../../core/vite-plugin-logger-tree-shaking';
 import type { UIFrameworkBuildAdapter } from '../adapter';
@@ -182,6 +182,10 @@ describe('bundleUIComponentsForBrowser', () => {
     setVitePressLoggerTreeShakingEnabled(TEST_LOGGER_SCOPE_ID, false);
   });
 
+  beforeEach(() => {
+    setLoggerConfigForScope(TEST_LOGGER_SCOPE_ID, {});
+  });
+
   it('should correctly bundle browser assets and validate their contents', async () => {
     const {
       buildMetrics,
@@ -194,6 +198,7 @@ describe('bundleUIComponentsForBrowser', () => {
       clientComponents,
       usedSnippetContainer,
       reactAdapter,
+      TEST_LOGGER_SCOPE_ID,
     );
 
     const allBundlePaths = [
@@ -425,6 +430,7 @@ describe('bundleUIComponentsForBrowser', () => {
       clientComponents,
       usedSnippetContainer,
       reactAdapter,
+      TEST_LOGGER_SCOPE_ID,
     );
     const loaderScriptContent = fs.readFileSync(
       join(config.outDir, loaderScript),

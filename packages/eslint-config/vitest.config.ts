@@ -4,7 +4,7 @@ const config: ViteUserConfig = defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['src/**/__tests__/**/*.{test,spec}.{js,ts,tsx}'],
+    include: ['src/**/__tests__/**/*.spec.ts'],
     testTimeout: 10_000,
     hookTimeout: 10_000,
     clearMocks: true,

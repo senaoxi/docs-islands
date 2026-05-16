@@ -59,7 +59,9 @@ function findPluginIndexByName(
 
   return plugins.findIndex(
     (plugin) =>
-      Boolean(plugin) &&
+      plugin !== null &&
+      plugin !== false &&
+      plugin !== undefined &&
       !Array.isArray(plugin) &&
       typeof plugin === 'object' &&
       'name' in plugin &&
@@ -81,8 +83,21 @@ async function resolvePublicLoggerVirtualId(
   }
 
   return typeof resolveId === 'function'
-    ? resolveId.call({} as never, VITEPRESS_LOGGER_MODULE_ID)
-    : resolveId.handler.call({} as never, VITEPRESS_LOGGER_MODULE_ID);
+    ? resolveId.call({} as never, VITEPRESS_LOGGER_MODULE_ID, undefined, {
+        attributes: {},
+        custom: {},
+        isEntry: false,
+      })
+    : resolveId.handler.call(
+        {} as never,
+        VITEPRESS_LOGGER_MODULE_ID,
+        undefined,
+        {
+          attributes: {},
+          custom: {},
+          isEntry: false,
+        },
+      );
 }
 
 describe('createDocsIslands', () => {

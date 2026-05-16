@@ -1,3 +1,4 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { expect, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -8,7 +9,6 @@ import {
   CLIENT_ENTRY_SPECIFIER,
   collectMpaIntegrationScripts,
   createConsumerFixture,
-  elapsedSince,
   formatUnknownError,
   getPnpmCommand,
   getSmokeLogger,
@@ -114,7 +114,7 @@ export default theme;
 
 test('MPA dist integration bundle resolves and imports cleanly', async () => {
   const logger = getSmokeLogger('task.mpa-integration-smoke');
-  const smokeStartedAt = Date.now();
+  const smokeElapsed = createElapsedTimer();
   let cleanupPackedDist: (() => Promise<void>) | undefined;
   let cleanupPackedLogger: (() => Promise<void>) | undefined;
   let cleanupFixture: (() => Promise<void>) | undefined;
@@ -159,14 +159,11 @@ test('MPA dist integration bundle resolves and imports cleanly', async () => {
     assertNoManagedLoggerSpecifier(outDir);
 
     expect(integrationScripts.length).toBeGreaterThan(0);
-    logger.success(
-      'MPA integration smoke passed',
-      elapsedSince(smokeStartedAt),
-    );
+    logger.success('MPA integration smoke passed', smokeElapsed());
   } catch (error) {
     logger.error(
       `MPA integration smoke failed: ${formatUnknownError(error)}`,
-      elapsedSince(smokeStartedAt),
+      smokeElapsed(),
     );
     throw error;
   } finally {

@@ -110,6 +110,7 @@ describe('Shared Path Helpers', () => {
           publicDir: '/repo/docs/public',
           cacheDir: '/repo/.vitepress/cache',
           cleanUrls: false,
+          siteDevtools: {},
           wrapBaseUrl: (path: string) => path,
         }),
       ).toBe('/docs/guide/');

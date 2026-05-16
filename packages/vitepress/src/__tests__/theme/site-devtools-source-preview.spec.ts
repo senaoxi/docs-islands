@@ -40,8 +40,7 @@ describe('site-devtools-source-preview plain text indexing', () => {
       indexer.dispose();
 
       if (originalWorker === undefined) {
-        delete (globalThis as typeof globalThis & { Worker?: typeof Worker })
-          .Worker;
+        delete (globalThis as { Worker?: typeof Worker }).Worker;
       } else {
         vi.stubGlobal('Worker', originalWorker);
       }
@@ -124,8 +123,7 @@ describe('site-devtools-source-preview plain text indexing', () => {
       highlighter.dispose();
 
       if (originalWorker === undefined) {
-        delete (globalThis as typeof globalThis & { Worker?: typeof Worker })
-          .Worker;
+        delete (globalThis as { Worker?: typeof Worker }).Worker;
       } else {
         vi.stubGlobal('Worker', originalWorker);
       }

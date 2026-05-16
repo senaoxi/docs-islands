@@ -6,6 +6,7 @@
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint . --config ./dist/general.js --fix --cache",
     "test": "vitest run",
     "test:watch": "vitest",

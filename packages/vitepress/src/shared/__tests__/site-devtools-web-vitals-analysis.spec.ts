@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SiteDevToolsRenderMetric } from '../devtools';
+import type { SiteDevToolsRenderMetric } from '../internal/devtools';
 import { analyzeRenderMetricWebVitals } from '../site-devtools-web-vitals-analysis';
 
 const createMetric = (

@@ -20,7 +20,9 @@ describe('reactAdapter', () => {
     expect(
       browserPlugins.some(
         (plugin) =>
-          Boolean(plugin) &&
+          plugin !== null &&
+          plugin !== false &&
+          plugin !== undefined &&
           !Array.isArray(plugin) &&
           typeof plugin === 'object' &&
           'name' in plugin &&

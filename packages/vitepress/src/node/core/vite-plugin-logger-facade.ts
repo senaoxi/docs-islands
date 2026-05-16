@@ -25,14 +25,14 @@ const createSharedHeader = (
 ): string => `
 const loggerScopeId = ${JSON.stringify(loggerScopeId)};
 const loggerConfig = ${serializeLoggerConfig(logging)};
-setResolvedScopedLoggerConfig(loggerScopeId, loggerConfig);
+setScopedLoggerConfig(loggerScopeId, loggerConfig);
 `;
 
 const createVitePressLoggerFacadeSource = (
   loggerScopeId: LoggerScopeId,
   logging: ResolvedLoggerConfig | null | undefined,
 ): string => `
-import { createScopedLogger, setResolvedScopedLoggerConfig } from '@docs-islands/logger/core';
+import { createScopedLogger, setScopedLoggerConfig } from '@docs-islands/logger/core';
 
 ${createSharedHeader(loggerScopeId, logging)}
 

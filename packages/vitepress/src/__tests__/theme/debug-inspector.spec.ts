@@ -1,10 +1,21 @@
 import {
   createMetafileLookup,
+  type DebugWindow,
   getBuildMetricForRender,
   getCurrentPageCandidates,
   type PageMetafile,
   resolvePageMetafileState,
 } from '../../../theme/debug-inspector';
+
+const createPageMetafile = (
+  overrides: Partial<PageMetafile>,
+): PageMetafile => ({
+  cssBundlePaths: [],
+  loaderScript: '',
+  modulePreloads: [],
+  ssrInjectScript: '',
+  ...overrides,
+});
 
 describe('debug-inspector build metric lookup', () => {
   const partialLandingMetric = {
@@ -58,18 +69,18 @@ describe('debug-inspector build metric lookup', () => {
   };
 
   it('prefers richer component metrics for component-name fallback', () => {
-    const partialPageMetafile: PageMetafile = {
+    const partialPageMetafile = createPageMetafile({
       buildMetrics: {
         components: [partialLandingMetric],
         totalEstimatedComponentBytes: partialLandingMetric.estimatedTotalBytes,
       },
-    };
-    const fullPageMetafile: PageMetafile = {
+    });
+    const fullPageMetafile = createPageMetafile({
       buildMetrics: {
         components: [fullLandingMetric],
         totalEstimatedComponentBytes: fullLandingMetric.estimatedTotalBytes,
       },
-    };
+    });
 
     const lookup = createMetafileLookup({
       allPageMetafiles: [partialPageMetafile, fullPageMetafile],
@@ -82,7 +93,7 @@ describe('debug-inspector build metric lookup', () => {
   });
 
   it('prefers richer component metrics for render-id lookups', () => {
-    const partialPageMetafile: PageMetafile = {
+    const partialPageMetafile = createPageMetafile({
       buildMetrics: {
         components: [partialLandingMetric],
         spaSyncEffects: {
@@ -114,15 +125,15 @@ describe('debug-inspector build metric lookup', () => {
         },
         totalEstimatedComponentBytes: partialLandingMetric.estimatedTotalBytes,
       },
-    };
-    const fullPageMetafile: PageMetafile = {
+    });
+    const fullPageMetafile = createPageMetafile({
       buildMetrics: {
         components: [fullLandingMetric],
         spaSyncEffects:
           partialPageMetafile.buildMetrics?.spaSyncEffects ?? null,
         totalEstimatedComponentBytes: fullLandingMetric.estimatedTotalBytes,
       },
-    };
+    });
 
     const lookup = createMetafileLookup({
       allPageMetafiles: [partialPageMetafile, fullPageMetafile],
@@ -205,16 +216,7 @@ describe('debug-inspector build metric lookup', () => {
       location: {
         pathname: '/docs-islands/vitepress/guide/how-it-works',
       },
-    } as unknown as Window & {
-      __PAGE_METAFILE__: Record<string, PageMetafile>;
-      __VP_SITE_DATA__: {
-        base: string;
-        cleanUrls: boolean;
-      };
-      location: {
-        pathname: string;
-      };
-    };
+    } as unknown as DebugWindow;
 
     expect(
       getCurrentPageCandidates(debugWindow, '/zh/guide/how-it-works')[0],
@@ -258,16 +260,7 @@ describe('debug-inspector build metric lookup', () => {
       location: {
         pathname: '/blog/rendering-strategy',
       },
-    } as unknown as Window & {
-      __PAGE_METAFILE__: Record<string, PageMetafile>;
-      __VP_SITE_DATA__: {
-        base: string;
-        cleanUrls: boolean;
-      };
-      location: {
-        pathname: string;
-      };
-    };
+    } as unknown as DebugWindow;
 
     expect(
       getCurrentPageCandidates(

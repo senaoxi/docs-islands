@@ -32,7 +32,6 @@ The published @docs-islands/vitepress artifact additionally contains code with t
 BSD-2-Clause, ISC, MIT
 
 # Bundled dependencies:
-
 ## @babel/code-frame, @babel/generator, @babel/helper-globals, @babel/helper-string-parser, @babel/helper-validator-identifier, @babel/template, @babel/traverse, @babel/types
 
 License: MIT
@@ -565,3 +564,4 @@ Repository: alexeyraspopov/picocolors
 > WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 > ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 > OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+

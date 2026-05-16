@@ -2,45 +2,57 @@
  * @vitest-environment node
  */
 import {
-  createElapsedLogOptions,
-  createElapsedTimer,
-  formatElapsedTime,
-} from '@docs-islands/logger/helper';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+  createLogger,
+  resetLoggerConfig,
+  setLoggerConfig,
+} from '@docs-islands/logger';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { afterEach, beforeEach, describe, it, vi } from 'vitest';
+import {
+  expectConsoleMessages,
+  expectNoConsoleMessages,
+} from './helpers/log-assertions';
 
-describe('elapsed helpers', () => {
+describe('Integration: Elapsed Runtime Output', () => {
+  let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  let consoleDebugSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+  });
+
   afterEach(() => {
+    resetLoggerConfig();
     vi.restoreAllMocks();
   });
 
-  it('normalizes direct elapsed log options', () => {
-    expect(createElapsedLogOptions(5.678)).toEqual({
-      elapsedTimeMs: 5.678,
-    });
-    expect(createElapsedLogOptions(-1)).toEqual({
-      elapsedTimeMs: 0,
-    });
-    expect(createElapsedLogOptions(Number.NaN)).toEqual({
-      elapsedTimeMs: 0,
-    });
-  });
-
-  it('creates an elapsed timer from the logger clock', () => {
+  it('appends elapsed time produced by createElapsedTimer in debug runtime output', () => {
     vi.spyOn(globalThis.performance, 'now')
       .mockReturnValueOnce(10)
       .mockReturnValueOnce(52);
 
-    const elapsed = createElapsedTimer();
-
-    expect(elapsed()).toEqual({
-      elapsedTimeMs: 42,
+    setLoggerConfig({
+      debug: true,
+      rules: {
+        Timer: { levels: ['info'] },
+      },
     });
-  });
 
-  it('formats elapsed time with fixed precision', () => {
-    expect(formatElapsedTime(5)).toBe('5.00ms');
-    expect(formatElapsedTime(5.678)).toBe('5.68ms');
-    expect(formatElapsedTime(-1)).toBe('0.00ms');
-    expect(formatElapsedTime(Number.NaN)).toBe('0.00ms');
+    const elapsed = createElapsedTimer();
+    const logger = createLogger({
+      main: '@docs-islands/test',
+    }).getLoggerByGroup('test.elapsed.runtime');
+
+    logger.info('timer finished', elapsed());
+
+    expectConsoleMessages(consoleLogSpy, [
+      '[Timer] @docs-islands/test[test.elapsed.runtime]: timer finished 42.00ms',
+    ]);
+    expectNoConsoleMessages(consoleWarnSpy, consoleErrorSpy, consoleDebugSpy);
   });
 });

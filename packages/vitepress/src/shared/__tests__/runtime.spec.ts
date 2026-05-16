@@ -5,11 +5,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GET_CLEAN_PATHNAME_RUNTIME, getCleanPathname } from '../runtime';
 
 describe('Shared Runtime - getCleanPathname', () => {
+  const runtimeGlobals = globalThis as typeof globalThis & {
+    __BASE__?: string;
+    __CLEAN_URLS__?: boolean;
+  };
   // Store original location and window properties
   const originalLocation = globalThis.location;
   const originalWindow = globalThis.window;
-  const originalBase = globalThis.__BASE__;
-  const originalCleanUrls = globalThis.__CLEAN_URLS__;
+  const originalBase = runtimeGlobals.__BASE__;
+  const originalCleanUrls = runtimeGlobals.__CLEAN_URLS__;
 
   beforeEach(() => {
     // Mock window and location
@@ -251,8 +255,8 @@ describe('Shared Runtime - getCleanPathname', () => {
 
     it('should use define fallbacks when site data is unavailable', () => {
       (globalThis.window as any).__VP_SITE_DATA__ = undefined;
-      globalThis.__BASE__ = '/docs/';
-      globalThis.__CLEAN_URLS__ = true;
+      runtimeGlobals.__BASE__ = '/docs/';
+      runtimeGlobals.__CLEAN_URLS__ = true;
       globalThis.location.pathname = '/docs/guide/test.html';
 
       const wrapperResult = getCleanPathname();

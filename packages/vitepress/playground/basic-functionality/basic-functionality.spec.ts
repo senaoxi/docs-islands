@@ -1,4 +1,4 @@
-import { createElapsedLogOptions } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { expect } from '@playwright/test';
 import { getPlaygroundLogger } from '../test-utils/logger';
 
@@ -60,11 +60,8 @@ describe('Basic Site Functionality', () => {
       const layout = page.locator('.Layout');
       await expect(layout).toBeVisible();
     } catch (error) {
-      const catchStartedAt = Date.now();
-      TestLogger.info(
-        `Expected 404 error: ${String(error)}`,
-        createElapsedLogOptions(Date.now() - catchStartedAt),
-      );
+      const catchElapsed = createElapsedTimer();
+      TestLogger.info(`Expected 404 error: ${String(error)}`, catchElapsed());
     }
   });
 

@@ -41,6 +41,7 @@
     "smoke": "pnpm --dir ./smoke test",
     "typecheck": "tsc --noEmit && tsc -p src/node --noEmit && tsc -p src/client --noEmit && tsc -p src/shared --noEmit && pnpm typecheck:theme",
     "typecheck:theme": "vue-tsc -p theme/tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "build": "rolldown --config rolldown.config.ts && pnpm build:theme && pnpm build-types-check",
     "build:theme": "rolldown --config rolldown.theme.config.ts",
     "build-types-check": "tsc -p tsconfig.check.json",

@@ -1,9 +1,10 @@
 /**
  * @vitest-environment node
  */
-import { resetLoggerConfig, resolveLoggerConfig } from '@docs-islands/logger';
+import { resetLoggerConfig } from '@docs-islands/logger';
 import {
   resetScopedLoggerConfig,
+  resolveLoggerConfig,
   shouldSuppressLog,
 } from '@docs-islands/logger/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';

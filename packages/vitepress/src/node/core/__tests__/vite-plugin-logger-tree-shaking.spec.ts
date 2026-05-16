@@ -3,9 +3,9 @@
  */
 import {
   resetScopedLoggerConfig,
-  setResolvedScopedLoggerConfig as setLoggerConfigForScope,
+  setScopedLoggerConfig as setLoggerConfigForScope,
 } from '@docs-islands/logger/core';
-import type { ResolvedLoggerConfig } from '@docs-islands/logger/types';
+import type { LoggerConfig } from '@docs-islands/logger/types';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createLoggerTreeShakingPlugin,
@@ -20,10 +20,10 @@ const TEST_MODULE_ID = '/workspace/docs/components/LoggerProbe.tsx';
 
 const transformCode = async (
   code: string,
-  config?: ResolvedLoggerConfig,
+  config?: LoggerConfig,
 ): Promise<string> => {
   resetScopedLoggerConfig(TEST_LOGGER_SCOPE_ID);
-  setLoggerConfigForScope(TEST_LOGGER_SCOPE_ID, config);
+  setLoggerConfigForScope(TEST_LOGGER_SCOPE_ID, config ?? {});
 
   const result = await transformLoggerTreeShaking(
     code,
@@ -132,14 +132,19 @@ logger.warn('generic visible warning');
   });
 
   it('removes debug logs with the default production visibility', async () => {
-    const code = await transformCode(`
+    const code = await transformCode(
+      `
 import { createLogger } from '@docs-islands/vitepress/logger';
 
 const logger = createLogger({ main: '@acme/docs' }).getLoggerByGroup('userland.metrics');
 
 logger.debug('hidden debug details');
 logger.info('visible default info');
-    `);
+    `,
+      {
+        levels: ['error', 'warn', 'info', 'success'],
+      },
+    );
 
     expect(code).not.toContain('hidden debug details');
     expect(code).toContain("logger.info('visible default info')");
@@ -157,15 +162,14 @@ logger.info('hidden different metric');
 logger.warn('hidden warning metric');
       `,
       {
-        rules: [
-          {
+        rules: {
+          'metrics-info': {
             group: 'userland.metrics',
-            label: 'metrics-info',
             levels: ['info'],
             main: '@acme/docs',
             message: 'visible exact metric',
           },
-        ],
+        },
       },
     );
 

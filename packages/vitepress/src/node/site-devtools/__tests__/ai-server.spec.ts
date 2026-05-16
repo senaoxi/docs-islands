@@ -1,7 +1,11 @@
 /**
  * @vitest-environment node
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  resetScopedLoggerConfig,
+  setScopedLoggerConfig,
+} from '@docs-islands/logger/core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SiteDevToolsAiAnalysisTarget } from '../../../shared/site-devtools-ai';
 import {
   analyzeSiteDevToolsAiTarget,
@@ -19,10 +23,28 @@ const createAnalysisTarget = (
   language: 'js',
   ...overrides,
 });
+const TEST_LOGGER_SCOPE_ID = 'site-devtools-ai-server-test-scope';
+const analyzeTestSiteDevToolsAiTarget = (
+  options: Omit<
+    Parameters<typeof analyzeSiteDevToolsAiTarget>[0],
+    'loggerScopeId'
+  > & {
+    loggerScopeId?: string;
+  },
+) =>
+  analyzeSiteDevToolsAiTarget({
+    ...options,
+    loggerScopeId: options.loggerScopeId ?? TEST_LOGGER_SCOPE_ID,
+  });
 
 afterEach(() => {
+  resetScopedLoggerConfig(TEST_LOGGER_SCOPE_ID);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+beforeEach(() => {
+  setScopedLoggerConfig(TEST_LOGGER_SCOPE_ID, {});
 });
 
 describe('resolveSiteDevToolsAiCapabilities', () => {
@@ -138,12 +160,12 @@ describe('resolveSiteDevToolsAiCapabilities', () => {
           {
             apiKey: 'first-key',
             default: true,
-            id: 'first',
+            key: 'first',
           },
           {
             apiKey: 'second-key',
             default: true,
-            id: 'second',
+            key: 'second',
           },
         ],
       },
@@ -204,7 +226,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await analyzeSiteDevToolsAiTarget({
+    const result = await analyzeTestSiteDevToolsAiTarget({
       config: {
         buildReports: {
           models: [
@@ -257,7 +279,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     try {
-      await analyzeSiteDevToolsAiTarget({
+      await analyzeTestSiteDevToolsAiTarget({
         config: {
           buildReports: {
             models: [
@@ -332,7 +354,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await analyzeSiteDevToolsAiTarget({
+    const result = await analyzeTestSiteDevToolsAiTarget({
       config: {
         buildReports: {
           models: [
@@ -348,11 +370,11 @@ describe('analyzeSiteDevToolsAiTarget', () => {
           doubao: [
             {
               apiKey: 'first-key',
-              id: 'first',
+              key: 'first',
             },
             {
               apiKey: 'second-key',
-              id: 'second',
+              key: 'second',
             },
           ],
         },
@@ -419,7 +441,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await analyzeSiteDevToolsAiTarget({
+    const result = await analyzeTestSiteDevToolsAiTarget({
       config: {
         buildReports: {
           models: [
@@ -503,7 +525,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
       },
     } as unknown as SiteDevToolsAiConfig;
 
-    await analyzeSiteDevToolsAiTarget({
+    await analyzeTestSiteDevToolsAiTarget({
       config,
       provider: 'claude',
       target: createAnalysisTarget(),
@@ -529,7 +551,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     try {
-      await analyzeSiteDevToolsAiTarget({
+      await analyzeTestSiteDevToolsAiTarget({
         config: {
           buildReports: {
             models: [
@@ -597,7 +619,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      analyzeSiteDevToolsAiTarget({
+      analyzeTestSiteDevToolsAiTarget({
         config: {
           buildReports: {
             models: [
@@ -643,7 +665,7 @@ describe('analyzeSiteDevToolsAiTarget', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      analyzeSiteDevToolsAiTarget({
+      analyzeTestSiteDevToolsAiTarget({
         config: {
           buildReports: {
             models: [

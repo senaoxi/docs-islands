@@ -28,32 +28,24 @@ vi.mock('@docs-islands/utils/logger', async (importOriginal) => {
 });
 
 type TestComponent = () => string;
+type TestRuntimeWindow = Window & {
+  [RENDER_STRATEGY_CONSTANTS.componentManager]?: unknown;
+  [RENDER_STRATEGY_CONSTANTS.injectComponent]?: DocsInjectComponent<TestComponent>;
+  [RENDER_STRATEGY_CONSTANTS.pageMetafile]?: Record<string, unknown>;
+};
+
+const getTestRuntimeWindow = (): TestRuntimeWindow =>
+  globalThis as unknown as TestRuntimeWindow;
 
 describe('DocsComponentManager', () => {
   beforeEach(() => {
     document.head.innerHTML = '';
     document.body.innerHTML = '';
-    (
-      globalThis as Window & {
-        [RENDER_STRATEGY_CONSTANTS.componentManager]?: unknown;
-        [RENDER_STRATEGY_CONSTANTS.injectComponent]?: DocsInjectComponent<TestComponent>;
-        [RENDER_STRATEGY_CONSTANTS.pageMetafile]?: Record<string, unknown>;
-      }
-    )[RENDER_STRATEGY_CONSTANTS.componentManager] = undefined;
-    (
-      globalThis as Window & {
-        [RENDER_STRATEGY_CONSTANTS.componentManager]?: unknown;
-        [RENDER_STRATEGY_CONSTANTS.injectComponent]?: DocsInjectComponent<TestComponent>;
-        [RENDER_STRATEGY_CONSTANTS.pageMetafile]?: Record<string, unknown>;
-      }
-    )[RENDER_STRATEGY_CONSTANTS.injectComponent] = {};
-    (
-      globalThis as Window & {
-        [RENDER_STRATEGY_CONSTANTS.componentManager]?: unknown;
-        [RENDER_STRATEGY_CONSTANTS.injectComponent]?: DocsInjectComponent<TestComponent>;
-        [RENDER_STRATEGY_CONSTANTS.pageMetafile]?: Record<string, unknown>;
-      }
-    )[RENDER_STRATEGY_CONSTANTS.pageMetafile] = {};
+    const testWindow = getTestRuntimeWindow();
+
+    testWindow[RENDER_STRATEGY_CONSTANTS.componentManager] = undefined;
+    testWindow[RENDER_STRATEGY_CONSTANTS.injectComponent] = {};
+    testWindow[RENDER_STRATEGY_CONSTANTS.pageMetafile] = {};
   });
 
   afterEach(() => {
@@ -61,27 +53,11 @@ describe('DocsComponentManager', () => {
     vi.unstubAllGlobals();
     document.head.innerHTML = '';
     document.body.innerHTML = '';
-    (
-      globalThis as Window & {
-        [RENDER_STRATEGY_CONSTANTS.componentManager]?: unknown;
-        [RENDER_STRATEGY_CONSTANTS.injectComponent]?: DocsInjectComponent<TestComponent>;
-        [RENDER_STRATEGY_CONSTANTS.pageMetafile]?: Record<string, unknown>;
-      }
-    )[RENDER_STRATEGY_CONSTANTS.componentManager] = undefined;
-    (
-      globalThis as Window & {
-        [RENDER_STRATEGY_CONSTANTS.componentManager]?: unknown;
-        [RENDER_STRATEGY_CONSTANTS.injectComponent]?: DocsInjectComponent<TestComponent>;
-        [RENDER_STRATEGY_CONSTANTS.pageMetafile]?: Record<string, unknown>;
-      }
-    )[RENDER_STRATEGY_CONSTANTS.injectComponent] = {};
-    (
-      globalThis as Window & {
-        [RENDER_STRATEGY_CONSTANTS.componentManager]?: unknown;
-        [RENDER_STRATEGY_CONSTANTS.injectComponent]?: DocsInjectComponent<TestComponent>;
-        [RENDER_STRATEGY_CONSTANTS.pageMetafile]?: Record<string, unknown>;
-      }
-    )[RENDER_STRATEGY_CONSTANTS.pageMetafile] = {};
+    const testWindow = getTestRuntimeWindow();
+
+    testWindow[RENDER_STRATEGY_CONSTANTS.componentManager] = undefined;
+    testWindow[RENDER_STRATEGY_CONSTANTS.injectComponent] = {};
+    testWindow[RENDER_STRATEGY_CONSTANTS.pageMetafile] = {};
   });
 
   it('loads the page metafile index and current page metafile into the shared cache', async () => {
@@ -188,11 +164,7 @@ describe('DocsComponentManager', () => {
       '/docs/assets/unified-loader.zh.js',
     ]);
     expect(
-      (
-        globalThis as Window & {
-          [RENDER_STRATEGY_CONSTANTS.pageMetafile]?: Record<string, unknown>;
-        }
-      )[RENDER_STRATEGY_CONSTANTS.pageMetafile],
+      getTestRuntimeWindow()[RENDER_STRATEGY_CONSTANTS.pageMetafile],
     ).toMatchObject({
       '/guide/how-it-works': expect.objectContaining({
         loaderScript: '/docs/assets/unified-loader.core.js',
@@ -225,11 +197,7 @@ describe('DocsComponentManager', () => {
     await expect(runtimeReady).resolves.toBe(true);
 
     const component = vi.fn(() => 'HeroCard');
-    (
-      globalThis as Window & {
-        [RENDER_STRATEGY_CONSTANTS.injectComponent]?: DocsInjectComponent<TestComponent>;
-      }
-    )[RENDER_STRATEGY_CONSTANTS.injectComponent] = {
+    getTestRuntimeWindow()[RENDER_STRATEGY_CONSTANTS.injectComponent] = {
       '/guide/how-it-works': {
         HeroCard: {
           component,

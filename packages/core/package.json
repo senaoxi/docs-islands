@@ -35,6 +35,7 @@
   "scripts": {
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache --cache-location ./node_modules/.cache/eslint/",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "test": "pnpm test:unit",
     "test:unit": "vitest run",
     "clean": "del-cli .eslintcache dist coverage node_modules"
