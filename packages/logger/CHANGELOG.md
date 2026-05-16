@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-05-16
+
+### Features
+
+- feat(logger): support preset-backed rule configs ([bd90aa6](https://github.com/XiSenao/docs-islands/commit/bd90aa6))
+
+### Maintenance
+
+- refactor: standardize test files to .spec.ts and add dedicated test tsconfig ([cbb7c2a](https://github.com/XiSenao/docs-islands/commit/cbb7c2a))
+- test(logger): restructure test suite with focused specs and documentation ([44815e4](https://github.com/XiSenao/docs-islands/commit/44815e4))
+- refactor(eslint): resolve complexity warnings with modular architecture ([679fcfb](https://github.com/XiSenao/docs-islands/commit/679fcfb))
+- refactor(logger): unify managed logger facade ([d5dfe51](https://github.com/XiSenao/docs-islands/commit/d5dfe51))
+
 ## [0.0.3] - 2026-04-30
 
 ### Bug Fixes
