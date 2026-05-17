@@ -409,7 +409,7 @@ const getDoubaoCapability = (
 };
 
 export const resolveSiteDevToolsAiCapabilities = async (
-  config: SiteDevToolsAiConfig,
+  config?: SiteDevToolsAiConfig,
 ): Promise<SiteDevToolsAiCapabilitiesResponse> => {
   return {
     ok: true,

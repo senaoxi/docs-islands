@@ -5,8 +5,6 @@
  * - Exact message matching (Case 8)
  * - Message glob patterns (Cases 9-12)
  * - Combined scope and message matching (Cases 10, 13-15)
- *
- * @vitest-environment node
  */
 import {
   createLogger,

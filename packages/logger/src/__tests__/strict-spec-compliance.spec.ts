@@ -4,8 +4,6 @@
  * Tests Cases 32-25 from test-spec.md
  * Strengthens boundary semantics that are easy to miss with broad substring
  * assertions in the case-by-case coverage suite.
- *
- * @vitest-environment node
  */
 import {
   createLogger,

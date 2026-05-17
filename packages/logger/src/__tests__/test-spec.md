@@ -6,19 +6,19 @@ The following semantics are considered prerequisites for this test document; if 
 
 ### 1.1 Rule Structure
 
-Runtime matching consumes resolved rules:
+Runtime matching consumes normalized rules:
 
 ```ts
-export interface ResolvedLoggerRule {
-  group?: string;
+export interface NormalizedLoggerRule {
+  groupMatcher?: (value: string) => boolean;
   label: string;
   levels?: LoggerVisibilityLevel[];
   main?: string;
-  message?: string;
+  messageMatcher?: (value: string) => boolean;
 }
 ```
 
-Public config normalizes into that array. Public rule settings support only:
+Public config resolves directly into that runtime shape. Public rule settings support only:
 
 ```ts
 type LoggerRuleSetting = 'off' | LoggerRuleUserConfig;
@@ -34,7 +34,7 @@ interface LoggerRuleUserConfig {
 ### 1.2 `'off'` Deletion Semantics
 
 - `'off'` deletes a configured rule during public config normalization
-- Deleted rules do not appear in `ResolvedLoggerRule[]`
+- Deleted rules do not appear in `NormalizedLoggerRule[]`
 - Deleted rules therefore:
   1. Do not participate in scope matching
   2. Do not participate in level pass-through determination

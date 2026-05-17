@@ -33,8 +33,6 @@ import {
   getScopedLoggerConfig,
   resetScopedLoggerConfig,
   resolveLoggerConfig,
-  setResolvedLoggerConfig,
-  setResolvedScopedLoggerConfig,
   setScopedLoggerConfig,
   shouldSuppressLog,
 } from '@docs-islands/logger/core';
@@ -46,7 +44,8 @@ import { loggerPlugin, transformLoggerTreeShaking } from '@docs-islands/logger/p
 import type {
   LoggerConfig,
   LoggerPresetPlugin,
-  ResolvedLoggerConfig,
+  NormalizedLoggerConfig,
+  NormalizedLoggerRule,
 } from '@docs-islands/logger/types';
 ```
 
@@ -121,34 +120,35 @@ const logging = {
 };
 ```
 
-### 2.2 Resolved `ResolvedLoggerConfig`
+### 2.2 Normalized `NormalizedLoggerConfig`
 
-Resolved config 被 `setResolvedLoggerConfig`、`setResolvedScopedLoggerConfig` 和内部标准化结果消费。
+`resolveLoggerConfig(config)` 直接产出 runtime 使用的 compiled config。registry entry 的 `config` 字段保留用户原始 `LoggerConfig`，`compiledConfig` 字段保存 `resolveLoggerConfig(config)` 的结果。
 
 ```ts
-interface ResolvedLoggerRule {
-  group?: string;
+interface NormalizedLoggerRule {
+  groupMatcher?: (value: string) => boolean;
   label: string;
   levels?: LoggerVisibilityLevel[];
   main?: string;
-  message?: string;
+  messageMatcher?: (value: string) => boolean;
 }
 
-interface ResolvedLoggerConfig {
+interface NormalizedLoggerConfig {
   debug?: boolean;
-  levels?: LoggerVisibilityLevel[];
-  rules?: ResolvedLoggerRule[];
+  levels: LoggerVisibilityLevel[];
+  rules?: NormalizedLoggerRule[];
 }
 ```
 
 约束：
 
-1. resolved `rules` 必须是 array；object map 非法。
-2. 每条 resolved rule 必须有非空 `label`。
+1. public `rules` 必须是 object map；array 非法。
+2. 每条 normalized rule 必须有非空 `label`。
 3. `label: '<root>'` 是保留值，非法。
-4. resolved rule label 必须唯一。
-5. resolved rule 的 `levels` 可以省略；省略时 runtime 按 `rule.levels ?? config.levels ?? defaultResolvedLevels` 计算。
-6. resolved `rules: []` 会标准化为无 active rules；若同时没有 `debug` 与 `levels`，整个 resolved config 会标准化为 `undefined`。
+4. normalized rule label 必须唯一。
+5. normalized rule 的 `levels` 可以省略；省略时 runtime 按 `rule.levels ?? config.levels ?? defaultResolvedLevels` 计算。
+6. root `levels` 与 rule `levels` 一律以 `LoggerVisibilityLevel[]` 存储，不使用 `Set`。
+7. 无 active rules 时不生成 `rules` 字段，runtime 按 no-rules 行为处理。
 
 ### 2.3 生效 level 与 debug 判定
 
@@ -156,7 +156,7 @@ interface ResolvedLoggerConfig {
 
 ```ts
 effectiveLevels(rule) = rule.levels ?? config.levels ?? defaultResolvedLevels;
-defaultResolvedLevels = new Set(['error', 'warn', 'info', 'success']);
+defaultResolvedLevels = ['error', 'warn', 'info', 'success'];
 ```
 
 运行时输出决策：
@@ -356,40 +356,30 @@ expect(
 
 Runtime 预期：无 active rules，fallback 到根 `levels`；debug true 时不会出现 `[Deleted]` label。
 
-#### Case A7：resolved config 标准化
+#### Case A7：normalized config 标准化
 
 ```ts
-expect(setResolvedLoggerConfig(undefined)).not.toThrow();
-expect(setResolvedLoggerConfig(null)).not.toThrow();
-
-expect(() => setResolvedLoggerConfig({ rules: { A: { levels: ['warn'] } } as any })).toThrow(
-  'Resolved logger config rules must be an array.',
-);
-
-expect(() => setResolvedLoggerConfig({ rules: [{ levels: ['warn'] } as any] })).toThrow(
-  'Every logger rule must provide a non-empty label.',
-);
-
-expect(() => setResolvedLoggerConfig({ rules: [{ label: '<root>', levels: ['warn'] }] })).toThrow(
-  'Logger rule label "<root>" is reserved for the root logging baseline.',
+expect(() => resolveLoggerConfig({ rules: [] as any })).toThrow(
+  'logger.rules must be an object map, not an array.',
 );
 
 expect(() =>
-  setResolvedLoggerConfig({
-    rules: [
-      { label: 'Dup', levels: ['warn'] },
-      { label: 'Dup', levels: ['error'] },
-    ],
-  }),
-).toThrow('Logger rule label "Dup" must be unique within logger.rules.');
+  resolveLoggerConfig({ rules: { Invalid: { typo: true, levels: ['warn'] } as any } }),
+).toThrow('Logger rule "Invalid" only supports "main", "group", "message", and "levels".');
+
+expect(() => resolveLoggerConfig({ rules: { '<root>': { levels: ['warn'] } } })).toThrow(
+  'Logger rule label "<root>" is reserved for the root logging baseline.',
+);
 ```
 
-#### Case A8：resolved rule default levels fallback
+#### Case A8：normalized rule default levels fallback
 
 ```ts
-setResolvedLoggerConfig({
+setLoggerConfig({
   debug: true,
-  rules: [{ label: 'DefaultLevels' }],
+  rules: {
+    DefaultLevels: { levels: 'inherit' },
+  },
 });
 ```
 
@@ -828,17 +818,16 @@ setScopedLoggerConfig('scope-error', { levels: ['error'] });
 @docs-islands/test[test.scope.same]: error scope visible
 ```
 
-#### Case C5：resolved scoped `null` 注册为 fallback config
+#### Case C5：scoped registry 保留原始 config
 
 ```ts
-setResolvedScopedLoggerConfig('resolved-null-scope', null);
-expect(getScopedLoggerConfig('resolved-null-scope')).toBeUndefined();
-expect(() =>
-  createScopedLogger({ main: '@docs-islands/test' }, 'resolved-null-scope'),
-).not.toThrow();
+const rawConfig = { levels: ['warn'] } satisfies LoggerConfig;
+
+setScopedLoggerConfig('raw-scope', rawConfig);
+expect(getScopedLoggerConfig('raw-scope')).toBe(rawConfig);
 ```
 
-该 scope 已注册但 compiled config 为 `null`，runtime 使用默认 no-rules 行为：`info/success/warn/error` 可见，`debug` 不可见。
+该 scope 的 registry entry 同时保存原始 `config` 与内部 `compiledConfig`；公开读取只返回原始 config。
 
 #### Case C6：`shouldSuppressLog` 与 runtime 判定一致
 
@@ -1168,7 +1157,7 @@ expect(() =>
    - `__DOCS_ISLANDS_DEFAULT_LOGGER_CONFIG__ = JSON.stringify(config)`
 2. plugin factory 会对 default scope 调用 `setScopedLoggerConfig('__default__', config)`，因此 transform 阶段的 `shouldSuppressLog` 可读取同一配置。
 3. `config` 省略或显式传 `null` 时，当前实现都使用 `DEFAULT_LOGGER_CONFIG`，而不是注入 `null`。
-4. runtime 被 define 标记为 controlled 后，`setLoggerConfig`、`setResolvedLoggerConfig`、`resetLoggerConfig` 都应抛出 controlled runtime 错误。该断言需要在经过 define 替换的模块评估环境中执行，不要尝试通过 `globalThis` 模拟 declared compile-time constants。
+4. runtime 被 define 标记为 controlled 后，`setLoggerConfig`、`resetLoggerConfig` 都应抛出 controlled runtime 错误。该断言需要在经过 define 替换的模块评估环境中执行，不要尝试通过 `globalThis` 模拟 declared compile-time constants。
 
 #### Case F2：tree-shaking 移除静态可证明 suppressed 的独立调用
 

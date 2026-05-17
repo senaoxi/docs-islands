@@ -1,8 +1,3 @@
-/**
- * Integration Tests: Off Rule Overrides
- *
- * @vitest-environment node
- */
 import {
   createLogger,
   resetLoggerConfig,

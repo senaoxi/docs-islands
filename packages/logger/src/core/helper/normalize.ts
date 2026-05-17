@@ -108,7 +108,7 @@ export const normalizeLoggerLevelsArray = (
   const seenLevels = new Set<LoggerVisibilityLevel>();
 
   for (const level of levels) {
-    if (!DEFAULT_RESOLVED_LEVELS.has(level)) {
+    if (!DEFAULT_RESOLVED_LEVELS.includes(level)) {
       throw new TypeError(`Not supported to parse ${level}.`);
     }
 

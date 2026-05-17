@@ -5,16 +5,10 @@ import type {
   SiteDevToolsUserConfig,
 } from '#dep-types/utils';
 import { VITEPRESS_CONFIG_LOG_GROUPS } from '#shared/constants/log-groups/config';
-import {
-  resolveLoggerConfig,
-  setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+import { setScopedLoggerConfig } from '@docs-islands/logger/core';
 import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { LOGGER_TREE_SHAKING_PLUGIN_NAME } from '@docs-islands/logger/plugin';
-import type {
-  LoggerPluginMap,
-  ResolvedLoggerConfig,
-} from '@docs-islands/logger/types';
+import type { LoggerConfig, LoggerPluginMap } from '@docs-islands/logger/types';
 import type { DefaultTheme, UserConfig } from 'vitepress';
 import { LOGGER_FACADE_PLUGIN_NAME } from '../constants/core/plugin-names';
 import { getVitePressGroupLogger } from '../logger';
@@ -39,7 +33,7 @@ export interface DocsIslandsSharedOptions<
 export interface DocsIslandsResolvedUserConfig {
   loggerScopeId: string;
   loggerTreeShakingEnabled: boolean;
-  logging?: ResolvedLoggerConfig;
+  logging?: LoggerConfig;
   siteDevtoolsEnabled: boolean;
 }
 
@@ -166,9 +160,10 @@ export function applyDocsIslandsUserConfig<
 ): DocsIslandsResolvedUserConfig {
   const { treeshake: loggerTreeShaking, ...loggerConfig } =
     options?.logging ?? {};
+  const scopedLoggerConfig = loggerConfig as LoggerConfig<TPlugins>;
 
   // Complete the logger configuration initialization as early as possible to ensure subsequent logs are controlled.
-  setScopedLoggerConfig(loggerScopeId, loggerConfig);
+  setScopedLoggerConfig(loggerScopeId, scopedLoggerConfig);
 
   warnIfUnsupportedNodeVersion(loggerScopeId);
 
@@ -188,7 +183,7 @@ export function applyDocsIslandsUserConfig<
   return {
     loggerScopeId,
     loggerTreeShakingEnabled,
-    logging: resolveLoggerConfig(loggerConfig),
+    logging: scopedLoggerConfig,
     siteDevtoolsEnabled: mergedSiteDevTools !== undefined,
   };
 }

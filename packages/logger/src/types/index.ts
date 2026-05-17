@@ -91,12 +91,6 @@ export interface ResolvedLoggerRule {
   message?: string;
 }
 
-export interface ResolvedLoggerConfig {
-  debug?: boolean;
-  levels: LoggerVisibilityLevel[];
-  rules?: ResolvedLoggerRule[];
-}
-
 export interface DebugMessageOptions {
   context: string;
   decision: string;
@@ -136,19 +130,19 @@ export interface LoggerContext {
 export interface NormalizedLoggerRule {
   groupMatcher?: (value: string) => boolean;
   label: string;
-  levels?: ReadonlySet<LoggerVisibilityLevel>;
+  levels?: LoggerVisibilityLevel[];
   main?: string;
   messageMatcher?: (value: string) => boolean;
 }
 
 export interface NormalizedLoggerConfig {
   debug?: boolean;
-  levels?: ReadonlySet<LoggerVisibilityLevel>;
+  levels: LoggerVisibilityLevel[];
   rules?: NormalizedLoggerRule[];
 }
 
 export interface LoggerConfigRegistryEntry {
-  config: ResolvedLoggerConfig | undefined;
+  config: LoggerConfig | undefined;
   compiledConfig: NormalizedLoggerConfig | null;
 }
 

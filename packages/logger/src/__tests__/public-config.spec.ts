@@ -1,8 +1,8 @@
-/**
- * @vitest-environment node
- */
 import { resolveLoggerConfig } from '@docs-islands/logger/core';
-import type { LoggerPresetPlugin } from '@docs-islands/logger/types';
+import type {
+  LoggerPresetPlugin,
+  NormalizedLoggerRule,
+} from '@docs-islands/logger/types';
 import { describe, expect, it } from 'vitest';
 
 const testPreset = {
@@ -64,6 +64,33 @@ const testPreset = {
   },
 } satisfies LoggerPresetPlugin;
 
+const expectRuntimeRule = (
+  rule: NormalizedLoggerRule | undefined,
+  expected: Pick<NormalizedLoggerRule, 'label' | 'levels' | 'main'>,
+  options: {
+    group?: [match: string, miss: string];
+    message?: [match: string, miss: string];
+  } = {},
+): void => {
+  expect(rule).toMatchObject(expected);
+
+  if (options.group) {
+    expect(rule?.groupMatcher).toBeTypeOf('function');
+    expect(rule?.groupMatcher?.(options.group[0])).toBe(true);
+    expect(rule?.groupMatcher?.(options.group[1])).toBe(false);
+  } else {
+    expect(rule).not.toHaveProperty('groupMatcher');
+  }
+
+  if (options.message) {
+    expect(rule?.messageMatcher).toBeTypeOf('function');
+    expect(rule?.messageMatcher?.(options.message[0])).toBe(true);
+    expect(rule?.messageMatcher?.(options.message[1])).toBe(false);
+  } else {
+    expect(rule).not.toHaveProperty('messageMatcher');
+  }
+};
+
 describe('public logger config', () => {
   it('exposes the public resolver for runtime logger config', () => {
     expect(
@@ -77,53 +104,67 @@ describe('public logger config', () => {
     });
   });
 
-  it('normalizes rules maps into resolved rule arrays', () => {
-    expect(
-      resolveLoggerConfig({
-        debug: true,
-        levels: ['warn', 'error'],
-        plugins: {
-          test: testPreset,
-        },
-        rules: {
-          'custom:api-timeout': {
-            group: 'api.*',
-            levels: ['warn'],
-            message: '*timeout*',
-          },
-          'test/build': {
-            levels: 'inherit',
-          },
-          'test/hmr': {
-            levels: ['error'],
-            message: '*hot*',
-          },
-        },
-      }),
-    ).toEqual({
+  it('normalizes rules maps into runtime rule arrays', () => {
+    const resolved = resolveLoggerConfig({
       debug: true,
       levels: ['warn', 'error'],
-      rules: [
-        {
+      plugins: {
+        test: testPreset,
+      },
+      rules: {
+        'custom:api-timeout': {
           group: 'api.*',
-          label: 'custom:api-timeout',
           levels: ['warn'],
           message: '*timeout*',
         },
-        {
-          group: 'build.pipeline',
-          label: 'test/build',
-          main: '@docs-islands/test',
+        'test/build': {
+          levels: 'inherit',
         },
-        {
-          group: 'hmr.update',
-          label: 'test/hmr',
+        'test/hmr': {
           levels: ['error'],
-          main: '@docs-islands/test',
           message: '*hot*',
         },
-      ],
+      },
     });
+
+    expect(resolved).toMatchObject({
+      debug: true,
+      levels: ['warn', 'error'],
+    });
+    expect(resolved.rules).toHaveLength(3);
+    expectRuntimeRule(
+      resolved.rules?.[0],
+      {
+        label: 'custom:api-timeout',
+        levels: ['warn'],
+      },
+      {
+        group: ['api.users', 'build.pipeline'],
+        message: ['request timeout', 'request completed'],
+      },
+    );
+    expectRuntimeRule(
+      resolved.rules?.[1],
+      {
+        label: 'test/build',
+        main: '@docs-islands/test',
+      },
+      {
+        group: ['build.pipeline', 'build.pipeline.child'],
+      },
+    );
+    expectRuntimeRule(
+      resolved.rules?.[2],
+      {
+        label: 'test/hmr',
+        levels: ['error'],
+        main: '@docs-islands/test',
+      },
+      {
+        group: ['hmr.update', 'hmr.update.extra'],
+        message: ['hot update', 'cold update'],
+      },
+    );
   });
 
   it('treats off as deletion instead of a resolved disabled rule', () => {
@@ -155,104 +196,127 @@ describe('public logger config', () => {
   });
 
   it('extends plugin configs and applies top-level rules last', () => {
-    expect(
-      resolveLoggerConfig({
-        debug: true,
-        extends: ['test/all'],
-        levels: ['warn', 'error'],
-        plugins: {
-          test: testPreset,
-        },
-        rules: {
-          'test/transform': {
-            levels: ['error'],
-          },
-          'test/hmr': 'off',
-          'custom:api-timeout': {
-            group: 'api.*',
-            levels: ['warn'],
-            message: '*timeout*',
-          },
-        },
-      }),
-    ).toEqual({
+    const resolved = resolveLoggerConfig({
       debug: true,
+      extends: ['test/all'],
       levels: ['warn', 'error'],
-      rules: [
-        {
-          group: 'build.pipeline',
-          label: 'test/build',
-          main: '@docs-islands/test',
-        },
-        {
-          group: 'transform.*',
-          label: 'test/transform',
+      plugins: {
+        test: testPreset,
+      },
+      rules: {
+        'test/transform': {
           levels: ['error'],
-          main: '@docs-islands/test',
         },
-        {
+        'test/hmr': 'off',
+        'custom:api-timeout': {
           group: 'api.*',
-          label: 'custom:api-timeout',
           levels: ['warn'],
           message: '*timeout*',
         },
-      ],
+      },
     });
+
+    expect(resolved).toMatchObject({
+      debug: true,
+      levels: ['warn', 'error'],
+    });
+    expect(resolved.rules).toHaveLength(3);
+    expectRuntimeRule(
+      resolved.rules?.[0],
+      {
+        label: 'test/build',
+        main: '@docs-islands/test',
+      },
+      {
+        group: ['build.pipeline', 'build.pipeline.child'],
+      },
+    );
+    expectRuntimeRule(
+      resolved.rules?.[1],
+      {
+        label: 'test/transform',
+        levels: ['error'],
+        main: '@docs-islands/test',
+      },
+      {
+        group: ['transform.react', 'hmr.update'],
+      },
+    );
+    expectRuntimeRule(
+      resolved.rules?.[2],
+      {
+        label: 'custom:api-timeout',
+        levels: ['warn'],
+      },
+      {
+        group: ['api.users', 'transform.react'],
+        message: ['api timeout', 'api success'],
+      },
+    );
   });
 
   it('supports ordered extends overrides', () => {
-    expect(
-      resolveLoggerConfig({
-        extends: ['test/inheritLevels', 'test/strict'],
-        plugins: {
-          test: testPreset,
-        },
-      }),
-    ).toEqual({
-      levels: ['error', 'warn', 'info', 'success'],
-      rules: [
-        {
-          group: 'build.pipeline',
-          label: 'test/build',
-          main: '@docs-islands/test',
-        },
-        {
-          group: 'transform.*',
-          label: 'test/transform',
-          levels: ['error'],
-          main: '@docs-islands/test',
-        },
-      ],
+    const resolved = resolveLoggerConfig({
+      extends: ['test/inheritLevels', 'test/strict'],
+      plugins: {
+        test: testPreset,
+      },
     });
+
+    expect(resolved.levels).toEqual(['error', 'warn', 'info', 'success']);
+    expect(resolved.rules).toHaveLength(2);
+    expectRuntimeRule(
+      resolved.rules?.[0],
+      {
+        label: 'test/build',
+        main: '@docs-islands/test',
+      },
+      {
+        group: ['build.pipeline', 'build.pipeline.child'],
+      },
+    );
+    expectRuntimeRule(
+      resolved.rules?.[1],
+      {
+        label: 'test/transform',
+        levels: ['error'],
+        main: '@docs-islands/test',
+      },
+      {
+        group: ['transform.react', 'hmr.update'],
+      },
+    );
   });
 
   it('lets rule bodies override plugin template scope fields', () => {
-    expect(
-      resolveLoggerConfig({
-        plugins: {
-          test: testPreset,
-        },
-        rules: {
-          'test/build': {
-            group: 'custom.group',
-            levels: ['warn'],
-            main: '@custom/build',
-            message: '*custom*',
-          },
-        },
-      }),
-    ).toEqual({
-      levels: ['error', 'warn', 'info', 'success'],
-      rules: [
-        {
+    const resolved = resolveLoggerConfig({
+      plugins: {
+        test: testPreset,
+      },
+      rules: {
+        'test/build': {
           group: 'custom.group',
-          label: 'test/build',
           levels: ['warn'],
           main: '@custom/build',
           message: '*custom*',
         },
-      ],
+      },
     });
+
+    expect(resolved.levels).toEqual(['error', 'warn', 'info', 'success']);
+    expect(resolved.rules).toHaveLength(1);
+    expectRuntimeRule(
+      resolved.rules?.[0],
+      {
+        label: 'test/build',
+        levels: ['warn'],
+        main: '@custom/build',
+      },
+      {
+        group: ['custom.group', 'build.pipeline'],
+        message: ['custom build', 'default build'],
+      },
+    );
   });
 
   it('rejects removed and invalid public rule forms', () => {

@@ -18,7 +18,6 @@ import type {
   LogKind,
   NormalizedLoggerConfig,
   NormalizedLoggerRule,
-  ResolvedLoggerConfig,
   ResolvedLoggerContext,
   ResolvedLoggerRule,
 } from '../types';
@@ -86,47 +85,30 @@ const createPatternMatcher = (
   return (value) => matcher(value);
 };
 
-const compileLoggerRule = (rule: ResolvedLoggerRule): NormalizedLoggerRule => ({
+const createNormalizedLoggerRule = (
+  rule: ResolvedLoggerRule,
+): NormalizedLoggerRule => ({
   ...(rule.group
     ? { groupMatcher: createPatternMatcher(rule.group, 'group') }
     : {}),
   label: rule.label,
   ...(rule.levels === undefined
     ? {}
-    : { levels: new Set(normalizeLoggerLevelsArray(rule.levels)) }),
+    : { levels: normalizeLoggerLevelsArray(rule.levels) }),
   ...(rule.main ? { main: rule.main } : {}),
   ...(rule.message
     ? { messageMatcher: createPatternMatcher(rule.message, 'message') }
     : {}),
 });
 
-const compileLoggerConfig = (
-  normalizedConfig: ResolvedLoggerConfig | undefined,
-): NormalizedLoggerConfig | null => {
-  if (!normalizedConfig) {
-    return null;
-  }
+const createDefaultResolvedLevels = (): LoggerVisibilityLevel[] => [
+  ...DEFAULT_RESOLVED_LEVELS,
+];
 
-  return {
-    ...(normalizedConfig.debug === undefined
-      ? {}
-      : { debug: normalizedConfig.debug }),
-    ...(normalizedConfig.levels
-      ? {
-          levels: new Set(normalizeLoggerLevelsArray(normalizedConfig.levels)),
-        }
-      : {}),
-    ...(normalizedConfig.rules === undefined
-      ? {}
-      : {
-          rules: normalizedConfig.rules.map((rule) => compileLoggerRule(rule)),
-        }),
-  };
-};
-
-const cloneLevels = (
-  levels: ReadonlySet<LoggerVisibilityLevel>,
-): Set<LoggerVisibilityLevel> => new Set(levels);
+const includesLoggerLevel = (
+  levels: readonly LoggerVisibilityLevel[],
+  level: LoggerVisibilityLevel,
+): boolean => levels.includes(level);
 
 export const isLoggerControlled = (): boolean => {
   if (typeof __DOCS_ISLANDS_DEFAULT_LOGGER_CONTROLLED__ === 'boolean') {
@@ -153,11 +135,9 @@ const getLoggerConfigRegistry = (): Map<
 const createLoggerConfigRegistryEntry = (
   config: LoggerConfig,
 ): LoggerConfigRegistryEntry => {
-  const normalizedConfig = resolveLoggerConfig(config);
-
   return {
-    compiledConfig: compileLoggerConfig(normalizedConfig),
-    config: normalizedConfig,
+    compiledConfig: resolveLoggerConfig(config),
+    config,
   };
 };
 
@@ -261,7 +241,7 @@ const matchesLoggerRule = (
 const getRuleEffectiveLevels = (
   rule: NormalizedLoggerRule,
   config: NormalizedLoggerConfig,
-): ReadonlySet<LoggerVisibilityLevel> => {
+): readonly LoggerVisibilityLevel[] => {
   if (rule.levels !== undefined) {
     return rule.levels;
   }
@@ -270,7 +250,7 @@ const getRuleEffectiveLevels = (
     return config.levels;
   }
 
-  return DEFAULT_RESOLVED_LEVELS;
+  return createDefaultResolvedLevels();
 };
 
 export const resolveLoggerContext = (
@@ -278,9 +258,7 @@ export const resolveLoggerContext = (
   scopeId?: LoggerScopeId,
 ): ResolvedLoggerContext => {
   const config = getCompiledLoggerConfigForScope(scopeId);
-  const baseEnabledLevels = config?.levels
-    ? cloneLevels(config.levels)
-    : cloneLevels(DEFAULT_RESOLVED_LEVELS);
+  const baseEnabledLevels = config?.levels || createDefaultResolvedLevels();
   const baseDebugEnabled = config?.debug ?? false;
   const hasRules = config?.rules !== undefined;
 
@@ -298,7 +276,7 @@ export const resolveLoggerContext = (
     return {
       appendElapsedTime: baseDebugEnabled,
       ruleLabels: [],
-      suppress: !baseEnabledLevels.has(level),
+      suppress: !includesLoggerLevel(baseEnabledLevels, level),
     };
   }
 
@@ -306,7 +284,7 @@ export const resolveLoggerContext = (
     matchesLoggerRule(rule, context),
   );
   const contributingRules = matchedRules.filter((rule) =>
-    getRuleEffectiveLevels(rule, config).has(level),
+    includesLoggerLevel(getRuleEffectiveLevels(rule, config), level),
   );
 
   return {
@@ -319,14 +297,14 @@ export const resolveLoggerContext = (
 };
 
 /**
- * Retrieves the resolved logger configuration for a specific scope.
+ * Retrieves the raw logger configuration for a specific scope.
  *
  * @param scopeId - The identifier for the logger scope
- * @returns The resolved logger configuration if registered for the scope, undefined otherwise
+ * @returns The raw logger configuration if registered for the scope, undefined otherwise
  */
 export function getScopedLoggerConfig(
   scopeId: LoggerScopeId,
-): ResolvedLoggerConfig | undefined {
+): LoggerConfig | undefined {
   const normalizedScopeId = normalizeLoggerScopeId(scopeId);
 
   if (normalizedScopeId === DEFAULT_LOGGER_SCOPE_ID) {
@@ -795,15 +773,16 @@ function assertUniqueLoggerRuleLabels(
 }
 
 /**
- * Resolves and normalizes a logger configuration object.
+ * Resolves a logger configuration object into the runtime matching shape.
  *
  * This function processes user-provided logger configuration by:
  * - Normalizing plugin definitions and merging plugin-based rule presets
  * - Expanding rule references to their full definitions
  * - Validating rule labels for uniqueness
  * - Normalizing log levels to a consistent format
+ * - Creating matcher functions for group and message rules
  *
- * The resolved configuration is ready for use in logger initialization and rule matching.
+ * The resolved configuration is ready for runtime rule matching.
  *
  * @param config - The logger configuration object containing plugins, rules, levels, and debug settings
  * @returns A normalized and validated logger configuration ready for runtime use
@@ -820,7 +799,7 @@ function assertUniqueLoggerRuleLabels(
  */
 export function resolveLoggerConfig<
   TPlugins extends LoggerPluginMap = LoggerPluginMap,
->(config: LoggerConfig<TPlugins>): ResolvedLoggerConfig {
+>(config: LoggerConfig<TPlugins>): NormalizedLoggerConfig {
   const normalizedPlugins = normalizeLoggingPlugins(config.plugins);
   /**
    * The value of `levels` must be either `undefined` or a valid array format.
@@ -828,19 +807,21 @@ export function resolveLoggerConfig<
    */
   const normalizedLevels =
     config.levels === undefined
-      ? [...DEFAULT_RESOLVED_LEVELS]
+      ? createDefaultResolvedLevels()
       : (normalizeLoggerLevelsArray(config.levels) ?? []);
-  const normalizedRules = expandLoggerRules(normalizedPlugins, config)
+  const resolvedRules = expandLoggerRules(normalizedPlugins, config)
     ?.map((rule) => normalizeResolvedLoggerRule(rule))
     .filter((rule): rule is ResolvedLoggerRule => Boolean(rule));
 
-  assertUniqueLoggerRuleLabels(normalizedRules);
+  assertUniqueLoggerRuleLabels(resolvedRules);
 
   return {
     ...(config.debug === undefined ? {} : { debug: config.debug }),
     levels: normalizedLevels,
-    ...(normalizedRules && normalizedRules.length > 0
-      ? { rules: normalizedRules }
+    ...(resolvedRules && resolvedRules.length > 0
+      ? {
+          rules: resolvedRules.map((rule) => createNormalizedLoggerRule(rule)),
+        }
       : {}),
   };
 }

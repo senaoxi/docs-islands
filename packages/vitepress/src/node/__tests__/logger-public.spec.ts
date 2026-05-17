@@ -1,5 +1,5 @@
 import { resetScopedLoggerConfig } from '@docs-islands/logger/core';
-import type { ResolvedLoggerConfig } from '@docs-islands/logger/types';
+import type { LoggerConfig } from '@docs-islands/logger/types';
 import * as vitepressPublicModule from '@docs-islands/vitepress';
 import * as publicLoggerModule from '@docs-islands/vitepress/logger';
 import { createLogger } from '@docs-islands/vitepress/logger';
@@ -75,15 +75,14 @@ describe('public vitepress logger api', () => {
   it('generates a scope-bound virtual logger facade in managed builds', async () => {
     const loggingConfig = {
       levels: ['info'],
-      rules: [
-        {
+      rules: {
+        RuntimeAllowed: {
           group: 'runtime.allowed',
-          label: 'RuntimeAllowed',
           levels: ['info'],
           main: '@docs-islands/vitepress',
         },
-      ],
-    } satisfies ResolvedLoggerConfig;
+      },
+    } satisfies LoggerConfig;
     const plugin = createVitePressLoggerFacadePlugin(
       TEST_RUNTIME_LOGGER_SCOPE_ID,
       loggingConfig,

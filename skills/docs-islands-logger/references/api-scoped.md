@@ -44,7 +44,7 @@ import { getScopedLoggerConfig } from '@docs-islands/logger/core';
 const config = getScopedLoggerConfig(scopeId);
 ```
 
-Returns the normalized internal `ResolvedLoggerConfig | undefined`.
+Returns the original raw `LoggerConfig | undefined` registered for the scope.
 
 ## resetScopedLoggerConfig
 

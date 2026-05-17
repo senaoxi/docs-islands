@@ -6,8 +6,6 @@
  * - Main scope matching (Case 3)
  * - Group scope matching (Cases 4-6)
  * - Main and group combined (Case 7)
- *
- * @vitest-environment node
  */
 import {
   createLogger,

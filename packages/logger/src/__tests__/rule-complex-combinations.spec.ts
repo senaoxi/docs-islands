@@ -6,8 +6,6 @@
  * - Main + message (Case 17)
  * - Group + message (Cases 18-19, 22)
  * - Main + group + message (Cases 20-21, 23)
- *
- * @vitest-environment node
  */
 import {
   createLogger,

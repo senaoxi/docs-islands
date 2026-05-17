@@ -1,8 +1,5 @@
 import { getScopedLoggerConfig } from '@docs-islands/logger/core';
-import type {
-  LoggerScopeId,
-  ResolvedLoggerConfig,
-} from '@docs-islands/logger/types';
+import type { LoggerConfig, LoggerScopeId } from '@docs-islands/logger/types';
 import { normalizePath, type Plugin } from 'vite';
 import { LOGGER_FACADE_PLUGIN_NAME } from '../constants/core/plugin-names';
 
@@ -12,8 +9,8 @@ const VITEPRESS_LOGGER_VIRTUAL_MODULE_PREFIX =
   '\0docs-islands:vitepress-logger:';
 
 const serializeLoggerConfig = (
-  config: ResolvedLoggerConfig | null | undefined,
-): string => (config === undefined ? 'undefined' : JSON.stringify(config));
+  config: LoggerConfig | null | undefined,
+): string => JSON.stringify(config ?? {});
 
 export const createVitePressLoggerVirtualModuleId = (
   loggerScopeId: LoggerScopeId,
@@ -21,7 +18,7 @@ export const createVitePressLoggerVirtualModuleId = (
 
 const createSharedHeader = (
   loggerScopeId: LoggerScopeId,
-  logging: ResolvedLoggerConfig | null | undefined,
+  logging: LoggerConfig | null | undefined,
 ): string => `
 const loggerScopeId = ${JSON.stringify(loggerScopeId)};
 const loggerConfig = ${serializeLoggerConfig(logging)};
@@ -30,7 +27,7 @@ setScopedLoggerConfig(loggerScopeId, loggerConfig);
 
 const createVitePressLoggerFacadeSource = (
   loggerScopeId: LoggerScopeId,
-  logging: ResolvedLoggerConfig | null | undefined,
+  logging: LoggerConfig | null | undefined,
 ): string => `
 import { createScopedLogger, setScopedLoggerConfig } from '@docs-islands/logger/core';
 
@@ -42,7 +39,7 @@ export const createLogger = (options) =>
 
 export const createVitePressLoggerFacadePlugin = (
   loggerScopeId: LoggerScopeId,
-  logging: ResolvedLoggerConfig | null | undefined = getScopedLoggerConfig(
+  logging: LoggerConfig | null | undefined = getScopedLoggerConfig(
     loggerScopeId,
   ),
 ): Plugin => {

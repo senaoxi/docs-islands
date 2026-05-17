@@ -4,8 +4,6 @@
  * Tests Cases 24-25 from test-spec.md
  * - Behavior when no rules are configured
  * - Debug mode vs non-debug mode
- *
- * @vitest-environment node
  */
 import {
   createLogger,

@@ -4,8 +4,6 @@
  * Tests Cases 26-27 from test-spec.md
  * - Success level in rule mode (Case 26)
  * - Picomatch operators ? and [] (Case 27)
- *
- * @vitest-environment node
  */
 import {
   createLogger,

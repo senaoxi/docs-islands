@@ -252,29 +252,25 @@ describe('logger node behavior', () => {
       ),
     );
     expect(getLoggerConfigForScope(scopeA)).toEqual({
-      levels: ['error', 'warn', 'info', 'success'],
-      rules: [
-        {
+      rules: {
+        'scope-a-only': {
           group: VITEPRESS_RUNTIME_LOG_GROUPS.reactDevRender,
-          label: 'scope-a-only',
           levels: ['info'],
           main: '@docs-islands/vitepress',
         },
-      ],
+      },
     });
 
     resetScopedLoggerConfig(scopeA);
     expect(getLoggerConfigForScope(scopeA)).toBeUndefined();
     expect(getLoggerConfigForScope(scopeB)).toEqual({
-      levels: ['error', 'warn', 'info', 'success'],
-      rules: [
-        {
+      rules: {
+        'scope-b-only': {
           group: VITEPRESS_RUNTIME_LOG_GROUPS.reactComponentManager,
-          label: 'scope-b-only',
           levels: ['warn'],
           main: '@docs-islands/vitepress',
         },
-      ],
+      },
     });
   });
 

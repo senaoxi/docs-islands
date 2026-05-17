@@ -46,32 +46,39 @@ afterEach(() => {
 
 describe('react logging config', () => {
   it('uses the public logger resolver for runtime logger config', () => {
-    expect(
-      resolveLoggerConfig({
-        debug: true,
-        levels: ['info', 'success', 'warn'],
-        rules: {
-          'runtime-react-rule': {
-            group: 'runtime.react.*',
-            levels: ['warn', 'success'],
-            main: '@docs-islands/vitepress',
-            message: '*ready*',
-          },
-        },
-      }),
-    ).toEqual({
+    const resolved = resolveLoggerConfig({
       debug: true,
       levels: ['info', 'success', 'warn'],
-      rules: [
-        {
+      rules: {
+        'runtime-react-rule': {
           group: 'runtime.react.*',
-          label: 'runtime-react-rule',
           levels: ['warn', 'success'],
           main: '@docs-islands/vitepress',
           message: '*ready*',
         },
-      ],
+      },
     });
+
+    expect(resolved).toMatchObject({
+      debug: true,
+      levels: ['info', 'success', 'warn'],
+    });
+    expect(resolved.rules).toHaveLength(1);
+    expect(resolved.rules?.[0]).toMatchObject({
+      label: 'runtime-react-rule',
+      levels: ['warn', 'success'],
+      main: '@docs-islands/vitepress',
+    });
+    expect(resolved.rules?.[0]?.groupMatcher?.('runtime.react.render')).toBe(
+      true,
+    );
+    expect(resolved.rules?.[0]?.groupMatcher?.('runtime.vue.render')).toBe(
+      false,
+    );
+    expect(resolved.rules?.[0]?.messageMatcher?.('runtime ready')).toBe(true);
+    expect(resolved.rules?.[0]?.messageMatcher?.('runtime pending')).toBe(
+      false,
+    );
   });
 
   it('applies the single VitePress preset plugin before runtime registration', async () => {
@@ -98,29 +105,19 @@ describe('react logging config', () => {
       },
     );
 
-    expect(resolved.logging?.rules).toEqual([
-      {
-        group: VITEPRESS_HMR_LOG_GROUPS.reactRuntimePrepare,
-        label: 'vitepress/reactRuntimePrepare',
-        main: '@docs-islands/vitepress',
+    expect(resolved.logging).toEqual({
+      extends: ['vitepress/hmr'],
+      levels: ['warn'],
+      plugins: {
+        vitepress: vitepressLogger,
       },
-      {
-        group: VITEPRESS_HMR_LOG_GROUPS.reactSsrOnlyRender,
-        label: 'vitepress/reactSsrOnlyRender',
-        main: '@docs-islands/vitepress',
+      rules: {
+        'vitepress/markdownUpdate': 'off',
+        'vitepress/viteAfterUpdate': {
+          levels: ['error'],
+        },
       },
-      {
-        group: VITEPRESS_HMR_LOG_GROUPS.viteAfterUpdate,
-        label: 'vitepress/viteAfterUpdate',
-        levels: ['error'],
-        main: '@docs-islands/vitepress',
-      },
-      {
-        group: VITEPRESS_HMR_LOG_GROUPS.viteAfterUpdateRender,
-        label: 'vitepress/viteAfterUpdateRender',
-        main: '@docs-islands/vitepress',
-      },
-    ]);
+    });
 
     expect(
       shouldSuppressLog(
@@ -198,9 +195,7 @@ describe('react logging config', () => {
       },
     );
 
-    expect(resolved.logging).toEqual({
-      levels: ['error', 'warn', 'info', 'success'],
-    });
+    expect(resolved.logging).toEqual({});
     expect(resolved.loggerTreeShakingEnabled).toBe(true);
 
     applyDocsIslandsViteBaseConfig(

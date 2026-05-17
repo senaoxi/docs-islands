@@ -23,7 +23,7 @@ import {
 
 ```ts
 createLogger(options: { main: string }): Logger;
-resolveLoggerConfig(config: LoggerConfig): ResolvedLoggerConfig | undefined;
+resolveLoggerConfig(config: LoggerConfig): NormalizedLoggerConfig;
 setLoggerConfig(config: LoggerConfig): void;
 resetLoggerConfig(): void;
 ```
@@ -111,8 +111,8 @@ import type {
   LoggerRulesUserConfig,
   LoggerVisibilityLevel,
   LogKind,
-  ResolvedLoggerConfig,
-  ResolvedLoggerRule,
+  NormalizedLoggerConfig,
+  NormalizedLoggerRule,
   ScopedLogger,
 } from '@docs-islands/logger/types';
 ```
@@ -145,17 +145,17 @@ interface LoggerPresetRuleUserConfig {
   message?: string;
 }
 
-interface ResolvedLoggerConfig {
+interface NormalizedLoggerConfig {
   debug?: boolean;
   levels?: Array<'error' | 'warn' | 'info' | 'success'>;
-  rules?: ResolvedLoggerRule[];
+  rules?: NormalizedLoggerRule[];
 }
 
-interface ResolvedLoggerRule {
+interface NormalizedLoggerRule {
+  groupMatcher?: (value: string) => boolean;
   label: string;
   main?: string;
-  group?: string;
-  message?: string;
+  messageMatcher?: (value: string) => boolean;
   levels?: Array<'error' | 'warn' | 'info' | 'success'>;
 }
 ```
