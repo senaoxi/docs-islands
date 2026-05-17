@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-05-17
+
+### Maintenance
+
+- refactor(logging): standardize test files and normalize logger rule resolution ([d86e312](https://github.com/XiSenao/docs-islands/commit/d86e312))
+
 ## [0.0.4] - 2026-05-16
 
 ### Features
