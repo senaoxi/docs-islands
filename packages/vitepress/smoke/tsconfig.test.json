@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.source.json",
+  "include": ["consumer.fixtures.ts", "helpers.ts", "*.spec.ts"]
+}

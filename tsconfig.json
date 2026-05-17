@@ -1,9 +1,42 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "isolatedDeclarations": false,
-    "declaration": false,
-    "types": ["node"],
-  },
-  "include": ["scripts/", "*.ts"],
+  "files": [],
+  "references": [
+    // root-level source/scripts project
+    {
+      "path": "./tsconfig.source.json",
+    },
+
+    // root-level workspaces
+    {
+      "path": "./utils", // @docs-islands/utils
+    },
+    {
+      "path": "./docs", // @docs-islands/monorepo-docs
+    },
+
+    // first-class package workspaces
+    {
+      "path": "./packages/core", // @docs-islands/core
+    },
+    {
+      "path": "./packages/eslint-config", // @docs-islands/eslint-config
+    },
+    {
+      "path": "./packages/logger", // @docs-islands/logger
+    },
+    {
+      "path": "./packages/plugins/license", // @docs-islands/plugin-license
+    },
+    {
+      /**
+       * @docs-islands/vitepress
+       *
+       * Owned subprojects should be referenced from packages/vitepress/tsconfig.json:
+       * - @docs-islands/vitepress-docs
+       * - @docs-islands/vitepress-playground
+       * - @docs-islands/vitepress-smoke
+       */
+      "path": "./packages/vitepress",
+    },
+  ],
 }

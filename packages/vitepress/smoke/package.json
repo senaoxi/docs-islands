@@ -5,7 +5,8 @@
   "scripts": {
     "test": "pnpm smoke",
     "smoke": "playwright test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.source.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .eslintcache node_modules"
   },

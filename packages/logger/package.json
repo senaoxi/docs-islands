@@ -29,7 +29,7 @@
     "lint:package:publint": "tsx scripts/lint-package.ts --tool publint",
     "lint:package:attw": "tsx scripts/lint-package.ts --tool attw",
     "lint:package:boundary": "tsx scripts/lint-package.ts --tool boundary",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.source.json --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",

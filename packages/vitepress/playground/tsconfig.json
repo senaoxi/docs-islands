@@ -1,11 +1,11 @@
 {
-  "extends": "../tsconfig.json",
-  "compilerOptions": {
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["node", "vitest/globals"],
-    "jsx": "preserve",
-    "isolatedDeclarations": false,
-    "declaration": false,
-  },
-  "include": ["./", "./.vitepress/**/*.ts"],
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.source.json",
+    },
+    {
+      "path": "./tsconfig.test.json",
+    },
+  ],
 }

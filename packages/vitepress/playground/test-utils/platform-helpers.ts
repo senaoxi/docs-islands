@@ -1,7 +1,3 @@
-/**
- * Platform-specific test utilities for handling Windows CI issues
- */
-
 import { loadEnv } from '@docs-islands/utils/env';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { getPlaygroundLogger } from './logger';
@@ -12,9 +8,6 @@ const TestLogger = getPlaygroundLogger('test.playground.platform-helpers');
 export const isWindows: boolean = process.platform === 'win32';
 export const isCI = ci;
 
-/**
- * Platform-aware timeout values
- */
 export const TIMEOUTS = {
   DEFAULT: 30_000,
   WINDOWS_CI: 90_000,
@@ -22,9 +15,6 @@ export const TIMEOUTS = {
   PAGE_LOAD: (isWindows && isCI ? 45_000 : 15_000) as number,
 } as const;
 
-/**
- * Enhanced element waiting with platform-specific retry logic
- */
 export async function waitForElementRobust(
   page: Page,
   selector: string,

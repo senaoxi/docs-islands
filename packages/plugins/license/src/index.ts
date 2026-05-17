@@ -95,36 +95,7 @@ export default function licensePlugin(
         let text = `## ${sameDeps.map((d) => d.name).join(', ')}\n\n`;
         const depInfos = sameDeps.map((d) => getDependencyInformation(d));
 
-        // If all same dependencies have the same license and contributor names, show them only once.
-        if (
-          depInfos.length > 1 &&
-          depInfos.every(
-            (info) =>
-              info.license === depInfos[0].license &&
-              info.names === depInfos[0].names,
-          )
-        ) {
-          const { license, names } = depInfos[0];
-          const repositoryText = depInfos
-            .map((info) => info.repository)
-            .filter(Boolean)
-            .join(', ');
-
-          if (license) text += `License: ${license}\n`;
-          if (names) text += `By: ${names}\n`;
-          if (repositoryText) text += `Repositories: ${repositoryText}\n`;
-        }
-        // Else show each dependency separately.
-        else {
-          for (let j = 0; j < depInfos.length; j++) {
-            const { license, names, repository } = depInfos[j];
-
-            if (license) text += `License: ${license}\n`;
-            if (names) text += `By: ${names}\n`;
-            if (repository) text += `Repository: ${repository}\n`;
-            if (j !== depInfos.length - 1) text += '\n';
-          }
-        }
+        text += formatDependencyInfosText(depInfos);
 
         if (licenseText) {
           text += `\n${licenseText
@@ -234,4 +205,40 @@ function getDependencyInformation(dep: Dependency): DependencyInfo {
   }
 
   return info;
+}
+
+function formatDependencyInfosText(depInfos: DependencyInfo[]): string {
+  // If all same dependencies have the same license and contributor names, show them only once.
+  if (
+    depInfos.length > 1 &&
+    depInfos.every(
+      (info) =>
+        info.license === depInfos[0].license &&
+        info.names === depInfos[0].names,
+    )
+  ) {
+    let text = '';
+    const { license, names } = depInfos[0];
+    const repositoryText = depInfos
+      .map((info) => info.repository)
+      .filter(Boolean)
+      .join(', ');
+
+    if (license) text += `License: ${license}\n`;
+    if (names) text += `By: ${names}\n`;
+    if (repositoryText) text += `Repositories: ${repositoryText}\n`;
+    return text;
+  }
+
+  // Else show each dependency separately.
+  let text = '';
+  for (let j = 0; j < depInfos.length; j++) {
+    const { license, names, repository } = depInfos[j];
+
+    if (license) text += `License: ${license}\n`;
+    if (names) text += `By: ${names}\n`;
+    if (repository) text += `Repository: ${repository}\n`;
+    if (j !== depInfos.length - 1) text += '\n';
+  }
+  return text;
 }

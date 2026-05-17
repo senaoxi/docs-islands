@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.json",
+  "extends": "../../tsconfig.source.json",
   "compilerOptions": {
     "isolatedDeclarations": true,
     "declaration": true,

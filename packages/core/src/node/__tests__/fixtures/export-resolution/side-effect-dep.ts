@@ -1,1 +1,1 @@
-globalThis.__sideEffectExecuted = true;
+(globalThis as Record<string, unknown>).__sideEffectExecuted = true;

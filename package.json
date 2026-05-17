@@ -45,7 +45,7 @@
     "lint": "eslint . --fix --cache --concurrency auto --config ./eslint.config.mjs && pnpm -r --parallel run lint",
     "lint:packages": "pnpm -r --parallel run lint:package",
     "format": "prettier --write --cache .",
-    "typecheck": "tsc --noEmit && pnpm -r --parallel run typecheck && pnpm typecheck:test",
+    "typecheck": "tsc -p tsconfig.source.json --noEmit && pnpm -r --parallel run typecheck && pnpm typecheck:test",
     "typecheck:test": "pnpm -r --parallel run typecheck:test",
     "release": "tsx scripts/release.ts",
     "changelog": "tsx scripts/changelog.ts",

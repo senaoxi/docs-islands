@@ -162,6 +162,7 @@ const dtsConfig: RolldownOptions = defineConfig({
   external: isExternalDependency,
   plugins: [
     dts({
+      tsconfig: 'tsconfig.source.json',
       emitDtsOnly: true,
       sourcemap,
     }),

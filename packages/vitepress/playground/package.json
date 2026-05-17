@@ -8,7 +8,8 @@
     "docs:preview": "vitepress preview",
     "test:e2e": "vitest run",
     "test:e2e:watch": "DEBUG=1 vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.source.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "pnpm clean:remaining && del-cli .eslintcache .vitepress/dist .vitepress/cache node_modules",
     "clean:remaining": "del-cli .vitepress/config.ts.timestamp-*.mjs || true"

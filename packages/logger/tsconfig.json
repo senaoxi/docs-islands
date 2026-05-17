@@ -1,10 +1,11 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "isolatedDeclarations": false,
-    "declaration": true,
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"],
-  },
-  "include": ["./"],
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.source.json",
+    },
+    {
+      "path": "./tsconfig.test.json",
+    },
+  ],
 }
