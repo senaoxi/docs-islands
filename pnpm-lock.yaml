@@ -252,8 +252,8 @@ catalogs:
       version: 1.3.0
   prod:
     '@docs-islands/logger':
-      specifier: 0.0.4
-      version: 0.0.4
+      specifier: 0.0.5
+      version: 0.0.5
     cheerio:
       specifier: ^1.2.0
       version: 1.2.0
@@ -472,7 +472,7 @@ importers:
     dependencies:
       '@docs-islands/logger':
         specifier: catalog:prod
-        version: 0.0.4(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.5(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:../../utils
@@ -497,7 +497,7 @@ importers:
         version: 7.29.0
       '@docs-islands/logger':
         specifier: catalog:prod
-        version: 0.0.4(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.5(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       htmlparser2:
         specifier: catalog:dev
         version: 10.1.0
@@ -783,7 +783,7 @@ importers:
     dependencies:
       '@docs-islands/logger':
         specifier: catalog:prod
-        version: 0.0.4(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.5(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
       '@docs-islands/eslint-config':
         specifier: workspace:*
@@ -1093,7 +1093,7 @@ importers:
     dependencies:
       '@docs-islands/logger':
         specifier: catalog:prod
-        version: 0.0.4(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.5(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       cheerio:
         specifier: catalog:prod
         version: 1.2.0
@@ -1145,7 +1145,7 @@ importers:
     dependencies:
       '@docs-islands/logger':
         specifier: catalog:prod
-        version: 0.0.4(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.5(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       tinyglobby:
         specifier: catalog:prod
         version: 0.2.15
@@ -1581,10 +1581,10 @@ packages:
       }
     engines: { node: '>=20.19.0' }
 
-  '@docs-islands/logger@0.0.4':
+  '@docs-islands/logger@0.0.5':
     resolution:
       {
-        integrity: sha512-Uy1F7QpiBzsLSDkxza7sYUa6ATfGslkBh8fn+MV05MEVRFqjsgLa81uWTbG41nO7flSVh/8h+xHULv4qpJQ6wQ==,
+        integrity: sha512-9FuuhGZyJeXEiXQp5EFMnqqcs1YnbZLyVM9Ihl5EMpYJb6eB7alBhCikU8xPpEl60gVCOHqiQc4qX949VQ3E+w==,
       }
     engines: { node: ^20.19.0 || >=22.12.0 }
     peerDependencies:
@@ -9555,7 +9555,7 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@docs-islands/logger@0.0.4(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)':
+  '@docs-islands/logger@0.0.5(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)':
     dependencies:
       '@babel/parser': 7.29.0
       '@babel/traverse': 7.29.0
