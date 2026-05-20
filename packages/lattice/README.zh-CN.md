@@ -17,7 +17,8 @@
 - **显式配置**：所有架构规则都写在 `lattice.config.mjs` 中，不依赖隐藏 preset。
 - **项目图校验**：约束 project reference 边、包导入边界、package exports 源码归属、推断项目归属和 Node builtin 导入规则。
 - **兼容 paths 生成**：为 package exports 仍指向构建产物的 `workspace:*` 依赖生成可选的源码 `paths` 文件。
-- **Typecheck 覆盖证明**：确认 package 级 typecheck 脚本都被根图、配置的 sidecar 或带理由的 allowlist 覆盖。
+- **Typecheck 覆盖证明**：确认 build config 与本地 typecheck config 和 IDE/typecheck 路线一致。
+- **TypeScript runner**：从 `process.cwd()` 或 `lattice tsc -p` 发现普通 `tsconfig*.json` 类型检查目标并逐个执行。
 - **发布产物包边界审计**：扫描构建后的 `.js` 文件，确认 runtime import 与 dependencies、自身 exports、browser/node 环境匹配。
 - **Pipeline 组合**：在 `typecheck`、`package`、`publish` 等命名 pipeline 中组合内置检查和 shell 命令。
 - **统一日志输出**：通过 `@docs-islands/logger` 输出稳定的 `@docs-islands/lattice[task.*]` 日志分组。
@@ -99,15 +100,7 @@ export default defineConfig({
     ],
   },
   pipelines: {
-    typecheck: [
-      'graph:check',
-      'proof:check',
-      {
-        type: 'command',
-        command: 'tsc',
-        args: ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
-      },
-    ],
+    typecheck: ['graph:check', 'proof:check', 'tsc:run'],
     package: ['package:check'],
   },
 });
@@ -136,18 +129,25 @@ pnpm exec lattice package check --package @acme/core
 lattice [--config lattice.config.mjs] [--mode mode] <command>
 ```
 
-| 命令                                     | 说明                                                             |
-| ---------------------------------------- | ---------------------------------------------------------------- |
-| `lattice check <pipeline>`               | 运行 `pipelines` 中的命名 pipeline。                             |
-| `lattice paths generate`                 | 为产物导向的 `workspace:*` exports 生成兼容源码 paths。          |
-| `lattice paths check`                    | 检查生成的兼容 paths 文件是否是最新状态。                        |
-| `lattice graph check`                    | 校验 project references 和架构导入规则。                         |
-| `lattice proof check`                    | 证明 workspace typecheck 目标被根图、sidecar 或 allowlist 覆盖。 |
-| `lattice package check`                  | 对发布产物运行配置的 publint、ATTW 和边界检查。                  |
-| `lattice package check --package <name>` | 按配置的 `name` 检查单个 package 目标。                          |
-| `lattice package check --tool <tool>`    | 只运行一个 package 检查工具：`publint`、`attw` 或 `boundary`。   |
+| 命令                                     | 说明                                                           |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `lattice check <pipeline>`               | 运行 `pipelines` 中的命名 pipeline。                           |
+| `lattice paths generate`                 | 为产物导向的 `workspace:*` exports 生成兼容源码 paths。        |
+| `lattice paths check`                    | 检查生成的兼容 paths 文件是否是最新状态。                      |
+| `lattice graph check`                    | 校验 project references 和架构导入规则。                       |
+| `lattice proof check`                    | 证明 build config 与本地 typecheck companion 和 IDE 路线一致。 |
+| `lattice tsc`                            | 从当前 cwd 发现 typecheck 目标配置并运行 `tsc --noEmit`。      |
+| `lattice package check`                  | 对发布产物运行配置的 publint、ATTW 和边界检查。                |
+| `lattice package check --package <name>` | 按配置的 `name` 检查单个 package 目标。                        |
+| `lattice package check --tool <tool>`    | 只运行一个 package 检查工具：`publint`、`attw` 或 `boundary`。 |
 
-graph、proof 和 package 检查都是只读的。`lattice paths generate` 会写入生成的配置文件；`lattice paths check` 只报告生成文件是否过期。`lattice paths apply` 保留为 `generate` 的兼容别名。
+graph、proof、typecheck 和 package 检查都是只读的。`lattice paths generate` 会写入生成的配置文件；`lattice paths check` 只报告生成文件是否过期。`lattice paths apply` 保留为 `generate` 的兼容别名。
+
+## TypeScript Check
+
+`lattice tsc` 不会加载 `lattice.config.mjs`。它默认从 `process.cwd()/tsconfig.json` 出发，递归跟随普通 `tsconfig*.json` references，并对发现的每个类型检查目标执行 `tsc -p <config> --noEmit`。一个 config 没有 references 时是目标；有 references 但自己仍通过非空 `files`/`include` 或 TypeScript 默认 include 行为拥有源文件输入时，也是目标。带 references 且显式 `files: []`、没有有效 `include` 的 config 会被视为纯聚合器。可以用 `lattice tsc -p <path>` 指定其他 config 文件或 config 目录。相对 `-p` 会从当前命令 cwd 解析，绝对路径按原样使用。可以用 `--concurrency <n>` 限制并发 `tsc` 进程数。
+
+typecheck route 会拒绝 `tsconfig*.build.json` 和 `tsconfig*.graph.json`，报告缺失的 referenced config 和成环的 references，并在找不到目标时失败。Vue/SFC 检查仍应保留在显式 `vue-tsc` 脚本或 pipeline sidecar 中。
 
 ## 配置
 
@@ -165,7 +165,7 @@ Lattice 优先使用 pnpm recursive package list，也会读取固定的 `pnpm-w
 
 ### `graph`
 
-graph 检查会解析从 `rootConfig` 可达的 TypeScript project references，并检查每个项目中的 import。通过 `workspace:*` 声明的 workspace package 是源码依赖，package `exports` 应该暴露源码入口。产物依赖不能再用 project reference 表达：本地构建产物使用 `link:`，已发布生产包使用 `catalog:` 或普通 semver。如果目标包是 `private: true`，它没有可消费的发布版本，产物消费者只能使用 `link:`。
+graph 检查会解析从 `rootConfig` 可达的 TypeScript project references，并检查每个项目中的 import。这是 build graph 路线：`tsconfig*.graph.json` 聚合 `tsconfig*.build.json` 叶子，用于 `tsc -b`、CI 和架构检查。通过 `workspace:*` 声明的 workspace package 是源码依赖，package `exports` 应该暴露源码入口。产物依赖不能再用 project reference 表达：本地构建产物使用 `link:`，已发布生产包使用 `catalog:` 或普通 semver。如果目标包是 `private: true`，它没有可消费的发布版本，产物消费者只能使用 `link:`。
 
 如果 A 包通过 `workspace:*` 依赖 B 包，并且 A 的 `tsconfig*.build.json` reference 了 B，那么 TypeScript 仍然会按照 B 的 package exports 做模块解析。`tsc -b` 不会因为存在 project reference 就把产物 exports 自动改写成源码项目。如果 B 暴露的是 `./dist/index.js`，而 A 没有源码 `paths` 映射，`lattice graph check` 会直接失败并解释原因和修复方式。
 
@@ -208,20 +208,22 @@ build 会 emit 的每个文件都必须被 companion typecheck config 覆盖。
 
 ### `proof`
 
-proof 检查会把 package 级 typecheck 脚本与根图覆盖范围对齐。
-它还保留一个仓库级兜底：扫描发现的所有 `tsconfig*.build.json`，要求
-每个 build config 都能从 root graph 到达，并且与严格同名的本地
-typecheck config 保持语义一致。这与 graph 的可达项目校验互相补位，
-用于抓出游离的 build config。
+proof 检查使用两条显式 TypeScript 路线。build graph 路线从
+`graph.rootConfig` 出发，必须到达所有 `tsconfig*.build.json`。IDE/typecheck
+路线从 `proof.typecheckRootConfig` 出发，只允许引用普通 `tsconfig*.json`
+文件。package scripts 不作为 proof 的事实来源。
 
-| 字段                      | 说明                                                             |
-| ------------------------- | ---------------------------------------------------------------- |
-| `typecheckScriptPrefix`   | 扫描 package scripts 时使用的脚本名前缀，默认 `typecheck`。      |
-| `sidecarTargets`          | 根 typecheck 在 `tsc -b` 外额外覆盖的配置，例如 `vue-tsc` 项目。 |
-| `ignoredTypecheckTargets` | 由其他 pipeline 拥有的 typecheck config，例如 dist consumer。    |
-| `rootSidecarScript`       | 可选；从根脚本中解析 sidecar target。                            |
-| `allowlist`               | 显式允许在 graph/sidecar 覆盖外的文件，每项都必须写 reason。     |
-| `sourceFilePattern`       | 计入覆盖统计的文件 pattern。                                     |
+对于每个发现的 `tsconfig*.build.json`，proof 会检查严格同名的本地配置是否
+存在、解析后的文件集合和类型检查语义是否一致，并确认该本地配置能从
+IDE/typecheck 路线到达。`composite`、`noEmit`、`outDir`、`rootDir`、
+`tsBuildInfoFile` 等 build-only 选项允许不同。
+
+| 字段                  | 说明                                                         |
+| --------------------- | ------------------------------------------------------------ |
+| `typecheckRootConfig` | IDE/typecheck 根 solution config，默认 `tsconfig.json`。     |
+| `sidecarTargets`      | 在 `tsc -b` 外额外覆盖的配置，例如 `vue-tsc` 项目。          |
+| `allowlist`           | 显式允许在 graph/sidecar 覆盖外的文件，每项都必须写 reason。 |
+| `sourceFilePattern`   | 计入覆盖统计的文件 pattern。                                 |
 
 ### `packageChecks`
 
@@ -248,11 +250,7 @@ pipelines: {
   typecheck: [
     'graph:check',
     'proof:check',
-    {
-      type: 'command',
-      command: 'tsc',
-      args: ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
-    },
+    'tsc:run',
   ],
 }
 ```
@@ -262,6 +260,7 @@ pipelines: {
 - `graph:check`
 - `proof:check`
 - `package:check`
+- `tsc:run`
 
 命令步骤默认在 `workspace.rootDir` 下运行，并继承 `process.env`。可以用 `cwd` 和 `env` 覆盖。
 

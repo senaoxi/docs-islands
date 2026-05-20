@@ -1,6 +1,6 @@
 {
   // Package-local tooling check. Build leaf: tsconfig.tools.build.json.
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"]
   },

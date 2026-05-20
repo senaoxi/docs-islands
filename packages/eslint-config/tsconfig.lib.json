@@ -1,9 +1,10 @@
 {
   // Package-local library check. Build leaf: tsconfig.lib.build.json.
-  "extends": "./tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"]
   },
+  "include": ["src/"],
   "exclude": [
     "dist",
     "cache",

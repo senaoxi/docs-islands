@@ -1,5 +1,5 @@
 {
   // Internal declaration modules for VitePress runtime source.
-  "extends": "../../tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "include": ["./"],
 }

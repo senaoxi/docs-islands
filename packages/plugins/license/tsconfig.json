@@ -1,8 +1,12 @@
 {
-  // Package-local source/tooling check and implicit rolldown-plugin-dts config.
-  "extends": "../../../tsconfig.base.json",
-  "compilerOptions": {
-    "types": ["node"]
-  },
-  "include": ["src/", "rolldown.config.ts"],
+  // Package-local IDE/typecheck solution. Build graph leaf: tsconfig.graph.json.
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.tools.json"
+    }
+  ]
 }

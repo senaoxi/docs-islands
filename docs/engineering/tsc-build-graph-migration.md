@@ -62,23 +62,23 @@ graph cleanup. It used orchestration, not TypeScript build mode:
 
 The first step checked root-level TypeScript files under `scripts/` and root
 `*.ts` files. The second step fanned out to workspace `typecheck` scripts in
-parallel. The last step fanned out to workspace `typecheck:test` scripts.
+parallel. The last step fanned out to workspace test TypeScript checks.
 
 Former legacy workspace checks:
 
-| Workspace                            | Former source check                                                                                                                 | Former test check                       | Notes                                                                                    |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------- |
-| root                                 | root source/script check                                                                                                            | `pnpm -r --parallel run typecheck:test` | Root scripts import `@docs-islands/logger` and `@docs-islands/utils`.                    |
-| `@docs-islands/utils`                | `tsc --noEmit`                                                                                                                      | none                                    | `utils/tsconfig.json` included the whole package; workspace exports now point to source. |
-| `@docs-islands/core`                 | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit`    | Package exports point to source files in the workspace manifest.                         |
-| `@docs-islands/logger`               | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit`    | Source check includes `rolldown.config.ts`, `packagePlugin.ts`, and `scripts/**/*.ts`.   |
-| `@docs-islands/plugin-license`       | `tsc --noEmit`                                                                                                                      | none                                    | Private build plugin; source imports logger and utils.                                   |
-| `@docs-islands/eslint-config`        | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit`    | Workspace exports now point to source.                                                   |
-| `@docs-islands/vitepress`            | `tsc -p tsconfig.json --noEmit`, then `tsc -p src/node`, `src/client`, `src/shared`, then `vue-tsc -p theme/tsconfig.json --noEmit` | `tsc -p tsconfig.test.json --noEmit`    | The old package-level solution config did not use `tsc -b` and was removed later.        |
-| `@docs-islands/monorepo-docs`        | `vue-tsc --noEmit`                                                                                                                  | none                                    | Vue/VitePress site check.                                                                |
-| `@docs-islands/vitepress-docs`       | `vue-tsc --noEmit`                                                                                                                  | none                                    | Vue/VitePress package docs check.                                                        |
-| `@docs-islands/vitepress-playground` | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit`    | Consumer-style playground uses `@docs-islands/vitepress` via `link:../dist`.             |
-| `@docs-islands/vitepress-smoke`      | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit`    | Smoke fixtures and Playwright config.                                                    |
+| Workspace                            | Former source check                                                                                                                 | Former test check                    | Notes                                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| root                                 | root source/script check                                                                                                            | workspace test TypeScript checks     | Root scripts import `@docs-islands/logger` and `@docs-islands/utils`.                    |
+| `@docs-islands/utils`                | `tsc --noEmit`                                                                                                                      | none                                 | `utils/tsconfig.json` included the whole package; workspace exports now point to source. |
+| `@docs-islands/core`                 | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Package exports point to source files in the workspace manifest.                         |
+| `@docs-islands/logger`               | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Source check includes `rolldown.config.ts`, `packagePlugin.ts`, and `scripts/**/*.ts`.   |
+| `@docs-islands/plugin-license`       | `tsc --noEmit`                                                                                                                      | none                                 | Private build plugin; source imports logger and utils.                                   |
+| `@docs-islands/eslint-config`        | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Workspace exports now point to source.                                                   |
+| `@docs-islands/vitepress`            | `tsc -p tsconfig.json --noEmit`, then `tsc -p src/node`, `src/client`, `src/shared`, then `vue-tsc -p theme/tsconfig.json --noEmit` | `tsc -p tsconfig.test.json --noEmit` | The old package-level solution config did not use `tsc -b` and was removed later.        |
+| `@docs-islands/monorepo-docs`        | `vue-tsc --noEmit`                                                                                                                  | none                                 | Vue/VitePress site check.                                                                |
+| `@docs-islands/vitepress-docs`       | `vue-tsc --noEmit`                                                                                                                  | none                                 | Vue/VitePress package docs check.                                                        |
+| `@docs-islands/vitepress-playground` | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Consumer-style playground uses `@docs-islands/vitepress` via `link:../dist`.             |
+| `@docs-islands/vitepress-smoke`      | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Smoke fixtures and Playwright config.                                                    |
 
 Before the breaking graph cleanup, root and package `tsconfig.json` files
 looked solution-style because they had `files: []` and `references`. They were
@@ -135,14 +135,31 @@ Some `@docs-islands/test`, `@docs-islands/test_b`,
 `@docs-islands/logger-fixture`, and `@docs-islands/missing` strings are test
 fixture package names, not real workspace graph nodes.
 
-## Current Layered `tsc -b` Project Graph
+## Current Layered TypeScript Routes
 
-The graph now uses `tsconfig.graph.json` as the default full check entry. The
-full check graph and production library graph are separate entries:
+The repository now keeps two TypeScript reference routes separate. The
+IDE/typecheck route uses ordinary `tsconfig*.json` files, while the build graph
+route uses `tsconfig*.graph.json` aggregators and `tsconfig*.build.json` leaves.
+Package scripts are convenience entrypoints, not the source of truth for graph
+ownership or coverage proof.
 
 ```text
 tsconfig.json
-  -> tsconfig.graph.json
+  -> scripts/tsconfig.json
+  -> utils/tsconfig.json
+  -> packages/*/tsconfig.json
+
+packages/*/tsconfig.json
+  -> tsconfig.lib.json
+  -> tsconfig.tools.json
+  -> tsconfig.test.json
+  -> runtime/type subproject tsconfig.json files where needed
+```
+
+The build graph uses `tsconfig.graph.json` as the default full `tsc -b` check
+entry. The full check graph and production library graph are separate entries:
+
+```text
 
 tsconfig.graph.json
   -> tsconfig.lib.graph.json
@@ -156,6 +173,8 @@ tsconfig.lib.graph.json
   -> packages/vitepress/tsconfig.lib.graph.json
 
 packages/vitepress/tsconfig.lib.graph.json
+  -> types/tsconfig.build.json
+  -> src/types/tsconfig.build.json
   -> src/shared/tsconfig.build.json
   -> src/node/tsconfig.build.json
   -> src/client/tsconfig.build.json
@@ -222,17 +241,17 @@ The checker also enforces forbidden edges:
 
 Current graph/local classification:
 
-| Class            | Projects/configs                                                                                                                                                                                                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib`            | `packages/logger/tsconfig.lib.build.json`, `utils/tsconfig.lib.build.json`, `packages/plugins/license/tsconfig.lib.build.json`, `packages/core/tsconfig.lib.build.json`, `packages/eslint-config/tsconfig.lib.build.json`                                               |
-| `tools`          | `scripts/tsconfig.build.json`, `packages/logger/tsconfig.tools.build.json`, `utils/tsconfig.tools.build.json`, `packages/plugins/license/tsconfig.tools.build.json`, `packages/eslint-config/tsconfig.tools.build.json`, `packages/vitepress/tsconfig.tools.build.json` |
-| `test`           | `packages/logger/tsconfig.test.build.json`, `packages/core/tsconfig.test.build.json`, `packages/eslint-config/tsconfig.test.build.json`, `packages/vitepress/tsconfig.test.build.json`                                                                                  |
-| `runtime-node`   | `packages/vitepress/src/node/tsconfig.build.json` for graph, `packages/vitepress/src/node/tsconfig.json` for package scripts and dts                                                                                                                                    |
-| `runtime-client` | `packages/vitepress/src/client/tsconfig.build.json` for graph, `packages/vitepress/src/client/tsconfig.json` for package scripts and dts                                                                                                                                |
-| `runtime-shared` | `packages/vitepress/src/shared/tsconfig.build.json` for graph, `packages/vitepress/src/shared/tsconfig.json` for package scripts                                                                                                                                        |
-| `docs`           | `docs/tsconfig.json` in source typecheck; `packages/vitepress/docs/tsconfig.json` in the dist consumer pipeline                                                                                                                                                         |
-| `playground`     | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                 |
-| `smoke`          | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                 |
+| Class            | Projects/configs                                                                                                                                                                                                                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib`            | `packages/logger/tsconfig.lib.build.json`, `utils/tsconfig.lib.build.json`, `packages/plugins/license/tsconfig.lib.build.json`, `packages/core/tsconfig.lib.build.json`, `packages/eslint-config/tsconfig.lib.build.json`, `packages/lattice/tsconfig.lib.build.json`                                                 |
+| `tools`          | `scripts/tsconfig.build.json`, `packages/logger/tsconfig.tools.build.json`, `utils/tsconfig.tools.build.json`, `packages/plugins/license/tsconfig.tools.build.json`, `packages/eslint-config/tsconfig.tools.build.json`, `packages/lattice/tsconfig.tools.build.json`, `packages/vitepress/tsconfig.tools.build.json` |
+| `test`           | `packages/logger/tsconfig.test.build.json`, `packages/core/tsconfig.test.build.json`, `packages/eslint-config/tsconfig.test.build.json`, `packages/vitepress/tsconfig.test.build.json`                                                                                                                                |
+| `runtime-node`   | `packages/vitepress/src/node/tsconfig.build.json` for graph, `packages/vitepress/src/node/tsconfig.json` for package scripts and dts                                                                                                                                                                                  |
+| `runtime-client` | `packages/vitepress/src/client/tsconfig.build.json` for graph, `packages/vitepress/src/client/tsconfig.json` for package scripts and dts                                                                                                                                                                              |
+| `runtime-shared` | `packages/vitepress/src/shared/tsconfig.build.json` for graph, `packages/vitepress/src/shared/tsconfig.json` for package scripts                                                                                                                                                                                      |
+| `docs`           | `docs/tsconfig.json` in source typecheck; `packages/vitepress/docs/tsconfig.json` in the dist consumer pipeline                                                                                                                                                                                                       |
+| `playground`     | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                               |
+| `smoke`          | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                               |
 
 ## Likely Graph Cycles And Breaks
 
@@ -384,9 +403,10 @@ surface: the package that consumers actually install.
    checks that run after package artifacts are built.
 10. Continue to run source-owned `vue-tsc` checks and dist artifact checks
     after the graph check.
-11. After parity is proven, switch root `typecheck` from workspace script
-    orchestration to the graph check plus the preserved `vue-tsc` checks. The
-    legacy fallback can then be removed as a breaking cleanup.
+11. After parity is proven, make root `tsconfig.json` the IDE/typecheck
+    solution over ordinary `tsconfig*.json` configs. Keep `tsconfig.graph.json`
+    as the build graph entry for `tsc -b`, and keep `vue-tsc` sidecars
+    explicit.
 
 ## Uncertainties For Later Code-Change Tasks
 

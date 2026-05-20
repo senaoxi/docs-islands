@@ -69,6 +69,22 @@ function createPassingFiles(
       },
       include: ['src/**/*.ts'],
     }),
+    'packages/pkg/tsconfig.json': JSON.stringify({
+      files: [],
+      references: [
+        {
+          path: './tsconfig.lib.json',
+        },
+      ],
+    }),
+    'tsconfig.json': JSON.stringify({
+      files: [],
+      references: [
+        {
+          path: './packages/pkg/tsconfig.json',
+        },
+      ],
+    }),
     'tsconfig.graph.json': JSON.stringify({
       files: [],
       references: [
@@ -208,15 +224,46 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('allows different typecheck tools to cover the same file', async () => {
-    const fixture = await createFixture({
-      'packages/pkg/package.json': JSON.stringify({
-        name: '@example/pkg',
-        scripts: {
-          typecheck: 'tsc -p tsconfig.test.json --noEmit',
-          'typecheck:vue': 'vue-tsc -p tsconfig.vue.json --noEmit',
-        },
+  it('reports build configs referenced from the IDE/typecheck route', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'packages/pkg/tsconfig.json': JSON.stringify({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.build.json',
+            },
+          ],
+        }),
       }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports companion local configs missing from the IDE/typecheck route', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'packages/pkg/tsconfig.json': JSON.stringify({
+          files: [],
+          references: [],
+        }),
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('accepts configured sidecars outside the root graph route', async () => {
+    const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
       'packages/pkg/tsconfig.test.build.json': JSON.stringify({
         extends: './tsconfig.test.json',
@@ -240,10 +287,22 @@ describe('runProofCheck build config semantics', () => {
       'packages/pkg/tsconfig.vue.json': JSON.stringify({
         extends: './tsconfig.test.json',
       }),
-      'pnpm-workspace.yaml': `
-packages:
-  - packages/*
-`,
+      'packages/pkg/tsconfig.json': JSON.stringify({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.test.json',
+          },
+        ],
+      }),
+      'tsconfig.json': JSON.stringify({
+        files: [],
+        references: [
+          {
+            path: './packages/pkg/tsconfig.json',
+          },
+        ],
+      }),
       'tsconfig.graph.json': JSON.stringify({
         files: [],
         references: [
@@ -255,47 +314,16 @@ packages:
     });
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('ignores configured artifact consumer typecheck targets', async () => {
-    const fixture = await createFixture({
-      'packages/pkg/package.json': JSON.stringify({
-        name: '@example/pkg',
-        scripts: {
-          typecheck: 'tsc -p tsconfig.json --noEmit',
-        },
-      }),
-      'packages/pkg/src/index.ts': 'export const value = 1;\n',
-      'packages/pkg/tsconfig.json': JSON.stringify({
-        compilerOptions: {
-          module: 'ESNext',
-          moduleResolution: 'bundler',
-          strict: true,
-          target: 'ES2023',
-          types: [],
-        },
-        include: ['src/**/*.ts'],
-      }),
-      'pnpm-workspace.yaml': `
-packages:
-  - packages/*
-`,
-      'tsconfig.graph.json': JSON.stringify({
-        files: [],
-        references: [],
-      }),
-    });
-
-    try {
       await expect(
         runProofCheck({
           ...fixture.config,
           proof: {
-            ignoredTypecheckTargets: ['packages/pkg/tsconfig.json'],
+            sidecarTargets: [
+              {
+                config: 'packages/pkg/tsconfig.vue.json',
+                tool: 'vue-tsc',
+              },
+            ],
           },
         }),
       ).resolves.toBe(true);

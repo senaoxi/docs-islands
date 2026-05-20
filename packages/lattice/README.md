@@ -17,7 +17,8 @@ English | [简体中文](./README.zh-CN.md)
 - **Explicit config**: keep all architecture rules in `lattice.config.mjs`; there is no hidden preset.
 - **Project graph validation**: enforce project-reference edges, package import boundaries, inferred project ownership, package export source ownership, and Node builtin restrictions.
 - **Compatibility path generation**: generate opt-in source `paths` files for `workspace:*` dependencies whose package exports still point at build artifacts.
-- **Typecheck coverage proof**: verify that package-level typecheck scripts are covered by the root graph, configured sidecars, or documented allowlist entries.
+- **Typecheck coverage proof**: verify that build configs match local typecheck configs and the IDE/typecheck route.
+- **TypeScript runner**: run every ordinary `tsconfig*.json` typecheck target discovered from `process.cwd()` or `lattice tsc -p`.
 - **Published package boundary audit**: inspect built `.js` files and ensure runtime imports match package dependencies, self exports, and browser/node environments.
 - **Pipeline composition**: combine built-in checks and shell commands in named pipelines such as `typecheck`, `package`, and `publish`.
 - **First-class logs**: command output uses `@docs-islands/logger` with stable `@docs-islands/lattice[task.*]` groups.
@@ -99,15 +100,7 @@ export default defineConfig({
     ],
   },
   pipelines: {
-    typecheck: [
-      'graph:check',
-      'proof:check',
-      {
-        type: 'command',
-        command: 'tsc',
-        args: ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
-      },
-    ],
+    typecheck: ['graph:check', 'proof:check', 'tsc:run'],
     package: ['package:check'],
   },
 });
@@ -136,18 +129,25 @@ pnpm exec lattice package check --package @acme/core
 lattice [--config lattice.config.mjs] [--mode mode] <command>
 ```
 
-| Command                                  | Description                                                                                  |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `lattice check <pipeline>`               | Run a named pipeline from `pipelines`.                                                       |
-| `lattice paths generate`                 | Generate compatibility source paths for artifact-facing `workspace:*` exports.               |
-| `lattice paths check`                    | Check that generated compatibility path files are up to date.                                |
-| `lattice graph check`                    | Validate project references and architecture import rules.                                   |
-| `lattice proof check`                    | Prove workspace typecheck targets are covered by root graph, sidecars, or allowlist entries. |
-| `lattice package check`                  | Run configured publint, ATTW, and boundary checks for published package outputs.             |
-| `lattice package check --package <name>` | Check one package target by configured `name`.                                               |
-| `lattice package check --tool <tool>`    | Run one package check tool: `publint`, `attw`, or `boundary`.                                |
+| Command                                  | Description                                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------------- |
+| `lattice check <pipeline>`               | Run a named pipeline from `pipelines`.                                           |
+| `lattice paths generate`                 | Generate compatibility source paths for artifact-facing `workspace:*` exports.   |
+| `lattice paths check`                    | Check that generated compatibility path files are up to date.                    |
+| `lattice graph check`                    | Validate project references and architecture import rules.                       |
+| `lattice proof check`                    | Prove build configs match their local typecheck companions and IDE route.        |
+| `lattice tsc`                            | Run `tsc --noEmit` for typecheck target configs from the current cwd.            |
+| `lattice package check`                  | Run configured publint, ATTW, and boundary checks for published package outputs. |
+| `lattice package check --package <name>` | Check one package target by configured `name`.                                   |
+| `lattice package check --tool <tool>`    | Run one package check tool: `publint`, `attw`, or `boundary`.                    |
 
-Graph, proof, and package checks are read-only. `lattice paths generate` writes generated config files; `lattice paths check` only reports stale generated files. `lattice paths apply` is kept as a compatibility alias for `generate`.
+Graph, proof, typecheck, and package checks are read-only. `lattice paths generate` writes generated config files; `lattice paths check` only reports stale generated files. `lattice paths apply` is kept as a compatibility alias for `generate`.
+
+## TypeScript Check
+
+`lattice tsc` does not load `lattice.config.mjs`. It starts from `process.cwd()/tsconfig.json` by default, recursively follows ordinary `tsconfig*.json` references, and runs `tsc -p <config> --noEmit` for every discovered typecheck target. A config is a target when it has no references, or when it has references and still owns source inputs through non-empty `files`/`include` entries or TypeScript's implicit include behavior. A config with `references` plus `files: []` and no effective `include` is treated as a pure aggregator. Use `lattice tsc -p <path>` to choose a different config file or config directory. Relative `-p` values are resolved from the command cwd; absolute values are used as-is. Use `--concurrency <n>` to cap concurrent `tsc` processes.
+
+The typecheck route rejects `tsconfig*.build.json` and `tsconfig*.graph.json`, reports missing referenced configs and circular reference routes, and fails when no target can be found. Vue/SFC checks should stay in explicit `vue-tsc` scripts or pipeline sidecars.
 
 ## Configuration
 
@@ -165,7 +165,7 @@ Lattice prefers pnpm's recursive package list and also reads package globs from 
 
 ### `graph`
 
-Graph checks parse TypeScript project references reachable from `rootConfig`, then inspect imports in each project. Workspace packages declared through `workspace:*` are source dependencies and should expose source entries from package `exports`. Artifact dependencies must not be represented as project references: use `link:` for local built output, or `catalog:`/normal semver to consume a published production package. If the target package is `private: true`, it has no published production package, so artifact consumers must use `link:`.
+Graph checks parse TypeScript project references reachable from `rootConfig`, then inspect imports in each project. This is the build graph route: `tsconfig*.graph.json` files aggregate `tsconfig*.build.json` leaves for `tsc -b`, CI, and architecture checks. Workspace packages declared through `workspace:*` are source dependencies and should expose source entries from package `exports`. Artifact dependencies must not be represented as project references: use `link:` for local built output, or `catalog:`/normal semver to consume a published production package. If the target package is `private: true`, it has no published production package, so artifact consumers must use `link:`.
 
 If package A depends on package B through `workspace:*` and A references B in a `tsconfig*.build.json`, TypeScript still resolves B through B's package exports. `tsc -b` does not rewrite artifact exports to referenced source projects. If B exports `./dist/index.js` and A has no source `paths` mapping, `lattice graph check` fails with an explanation and fix hint.
 
@@ -208,20 +208,22 @@ Most repositories should not need generated `paths`: make workspace package expo
 
 ### `proof`
 
-Proof checks compare package-level typecheck scripts with root graph coverage.
-It also keeps a repository-wide guard for discovered `tsconfig*.build.json`
-files: every build config must be reachable from the root graph and must match
-its strict same-name local typecheck config. This mirrors graph's reachable
-project validation and catches orphan build configs.
+Proof checks use two explicit TypeScript routes. The build graph route starts
+at `graph.rootConfig` and must reach every `tsconfig*.build.json`. The
+IDE/typecheck route starts at `proof.typecheckRootConfig` and may only reference
+ordinary `tsconfig*.json` files. Package scripts are not used as proof inputs.
 
-| Field                     | Description                                                                             |
-| ------------------------- | --------------------------------------------------------------------------------------- |
-| `typecheckScriptPrefix`   | Package script prefix to scan. Defaults to `typecheck`.                                 |
-| `sidecarTargets`          | Extra configs covered by root typecheck outside `tsc -b`, such as `vue-tsc` projects.   |
-| `ignoredTypecheckTargets` | Typecheck config paths intentionally owned by another pipeline, such as dist consumers. |
-| `rootSidecarScript`       | Optional root script to parse for sidecar targets.                                      |
-| `allowlist`               | Explicit files allowed outside graph/sidecar coverage, each with a reason.              |
-| `sourceFilePattern`       | File pattern included in coverage accounting.                                           |
+For each discovered `tsconfig*.build.json`, proof checks that the strict
+same-name local config exists, has the same file set and typecheck semantics,
+and is reachable from the IDE/typecheck route. Build-only options such as
+`composite`, `noEmit`, `outDir`, `rootDir`, and `tsBuildInfoFile` may differ.
+
+| Field                 | Description                                                                |
+| --------------------- | -------------------------------------------------------------------------- |
+| `typecheckRootConfig` | Root IDE/typecheck solution config. Defaults to `tsconfig.json`.           |
+| `sidecarTargets`      | Extra configs covered outside `tsc -b`, such as `vue-tsc` projects.        |
+| `allowlist`           | Explicit files allowed outside graph/sidecar coverage, each with a reason. |
+| `sourceFilePattern`   | File pattern included in coverage accounting.                              |
 
 ### `packageChecks`
 
@@ -248,11 +250,7 @@ pipelines: {
   typecheck: [
     'graph:check',
     'proof:check',
-    {
-      type: 'command',
-      command: 'tsc',
-      args: ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
-    },
+    'tsc:run',
   ],
 }
 ```
@@ -262,6 +260,7 @@ Built-in task strings:
 - `graph:check`
 - `proof:check`
 - `package:check`
+- `tsc:run`
 
 Command steps run from `workspace.rootDir` by default and inherit `process.env`. Use `cwd` and `env` to override.
 

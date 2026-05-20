@@ -16,7 +16,7 @@
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.lib.json --noEmit && tsc -p tsconfig.tools.json --noEmit",
+    "typecheck": "lattice tsc",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },

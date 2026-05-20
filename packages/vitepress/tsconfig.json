@@ -1,21 +1,15 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "isolatedDeclarations": false,
-    "declaration": false,
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"],
-  },
-  // moduleResolution enforces TypeScript to resolve the imports field of package.json file
-  // when performing a lookup that starts with # from a file whose ancestor directory contains a package.json
-  // under the node16, nodenext, and bundler options.
-  //
-  // https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/#moduleresolution-bundler
-  "include": [
-    "src/shared/internal/client-runtime.d.ts",
-    "scripts/",
-    "packagePlugin.ts",
-    "rolldown.config.ts",
-    "rolldown.theme.config.ts",
+  // Package-local IDE/typecheck solution. Build graph leaf: tsconfig.graph.json.
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json",
+    },
+    {
+      "path": "./tsconfig.tools.json",
+    },
+    {
+      "path": "./tsconfig.test.json",
+    },
   ],
 }

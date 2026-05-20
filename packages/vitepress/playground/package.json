@@ -8,8 +8,7 @@
     "docs:preview": "vitepress preview",
     "test:e2e": "vitest run",
     "test:e2e:watch": "DEBUG=1 vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "lattice tsc",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "pnpm clean:remaining && del-cli .tsbuild .eslintcache .vitepress/dist .vitepress/cache node_modules",
     "clean:remaining": "del-cli .vitepress/config.ts.timestamp-*.mjs || true"
@@ -21,6 +20,7 @@
   },
   "devDependencies": {
     "eslint": "catalog:lint",
+    "@typescript-eslint/parser": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "link:../../../utils/dist",
     "typescript": "catalog:dev",

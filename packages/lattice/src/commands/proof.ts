@@ -6,23 +6,17 @@ import type { ResolvedLatticeConfig } from '../config';
 import { ProofLogger } from '../logger';
 import {
   collectGraphProjectPaths,
+  collectTypecheckTargetProjectPaths,
   createFormatHost,
   parseProjectFileNames,
-  resolveProjectConfigPath,
 } from '../tsconfig';
 import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
-import {
-  collectWorkspacePackages,
-  readJsonFile,
-  type PackageManifest,
-} from '../workspace';
 
 type TypecheckTool = 'tsc' | 'vue-tsc' | string;
 
-interface TypecheckTarget {
+interface SidecarTarget {
   configPath: string;
-  manifestPath: string;
-  scriptName: string;
+  label: string;
   tool: TypecheckTool;
 }
 
@@ -32,7 +26,6 @@ interface CoverageSource {
 }
 
 type ConfigFileOwners = Map<string, string[]>;
-type TypecheckTargetOwners = Map<string, TypecheckTarget[]>;
 
 interface ParsedConfig {
   fileNames: string[];
@@ -81,95 +74,6 @@ function sourceFilePattern(config: ResolvedLatticeConfig): RegExp {
   );
 }
 
-function splitShellWords(value: string): string[] {
-  const words: string[] = [];
-  const pattern = /"([^"]*)"|'([^']*)'|(\S+)/gu;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(value))) {
-    words.push(match[1] ?? match[2] ?? match[3] ?? '');
-  }
-
-  return words;
-}
-
-function getProjectArgument(args: string[]): string | undefined {
-  for (let index = 0; index < args.length; index++) {
-    const argument = args[index];
-
-    if (argument === '-p' || argument === '--project') {
-      return args[index + 1];
-    }
-
-    if (argument?.startsWith('--project=')) {
-      return argument.slice('--project='.length);
-    }
-  }
-
-  return undefined;
-}
-
-function isBuildModeCommand(args: string[]): boolean {
-  return args.some(
-    (argument) =>
-      argument === '-b' ||
-      argument === '--build' ||
-      argument.startsWith('--build='),
-  );
-}
-
-function collectTypecheckTargetsFromCommand(options: {
-  command: string;
-  manifestPath: string;
-  scriptName: string;
-}): TypecheckTarget[] {
-  const manifestDirectory = path.dirname(options.manifestPath);
-  const targets: TypecheckTarget[] = [];
-  const toolPattern =
-    /(?:^|[\s;&|])(?:(?:pnpm|npm|yarn)\s+(?:exec\s+)?)?(vue-tsc|tsc)(?=\s|$)([^;&|]*)/gu;
-  let match: RegExpExecArray | null;
-
-  while ((match = toolPattern.exec(options.command))) {
-    const tool = match[1] as TypecheckTool;
-    const args = splitShellWords(match[2] ?? '');
-
-    if (isBuildModeCommand(args)) {
-      continue;
-    }
-
-    targets.push({
-      configPath: resolveProjectConfigPath(
-        manifestDirectory,
-        getProjectArgument(args),
-      ),
-      manifestPath: options.manifestPath,
-      scriptName: options.scriptName,
-      tool,
-    });
-  }
-
-  return targets;
-}
-
-async function collectWorkspacePackageManifestPaths(
-  config: ResolvedLatticeConfig,
-): Promise<string[]> {
-  const rootManifestPath = path.join(config.rootDir, 'package.json');
-  const packages = await collectWorkspacePackages(config);
-
-  return packages
-    .map((workspacePackage) =>
-      normalizeAbsolutePath(
-        path.join(workspacePackage.directory, 'package.json'),
-      ),
-    )
-    .filter(
-      (manifestPath) =>
-        manifestPath !== normalizeAbsolutePath(rootManifestPath),
-    )
-    .sort();
-}
-
 async function collectBuildConfigPaths(
   config: ResolvedLatticeConfig,
 ): Promise<string[]> {
@@ -188,94 +92,14 @@ async function collectBuildConfigPaths(
   return paths.map(normalizeAbsolutePath).sort();
 }
 
-async function collectWorkspaceTypecheckTargets(
-  config: ResolvedLatticeConfig,
-): Promise<TypecheckTarget[]> {
-  const targets: TypecheckTarget[] = [];
-  const scriptPrefix = config.proof?.typecheckScriptPrefix ?? 'typecheck';
-  const ignoredTypecheckTargets = new Set(
-    config.proof?.ignoredTypecheckTargets ?? [],
-  );
-
-  for (const manifestPath of await collectWorkspacePackageManifestPaths(
-    config,
-  )) {
-    const manifest = readJsonFile<PackageManifest>(manifestPath);
-
-    for (const [scriptName, command] of Object.entries(
-      manifest.scripts ?? {},
-    )) {
-      if (!scriptName.startsWith(scriptPrefix)) {
-        continue;
-      }
-
-      targets.push(
-        ...collectTypecheckTargetsFromCommand({
-          command,
-          manifestPath,
-          scriptName,
-        }),
-      );
-    }
-  }
-
-  return targets
-    .filter(
-      (target) =>
-        !ignoredTypecheckTargets.has(
-          toRelativePath(config.rootDir, target.configPath),
-        ),
-    )
-    .sort((left, right) => {
-      const manifestDelta = left.manifestPath.localeCompare(right.manifestPath);
-      const scriptDelta =
-        manifestDelta === 0
-          ? left.scriptName.localeCompare(right.scriptName)
-          : manifestDelta;
-
-      return scriptDelta === 0
-        ? left.configPath.localeCompare(right.configPath)
-        : scriptDelta;
-    });
-}
-
 function collectConfiguredSidecarTargets(
   config: ResolvedLatticeConfig,
-): TypecheckTarget[] {
+): SidecarTarget[] {
   return (config.proof?.sidecarTargets ?? []).map((target) => ({
     configPath: normalizeAbsolutePath(path.join(config.rootDir, target.config)),
-    manifestPath: normalizeAbsolutePath(
-      path.join(config.rootDir, 'lattice.config.mjs'),
-    ),
-    scriptName: target.label ?? 'configured-sidecar',
+    label: target.label ?? 'configured-sidecar',
     tool: target.tool,
   }));
-}
-
-function collectRootSidecarTargets(
-  config: ResolvedLatticeConfig,
-): TypecheckTarget[] {
-  const scriptName = config.proof?.rootSidecarScript;
-
-  if (!scriptName) {
-    return [];
-  }
-
-  const manifestPath = normalizeAbsolutePath(
-    path.join(config.rootDir, 'package.json'),
-  );
-  const manifest = readJsonFile<PackageManifest>(manifestPath);
-  const command = manifest.scripts?.[scriptName];
-
-  if (!command) {
-    return [];
-  }
-
-  return collectTypecheckTargetsFromCommand({
-    command,
-    manifestPath,
-    scriptName,
-  }).filter((target) => target.tool !== 'tsc');
 }
 
 function addCoverage(
@@ -293,7 +117,7 @@ function collectCoverage(options: {
   config: ResolvedLatticeConfig;
   graphProjectPaths: string[];
   includeAllowlist?: boolean;
-  sidecarTargets: TypecheckTarget[];
+  sidecarTargets: SidecarTarget[];
 }): Map<string, CoverageSource[]> {
   const coverageByFile = new Map<string, CoverageSource[]>();
   const pattern = sourceFilePattern(options.config);
@@ -624,65 +448,9 @@ function addDuplicateGraphCoverageProblems(options: {
   }
 }
 
-function collectTypecheckTargetOwners(
-  config: ResolvedLatticeConfig,
-  targets: TypecheckTarget[],
-): TypecheckTargetOwners {
-  const ownersByFile: TypecheckTargetOwners = new Map();
-  const pattern = sourceFilePattern(config);
-
-  for (const target of targets) {
-    if (!existsSync(target.configPath)) {
-      continue;
-    }
-
-    for (const filePath of parseProjectFileNames(
-      config,
-      target.configPath,
-      pattern,
-    )) {
-      const owners = ownersByFile.get(filePath) ?? [];
-
-      owners.push(target);
-      ownersByFile.set(filePath, owners);
-    }
-  }
-
-  return ownersByFile;
-}
-
-function formatTypecheckTarget(
-  config: ResolvedLatticeConfig,
-  target: TypecheckTarget,
-): string {
-  return [
-    toRelativePath(config.rootDir, target.configPath),
-    `via ${toRelativePath(config.rootDir, target.manifestPath)}#${target.scriptName}`,
-    target.tool,
-  ].join(' ');
-}
-
-function uniqueTypecheckTargets(targets: TypecheckTarget[]): TypecheckTarget[] {
-  const seen = new Set<string>();
-  const uniqueTargets: TypecheckTarget[] = [];
-
-  for (const target of targets) {
-    const key = `${target.configPath}\0${target.tool}`;
-
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    uniqueTargets.push(target);
-  }
-
-  return uniqueTargets;
-}
-
 function addDuplicateTypecheckCoverageProblems(options: {
   config: ResolvedLatticeConfig;
-  ownersByFile: TypecheckTargetOwners;
+  ownersByFile: ConfigFileOwners;
   problems: string[];
 }): void {
   for (const [filePath, owners] of [...options.ownersByFile.entries()].sort(
@@ -691,48 +459,67 @@ function addDuplicateTypecheckCoverageProblems(options: {
         toRelativePath(options.config.rootDir, right),
       ),
   )) {
-    const uniqueOwners = uniqueTypecheckTargets(owners);
+    const uniqueOwners = [...new Set(owners)];
 
-    const ownersByTool = new Map<string, TypecheckTarget[]>();
-
-    for (const owner of uniqueOwners) {
-      ownersByTool.set(owner.tool, [
-        ...(ownersByTool.get(owner.tool) ?? []),
-        owner,
-      ]);
+    if (uniqueOwners.length <= 1) {
+      continue;
     }
 
-    for (const duplicateOwners of ownersByTool.values()) {
-      if (duplicateOwners.length <= 1) {
-        continue;
-      }
-
-      options.problems.push(
-        [
-          'Duplicate workspace typecheck coverage:',
-          `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
-          '  covered by:',
-          ...duplicateOwners
-            .sort((left, right) =>
-              formatTypecheckTarget(options.config, left).localeCompare(
-                formatTypecheckTarget(options.config, right),
-              ),
-            )
-            .map(
-              (target) =>
-                `    - ${formatTypecheckTarget(options.config, target)}`,
+    options.problems.push(
+      [
+        'Duplicate IDE/typecheck route coverage:',
+        `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
+        '  covered by:',
+        ...uniqueOwners
+          .sort((left, right) =>
+            toRelativePath(options.config.rootDir, left).localeCompare(
+              toRelativePath(options.config.rootDir, right),
             ),
-          '  reason: a workspace typecheck file must have a single local owner per tool; move the file to one config or narrow include/exclude patterns.',
-        ].join('\n'),
-      );
+          )
+          .map(
+            (configPath) =>
+              `    - ${toRelativePath(options.config.rootDir, configPath)}`,
+          ),
+        '  reason: a file in the IDE/typecheck route should have a single local tsconfig owner; move the file to one layer or narrow include/exclude patterns.',
+      ].join('\n'),
+    );
+  }
+}
+
+function addTypecheckRouteProblems(options: {
+  buildConfigPaths: string[];
+  config: ResolvedLatticeConfig;
+  problems: string[];
+  typecheckProjectPaths: string[];
+}): void {
+  const typecheckProjectPathSet = new Set(options.typecheckProjectPaths);
+
+  for (const buildConfigPath of options.buildConfigPaths) {
+    const localConfigPath = getStrictLocalConfigPath(buildConfigPath);
+
+    if (!existsSync(localConfigPath)) {
+      continue;
     }
+
+    if (typecheckProjectPathSet.has(localConfigPath)) {
+      continue;
+    }
+
+    options.problems.push(
+      [
+        'Build companion config is not reachable from IDE/typecheck route:',
+        `  build config: ${toRelativePath(options.config.rootDir, buildConfigPath)}`,
+        `  expected local config: ${toRelativePath(options.config.rootDir, localConfigPath)}`,
+        `  root: ${options.config.proof?.typecheckRootConfig ?? 'tsconfig.json'}`,
+        '  reason: every tsconfig*.build.json companion must be reachable from the ordinary tsconfig.json route used by editors and local typecheck analysis.',
+      ].join('\n'),
+    );
   }
 }
 
 function addAllowlistProblems(options: {
   baseCoverageByFile: Map<string, CoverageSource[]>;
   config: ResolvedLatticeConfig;
-  ownersByFile: TypecheckTargetOwners;
   problems: string[];
 }): void {
   for (const entry of options.config.proof?.allowlist ?? []) {
@@ -749,15 +536,6 @@ function addAllowlistProblems(options: {
       );
     }
 
-    if (!options.ownersByFile.has(filePath)) {
-      options.problems.push(
-        [
-          'Typecheck proof allowlist file is not used by any workspace typecheck target:',
-          `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
-        ].join('\n'),
-      );
-    }
-
     if (options.baseCoverageByFile.has(filePath)) {
       options.problems.push(
         [
@@ -769,89 +547,6 @@ function addAllowlistProblems(options: {
   }
 }
 
-function addTypecheckCoverageProblems(options: {
-  config: ResolvedLatticeConfig;
-  coverageByFile: Map<string, CoverageSource[]>;
-  problems: string[];
-  targets: TypecheckTarget[];
-}): {
-  outsideGraphEntryCount: number;
-  outsideGraphFileCount: number;
-  targetCount: number;
-} {
-  let outsideGraphCount = 0;
-  const outsideGraphFiles = new Set<string>();
-  const pattern = sourceFilePattern(options.config);
-
-  for (const target of options.targets) {
-    if (!existsSync(target.configPath)) {
-      options.problems.push(
-        [
-          'Typecheck script references a missing tsconfig:',
-          `  package: ${toRelativePath(options.config.rootDir, target.manifestPath)}`,
-          `  script: ${target.scriptName}`,
-          `  config: ${toRelativePath(options.config.rootDir, target.configPath)}`,
-        ].join('\n'),
-      );
-      continue;
-    }
-
-    const files = parseProjectFileNames(
-      options.config,
-      target.configPath,
-      pattern,
-    );
-    const uncoveredFiles = files.filter(
-      (filePath) => !options.coverageByFile.has(filePath),
-    );
-    const coveredOutsideGraph = files.filter((filePath) => {
-      const sources = options.coverageByFile.get(filePath) ?? [];
-
-      return (
-        sources.length > 0 && !sources.some((source) => source.type === 'graph')
-      );
-    });
-
-    outsideGraphCount += coveredOutsideGraph.length;
-
-    for (const filePath of coveredOutsideGraph) {
-      outsideGraphFiles.add(filePath);
-    }
-
-    if (uncoveredFiles.length === 0) {
-      continue;
-    }
-
-    options.problems.push(
-      [
-        'Package typecheck config is not covered by root typecheck proof:',
-        `  package: ${toRelativePath(options.config.rootDir, target.manifestPath)}`,
-        `  script: ${target.scriptName}`,
-        `  tool: ${target.tool}`,
-        `  config: ${toRelativePath(options.config.rootDir, target.configPath)}`,
-        '  uncovered files:',
-        ...uncoveredFiles
-          .slice(0, 20)
-          .map(
-            (filePath) =>
-              `    - ${toRelativePath(options.config.rootDir, filePath)}`,
-          ),
-        uncoveredFiles.length > 20
-          ? `    ... ${uncoveredFiles.length - 20} more`
-          : '',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-    );
-  }
-
-  return {
-    outsideGraphEntryCount: outsideGraphCount,
-    outsideGraphFileCount: outsideGraphFiles.size,
-    targetCount: options.targets.length,
-  };
-}
-
 export async function runProofCheck(
   config: ResolvedLatticeConfig,
 ): Promise<boolean> {
@@ -859,6 +554,16 @@ export async function runProofCheck(
   const graphProjectPaths = collectGraphProjectPaths(config);
   const graphProjectPathSet = new Set(graphProjectPaths);
   const buildConfigPaths = await collectBuildConfigPaths(config);
+  const typecheckRoute = collectTypecheckTargetProjectPaths({
+    rootConfigPath: path.join(
+      config.rootDir,
+      config.proof?.typecheckRootConfig ?? 'tsconfig.json',
+    ),
+    rootDir: config.rootDir,
+  });
+  const typecheckProjectPaths = typecheckRoute.projectPaths;
+
+  problems.push(...typecheckRoute.problems);
 
   addBuildConfigProblems({
     buildConfigPaths,
@@ -866,33 +571,34 @@ export async function runProofCheck(
     graphProjectPaths: graphProjectPathSet,
     problems,
   });
+  addTypecheckRouteProblems({
+    buildConfigPaths,
+    config,
+    problems,
+    typecheckProjectPaths,
+  });
 
   if (problems.length > 0) {
     ProofLogger.error(problems.join('\n\n'));
     return false;
   }
 
-  const rootSidecarTargets = [
-    ...collectRootSidecarTargets(config),
-    ...collectConfiguredSidecarTargets(config),
-  ];
+  const sidecarTargets = collectConfiguredSidecarTargets(config);
   const baseCoverageByFile = collectCoverage({
     config,
     graphProjectPaths,
     includeAllowlist: false,
-    sidecarTargets: rootSidecarTargets,
+    sidecarTargets,
   });
   const coverageByFile = collectCoverage({
     config,
     graphProjectPaths,
-    sidecarTargets: rootSidecarTargets,
+    sidecarTargets,
   });
   const graphFileOwners = collectConfigFileOwners(config, graphProjectPaths);
-  const packageTypecheckTargets =
-    await collectWorkspaceTypecheckTargets(config);
-  const packageTypecheckOwners = collectTypecheckTargetOwners(
+  const typecheckFileOwners = collectConfigFileOwners(
     config,
-    packageTypecheckTargets,
+    typecheckProjectPaths,
   );
 
   addDuplicateGraphCoverageProblems({
@@ -902,20 +608,13 @@ export async function runProofCheck(
   });
   addDuplicateTypecheckCoverageProblems({
     config,
-    ownersByFile: packageTypecheckOwners,
+    ownersByFile: typecheckFileOwners,
     problems,
   });
   addAllowlistProblems({
     baseCoverageByFile,
     config,
-    ownersByFile: packageTypecheckOwners,
     problems,
-  });
-  const coverageResult = addTypecheckCoverageProblems({
-    config,
-    coverageByFile,
-    problems,
-    targets: packageTypecheckTargets,
   });
 
   if (problems.length > 0) {
@@ -933,8 +632,8 @@ export async function runProofCheck(
   ProofLogger.success(
     [
       `Checked ${graphProjectPaths.length} graph projects and ${buildConfigPaths.length} build configs.`,
-      `Root graph covers ${graphFileCount} files; root sidecars cover ${sidecarFileCount} files.`,
-      `Checked ${coverageResult.targetCount} workspace typecheck targets; ${coverageResult.outsideGraphEntryCount} target-file entries (${coverageResult.outsideGraphFileCount} unique files) are covered by sidecars or explicit allowlist.`,
+      `IDE/typecheck route covers ${typecheckProjectPaths.length} configs from ${config.proof?.typecheckRootConfig ?? 'tsconfig.json'}.`,
+      `Root graph covers ${graphFileCount} files; configured sidecars cover ${sidecarFileCount} files.`,
     ].join('\n'),
   );
 

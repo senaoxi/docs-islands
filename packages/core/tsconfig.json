@@ -1,11 +1,12 @@
 {
-  // Package-local source/editor check. Build graph leaf: tsconfig.lib.build.json.
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "isolatedDeclarations": false,
-    "declaration": true,
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["node"],
-  },
-  "include": ["src/"],
+  // Package-local IDE/typecheck solution. Build graph leaf: tsconfig.graph.json.
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json",
+    },
+    {
+      "path": "./tsconfig.test.json",
+    },
+  ],
 }

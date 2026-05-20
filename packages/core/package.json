@@ -34,8 +34,7 @@
   },
   "scripts": {
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache --cache-location ./node_modules/.cache/eslint/",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "lattice tsc",
     "test": "pnpm test:unit",
     "test:unit": "vitest run",
     "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"

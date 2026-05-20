@@ -63,7 +63,11 @@ export type PipelineStep =
 /**
  * Built-in task names understood by Lattice pipelines.
  */
-export type BuiltinTaskName = 'graph:check' | 'package:check' | 'proof:check';
+export type BuiltinTaskName =
+  | 'graph:check'
+  | 'package:check'
+  | 'proof:check'
+  | 'tsc:run';
 
 /**
  * Workspace discovery and path settings.
@@ -276,17 +280,6 @@ export interface ProofConfig {
    */
   allowlist?: ProofAllowlistEntry[];
   /**
-   * Typecheck targets to skip when proving workspace script coverage.
-   *
-   * Use this for consumer fixtures or artifact-only packages that are checked
-   * by another pipeline.
-   */
-  ignoredTypecheckTargets?: string[];
-  /**
-   * Root package script that runs sidecar typechecks.
-   */
-  rootSidecarScript?: string;
-  /**
    * Extra typecheck targets that are not part of the root graph.
    */
   sidecarTargets?: ProofSidecarTarget[];
@@ -295,12 +288,11 @@ export interface ProofConfig {
    */
   sourceFilePattern?: string;
   /**
-   * Prefix used to discover package typecheck scripts.
+   * Root IDE/typecheck solution config, relative to `workspace.rootDir`.
    *
-   * Example: `typecheck` matches `typecheck`, `typecheck:test`, and
-   * `typecheck:vue`.
+   * @default "tsconfig.json"
    */
-  typecheckScriptPrefix?: string;
+  typecheckRootConfig?: string;
 }
 
 /**

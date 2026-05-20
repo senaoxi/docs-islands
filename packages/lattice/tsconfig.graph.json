@@ -6,6 +6,9 @@
       "path": "./tsconfig.lib.build.json"
     },
     {
+      "path": "./tsconfig.tools.build.json"
+    },
+    {
       "path": "./tsconfig.test.build.json"
     }
   ]

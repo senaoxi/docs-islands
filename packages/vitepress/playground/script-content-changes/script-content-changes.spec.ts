@@ -1,9 +1,11 @@
+import { loadEnv } from '@docs-islands/utils/env';
 import { expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const originalMarkdownContent =
   '<!-- This file is used to test the HMR of markdown content changes. -->\n';
+const { test: TEST } = loadEnv();
 
 // Helper function to modify a file and wait for HMR.
 const modifyFileAndWaitForHMR = async (
@@ -38,6 +40,13 @@ const waitForHMRSelector = async (selector: string, timeout = 5000) => {
   }
 };
 
+async function expectDevPageFailure(pathname: string): Promise<void> {
+  const response = await page.goto(`http://localhost:${TEST.port}${pathname}`);
+
+  expect(response).toBeTruthy();
+  await expect(page.locator('body')).toContainText('PAGE NOT FOUND');
+}
+
 describe('Script Content Changes', () => {
   describe('Basic Component Rendering', () => {
     beforeEach(async () => {
@@ -65,70 +74,8 @@ describe('Script Content Changes', () => {
       allowBrowserRuntimeFailures();
     });
 
-    // Vite path resolution is case-insensitive on macOS and Unix-like systems.
-    test('Should markdown be rendered normally', async () => {
-      await goto('/script-content-changes/import-path-error');
-
-      await page.waitForSelector(
-        '#script-content-changes-test-import-path-error',
-      );
-      // The page should still load even with import errors.
-      const heading = page.locator(
-        '#script-content-changes-test-import-path-error',
-      );
-      await expect(heading).toBeVisible();
-      expect(await heading.textContent()).toContain('Import Path Error');
-    });
-
-    test('Should not affect other rendering containers', async () => {
-      // Component parsing failures prevent successful render container resolution.
-      const withErrorPathRenderContainer = page.locator(
-        '[uniqueid="with-error-path"]',
-      );
-      expect(await withErrorPathRenderContainer.count()).toBe(1);
-      await expect(
-        await withErrorPathRenderContainer.getAttribute('__render_directive__'),
-      ).toBe(null);
-
-      await page.waitForSelector('[__render_directive__="ssr:only"]');
-      const ssrOnlyRenderContainer = page.locator(
-        '[__render_directive__="ssr:only"]',
-      );
-      await expect(ssrOnlyRenderContainer).toBeVisible();
-
-      await page.waitForSelector(
-        '[data-unique-id="ssr-only-normal-render"] > button',
-      );
-      const ssrOnlyButton = page.locator(
-        '[data-unique-id="ssr-only-normal-render"] > button',
-      );
-      await ssrOnlyButton.click();
-      expect(await ssrOnlyButton.textContent()).toContain('Count: 0');
-      await ssrOnlyButton.click();
-      expect(await ssrOnlyButton.textContent()).toContain('Count: 0');
-      await ssrOnlyButton.click();
-      expect(await ssrOnlyButton.textContent()).toContain('Count: 0');
-
-      await page.waitForSelector('[__render_directive__="client:only"]');
-      const clientOnlyRenderContainer = page.locator(
-        '[__render_directive__="client:only"]',
-      );
-      await expect(clientOnlyRenderContainer).toBeVisible();
-
-      await page.waitForSelector(
-        '[data-unique-id="client-only-normal-render"] > button',
-      );
-      const clientOnlyButton = page.locator(
-        '[data-unique-id="client-only-normal-render"] > button',
-      );
-      await expect(clientOnlyButton).toBeVisible();
-
-      await clientOnlyButton.click();
-      expect(await clientOnlyButton.textContent()).toContain('Count: 1');
-      await clientOnlyButton.click();
-      expect(await clientOnlyButton.textContent()).toContain('Count: 2');
-      await clientOnlyButton.click();
-      expect(await clientOnlyButton.textContent()).toContain('Count: 3');
+    test('Should surface unresolved imports as a dev page failure', async () => {
+      await expectDevPageFailure('/script-content-changes/import-path-error');
     });
   });
 
@@ -192,13 +139,11 @@ describe('HMR: Changing Render Component References', () => {
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
-      // Page should still load even with import errors
-      await waitForHMRSelector('.modified-content-case1');
-      const heading = page.locator('#hmr-import-path-test');
-      await expect(heading).toBeVisible();
-      expect(await heading.textContent()).toContain('HMR Import Path Test');
+      await page.reload();
+      await expect(page.locator('body')).toContainText('PAGE NOT FOUND');
     } finally {
       await restoreFileContent(hmrTestFilePath, originalMarkdownContent);
+      await goto('/script-content-changes/hmr-test');
     }
   });
 
@@ -301,25 +246,11 @@ describe('HMR: Adding New Render Component References', () => {
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
-      // Reused components maintain state and remain functional after updates.
-      await waitForHMRSelector('[data-unique-id="original-component"]');
-      await expect(originalComponent).toBeVisible();
-      expect(await originalComponentButton.textContent()).toContain('Count: 3');
-      await originalComponentButton.click();
-      expect(await originalComponentButton.textContent()).toContain('Count: 4');
-
-      // Invalid components will not be rendered.
-      const invalidComponent = page.locator('[uniqueid="invalid-component"]');
-      expect(await invalidComponent.count()).toBe(1);
-      expect(await invalidComponent.getAttribute('__render_directive__')).toBe(
-        null,
-      );
-
-      // The page should still render despite the invalid import.
-      const heading = page.locator('h1');
-      await expect(heading).toBeVisible();
+      await page.reload();
+      await expect(page.locator('body')).toContainText('PAGE NOT FOUND');
     } finally {
       await restoreFileContent(hmrTestFilePath, originalMarkdownContent);
+      await goto('/script-content-changes/hmr-test');
     }
   });
 

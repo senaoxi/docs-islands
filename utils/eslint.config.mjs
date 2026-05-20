@@ -17,7 +17,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['./dom-iterable.ts'],
+    files: ['./src/dom-iterable.ts'],
     rules: {
       'unicorn/prefer-spread': 'off',
     },

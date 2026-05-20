@@ -13,6 +13,7 @@ type Config = ReturnType<typeof defineConfig>;
  *   - packageName (monorepo)
  *     - docs (monorepo)
  *     - playground (monorepo)
+ *     - smoke (monorepo)
  *     - src
  *       - client
  *       - node
@@ -27,7 +28,7 @@ type Config = ReturnType<typeof defineConfig>;
 const config: Config = [
   ...eslintGeneralConfig,
 
-  globalIgnores(['docs/**', 'playground/**']),
+  globalIgnores(['docs/**', 'playground/**', 'smoke/**']),
   // Core rendering files - complex rendering logic requires flexibility
   {
     files: ['src/client/**/*.ts', 'src/node/**/*.ts'],

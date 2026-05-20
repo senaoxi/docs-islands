@@ -26,6 +26,7 @@ const dtsConfig: RolldownOptions = defineConfig({
   },
   plugins: [
     dts({
+      tsconfig: 'tsconfig.lib.json',
       emitDtsOnly: true,
       sourcemap,
     }),

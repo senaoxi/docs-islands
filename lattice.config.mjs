@@ -207,11 +207,7 @@ export default defineConfig({
       },
       'graph:check',
       'proof:check',
-      {
-        type: 'command',
-        command: 'tsc',
-        args: ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
-      },
+      'tsc:run',
       {
         type: 'command',
         command: 'vue-tsc',
@@ -248,17 +244,7 @@ export default defineConfig({
       {
         type: 'command',
         command: 'pnpm',
-        args: ['--dir', 'packages/vitepress/playground', 'typecheck:test'],
-      },
-      {
-        type: 'command',
-        command: 'pnpm',
         args: ['--dir', 'packages/vitepress/smoke', 'typecheck'],
-      },
-      {
-        type: 'command',
-        command: 'pnpm',
-        args: ['--dir', 'packages/vitepress/smoke', 'typecheck:test'],
       },
     ],
     // Package artifact checks for dist output.

@@ -1104,6 +1104,9 @@ importers:
       '@playwright/test':
         specifier: catalog:test
         version: 1.58.2
+      '@typescript-eslint/parser':
+        specifier: catalog:lint
+        version: 8.55.0(eslint@9.39.2)(typescript@5.9.3)
       '@vitejs/plugin-react-swc':
         specifier: catalog:dev
         version: 4.2.3(@swc/helpers@0.5.17)(vite@5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(terser@5.46.2))

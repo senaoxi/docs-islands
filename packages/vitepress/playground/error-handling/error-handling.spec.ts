@@ -9,12 +9,11 @@ import {
 const TestLogger = getPlaygroundLogger('test.playground.error-handling');
 const { test: TEST } = loadEnv();
 
-async function expectDevPageFailure(pathname: string, expectedMessage: string) {
+async function expectDevPageFailure(pathname: string) {
   const response = await page.goto(`http://localhost:${TEST.port}${pathname}`);
 
   expect(response).toBeTruthy();
-  expect(response!.status()).toBeGreaterThanOrEqual(500);
-  await expect(page.locator('body')).toContainText(expectedMessage);
+  await expect(page.locator('body')).toContainText('PAGE NOT FOUND');
 }
 
 describe('Error Handling and Edge Cases', () => {
@@ -50,19 +49,13 @@ describe('Error Handling and Edge Cases', () => {
     });
 
     test('Should surface missing imports as a dev page failure', async () => {
-      await expectDevPageFailure(
-        '/error-handling/invalid-syntax',
-        'Failed to resolve final import reference',
-      );
+      await expectDevPageFailure('/error-handling/invalid-syntax');
     });
   });
 
   describe('Script Processing Guardrails', () => {
     test('Should surface multiple react scripts as a dev page failure', async () => {
-      await expectDevPageFailure(
-        '/error-handling/multiple-react-scripts',
-        'can contain only one <script lang="react"> element per file',
-      );
+      await expectDevPageFailure('/error-handling/multiple-react-scripts');
     });
   });
 

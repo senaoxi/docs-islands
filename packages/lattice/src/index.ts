@@ -32,3 +32,18 @@ export {
   type RuntimeEnvironment,
   type WorkspaceConfig,
 } from './config';
+
+export {
+  runTypecheck,
+  type RunTypecheckOptions,
+  type RunTypecheckResult,
+  type TypecheckRunner,
+  type TypecheckTarget,
+  type TypecheckTargetResult,
+} from './commands/typecheck';
+export {
+  collectTypecheckTargetProjectPaths,
+  isOrdinaryTypecheckConfigPath,
+  type CollectTypecheckTargetProjectPathsOptions,
+  type CollectTypecheckTargetProjectPathsResult,
+} from './tsconfig';

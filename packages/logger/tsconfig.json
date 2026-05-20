@@ -1,16 +1,15 @@
 {
-  // Package-local source/editor check and rolldown-plugin-dts input.
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "isolatedDeclarations": false,
-    "declaration": true,
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"],
-  },
-  "include": [
-    "packagePlugin.ts",
-    "rolldown.config.ts",
-    "scripts/**/*.ts",
-    "src/",
+  // Package-local IDE/typecheck solution. Build graph leaf: tsconfig.graph.json.
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json",
+    },
+    {
+      "path": "./tsconfig.tools.json",
+    },
+    {
+      "path": "./tsconfig.test.json",
+    },
   ],
 }

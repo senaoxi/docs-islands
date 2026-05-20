@@ -99,7 +99,7 @@ export default Promise.resolve({
       await writeText(
         path.join(rootDir, 'lattice.config.mjs'),
         `
-import { defineConfig } from '${new URL('../../config.mjs', import.meta.url).href}';
+import { defineConfig } from '${new URL('../config.ts', import.meta.url).href}';
 
 export default defineConfig(async ({ command, mode }) => ({
   workspace: {

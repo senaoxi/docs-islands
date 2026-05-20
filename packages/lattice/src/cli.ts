@@ -6,6 +6,7 @@ import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runPaths } from './commands/paths';
 import { runProofCheck } from './commands/proof';
+import { runTypecheck } from './commands/typecheck';
 import {
   loadConfig,
   type BuiltinTaskName,
@@ -26,6 +27,11 @@ interface PackageFlags extends GlobalFlags {
   attwProfile?: string;
   package?: string;
   tool?: string;
+}
+
+interface TscFlags extends GlobalFlags {
+  concurrency?: string;
+  project?: string;
 }
 
 type NormalizedPipelineStep = Exclude<PipelineStep, string>;
@@ -56,6 +62,13 @@ async function runBuiltinTask(
     case 'package:check': {
       return runPackageCheck({ config });
     }
+    case 'tsc:run': {
+      const result = await runTypecheck({
+        cwd: config.rootDir,
+      });
+
+      return result.passed;
+    }
   }
 }
 
@@ -67,7 +80,8 @@ function normalizePipelineStep(step: PipelineStep): NormalizedPipelineStep {
   if (
     step === 'graph:check' ||
     step === 'proof:check' ||
-    step === 'package:check'
+    step === 'package:check' ||
+    step === 'tsc:run'
   ) {
     return {
       name: step,
@@ -123,6 +137,22 @@ function parsePackageAttwProfile(
   throw new Error(
     `Invalid package check --attw-profile "${profile}". Expected one of: strict, node16, esm-only.`,
   );
+}
+
+function parseConcurrency(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(
+      'Invalid --concurrency value. Expected a positive integer.',
+    );
+  }
+
+  return parsed;
 }
 
 function runCommandStep(
@@ -230,6 +260,22 @@ async function main(): Promise<void> {
       const config = await load(flags, 'proof');
 
       if (!(await runProofCheck(config))) {
+        process.exitCode = 1;
+      }
+    });
+
+  cli
+    .command('tsc', 'Run tsc for TypeScript typecheck target configs')
+    .option('-p, --project <path>', 'Tsconfig file or directory')
+    .option('--concurrency <n>', 'Maximum concurrent tsc processes')
+    .action(async (flags: TscFlags) => {
+      const result = await runTypecheck({
+        concurrency: parseConcurrency(flags.concurrency),
+        cwd: process.cwd(),
+        project: flags.project,
+      });
+
+      if (!result.passed) {
         process.exitCode = 1;
       }
     });

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  // Package-local library check. Build leaf: tsconfig.lib.build.json.
+  // Package-local tooling check. Build leaf: tsconfig.tools.build.json.
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "declaration": true,
@@ -8,6 +8,5 @@
     "lib": ["ESNext"],
     "types": ["node"]
   },
-  "include": ["src/"],
-  "exclude": ["src/**/__tests__/**/*.ts", "vitest.config.ts"]
+  "include": ["package.json", "packagePlugin.ts", "rolldown.config.ts"]
 }
