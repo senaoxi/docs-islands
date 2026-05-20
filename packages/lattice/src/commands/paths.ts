@@ -311,46 +311,13 @@ function shouldResolveThroughGraph(
   );
 }
 
-function inferConfiguredProject(
-  config: ResolvedLatticeConfig,
-  resolvedFilePath: string,
-  targetPackage: WorkspacePackage,
-): string | null {
-  const relativePath = toRelativePath(config.rootDir, resolvedFilePath);
-
-  for (const rule of config.graph?.inferredProjects ?? []) {
-    if (rule.packageName && rule.packageName !== targetPackage.name) {
-      continue;
-    }
-
-    if (!relativePath.startsWith(rule.sourcePrefix)) {
-      continue;
-    }
-
-    return normalizeAbsolutePath(path.join(config.rootDir, rule.project));
-  }
-
-  return null;
-}
-
 function inferPackageProject(
-  config: ResolvedLatticeConfig,
   resolvedFilePath: string,
   workspacePackage: WorkspacePackage,
   projectPaths: string[],
 ): string | null {
   if (!isPathInsideDirectory(resolvedFilePath, workspacePackage.directory)) {
     return null;
-  }
-
-  const configured = inferConfiguredProject(
-    config,
-    resolvedFilePath,
-    workspacePackage,
-  );
-
-  if (configured) {
-    return configured;
   }
 
   return (
@@ -932,7 +899,6 @@ async function collectGeneratedConfigs(
         }
 
         const targetProjectPath = inferPackageProject(
-          config,
           artifactResolvedFilePath,
           targetPackage,
           projectPaths,

@@ -31,7 +31,7 @@ English | [简体中文](./README.zh-CN.md)
 - A pnpm workspace with `pnpm-workspace.yaml`
 - ESM config file support
 
-Lattice is pnpm-only by design. It prefers `pnpm recursive list --depth -1 --json` for package discovery, then merges in `pnpm-workspace.yaml` and configured package globs as a fallback. Package manifests define `workspace:*` dependency semantics.
+Lattice is pnpm-only by design. It infers the workspace root from `pnpm-workspace.yaml`, prefers `pnpm recursive list --depth -1 --json` for package discovery, then merges in `pnpm-workspace.yaml` and root `package.json#workspaces` globs as a fallback. Package manifests define `workspace:*` dependency semantics.
 
 ## Installation
 
@@ -57,21 +57,31 @@ Create `lattice.config.mjs` at the repository root:
 import { defineConfig } from '@docs-islands/lattice/config';
 
 export default defineConfig({
+  config: {
+    roots: {
+      graph: 'tsconfig.graph.json',
+      typecheck: 'tsconfig.json',
+    },
+  },
   graph: {
-    rootConfig: 'tsconfig.graph.json',
-    productionKinds: ['lib', 'runtime-client', 'runtime-node'],
-    projectKinds: [
-      { kind: 'solution', paths: ['tsconfig.graph.json'] },
-      { kind: 'lib', suffixes: ['/tsconfig.lib.build.json'] },
-      { kind: 'test', suffixes: ['/tsconfig.test.build.json'] },
-    ],
-    forbiddenEdges: [
-      {
-        fromKinds: ['lib', 'runtime-client', 'runtime-node'],
-        toKinds: ['test'],
-        reason: 'production graph must not depend on tests',
+    rules: {
+      runtime: {
+        deny: {
+          refs: [
+            {
+              path: 'packages/core/tsconfig.internal.build.json',
+              reason: 'runtime code must not depend on internal build boundaries',
+            },
+          ],
+          deps: [
+            {
+              name: '@acme/internal',
+              reason: 'runtime packages must not consume internal packages directly',
+            },
+          ],
+        },
       },
-    ],
+    },
   },
   proof: {
     sidecarTargets: [
@@ -153,24 +163,27 @@ The typecheck route rejects `tsconfig*.build.json` and `tsconfig*.graph.json`, r
 
 `lattice.config.mjs` must default-export a config object, a Promise for one, or a function receiving `{ command, mode }`. Use `defineConfig(...)` for editor hints and typed package exports. `--mode` is forwarded to config functions; when omitted, Lattice uses `process.env.NODE_ENV` or `default`.
 
-### `workspace`
+Lattice infers the workspace root by walking upward from the loaded config file until it finds `pnpm-workspace.yaml`. All config-relative paths below are resolved from that inferred root.
 
-| Field             | Description                                                   |
-| ----------------- | ------------------------------------------------------------- |
-| `rootDir`         | Repository root relative to the config file. Defaults to `.`. |
-| `packagePatterns` | Additional workspace package globs.                           |
-| `ignore`          | Extra glob ignores for workspace package discovery.           |
+### `config`
 
-Lattice prefers pnpm's recursive package list and also reads package globs from the fixed `pnpm-workspace.yaml` file for fallback discovery and extra configured patterns.
+Shared project facts live in `config` so graph, paths, proof, and pipelines read the same roots and source boundary.
+
+| Field             | Description                                                                                                                                                    |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `roots.graph`     | Root build graph solution config. Defaults to `tsconfig.graph.json`.                                                                                           |
+| `roots.typecheck` | Root IDE/typecheck solution config. Defaults to `tsconfig.json`.                                                                                               |
+| `source.include`  | Optional glob override for files that must be covered by graph, sidecar, or allowlist proof. Defaults to TS/TSX/CTS/MTS/declaration/JSON files.                |
+| `source.exclude`  | Optional glob or directory-shorthand override for files omitted from source proof. Defaults to dependencies, build outputs, coverage, and common config files. |
 
 ### `graph`
 
-Graph checks parse TypeScript project references reachable from `rootConfig`, then inspect imports in each project. This is the build graph route: `tsconfig*.graph.json` files aggregate `tsconfig*.build.json` leaves for `tsc -b`, CI, and architecture checks. Workspace packages declared through `workspace:*` are source dependencies and should expose source entries from package `exports`. Artifact dependencies must not be represented as project references: use `link:` for local built output, or `catalog:`/normal semver to consume a published production package. If the target package is `private: true`, it has no published production package, so artifact consumers must use `link:`.
+Graph checks parse TypeScript project references reachable from `config.roots.graph`, then inspect imports in each project. This is the build graph route: `tsconfig*.graph.json` files aggregate `tsconfig*.build.json` leaves for `tsc -b`, CI, and architecture checks. Workspace packages declared through `workspace:*` are source dependencies and should expose source entries from package `exports`. Artifact dependencies must not be represented as project references: use `link:` for local built output, or `catalog:`/normal semver to consume a published production package. If the target package is `private: true`, it has no published production package, so artifact consumers must use `link:`.
 
 If package A depends on package B through `workspace:*` and A references B in a `tsconfig*.build.json`, TypeScript still resolves B through B's package exports. `tsc -b` does not rewrite artifact exports to referenced source projects. If B exports `./dist/index.js` and A has no source `paths` mapping, `lattice graph check` fails with an explanation and fix hint.
 
 Graph checks also validate every `tsconfig*.build.json` reachable from
-`rootConfig` against its strict same-name local config:
+`config.roots.graph` against its strict same-name local config:
 
 - `tsconfig.build.json` compares with `tsconfig.json`
 - `tsconfig.lib.build.json` compares with `tsconfig.lib.json`
@@ -183,14 +196,16 @@ typecheck config. Build-only options such as `composite`, `noEmit`,
 `declaration`, `outDir`, `rootDir`, and `tsBuildInfoFile` may differ. `paths`
 and `baseUrl` are treated as module-resolution policy and are not compared.
 
-| Field              | Description                                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `rootConfig`       | Root solution config. Defaults to `tsconfig.graph.json`.                                                |
-| `projectKinds`     | Ordered matchers that classify config paths into kinds such as `lib`, `test`, or `runtime-client`.      |
-| `productionKinds`  | Kinds treated as production graph leaves for stricter import checks.                                    |
-| `forbiddenEdges`   | Disallowed project-reference or inferred-import edges with human-readable reasons.                      |
-| `nodeBuiltinRules` | Project kinds that must not import Node builtins.                                                       |
-| `inferredProjects` | Rules that map source path prefixes to owning project configs when direct file ownership is not enough. |
+Graph rules can also enforce label-based package governance. A
+`tsconfig*.build.json` may declare one label with `"lattice": "runtime"`, and
+`graph.rules.runtime.deny` can block access to specific build refs or workspace
+packages. `refs[].path`, `deps[].name`, and every `reason` are required.
+Lattice treats these as graph/package boundaries only; source-level runtime API
+rules such as DOM or Node builtin usage belong in ESLint.
+
+| Field   | Description                                                                               |
+| ------- | ----------------------------------------------------------------------------------------- |
+| `rules` | Label-based deny rules for build refs (`deny.refs`) and workspace packages (`deny.deps`). |
 
 ### `paths`
 
@@ -209,21 +224,21 @@ Most repositories should not need generated `paths`: make workspace package expo
 ### `proof`
 
 Proof checks use two explicit TypeScript routes. The build graph route starts
-at `graph.rootConfig` and must reach every `tsconfig*.build.json`. The
-IDE/typecheck route starts at `proof.typecheckRootConfig` and may only reference
+at `config.roots.graph` and must reach every `tsconfig*.build.json`. The
+IDE/typecheck route starts at `config.roots.typecheck` and may only reference
 ordinary `tsconfig*.json` files. Package scripts are not used as proof inputs.
 
 For each discovered `tsconfig*.build.json`, proof checks that the strict
 same-name local config exists, has the same file set and typecheck semantics,
 and is reachable from the IDE/typecheck route. Build-only options such as
 `composite`, `noEmit`, `outDir`, `rootDir`, and `tsBuildInfoFile` may differ.
+Proof also globs `config.source` and requires every matched source file to be
+covered by the root graph, a configured sidecar target, or an allowlist entry.
 
-| Field                 | Description                                                                |
-| --------------------- | -------------------------------------------------------------------------- |
-| `typecheckRootConfig` | Root IDE/typecheck solution config. Defaults to `tsconfig.json`.           |
-| `sidecarTargets`      | Extra configs covered outside `tsc -b`, such as `vue-tsc` projects.        |
-| `allowlist`           | Explicit files allowed outside graph/sidecar coverage, each with a reason. |
-| `sourceFilePattern`   | File pattern included in coverage accounting.                              |
+| Field            | Description                                                                |
+| ---------------- | -------------------------------------------------------------------------- |
+| `sidecarTargets` | Extra configs covered outside `tsc -b`, such as `vue-tsc` projects.        |
+| `allowlist`      | Explicit files allowed outside graph/sidecar coverage, each with a reason. |
 
 ### `packageChecks`
 
@@ -262,7 +277,7 @@ Built-in task strings:
 - `package:check`
 - `tsc:run`
 
-Command steps run from `workspace.rootDir` by default and inherit `process.env`. Use `cwd` and `env` to override.
+Command steps run from the inferred workspace root by default and inherit `process.env`. Use `cwd` and `env` to override.
 
 ## CI Example
 

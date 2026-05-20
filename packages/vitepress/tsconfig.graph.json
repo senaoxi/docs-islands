@@ -4,13 +4,19 @@
   "files": [],
   "references": [
     {
-      "path": "./tsconfig.lib.graph.json"
+      "path": "./src/tsconfig.graph.json"
+    },
+    {
+      "path": "./types/tsconfig.build.json"
+    },
+    {
+      "path": "./theme/tsconfig.lib.build.json"
     },
     {
       "path": "./tsconfig.tools.build.json"
     },
     {
-      "path": "./tsconfig.test.build.json"
+      "path": "./tsconfig.test.graph.json"
     }
   ]
 }

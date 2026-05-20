@@ -12,8 +12,15 @@ async function writeText(filePath: string, text: string): Promise<void> {
 describe('defineConfig', () => {
   it('returns the explicit user config unchanged', () => {
     const config = defineConfig({
-      workspace: {
-        packagePatterns: ['packages/*'],
+      config: {
+        roots: {
+          graph: 'tsconfig.graph.custom.json',
+          typecheck: 'tsconfig.check.json',
+        },
+        source: {
+          include: ['src/**/*.ts'],
+          exclude: ['dist'],
+        },
       },
       pipelines: {
         package: ['package:check'],
@@ -39,7 +46,10 @@ describe('defineConfig', () => {
       },
     });
 
-    expect(config.workspace?.packagePatterns).toEqual(['packages/*']);
+    expect(config.config?.roots?.graph).toBe('tsconfig.graph.custom.json');
+    expect(config.config?.roots?.typecheck).toBe('tsconfig.check.json');
+    expect(config.config?.source?.include).toEqual(['src/**/*.ts']);
+    expect(config.config?.source?.exclude).toEqual(['dist']);
     expect(config.pipelines?.package).toEqual(['package:check']);
     expect(config.packageChecks?.targets?.[0]?.checks).toEqual([
       'publint',
@@ -50,14 +60,18 @@ describe('defineConfig', () => {
 
   it('returns config factories unchanged', async () => {
     const config = defineConfig(async ({ command, mode }) => ({
-      workspace: {
-        rootDir: `${command}-${mode}`,
+      config: {
+        roots: {
+          graph: `tsconfig.${command}.${mode}.json`,
+        },
       },
     }));
 
     await expect(config({ command: 'graph', mode: 'ci' })).resolves.toEqual({
-      workspace: {
-        rootDir: 'graph-ci',
+      config: {
+        roots: {
+          graph: 'tsconfig.graph.ci.json',
+        },
       },
     });
   });
@@ -69,13 +83,13 @@ describe('loadConfig', () => {
 
     try {
       await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
         path.join(rootDir, 'lattice.config.mjs'),
         `
-export default Promise.resolve({
-  workspace: {
-    rootDir: 'workspace',
-  },
-});
+export default Promise.resolve({});
 `,
       );
 
@@ -83,7 +97,7 @@ export default Promise.resolve({
         cwd: rootDir,
       });
 
-      expect(config.rootDir).toBe(path.join(rootDir, 'workspace'));
+      expect(config.rootDir).toBe(rootDir);
     } finally {
       await rm(rootDir, {
         force: true,
@@ -97,13 +111,19 @@ export default Promise.resolve({
 
     try {
       await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
         path.join(rootDir, 'lattice.config.mjs'),
         `
 import { defineConfig } from '${new URL('../config.ts', import.meta.url).href}';
 
 export default defineConfig(async ({ command, mode }) => ({
-  workspace: {
-    rootDir: \`workspace-\${command}-\${mode}\`,
+  config: {
+    roots: {
+      graph: \`tsconfig.\${command}.\${mode}.json\`,
+    },
   },
 }));
 `,
@@ -116,7 +136,62 @@ export default defineConfig(async ({ command, mode }) => ({
       });
 
       expect(config.configPath).toBe(path.join(rootDir, 'lattice.config.mjs'));
-      expect(config.rootDir).toBe(path.join(rootDir, 'workspace-paths-ci'));
+      expect(config.rootDir).toBe(rootDir);
+      expect(config.config?.roots?.graph).toBe('tsconfig.paths.ci.json');
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('infers the pnpm workspace root from a parent directory', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'tools/lattice.config.mjs'),
+        `
+export default {};
+`,
+      );
+
+      const config = await loadConfig({
+        configPath: 'tools/lattice.config.mjs',
+        cwd: rootDir,
+      });
+
+      expect(config.configPath).toBe(
+        path.join(rootDir, 'tools/lattice.config.mjs'),
+      );
+      expect(config.rootDir).toBe(rootDir);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('fails clearly when no pnpm workspace root can be inferred', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /no pnpm-workspace\.yaml was found/u,
+      );
     } finally {
       await rm(rootDir, {
         force: true,

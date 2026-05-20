@@ -41,9 +41,6 @@ async function createFixture(files: Record<string, string>): Promise<{
     },
     config: {
       configPath: path.join(rootDir, 'lattice.config.mjs'),
-      graph: {
-        rootConfig: 'tsconfig.graph.json',
-      },
       rootDir,
     },
     rootDir,
@@ -148,6 +145,42 @@ packages:
 }
 
 describe('runPaths', () => {
+  it('uses the shared graph root config', async () => {
+    const fixture = await createFixture({
+      ...createWorkspaceExportFixture(),
+      'tsconfig.custom.graph.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './packages/b/tsconfig.lib.build.json',
+          },
+          {
+            path: './packages/a/tsconfig.lib.build.json',
+          },
+        ],
+      }),
+      'tsconfig.graph.json': stringifyConfig({
+        files: [],
+        references: [],
+      }),
+    });
+
+    try {
+      await expect(
+        runGraphCheck({
+          ...fixture.config,
+          config: {
+            roots: {
+              graph: 'tsconfig.custom.graph.json',
+            },
+          },
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('generates source paths for referenced workspace deps whose exports point to dist', async () => {
     const fixture = await createFixture(createWorkspaceExportFixture());
     const generatedPath = path.join(

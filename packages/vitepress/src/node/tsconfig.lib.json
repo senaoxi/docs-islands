@@ -1,13 +1,13 @@
 {
-  // Runtime local check and rolldown-plugin-dts input. Build leaf: ./tsconfig.build.json.
-  "extends": "../../tsconfig.base.json",
+  // Runtime local check and rolldown-plugin-dts input. Build leaf: ./tsconfig.lib.build.json.
+  "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
     "isolatedDeclarations": true,
     "declaration": true,
     "stripInternal": true,
     // https://github.com/microsoft/TypeScript/wiki/Node-Target-Mapping#node-20
     "lib": ["ES2023"],
-    "types": ["node"],
+    "types": ["node"]
   },
-  "include": ["./"],
+  "include": ["./"]
 }

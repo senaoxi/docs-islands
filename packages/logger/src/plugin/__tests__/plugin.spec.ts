@@ -1,14 +1,14 @@
-import { readFile } from 'node:fs/promises';
-import { afterEach, describe, expect, it } from 'vitest';
 import {
   resetScopedLoggerConfig,
   setScopedLoggerConfig,
-} from '../../core/config';
-import { DEFAULT_LOGGER_SCOPE_ID } from '../../core/helper/scope';
+} from '@docs-islands/logger/core';
+import { DEFAULT_LOGGER_SCOPE_ID } from '@docs-islands/logger/core/helper';
 import {
   DEFAULT_LOGGER_MODULE_ID,
   transformLoggerTreeShaking,
-} from '../transform';
+} from '@docs-islands/logger/plugin';
+import { readFile } from 'node:fs/promises';
+import { afterEach, describe, expect, it } from 'vitest';
 import { LOGGER_TREE_SHAKING_FIXTURE_BUILDS } from './fixtures/tree-shaking/builders';
 import { LOGGER_TREE_SHAKING_RULES_EXPECTED } from './fixtures/tree-shaking/expected';
 

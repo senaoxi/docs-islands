@@ -1,4 +1,0 @@
-{
-  // Playground-local source check. Dist consumer pipeline owns this config.
-  "extends": "./tsconfig.json"
-}

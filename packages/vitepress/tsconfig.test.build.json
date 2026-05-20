@@ -9,16 +9,19 @@
   },
   "references": [
     {
-      "path": "./src/types/tsconfig.build.json"
+      "path": "./src/types/tsconfig.lib.build.json"
     },
     {
-      "path": "./src/shared/tsconfig.build.json"
+      "path": "./src/shared/tsconfig.lib.build.json"
     },
     {
-      "path": "./src/node/tsconfig.build.json"
+      "path": "./src/node/tsconfig.lib.build.json"
     },
     {
-      "path": "./src/client/tsconfig.build.json"
+      "path": "./src/client/tsconfig.lib.build.json"
+    },
+    {
+      "path": "./theme/tsconfig.lib.build.json"
     },
     {
       "path": "./tsconfig.tools.build.json"

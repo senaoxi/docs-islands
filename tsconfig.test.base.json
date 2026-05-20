@@ -10,11 +10,5 @@
     "noUnusedLocals": false,
     "stripInternal": false
   },
-  "exclude": [
-    "node_modules",
-    "**/dist/**",
-    "**/coverage/**",
-    "**/playground/**",
-    "**/smoke/**"
-  ]
+  "exclude": ["node_modules", "**/dist/**", "**/coverage/**"]
 }

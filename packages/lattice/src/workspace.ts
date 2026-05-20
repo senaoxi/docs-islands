@@ -122,7 +122,7 @@ export function collectWorkspacePatterns(
   config: ResolvedLatticeConfig,
 ): string[] {
   const rootPackageJsonPath = path.join(config.rootDir, 'package.json');
-  const patterns = new Set<string>(config.workspace?.packagePatterns ?? []);
+  const patterns = new Set<string>();
 
   if (existsSync(rootPackageJsonPath)) {
     const rootPackageJson = readJsonFile<PackageManifest>(rootPackageJsonPath);
@@ -278,12 +278,7 @@ async function collectWorkspacePackagesFromPatterns(
   const packageJsonPaths = await glob(includePatterns, {
     cwd: config.rootDir,
     absolute: false,
-    ignore: [
-      '**/node_modules/**',
-      '**/dist/**',
-      ...(config.workspace?.ignore ?? []),
-      ...ignorePatterns,
-    ],
+    ignore: ['**/node_modules/**', '**/dist/**', ...ignorePatterns],
   });
   const packages: WorkspacePackage[] = [];
 

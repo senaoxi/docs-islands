@@ -1,13 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  // Internal declaration module build leaf; runtime projects import these types.
-  "extends": ["./tsconfig.json", "../../../../tsconfig.graph.base.json"],
+  "lattice": "runtime-shared",
+  // Shared runtime build leaf; node/client runtime projects depend on this leaf.
+  "extends": ["./tsconfig.lib.json", "../../../../tsconfig.graph.base.json"],
   "compilerOptions": {
-    "rootDir": ".",
+    "rootDir": "..",
     "outDir": "./.tsbuild",
     "tsBuildInfoFile": "./.tsbuild/build.tsbuildinfo"
   },
   "references": [
+    {
+      "path": "../types/tsconfig.lib.build.json"
+    },
     {
       "path": "../../../logger/tsconfig.lib.build.json"
     },

@@ -33,6 +33,24 @@ interface ParsedConfig {
 }
 
 const buildConfigPattern = '**/tsconfig*.build.json';
+const proofFilePattern = /\.(?:[cm]?tsx?|d\.[cm]?ts|json)$/u;
+const defaultSourceInclude = [
+  '**/*.{ts,tsx,cts,mts}',
+  '**/*.d.{ts,cts,mts}',
+  '**/*.json',
+];
+const defaultSourceExclude = [
+  'node_modules',
+  'dist',
+  '.git',
+  '.tsbuild',
+  'coverage',
+  '**/tsconfig*.json',
+  '**/package.json',
+  '.prettierrc.json',
+  '.markdownlint.json',
+  'vercel.json',
+];
 
 const ignoredSemanticCompilerOptions = new Set([
   'baseUrl',
@@ -66,14 +84,6 @@ const ignoredSemanticCompilerOptions = new Set([
   'tsBuildInfoFile',
 ]);
 
-function sourceFilePattern(config: ResolvedLatticeConfig): RegExp {
-  return new RegExp(
-    config.proof?.sourceFilePattern ??
-      String.raw`\.(?:[cm]?tsx?|d\.[cm]?ts|json)$`,
-    'u',
-  );
-}
-
 async function collectBuildConfigPaths(
   config: ResolvedLatticeConfig,
 ): Promise<string[]> {
@@ -90,6 +100,70 @@ async function collectBuildConfigPaths(
   });
 
   return paths.map(normalizeAbsolutePath).sort();
+}
+
+function typecheckRootConfig(config: ResolvedLatticeConfig): string {
+  return config.config?.roots?.typecheck ?? 'tsconfig.json';
+}
+
+function hasGlobSyntax(pattern: string): boolean {
+  return /[*?[\]{}()!+@]/u.test(pattern);
+}
+
+function isDirectoryShorthand(pattern: string): boolean {
+  return (
+    !hasGlobSyntax(pattern) && !pattern.includes('/') && !path.extname(pattern)
+  );
+}
+
+function normalizeSourceExcludePattern(pattern: string): string[] {
+  const normalized = pattern.replaceAll('\\', '/').replace(/\/+$/u, '');
+
+  if (!normalized) {
+    return [];
+  }
+
+  if (isDirectoryShorthand(normalized)) {
+    return [`${normalized}/**`, `**/${normalized}/**`];
+  }
+
+  if (hasGlobSyntax(normalized)) {
+    return [normalized];
+  }
+
+  if (normalized.includes('/')) {
+    return [normalized, `${normalized}/**`];
+  }
+
+  return [normalized, `**/${normalized}`];
+}
+
+function sourceIncludePatterns(config: ResolvedLatticeConfig): string[] {
+  return config.config?.source?.include ?? defaultSourceInclude;
+}
+
+function sourceExcludePatterns(config: ResolvedLatticeConfig): string[] {
+  return (config.config?.source?.exclude ?? defaultSourceExclude).flatMap(
+    normalizeSourceExcludePattern,
+  );
+}
+
+async function collectExpectedSourceFiles(
+  config: ResolvedLatticeConfig,
+): Promise<Set<string>> {
+  const files = await glob(sourceIncludePatterns(config), {
+    cwd: config.rootDir,
+    absolute: true,
+    ignore: sourceExcludePatterns(config),
+    onlyFiles: true,
+  });
+
+  return new Set(
+    files
+      .map(normalizeAbsolutePath)
+      .filter((filePath) => proofFilePattern.test(filePath))
+      .sort(),
+  );
 }
 
 function collectConfiguredSidecarTargets(
@@ -118,16 +192,20 @@ function collectCoverage(options: {
   graphProjectPaths: string[];
   includeAllowlist?: boolean;
   sidecarTargets: SidecarTarget[];
+  sourceFiles: Set<string>;
 }): Map<string, CoverageSource[]> {
   const coverageByFile = new Map<string, CoverageSource[]>();
-  const pattern = sourceFilePattern(options.config);
 
   for (const graphProjectPath of options.graphProjectPaths) {
     for (const filePath of parseProjectFileNames(
       options.config,
       graphProjectPath,
-      pattern,
+      proofFilePattern,
     )) {
+      if (!options.sourceFiles.has(filePath)) {
+        continue;
+      }
+
       addCoverage(coverageByFile, filePath, {
         label: toRelativePath(options.config.rootDir, graphProjectPath),
         type: 'graph',
@@ -139,8 +217,12 @@ function collectCoverage(options: {
     for (const filePath of parseProjectFileNames(
       options.config,
       sidecarTarget.configPath,
-      pattern,
+      proofFilePattern,
     )) {
+      if (!options.sourceFiles.has(filePath)) {
+        continue;
+      }
+
       addCoverage(coverageByFile, filePath, {
         label: `${toRelativePath(options.config.rootDir, sidecarTarget.configPath)} via ${sidecarTarget.tool}`,
         type: 'sidecar',
@@ -150,14 +232,18 @@ function collectCoverage(options: {
 
   if (options.includeAllowlist !== false) {
     for (const entry of options.config.proof?.allowlist ?? []) {
-      addCoverage(
-        coverageByFile,
-        normalizeAbsolutePath(path.join(options.config.rootDir, entry.file)),
-        {
-          label: entry.reason,
-          type: 'allowlist',
-        },
+      const filePath = normalizeAbsolutePath(
+        path.join(options.config.rootDir, entry.file),
       );
+
+      if (!options.sourceFiles.has(filePath)) {
+        continue;
+      }
+
+      addCoverage(coverageByFile, filePath, {
+        label: entry.reason,
+        type: 'allowlist',
+      });
     }
   }
 
@@ -390,16 +476,24 @@ function addBuildConfigProblems(options: {
 function collectConfigFileOwners(
   config: ResolvedLatticeConfig,
   configPaths: string[],
+  sourceFiles: Set<string>,
 ): ConfigFileOwners {
   const ownersByFile: ConfigFileOwners = new Map();
-  const pattern = sourceFilePattern(config);
 
   for (const configPath of configPaths) {
     if (!existsSync(configPath)) {
       continue;
     }
 
-    for (const filePath of parseProjectFileNames(config, configPath, pattern)) {
+    for (const filePath of parseProjectFileNames(
+      config,
+      configPath,
+      proofFilePattern,
+    )) {
+      if (!sourceFiles.has(filePath)) {
+        continue;
+      }
+
       const owners = ownersByFile.get(filePath) ?? [];
 
       owners.push(configPath);
@@ -510,7 +604,7 @@ function addTypecheckRouteProblems(options: {
         'Build companion config is not reachable from IDE/typecheck route:',
         `  build config: ${toRelativePath(options.config.rootDir, buildConfigPath)}`,
         `  expected local config: ${toRelativePath(options.config.rootDir, localConfigPath)}`,
-        `  root: ${options.config.proof?.typecheckRootConfig ?? 'tsconfig.json'}`,
+        `  root: ${typecheckRootConfig(options.config)}`,
         '  reason: every tsconfig*.build.json companion must be reachable from the ordinary tsconfig.json route used by editors and local typecheck analysis.',
       ].join('\n'),
     );
@@ -547,6 +641,39 @@ function addAllowlistProblems(options: {
   }
 }
 
+function addUncoveredSourceProblems(options: {
+  config: ResolvedLatticeConfig;
+  coverageByFile: Map<string, CoverageSource[]>;
+  problems: string[];
+  sourceFiles: Set<string>;
+}): void {
+  const uncoveredFiles = [...options.sourceFiles].filter(
+    (filePath) => !options.coverageByFile.has(filePath),
+  );
+
+  if (uncoveredFiles.length === 0) {
+    return;
+  }
+
+  options.problems.push(
+    [
+      'Source files are not covered by typecheck proof:',
+      ...uncoveredFiles
+        .slice(0, 20)
+        .map(
+          (filePath) =>
+            `  - ${toRelativePath(options.config.rootDir, filePath)}`,
+        ),
+      uncoveredFiles.length > 20
+        ? `  ... ${uncoveredFiles.length - 20} more`
+        : '',
+      '  reason: every file in config.source must be covered by the root graph, a sidecar typecheck target, or an explicit allowlist entry.',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  );
+}
+
 export async function runProofCheck(
   config: ResolvedLatticeConfig,
 ): Promise<boolean> {
@@ -555,10 +682,7 @@ export async function runProofCheck(
   const graphProjectPathSet = new Set(graphProjectPaths);
   const buildConfigPaths = await collectBuildConfigPaths(config);
   const typecheckRoute = collectTypecheckTargetProjectPaths({
-    rootConfigPath: path.join(
-      config.rootDir,
-      config.proof?.typecheckRootConfig ?? 'tsconfig.json',
-    ),
+    rootConfigPath: path.join(config.rootDir, typecheckRootConfig(config)),
     rootDir: config.rootDir,
   });
   const typecheckProjectPaths = typecheckRoute.projectPaths;
@@ -584,21 +708,29 @@ export async function runProofCheck(
   }
 
   const sidecarTargets = collectConfiguredSidecarTargets(config);
+  const sourceFiles = await collectExpectedSourceFiles(config);
   const baseCoverageByFile = collectCoverage({
     config,
     graphProjectPaths,
     includeAllowlist: false,
     sidecarTargets,
+    sourceFiles,
   });
   const coverageByFile = collectCoverage({
     config,
     graphProjectPaths,
     sidecarTargets,
+    sourceFiles,
   });
-  const graphFileOwners = collectConfigFileOwners(config, graphProjectPaths);
+  const graphFileOwners = collectConfigFileOwners(
+    config,
+    graphProjectPaths,
+    sourceFiles,
+  );
   const typecheckFileOwners = collectConfigFileOwners(
     config,
     typecheckProjectPaths,
+    sourceFiles,
   );
 
   addDuplicateGraphCoverageProblems({
@@ -616,6 +748,12 @@ export async function runProofCheck(
     config,
     problems,
   });
+  addUncoveredSourceProblems({
+    config,
+    coverageByFile,
+    problems,
+    sourceFiles,
+  });
 
   if (problems.length > 0) {
     ProofLogger.error(problems.join('\n\n'));
@@ -632,8 +770,9 @@ export async function runProofCheck(
   ProofLogger.success(
     [
       `Checked ${graphProjectPaths.length} graph projects and ${buildConfigPaths.length} build configs.`,
-      `IDE/typecheck route covers ${typecheckProjectPaths.length} configs from ${config.proof?.typecheckRootConfig ?? 'tsconfig.json'}.`,
+      `IDE/typecheck route covers ${typecheckProjectPaths.length} configs from ${typecheckRootConfig(config)}.`,
       `Root graph covers ${graphFileCount} files; configured sidecars cover ${sidecarFileCount} files.`,
+      `Configured source boundary covers ${sourceFiles.size} files.`,
     ].join('\n'),
   );
 

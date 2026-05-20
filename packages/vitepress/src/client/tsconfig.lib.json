@@ -1,0 +1,12 @@
+{
+  // Runtime local check and rolldown-plugin-dts input. Build leaf: ./tsconfig.lib.build.json.
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "isolatedDeclarations": true,
+    "declaration": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": [],
+    "jsx": "preserve"
+  },
+  "include": ["./"]
+}

@@ -1,0 +1,12 @@
+{
+  // Playground-local source/editor check. Dist consumer pipeline owns this config.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "jsx": "preserve",
+    "isolatedDeclarations": false,
+    "declaration": false
+  },
+  "include": [".vitepress/**/*.ts", "components/**/*.tsx"]
+}

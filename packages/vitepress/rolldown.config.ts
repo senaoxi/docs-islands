@@ -280,7 +280,7 @@ const nodeDtsConfig = defineConfig({
   plugins: [
     createManagedLoggerAliasPlugin(),
     dts({
-      tsconfig: 'src/node/tsconfig.json',
+      tsconfig: 'src/node/tsconfig.lib.json',
       emitDtsOnly: true,
       sourcemap,
     }),
@@ -309,7 +309,7 @@ const clientDtsConfig = defineConfig({
   plugins: [
     createManagedLoggerAliasPlugin(),
     dts({
-      tsconfig: 'src/client/tsconfig.json',
+      tsconfig: 'src/client/tsconfig.lib.json',
       emitDtsOnly: true,
       sourcemap,
     }),
@@ -401,7 +401,7 @@ const utilsConfigDtsConfig = defineConfig({
   },
   plugins: [
     dts({
-      tsconfig: 'src/client/tsconfig.json',
+      tsconfig: 'src/client/tsconfig.lib.json',
       emitDtsOnly: true,
       sourcemap,
     }),
@@ -437,7 +437,7 @@ const internalUtilsDtsConfig = defineConfig({
   },
   plugins: [
     dts({
-      tsconfig: 'src/client/tsconfig.json',
+      tsconfig: 'src/client/tsconfig.lib.json',
       emitDtsOnly: true,
       sourcemap,
     }),

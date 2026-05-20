@@ -1,5 +1,8 @@
 {
   // Smoke-local test check. Build leaf: tsconfig.test.build.json.
-  "extends": "./tsconfig.json",
+  "extends": "../../../tsconfig.test.base.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"]
+  },
   "include": ["consumer.fixtures.ts", "helpers.ts", "*.spec.ts"]
 }

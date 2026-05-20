@@ -1095,6 +1095,9 @@ importers:
       '@docs-islands/eslint-config':
         specifier: workspace:*
         version: link:../../eslint-config
+      '@docs-islands/lattice':
+        specifier: link:../../lattice/dist
+        version: link:../../lattice/dist
       '@docs-islands/utils':
         specifier: link:../../../utils/dist
         version: link:../../../utils/dist
@@ -1156,6 +1159,9 @@ importers:
       '@docs-islands/eslint-config':
         specifier: workspace:*
         version: link:../../eslint-config
+      '@docs-islands/lattice':
+        specifier: link:../../lattice/dist
+        version: link:../../lattice/dist
       '@docs-islands/utils':
         specifier: link:../../../utils/dist
         version: link:../../../utils/dist

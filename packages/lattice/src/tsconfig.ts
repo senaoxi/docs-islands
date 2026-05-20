@@ -304,7 +304,7 @@ export function collectGraphProjectPaths(
 ): string[] {
   const rootGraphConfigPath = path.join(
     config.rootDir,
-    config.graph?.rootConfig ?? 'tsconfig.graph.json',
+    config.config?.roots?.graph ?? 'tsconfig.graph.json',
   );
   const seen = new Set<string>();
   const orderedProjects: string[] = [];

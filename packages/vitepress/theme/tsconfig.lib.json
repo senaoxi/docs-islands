@@ -1,9 +1,10 @@
 {
   // Vue SFC/theme check used by vue-tsc; native tsc -b does not parse .vue templates.
-  "extends": "../tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "declaration": true,
-    "types": ["vite/client"],
+    "isolatedDeclarations": false,
+    "types": ["vite/client"]
   },
-  "include": ["./"],
+  "include": ["./"]
 }

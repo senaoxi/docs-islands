@@ -443,6 +443,7 @@ const factory: UnpluginFactory<LoggerPluginOptions | undefined> = (
 export const loggerPlugin = createUnplugin(factory);
 
 export {
+  DEFAULT_LOGGER_MODULE_ID,
   LOGGER_TREE_SHAKING_PLUGIN_NAME,
   transformLoggerTreeShaking,
 } from './transform';

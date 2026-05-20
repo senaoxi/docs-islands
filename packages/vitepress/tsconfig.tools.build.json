@@ -9,15 +9,6 @@
   },
   "references": [
     {
-      "path": "./src/shared/tsconfig.build.json"
-    },
-    {
-      "path": "./src/node/tsconfig.build.json"
-    },
-    {
-      "path": "./src/client/tsconfig.build.json"
-    },
-    {
       "path": "../../packages/logger/tsconfig.lib.build.json"
     }
   ]

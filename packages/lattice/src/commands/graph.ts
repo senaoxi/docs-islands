@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { builtinModules } from 'node:module';
 import path from 'node:path';
 import ts from 'typescript';
 import type { ResolvedLatticeConfig } from '../config';
@@ -8,6 +7,7 @@ import {
   collectGraphProjectPaths,
   formatReferences,
   getRawReferencePaths,
+  readJsonConfig,
 } from '../tsconfig';
 import {
   isPathInsideDirectory,
@@ -25,6 +25,8 @@ import {
 interface ProjectInfo {
   configPath: string;
   fileNames: string[];
+  label: string | null;
+  labelProblem: string | null;
   options: ts.CompilerOptions;
   references: Set<string>;
 }
@@ -33,6 +35,21 @@ interface ImportRecord {
   filePath: string;
   line: number;
   specifier: string;
+}
+
+interface GraphRuleRefDeny {
+  path: string;
+  reason: string;
+}
+
+interface GraphRuleDepDeny {
+  name: string;
+  reason: string;
+}
+
+interface NormalizedGraphRules {
+  depsByLabel: Map<string, Map<string, GraphRuleDepDeny>>;
+  refsByLabel: Map<string, Map<string, GraphRuleRefDeny>>;
 }
 
 const buildConfigFilePattern = /^tsconfig(?:\..+)?\.build\.json$/u;
@@ -90,14 +107,6 @@ const comparableTypecheckOptions: (keyof ts.CompilerOptions)[] = [
   'verbatimModuleSyntax',
 ];
 
-const nodeBuiltinSpecifiers = new Set(
-  builtinModules.flatMap((specifier) =>
-    specifier.startsWith('node:')
-      ? [specifier, specifier.slice('node:'.length)]
-      : [specifier, `node:${specifier}`],
-  ),
-);
-
 function isRelativeSpecifier(specifier: string): boolean {
   return (
     specifier === '.' ||
@@ -120,6 +129,55 @@ function getTypecheckConfigPath(buildConfigPath: string): string {
       : fileName.replace(/\.build\.json$/u, '.json');
 
   return path.join(directory, typecheckFileName);
+}
+
+function formatUnknownValue(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+
+  return JSON.stringify(value);
+}
+
+function readProjectLabel(
+  config: ResolvedLatticeConfig,
+  configPath: string,
+): Pick<ProjectInfo, 'label' | 'labelProblem'> {
+  if (!isBuildProjectConfig(configPath)) {
+    return {
+      label: null,
+      labelProblem: null,
+    };
+  }
+
+  const configObject = readJsonConfig(config, configPath);
+
+  if (!Object.hasOwn(configObject, 'lattice')) {
+    return {
+      label: null,
+      labelProblem: null,
+    };
+  }
+
+  const value = configObject.lattice;
+
+  if (typeof value === 'string' && value.trim()) {
+    return {
+      label: value.trim(),
+      labelProblem: null,
+    };
+  }
+
+  return {
+    label: null,
+    labelProblem: [
+      'Invalid Lattice graph label:',
+      `  project: ${toRelativePath(config.rootDir, configPath)}`,
+      `  field: lattice`,
+      `  value: ${formatUnknownValue(value)}`,
+      '  reason: tsconfig*.build.json may declare one non-empty string label with "lattice".',
+    ].join('\n'),
+  };
 }
 
 function parseProject(
@@ -158,11 +216,15 @@ function parseProject(
     );
   }
 
+  const labelInfo = readProjectLabel(config, configPath);
+
   return {
     configPath: normalizeAbsolutePath(configPath),
     fileNames: parsed.fileNames
       .filter((fileName) => /\.(?:[cm]?tsx?|d\.[cm]?ts)$/u.test(fileName))
       .map(normalizeAbsolutePath),
+    label: labelInfo.label,
+    labelProblem: labelInfo.labelProblem,
     options: parsed.options,
     references: new Set(getRawReferencePaths(config, configPath)),
   };
@@ -178,6 +240,280 @@ function formatCompilerOptionValue(value: unknown): string {
 
 function compilerOptionEquals(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function getRulesRecord(
+  config: ResolvedLatticeConfig,
+  problems: string[],
+): Record<string, unknown> {
+  const rules = config.graph?.rules;
+
+  if (rules === undefined) {
+    return {};
+  }
+
+  if (!isPlainRecord(rules)) {
+    problems.push(
+      [
+        'Invalid graph rules config:',
+        '  field: graph.rules',
+        `  value: ${formatUnknownValue(rules)}`,
+        '  reason: graph.rules must be an object keyed by Lattice labels.',
+      ].join('\n'),
+    );
+    return {};
+  }
+
+  return rules;
+}
+
+function addRuleEntryConfigProblem(
+  problems: string[],
+  details: string[],
+): void {
+  problems.push(['Invalid graph rule config:', ...details].join('\n'));
+}
+
+function addNormalizedRuleRef(options: {
+  config: ResolvedLatticeConfig;
+  entry: unknown;
+  index: number;
+  label: string;
+  problems: string[];
+  projectPathSet: Set<string>;
+  refsByLabel: Map<string, Map<string, GraphRuleRefDeny>>;
+}): void {
+  const field = `graph.rules.${options.label}.deny.refs[${options.index}]`;
+
+  if (!isPlainRecord(options.entry)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}`,
+      `  value: ${formatUnknownValue(options.entry)}`,
+      '  reason: deny.refs entries must be objects with non-empty path and reason fields.',
+    ]);
+    return;
+  }
+
+  const pathValue = options.entry.path;
+  const reasonValue = options.entry.reason;
+
+  if (!isNonEmptyString(pathValue)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}.path`,
+      `  value: ${formatUnknownValue(pathValue)}`,
+      '  reason: deny.refs path is required and must be a non-empty string.',
+    ]);
+    return;
+  }
+
+  if (!isNonEmptyString(reasonValue)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}.reason`,
+      `  value: ${formatUnknownValue(reasonValue)}`,
+      '  reason: deny.refs reason is required and must be a non-empty string.',
+    ]);
+    return;
+  }
+
+  const refPath = normalizeAbsolutePath(
+    path.resolve(options.config.rootDir, pathValue),
+  );
+
+  if (!options.projectPathSet.has(refPath)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}.path`,
+      `  path: ${pathValue}`,
+      '  reason: deny.refs path must point to a project reachable from the root graph config.',
+    ]);
+    return;
+  }
+
+  if (!isBuildProjectConfig(refPath)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}.path`,
+      `  path: ${pathValue}`,
+      '  reason: deny.refs path must point to a tsconfig*.build.json project.',
+    ]);
+    return;
+  }
+
+  const refs = options.refsByLabel.get(options.label) ?? new Map();
+
+  refs.set(refPath, {
+    path: refPath,
+    reason: reasonValue.trim(),
+  });
+  options.refsByLabel.set(options.label, refs);
+}
+
+function addNormalizedRuleDep(options: {
+  depsByLabel: Map<string, Map<string, GraphRuleDepDeny>>;
+  entry: unknown;
+  index: number;
+  label: string;
+  packageNames: Set<string>;
+  problems: string[];
+}): void {
+  const field = `graph.rules.${options.label}.deny.deps[${options.index}]`;
+
+  if (!isPlainRecord(options.entry)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}`,
+      `  value: ${formatUnknownValue(options.entry)}`,
+      '  reason: deny.deps entries must be objects with non-empty name and reason fields.',
+    ]);
+    return;
+  }
+
+  const nameValue = options.entry.name;
+  const reasonValue = options.entry.reason;
+
+  if (!isNonEmptyString(nameValue)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}.name`,
+      `  value: ${formatUnknownValue(nameValue)}`,
+      '  reason: deny.deps name is required and must be a non-empty string.',
+    ]);
+    return;
+  }
+
+  if (!isNonEmptyString(reasonValue)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}.reason`,
+      `  value: ${formatUnknownValue(reasonValue)}`,
+      '  reason: deny.deps reason is required and must be a non-empty string.',
+    ]);
+    return;
+  }
+
+  const packageName = nameValue.trim();
+
+  if (!options.packageNames.has(packageName)) {
+    addRuleEntryConfigProblem(options.problems, [
+      `  field: ${field}.name`,
+      `  name: ${packageName}`,
+      '  reason: deny.deps name must match a discovered workspace package.',
+    ]);
+    return;
+  }
+
+  const deps = options.depsByLabel.get(options.label) ?? new Map();
+
+  deps.set(packageName, {
+    name: packageName,
+    reason: reasonValue.trim(),
+  });
+  options.depsByLabel.set(options.label, deps);
+}
+
+function normalizeGraphRules(options: {
+  config: ResolvedLatticeConfig;
+  packages: WorkspacePackage[];
+  problems: string[];
+  projectPaths: string[];
+}): NormalizedGraphRules {
+  const refsByLabel = new Map<string, Map<string, GraphRuleRefDeny>>();
+  const depsByLabel = new Map<string, Map<string, GraphRuleDepDeny>>();
+  const projectPathSet = new Set(options.projectPaths);
+  const packageNames = new Set(
+    options.packages.map((workspacePackage) => workspacePackage.name),
+  );
+
+  for (const [rawLabel, rawRule] of Object.entries(
+    getRulesRecord(options.config, options.problems),
+  )) {
+    const label = rawLabel.trim();
+
+    if (!label) {
+      addRuleEntryConfigProblem(options.problems, [
+        '  field: graph.rules',
+        '  reason: graph.rules keys must be non-empty labels.',
+      ]);
+      continue;
+    }
+
+    if (!isPlainRecord(rawRule)) {
+      addRuleEntryConfigProblem(options.problems, [
+        `  field: graph.rules.${rawLabel}`,
+        `  value: ${formatUnknownValue(rawRule)}`,
+        '  reason: each graph rule must be an object.',
+      ]);
+      continue;
+    }
+
+    if (rawRule.deny === undefined) {
+      continue;
+    }
+
+    if (!isPlainRecord(rawRule.deny)) {
+      addRuleEntryConfigProblem(options.problems, [
+        `  field: graph.rules.${label}.deny`,
+        `  value: ${formatUnknownValue(rawRule.deny)}`,
+        '  reason: graph rule deny must be an object.',
+      ]);
+      continue;
+    }
+
+    const refs = rawRule.deny.refs;
+
+    if (refs !== undefined) {
+      if (!Array.isArray(refs)) {
+        addRuleEntryConfigProblem(options.problems, [
+          `  field: graph.rules.${label}.deny.refs`,
+          `  value: ${formatUnknownValue(refs)}`,
+          '  reason: deny.refs must be an array.',
+        ]);
+      } else {
+        refs.forEach((entry, index) => {
+          addNormalizedRuleRef({
+            config: options.config,
+            entry,
+            index,
+            label,
+            problems: options.problems,
+            projectPathSet,
+            refsByLabel,
+          });
+        });
+      }
+    }
+
+    const deps = rawRule.deny.deps;
+
+    if (deps !== undefined) {
+      if (!Array.isArray(deps)) {
+        addRuleEntryConfigProblem(options.problems, [
+          `  field: graph.rules.${label}.deny.deps`,
+          `  value: ${formatUnknownValue(deps)}`,
+          '  reason: deny.deps must be an array.',
+        ]);
+      } else {
+        deps.forEach((entry, index) => {
+          addNormalizedRuleDep({
+            depsByLabel,
+            entry,
+            index,
+            label,
+            packageNames,
+            problems: options.problems,
+          });
+        });
+      }
+    }
+  }
+
+  return {
+    depsByLabel,
+    refsByLabel,
+  };
 }
 
 function addBuildOptionProblems(
@@ -384,104 +720,38 @@ function resolveInternalImport(
     : null;
 }
 
-function matcherIncludesPath(
-  relativePath: string,
-  values: string[] | undefined,
-): boolean {
-  return values?.some((value) => relativePath.includes(value)) === true;
-}
-
-function getProjectKind(
-  config: ResolvedLatticeConfig,
-  configPath: string,
-): string {
-  const relativePath = toRelativePath(config.rootDir, configPath);
-
-  for (const matcher of config.graph?.projectKinds ?? []) {
-    if (matcher.paths?.includes(relativePath)) {
-      return matcher.kind;
-    }
-
-    if (matcher.suffixes?.some((suffix) => relativePath.endsWith(suffix))) {
-      return matcher.kind;
-    }
-
-    if (matcherIncludesPath(relativePath, matcher.includes)) {
-      return matcher.kind;
-    }
+function getDeniedRefRule(
+  rules: NormalizedGraphRules,
+  label: string | null,
+  targetProjectPath: string,
+): GraphRuleRefDeny | null {
+  if (!label) {
+    return null;
   }
 
-  return 'unknown';
+  return rules.refsByLabel.get(label)?.get(targetProjectPath) ?? null;
 }
 
-function isProductionGraphKind(
-  config: ResolvedLatticeConfig,
-  kind: string,
-): boolean {
-  return config.graph?.productionKinds?.includes(kind) === true;
-}
-
-function getForbiddenEdgeReason(
-  config: ResolvedLatticeConfig,
-  fromProjectPath: string,
-  toProjectPath: string,
-): string | null {
-  const fromKind = getProjectKind(config, fromProjectPath);
-  const toKind = getProjectKind(config, toProjectPath);
-
-  for (const rule of config.graph?.forbiddenEdges ?? []) {
-    if (rule.fromKinds.includes(fromKind) && rule.toKinds.includes(toKind)) {
-      return rule.reason;
-    }
+function getDeniedDepRule(
+  rules: NormalizedGraphRules,
+  label: string | null,
+  targetPackageName: string,
+): GraphRuleDepDeny | null {
+  if (!label) {
+    return null;
   }
 
-  return null;
+  return rules.depsByLabel.get(label)?.get(targetPackageName) ?? null;
 }
 
-function getForbiddenNodeBuiltinReason(
-  config: ResolvedLatticeConfig,
-  projectPath: string,
-): string | null {
-  const projectKind = getProjectKind(config, projectPath);
-
-  for (const rule of config.graph?.nodeBuiltinRules ?? []) {
-    if (rule.kinds.includes(projectKind)) {
-      return rule.reason;
-    }
-  }
-
-  return null;
-}
-
-function projectPriority(
-  config: ResolvedLatticeConfig,
-  configPath: string,
-): number {
-  const priority = [
-    'lib',
-    'runtime-shared',
-    'runtime-node',
-    'runtime-client',
-    'types',
-    'tools',
-    'test',
-    'solution',
-    'unknown',
-  ];
-  const index = priority.indexOf(getProjectKind(config, configPath));
-
-  return index === -1 ? priority.length : index;
-}
-
-function chooseOwningProject(
-  config: ResolvedLatticeConfig,
-  projectPaths: string[],
-): string {
+function chooseOwningProject(projectPaths: string[]): string {
   return [...projectPaths].sort((left, right) => {
-    const priorityDelta =
-      projectPriority(config, left) - projectPriority(config, right);
+    const directoryDepthDelta =
+      path.dirname(right).length - path.dirname(left).length;
 
-    return priorityDelta === 0 ? left.localeCompare(right) : priorityDelta;
+    return directoryDepthDelta === 0
+      ? left.localeCompare(right)
+      : directoryDepthDelta;
   })[0]!;
 }
 
@@ -540,46 +810,13 @@ function formatArtifactDependencyPolicy(
     : 'artifact consumers should use link: for local dist output, or catalog:/semver to consume the published production package, and should not keep a project reference.';
 }
 
-function inferConfiguredProject(
-  config: ResolvedLatticeConfig,
-  resolvedFilePath: string,
-  targetPackage: WorkspacePackage,
-): string | null {
-  const relativePath = toRelativePath(config.rootDir, resolvedFilePath);
-
-  for (const rule of config.graph?.inferredProjects ?? []) {
-    if (rule.packageName && rule.packageName !== targetPackage.name) {
-      continue;
-    }
-
-    if (!relativePath.startsWith(rule.sourcePrefix)) {
-      continue;
-    }
-
-    return normalizeAbsolutePath(path.join(config.rootDir, rule.project));
-  }
-
-  return null;
-}
-
 function inferPackageProject(
-  config: ResolvedLatticeConfig,
   resolvedFilePath: string,
   workspacePackage: WorkspacePackage,
   projectPaths: string[],
 ): string | null {
   if (!isPathInsideDirectory(resolvedFilePath, workspacePackage.directory)) {
     return null;
-  }
-
-  const configured = inferConfiguredProject(
-    config,
-    resolvedFilePath,
-    workspacePackage,
-  );
-
-  if (configured) {
-    return configured;
   }
 
   return (
@@ -608,7 +845,6 @@ function createFileOwnerLookup(projects: ProjectInfo[]): Map<string, string[]> {
 }
 
 function findTargetProject(options: {
-  config: ResolvedLatticeConfig;
   fileOwnerLookup: Map<string, string[]>;
   packages: WorkspacePackage[];
   projectPaths: string[];
@@ -618,7 +854,7 @@ function findTargetProject(options: {
   const ownerProjects = options.fileOwnerLookup.get(options.resolvedFilePath);
 
   if (ownerProjects && ownerProjects.length > 0) {
-    return chooseOwningProject(options.config, ownerProjects);
+    return chooseOwningProject(ownerProjects);
   }
 
   const workspacePackage = findPackageForSpecifier(
@@ -631,43 +867,110 @@ function findTargetProject(options: {
   }
 
   return inferPackageProject(
-    options.config,
     options.resolvedFilePath,
     workspacePackage,
     options.projectPaths,
   );
 }
 
-function addForbiddenReferenceProblems(
-  config: ResolvedLatticeConfig,
-  project: ProjectInfo,
-  projectsByPath: Map<string, ProjectInfo>,
-  problems: string[],
-): void {
-  for (const referencePath of project.references) {
-    if (!projectsByPath.has(referencePath)) {
+function addDeniedReferenceProblems(options: {
+  config: ResolvedLatticeConfig;
+  packages: WorkspacePackage[];
+  problems: string[];
+  project: ProjectInfo;
+  projectsByPath: Map<string, ProjectInfo>;
+  rules: NormalizedGraphRules;
+}): void {
+  if (!options.project.label) {
+    return;
+  }
+
+  for (const referencePath of options.project.references) {
+    if (!options.projectsByPath.has(referencePath)) {
       continue;
     }
 
-    const forbiddenReason = getForbiddenEdgeReason(
-      config,
-      project.configPath,
+    const deniedRefRule = getDeniedRefRule(
+      options.rules,
+      options.project.label,
       referencePath,
     );
+    const targetPackage = findPackageForFile(referencePath, options.packages);
+    const deniedDepRule = targetPackage
+      ? getDeniedDepRule(
+          options.rules,
+          options.project.label,
+          targetPackage.name,
+        )
+      : null;
 
-    if (!forbiddenReason) {
+    if (!deniedRefRule && !deniedDepRule) {
       continue;
     }
 
-    problems.push(
-      [
-        'Forbidden project reference:',
-        `  referencing project: ${toRelativePath(config.rootDir, project.configPath)}`,
-        `  referenced project: ${toRelativePath(config.rootDir, referencePath)}`,
-        `  reason: ${forbiddenReason}`,
-      ].join('\n'),
-    );
+    const lines = [
+      'Denied graph access:',
+      `  rule: ${options.project.label}`,
+      `  referencing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
+      `  referenced project: ${toRelativePath(options.config.rootDir, referencePath)}`,
+    ];
+
+    if (deniedRefRule) {
+      lines.push(
+        `  denied ref: ${toRelativePath(options.config.rootDir, deniedRefRule.path)}`,
+        `  reason: ${deniedRefRule.reason}`,
+      );
+    } else if (deniedDepRule) {
+      lines.push(
+        `  denied dependency: ${deniedDepRule.name}`,
+        `  reason: ${deniedDepRule.reason}`,
+      );
+    }
+
+    options.problems.push(lines.join('\n'));
   }
+}
+
+function addDeniedPackageImportProblem(options: {
+  config: ResolvedLatticeConfig;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  problems: string[];
+  rule: GraphRuleDepDeny;
+}): void {
+  options.problems.push(
+    [
+      'Denied graph access:',
+      `  rule: ${options.project.label}`,
+      `  importing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
+      `  file: ${toRelativePath(options.config.rootDir, options.importRecord.filePath)}:${options.importRecord.line}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  denied dependency: ${options.rule.name}`,
+      `  reason: ${options.rule.reason}`,
+    ].join('\n'),
+  );
+}
+
+function addDeniedRefImportProblem(options: {
+  config: ResolvedLatticeConfig;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  problems: string[];
+  rule: GraphRuleRefDeny;
+  targetProjectPath: string;
+}): void {
+  options.problems.push(
+    [
+      'Denied graph access:',
+      `  rule: ${options.project.label}`,
+      `  importing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
+      `  file: ${toRelativePath(options.config.rootDir, options.importRecord.filePath)}:${options.importRecord.line}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  target project: ${toRelativePath(options.config.rootDir, options.targetProjectPath)}`,
+      `  denied ref: ${toRelativePath(options.config.rootDir, options.rule.path)}`,
+      `  reason: ${options.rule.reason}`,
+    ].join('\n'),
+  );
 }
 
 function addWorkspaceReferenceDependencyProblems(
@@ -735,11 +1038,28 @@ export async function runGraphCheck(
   const packages = await collectWorkspacePackages(config);
   const importers = collectImporters(config, packages);
   const problems: string[] = [];
+  const graphRules = normalizeGraphRules({
+    config,
+    packages,
+    problems,
+    projectPaths,
+  });
 
   for (const project of projects) {
+    if (project.labelProblem) {
+      problems.push(project.labelProblem);
+    }
+
     addBuildOptionProblems(config, project, problems);
     addTypecheckParityProblems(config, project, problems);
-    addForbiddenReferenceProblems(config, project, projectsByPath, problems);
+    addDeniedReferenceProblems({
+      config,
+      packages,
+      problems,
+      project,
+      projectsByPath,
+      rules: graphRules,
+    });
     addWorkspaceReferenceDependencyProblems(
       config,
       project,
@@ -751,27 +1071,6 @@ export async function runGraphCheck(
 
     for (const filePath of project.fileNames) {
       for (const importRecord of collectImportsFromFile(filePath)) {
-        if (nodeBuiltinSpecifiers.has(importRecord.specifier)) {
-          const forbiddenReason = getForbiddenNodeBuiltinReason(
-            config,
-            project.configPath,
-          );
-
-          if (forbiddenReason) {
-            problems.push(
-              [
-                'Forbidden Node builtin import:',
-                `  importing project: ${toRelativePath(config.rootDir, project.configPath)}`,
-                `  file: ${toRelativePath(config.rootDir, importRecord.filePath)}:${importRecord.line}`,
-                `  imported specifier: ${importRecord.specifier}`,
-                `  reason: ${forbiddenReason}`,
-              ].join('\n'),
-            );
-          }
-
-          continue;
-        }
-
         const resolvedFilePath = resolveInternalImport(
           importRecord.specifier,
           filePath,
@@ -784,8 +1083,22 @@ export async function runGraphCheck(
         const importer = targetPackage
           ? findImporterForFile(importRecord.filePath, importers)
           : null;
+        const unresolvedDeniedDepRule = targetPackage
+          ? getDeniedDepRule(graphRules, project.label, targetPackage.name)
+          : null;
 
         if (!resolvedFilePath) {
+          if (unresolvedDeniedDepRule) {
+            addDeniedPackageImportProblem({
+              config,
+              importRecord,
+              problems,
+              project,
+              rule: unresolvedDeniedDepRule,
+            });
+            continue;
+          }
+
           if (!targetPackage) {
             continue;
           }
@@ -803,26 +1116,43 @@ export async function runGraphCheck(
           continue;
         }
 
-        if (
-          isProductionGraphKind(
+        const targetWorkspacePackageForResolved = findPackageForFile(
+          resolvedFilePath,
+          packages,
+        );
+        const deniedDepRule =
+          (targetPackage
+            ? getDeniedDepRule(graphRules, project.label, targetPackage.name)
+            : null) ??
+          (targetWorkspacePackageForResolved
+            ? getDeniedDepRule(
+                graphRules,
+                project.label,
+                targetWorkspacePackageForResolved.name,
+              )
+            : null);
+
+        if (deniedDepRule) {
+          addDeniedPackageImportProblem({
             config,
-            getProjectKind(config, project.configPath),
-          ) &&
-          isRelativeSpecifier(importRecord.specifier)
-        ) {
+            importRecord,
+            problems,
+            project,
+            rule: deniedDepRule,
+          });
+          continue;
+        }
+
+        if (isRelativeSpecifier(importRecord.specifier)) {
           const sourcePackage = findPackageForFile(
             importRecord.filePath,
-            packages,
-          );
-          const targetWorkspacePackage = findPackageForFile(
-            resolvedFilePath,
             packages,
           );
 
           if (
             sourcePackage &&
-            targetWorkspacePackage &&
-            sourcePackage.name !== targetWorkspacePackage.name
+            targetWorkspacePackageForResolved &&
+            sourcePackage.name !== targetWorkspacePackageForResolved.name
           ) {
             problems.push(
               [
@@ -831,7 +1161,7 @@ export async function runGraphCheck(
                 `  file: ${toRelativePath(config.rootDir, importRecord.filePath)}:${importRecord.line}`,
                 `  imported specifier: ${importRecord.specifier}`,
                 `  source package: ${sourcePackage.name}`,
-                `  target package: ${targetWorkspacePackage.name}`,
+                `  target package: ${targetWorkspacePackageForResolved.name}`,
                 `  resolved file: ${toRelativePath(config.rootDir, resolvedFilePath)}`,
                 '  reason: workspace packages must depend through package exports.',
               ].join('\n'),
@@ -853,7 +1183,6 @@ export async function runGraphCheck(
           !fileOwnerLookup.has(resolvedFilePath)
         ) {
           const referencedProjectPath = inferPackageProject(
-            config,
             resolvedFilePath,
             targetPackage,
             projectPaths,
@@ -886,7 +1215,6 @@ export async function runGraphCheck(
         }
 
         const targetProjectPath = findTargetProject({
-          config,
           fileOwnerLookup,
           packages,
           projectPaths,
@@ -935,23 +1263,22 @@ export async function runGraphCheck(
           continue;
         }
 
-        const forbiddenReason = getForbiddenEdgeReason(
-          config,
-          project.configPath,
+        const deniedRefRule = getDeniedRefRule(
+          graphRules,
+          project.label,
           targetProjectPath,
         );
 
-        if (forbiddenReason) {
-          problems.push(
-            [
-              'Forbidden graph import:',
-              `  importing project: ${toRelativePath(config.rootDir, project.configPath)}`,
-              `  file: ${toRelativePath(config.rootDir, importRecord.filePath)}:${importRecord.line}`,
-              `  imported specifier: ${importRecord.specifier}`,
-              `  target project: ${toRelativePath(config.rootDir, targetProjectPath)}`,
-              `  reason: ${forbiddenReason}`,
-            ].join('\n'),
-          );
+        if (deniedRefRule) {
+          addDeniedRefImportProblem({
+            config,
+            importRecord,
+            problems,
+            project,
+            rule: deniedRefRule,
+            targetProjectPath,
+          });
+          continue;
         }
 
         if (!projectsByPath.has(targetProjectPath)) {

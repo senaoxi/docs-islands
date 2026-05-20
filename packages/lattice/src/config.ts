@@ -31,11 +31,11 @@ export type PipelineStep =
       /**
        * Executable name, for example `pnpm`, `tsc`, or `vue-tsc`.
        *
-       * The command runs from `workspace.rootDir` unless `cwd` is set.
+       * The command runs from the inferred workspace root unless `cwd` is set.
        */
       command: string;
       /**
-       * Working directory for this step, relative to `workspace.rootDir`.
+       * Working directory for this step, relative to the inferred workspace root.
        */
       cwd?: string;
       /**
@@ -70,23 +70,69 @@ export type BuiltinTaskName =
   | 'tsc:run';
 
 /**
- * Workspace discovery and path settings.
+ * Shared TypeScript route roots used by several Lattice checks.
  */
-export interface WorkspaceConfig {
+export interface LatticeRootsConfig {
   /**
-   * Extra glob patterns to ignore while discovering workspace packages.
-   */
-  ignore?: string[];
-  /**
-   * Extra package.json globs when `pnpm-workspace.yaml` is not enough.
-   */
-  packagePatterns?: string[];
-  /**
-   * Repository root, relative to the config file.
+   * Root solution tsconfig for build graph traversal, relative to
+   * the inferred workspace root.
    *
-   * @default "."
+   * @default "tsconfig.graph.json"
    */
-  rootDir?: string;
+  graph?: string;
+  /**
+   * Root IDE/typecheck solution config, relative to the inferred workspace root.
+   *
+   * @default "tsconfig.json"
+   */
+  typecheck?: string;
+}
+
+/**
+ * Source boundary that must be covered by graph, sidecar, or allowlist proof.
+ */
+export interface SourceBoundaryConfig {
+  /**
+   * Glob patterns for source files that need proof coverage.
+   *
+   * @default: [
+   *   "**\/*.{ts,tsx,cts,mts}",
+   *   "**\/*.d.{ts,cts,mts}",
+   *   "**\/*.json",
+   * ]
+   */
+  include?: string[];
+  /**
+   * Glob patterns or directory shorthands to omit from proof coverage.
+   *
+   * @default: [
+   *   "node_modules",
+   *   "dist",
+   *   ".git",
+   *   ".tsbuild",
+   *   "coverage",
+   *   "**\/tsconfig*.json",
+   *   "**\/package.json",
+   *   ".prettierrc.json",
+   *   ".markdownlint.json",
+   *   "vercel.json",
+   * ]
+   */
+  exclude?: string[];
+}
+
+/**
+ * Shared project facts used by graph, paths, proof, and related checks.
+ */
+export interface SharedLatticeConfig {
+  /**
+   * TypeScript route roots shared by checks.
+   */
+  roots?: LatticeRootsConfig;
+  /**
+   * Source file boundary used by coverage proof.
+   */
+  source?: SourceBoundaryConfig;
 }
 
 /**
@@ -124,57 +170,13 @@ export interface PathsConfig {
 }
 
 /**
- * Rule that assigns a TypeScript config file to a project kind.
+ * Build graph boundary denied to projects with a matching Lattice label.
  */
-export interface ProjectKindMatcher {
+export interface GraphRuleRefDenyEntry {
   /**
-   * Path fragments that must appear in the config path.
+   * Target `tsconfig*.build.json` path, relative to the inferred workspace root.
    */
-  includes?: string[];
-  /**
-   * Project kind to assign when this matcher applies.
-   *
-   * Examples: `lib`, `test`, `runtime-client`, `runtime-node`.
-   */
-  kind: string;
-  /**
-   * Exact config paths, relative to `workspace.rootDir`.
-   */
-  paths?: string[];
-  /**
-   * Path suffixes that match this kind.
-   *
-   * Example: `/tsconfig.test.build.json`.
-   */
-  suffixes?: string[];
-}
-
-/**
- * Architecture rule that forbids references or imports from one kind to another.
- */
-export interface GraphForbiddenEdge {
-  /**
-   * Source project kinds the rule applies to.
-   */
-  fromKinds: string[];
-  /**
-   * Human-readable explanation shown when the rule fails.
-   */
-  reason: string;
-  /**
-   * Target project kinds that must not be depended on.
-   */
-  toKinds: string[];
-}
-
-/**
- * Rule that blocks Node.js built-in imports for selected project kinds.
- */
-export interface GraphNodeBuiltinRule {
-  /**
-   * Project kinds that must not import Node.js built-ins.
-   */
-  kinds: string[];
+  path: string;
   /**
    * Human-readable explanation shown when the rule fails.
    */
@@ -182,21 +184,42 @@ export interface GraphNodeBuiltinRule {
 }
 
 /**
- * Manual source ownership hint for files that TypeScript cannot infer cleanly.
+ * Workspace package dependency denied to projects with a matching Lattice label.
  */
-export interface GraphInferredProject {
+export interface GraphRuleDepDenyEntry {
   /**
-   * Package name this source prefix belongs to.
+   * Target workspace package name.
    */
-  packageName?: string;
+  name: string;
   /**
-   * Graph project that owns the source prefix, relative to `workspace.rootDir`.
+   * Human-readable explanation shown when the rule fails.
    */
-  project: string;
+  reason: string;
+}
+
+/**
+ * Deny lists for a Lattice graph label.
+ */
+export interface GraphRuleDenyConfig {
   /**
-   * Source path prefix owned by the project, relative to `workspace.rootDir`.
+   * Build graph boundaries that matching projects must not reference or import.
    */
-  sourcePrefix: string;
+  refs?: GraphRuleRefDenyEntry[];
+  /**
+   * Workspace packages that matching projects must not reference or import.
+   */
+  deps?: GraphRuleDepDenyEntry[];
+}
+
+/**
+ * Package-level graph governance rule keyed by a label declared in
+ * `tsconfig*.build.json`.
+ */
+export interface GraphRule {
+  /**
+   * Denied graph boundaries and workspace package dependencies.
+   */
+  deny?: GraphRuleDenyConfig;
 }
 
 /**
@@ -204,38 +227,12 @@ export interface GraphInferredProject {
  */
 export interface GraphConfig {
   /**
-   * Forbidden project-kind dependency rules.
-   */
-  forbiddenEdges?: GraphForbiddenEdge[];
-  /**
-   * Extra ownership hints for source folders that are not obvious from includes.
-   */
-  inferredProjects?: GraphInferredProject[];
-  /**
-   * Rules that prevent selected project kinds from importing Node.js built-ins.
-   */
-  nodeBuiltinRules?: GraphNodeBuiltinRule[];
-  /**
-   * Project kinds considered production code.
+   * Label-based package and build-boundary access rules.
    *
-   * These are useful when a rule should apply to every distributable project.
+   * A `tsconfig*.build.json` can opt into one rule by declaring
+   * `"lattice": "<label>"`.
    */
-  productionKinds?: string[];
-  /**
-   * Ordered matchers used to classify each TypeScript config in the graph.
-   */
-  projectKinds?: ProjectKindMatcher[];
-  /**
-   * Root solution tsconfig for graph traversal, relative to `workspace.rootDir`.
-   *
-   * @default "tsconfig.graph.json"
-   */
-  rootConfig?: string;
-  /**
-   * Project kinds that act as solution/aggregator configs instead of source
-   * leaves.
-   */
-  solutionKinds?: string[];
+  rules?: Record<string, GraphRule>;
 }
 
 /**
@@ -244,7 +241,7 @@ export interface GraphConfig {
  */
 export interface ProofAllowlistEntry {
   /**
-   * File path to allow, relative to `workspace.rootDir`.
+   * File path to allow, relative to the inferred workspace root.
    */
   file: string;
   /**
@@ -258,7 +255,7 @@ export interface ProofAllowlistEntry {
  */
 export interface ProofSidecarTarget {
   /**
-   * Tsconfig path for the sidecar typecheck, relative to `workspace.rootDir`.
+   * Tsconfig path for the sidecar typecheck, relative to the inferred workspace root.
    */
   config: string;
   /**
@@ -283,16 +280,6 @@ export interface ProofConfig {
    * Extra typecheck targets that are not part of the root graph.
    */
   sidecarTargets?: ProofSidecarTarget[];
-  /**
-   * Regular expression string used to decide which source files need coverage.
-   */
-  sourceFilePattern?: string;
-  /**
-   * Root IDE/typecheck solution config, relative to `workspace.rootDir`.
-   *
-   * @default "tsconfig.json"
-   */
-  typecheckRootConfig?: string;
 }
 
 /**
@@ -361,7 +348,7 @@ export interface PackageBoundaryCheckConfig {
  */
 export interface PackageCheckTarget {
   /**
-   * Built package directory to scan, relative to `workspace.rootDir`.
+   * Built package directory to scan, relative to the inferred workspace root.
    */
   distDir: string;
   /**
@@ -405,6 +392,10 @@ export interface PackageChecksConfig {
  */
 export interface LatticeConfig {
   /**
+   * Shared project facts, such as TypeScript route roots and source boundary.
+   */
+  config?: SharedLatticeConfig;
+  /**
    * TypeScript project graph and architecture rules.
    */
   graph?: GraphConfig;
@@ -424,10 +415,6 @@ export interface LatticeConfig {
    * Rules that prove source files are covered by graph or sidecar typechecks.
    */
   proof?: ProofConfig;
-  /**
-   * Workspace discovery and root path settings.
-   */
-  workspace?: WorkspaceConfig;
 }
 
 /**
@@ -478,7 +465,7 @@ export interface ResolvedLatticeConfig extends LatticeConfig {
    */
   configPath: string;
   /**
-   * Absolute workspace root after resolving `workspace.rootDir`.
+   * Absolute workspace root inferred from the nearest parent `pnpm-workspace.yaml`.
    */
   rootDir: string;
 }
@@ -548,6 +535,40 @@ function createConfigEnv(options: LoadConfigOptions): LatticeConfigEnv {
   };
 }
 
+function findPnpmWorkspaceRoot(startDir: string): string | null {
+  let currentDir = path.resolve(startDir);
+
+  while (true) {
+    if (existsSync(path.join(currentDir, 'pnpm-workspace.yaml'))) {
+      return currentDir;
+    }
+
+    const parentDir = path.dirname(currentDir);
+
+    if (parentDir === currentDir) {
+      return null;
+    }
+
+    currentDir = parentDir;
+  }
+}
+
+function inferWorkspaceRoot(configPath: string): string {
+  const configDir = path.dirname(configPath);
+  const rootDir = findPnpmWorkspaceRoot(configDir);
+
+  if (!rootDir) {
+    throw new Error(
+      [
+        `Unable to infer Lattice workspace root from ${configPath}:`,
+        'no pnpm-workspace.yaml was found in this directory or its parents.',
+      ].join(' '),
+    );
+  }
+
+  return rootDir;
+}
+
 async function resolveConfigExport(
   configExport: unknown,
   configEnv: LatticeConfigEnv,
@@ -582,10 +603,7 @@ export async function loadConfig(
     module.default,
     createConfigEnv(options),
   );
-  const rootDir = path.resolve(
-    path.dirname(configPath),
-    config.workspace?.rootDir ?? '.',
-  );
+  const rootDir = inferWorkspaceRoot(configPath);
 
   return {
     ...config,

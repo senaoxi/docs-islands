@@ -3,13 +3,25 @@
   "files": [],
   "references": [
     {
-      "path": "./tsconfig.lib.json",
+      "path": "./src/tsconfig.json",
+    },
+    {
+      "path": "./types/tsconfig.json",
+    },
+    {
+      "path": "./theme/tsconfig.lib.json",
     },
     {
       "path": "./tsconfig.tools.json",
     },
     {
       "path": "./tsconfig.test.json",
+    },
+    {
+      "path": "./playground/tsconfig.json",
+    },
+    {
+      "path": "./smoke/tsconfig.json",
     },
   ],
 }

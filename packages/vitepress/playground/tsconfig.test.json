@@ -1,12 +1,11 @@
 {
-  // Playground-local test check. Build leaf: tsconfig.test.build.json.
-  "extends": "./tsconfig.json",
+  "extends": "../../../tsconfig.test.base.json",
   "compilerOptions": {
     "types": ["node", "vitest/globals"]
   },
   "include": [
     "client.d.ts",
-    "test-utils/**/*.ts",
+    "test-utils/*.ts",
     "**/*.spec.ts",
     "vitest.config.ts",
     "vitestGlobalSetup.ts",

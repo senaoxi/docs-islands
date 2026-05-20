@@ -1,19 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  // Node runtime build leaf; do not use this as the rolldown-plugin-dts input.
-  "extends": ["./tsconfig.json", "../../../../tsconfig.graph.base.json"],
+  // Internal declaration module build leaf; runtime projects import these types.
+  "extends": ["./tsconfig.lib.json", "../../../../tsconfig.graph.base.json"],
   "compilerOptions": {
-    "rootDir": "..",
+    "rootDir": ".",
     "outDir": "./.tsbuild",
     "tsBuildInfoFile": "./.tsbuild/build.tsbuildinfo"
   },
   "references": [
-    {
-      "path": "../types/tsconfig.build.json"
-    },
-    {
-      "path": "../shared/tsconfig.build.json"
-    },
     {
       "path": "../../../logger/tsconfig.lib.build.json"
     },

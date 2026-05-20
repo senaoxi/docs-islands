@@ -32,9 +32,6 @@ async function createFixture(files: Record<string, string>): Promise<{
     },
     config: {
       configPath: path.join(rootDir, 'lattice.config.mjs'),
-      graph: {
-        rootConfig: 'tsconfig.graph.json',
-      },
       rootDir,
     },
     rootDir,
@@ -324,6 +321,176 @@ describe('runProofCheck build config semantics', () => {
                 tool: 'vue-tsc',
               },
             ],
+          },
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports source files outside graph, sidecars, and allowlist coverage', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'packages/pkg/fixtures/uncovered.ts': 'export const uncovered = 1;\n',
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('accepts source files covered by the proof allowlist', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'packages/pkg/fixtures/allowed.ts': 'export const allowed = 1;\n',
+      }),
+    );
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          proof: {
+            allowlist: [
+              {
+                file: 'packages/pkg/fixtures/allowed.ts',
+                reason: 'fixture intentionally lives outside TypeScript routes',
+              },
+            ],
+          },
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('accepts source files covered by a sidecar target', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'tools/covered.ts': 'export const covered = 1;\n',
+        'tools/tsconfig.json': JSON.stringify({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['covered.ts'],
+        }),
+      }),
+    );
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          proof: {
+            sidecarTargets: [
+              {
+                config: 'tools/tsconfig.json',
+                tool: 'tsc',
+              },
+            ],
+          },
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not require coverage for excluded config json files', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'package.json': JSON.stringify({
+          name: 'fixture',
+        }),
+      }),
+    );
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          config: {
+            source: {
+              include: ['package.json'],
+              exclude: ['package.json'],
+            },
+          },
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('uses the shared typecheck root config', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'tsconfig.check.json': JSON.stringify({
+          files: [],
+          references: [
+            {
+              path: './packages/pkg/tsconfig.json',
+            },
+          ],
+        }),
+        'tsconfig.json': JSON.stringify({
+          files: [],
+          references: [],
+        }),
+      }),
+    );
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          config: {
+            roots: {
+              typecheck: 'tsconfig.check.json',
+            },
+          },
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('uses the shared graph root config', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'tsconfig.custom.graph.json': JSON.stringify({
+          files: [],
+          references: [
+            {
+              path: './packages/pkg/tsconfig.lib.build.json',
+            },
+          ],
+        }),
+        'tsconfig.graph.json': JSON.stringify({
+          files: [],
+          references: [],
+        }),
+      }),
+    );
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          config: {
+            roots: {
+              graph: 'tsconfig.custom.graph.json',
+            },
           },
         }),
       ).resolves.toBe(true);

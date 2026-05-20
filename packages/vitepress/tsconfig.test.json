@@ -9,7 +9,6 @@
     "src/**/__tests__/**/*.tsx",
     "scripts/**/__tests__/**/*.ts",
     "tests/**/*.ts",
-    "vitest.config.ts",
-    "theme/*.ts"
+    "vitest.config.ts"
   ]
 }
