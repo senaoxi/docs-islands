@@ -21,8 +21,7 @@ export default defineConfig([
     languageOptions: {
       parser: typescriptESlintParser,
       parserOptions: {
-        project: ['./tsconfig.json', './tsconfig.test.json'],
-        projectService: false,
+        projectService: true,
         tsconfigRootDir,
         ecmaVersion: supportedEcmaVersion,
         sourceType: 'module',

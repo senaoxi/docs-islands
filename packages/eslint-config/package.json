@@ -30,6 +30,7 @@
     "eslint-plugin-pnpm": "catalog:lint",
     "@eslint/markdown": "catalog:lint",
     "@html-eslint/eslint-plugin": "catalog:lint",
+    "@vitest/eslint-plugin": "catalog:test",
     "@html-eslint/parser": "catalog:lint",
     "eslint-plugin-vue": "catalog:lint",
     "vue-eslint-parser": "catalog:lint",
