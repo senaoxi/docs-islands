@@ -145,6 +145,50 @@ packages:
 }
 
 describe('runPaths', () => {
+  it('fails when the shared graph route has config problems', async () => {
+    const fixture = await createFixture({
+      'packages/a/package.json': stringifyConfig({
+        name: '@example/a',
+        type: 'module',
+      }),
+      'packages/a/src/index.ts': 'export const value = 1;\n',
+      'packages/a/tsconfig.lib.json': stringifyConfig({
+        compilerOptions: {
+          ...buildCompilerOptions,
+          noEmit: true,
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/a/tsconfig.lib.build.json': stringifyConfig({
+        compilerOptions: {
+          ...buildCompilerOptions,
+          rootDir: 'src',
+          tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'tsconfig.graph.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './packages/a/tsconfig.lib.build.json',
+          },
+          {
+            path: './packages/missing/tsconfig.graph.jsonx',
+          },
+        ],
+      }),
+    });
+
+    try {
+      await expect(runPaths(fixture.config)).rejects.toThrow(
+        /Graph route references a missing tsconfig/u,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('uses the shared graph root config', async () => {
     const fixture = await createFixture({
       ...createWorkspaceExportFixture(),

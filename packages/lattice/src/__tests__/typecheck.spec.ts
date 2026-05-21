@@ -472,6 +472,43 @@ describe('runTypecheck', () => {
     }
   });
 
+  it('fails when reference entries are malformed', async () => {
+    const calls: TypecheckTarget[] = [];
+    const fixture = await createFixture({
+      'package.json': packageJson(),
+      'tsconfig.json': tsconfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+          {
+            pat: './tsconfig.tools.json',
+          },
+          {
+            path: '',
+          },
+        ],
+      }),
+      'tsconfig.lib.json': tsconfig({
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await runTypecheck({
+        cwd: fixture.rootDir,
+        runner: passingRunner(calls),
+      });
+
+      expect(result.passed).toBe(false);
+      expect(result.results).toEqual([]);
+      expect(calls).toHaveLength(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('rejects build and graph configs in the typecheck route', async () => {
     const fixture = await createFixture({
       'package.json': packageJson(),

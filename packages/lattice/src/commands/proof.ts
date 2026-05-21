@@ -22,6 +22,21 @@ interface SidecarTarget {
   tool: TypecheckTool;
 }
 
+interface SidecarTargetCollection {
+  problems: string[];
+  targets: SidecarTarget[];
+}
+
+interface AllowlistEntry {
+  filePath: string;
+  reason: string;
+}
+
+interface AllowlistEntryCollection {
+  entries: AllowlistEntry[];
+  problems: string[];
+}
+
 interface CoverageSource {
   label: string;
   type: 'allowlist' | 'graph' | 'sidecar';
@@ -114,6 +129,18 @@ function typecheckRootConfig(config: ResolvedLatticeConfig): string {
   return config.config?.roots?.typecheck ?? 'tsconfig.json';
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function formatUnknownValue(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+
+  return JSON.stringify(value);
+}
+
 function hasGlobSyntax(pattern: string): boolean {
   return /[*?[\]{}()!+@]/u.test(pattern);
 }
@@ -176,12 +203,200 @@ async function collectExpectedSourceFiles(
 
 function collectConfiguredSidecarTargets(
   config: ResolvedLatticeConfig,
-): SidecarTarget[] {
-  return (config.proof?.sidecarTargets ?? []).map((target) => ({
-    configPath: normalizeAbsolutePath(path.join(config.rootDir, target.config)),
-    label: target.label ?? 'configured-sidecar',
-    tool: target.tool,
-  }));
+): SidecarTargetCollection {
+  const problems: string[] = [];
+  const targets: SidecarTarget[] = [];
+  const rawTargets = config.proof?.sidecarTargets;
+
+  if (rawTargets === undefined) {
+    return {
+      problems,
+      targets,
+    };
+  }
+
+  if (!Array.isArray(rawTargets)) {
+    problems.push(
+      [
+        'Invalid proof sidecar target config:',
+        '  field: proof.sidecarTargets',
+        `  value: ${formatUnknownValue(rawTargets)}`,
+        '  reason: proof.sidecarTargets must be an array.',
+      ].join('\n'),
+    );
+    return {
+      problems,
+      targets,
+    };
+  }
+
+  rawTargets.forEach((target, index) => {
+    const field = `proof.sidecarTargets[${index}]`;
+
+    if (!isPlainRecord(target)) {
+      problems.push(
+        [
+          'Invalid proof sidecar target config:',
+          `  field: ${field}`,
+          `  value: ${formatUnknownValue(target)}`,
+          '  reason: sidecar targets must be objects with non-empty config and tool fields.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    const configValue = target.config;
+    const toolValue = target.tool;
+    const labelValue = target.label;
+
+    if (typeof configValue !== 'string' || configValue.trim().length === 0) {
+      problems.push(
+        [
+          'Invalid proof sidecar target config:',
+          `  field: ${field}.config`,
+          `  value: ${formatUnknownValue(configValue)}`,
+          '  reason: sidecar target config must be a non-empty string.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    if (typeof toolValue !== 'string' || toolValue.trim().length === 0) {
+      problems.push(
+        [
+          'Invalid proof sidecar target config:',
+          `  field: ${field}.tool`,
+          `  value: ${formatUnknownValue(toolValue)}`,
+          '  reason: sidecar target tool must be a non-empty string.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    if (
+      labelValue !== undefined &&
+      (typeof labelValue !== 'string' || labelValue.trim().length === 0)
+    ) {
+      problems.push(
+        [
+          'Invalid proof sidecar target config:',
+          `  field: ${field}.label`,
+          `  value: ${formatUnknownValue(labelValue)}`,
+          '  reason: sidecar target label must be a non-empty string when provided.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    const configPath = normalizeAbsolutePath(
+      path.join(config.rootDir, configValue),
+    );
+
+    if (!existsSync(configPath)) {
+      problems.push(
+        [
+          'Typecheck proof sidecar target references a missing tsconfig:',
+          `  field: ${field}.config`,
+          `  config: ${toRelativePath(config.rootDir, configPath)}`,
+        ].join('\n'),
+      );
+      return;
+    }
+
+    targets.push({
+      configPath,
+      label: labelValue?.trim() ?? 'configured-sidecar',
+      tool: toolValue.trim(),
+    });
+  });
+
+  return {
+    problems,
+    targets,
+  };
+}
+
+function collectConfiguredAllowlistEntries(
+  config: ResolvedLatticeConfig,
+): AllowlistEntryCollection {
+  const entries: AllowlistEntry[] = [];
+  const problems: string[] = [];
+  const rawEntries = config.proof?.allowlist;
+
+  if (rawEntries === undefined) {
+    return {
+      entries,
+      problems,
+    };
+  }
+
+  if (!Array.isArray(rawEntries)) {
+    problems.push(
+      [
+        'Invalid proof allowlist config:',
+        '  field: proof.allowlist',
+        `  value: ${formatUnknownValue(rawEntries)}`,
+        '  reason: proof.allowlist must be an array.',
+      ].join('\n'),
+    );
+    return {
+      entries,
+      problems,
+    };
+  }
+
+  rawEntries.forEach((entry, index) => {
+    const field = `proof.allowlist[${index}]`;
+
+    if (!isPlainRecord(entry)) {
+      problems.push(
+        [
+          'Invalid proof allowlist config:',
+          `  field: ${field}`,
+          `  value: ${formatUnknownValue(entry)}`,
+          '  reason: allowlist entries must be objects with non-empty file and reason fields.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    const fileValue = entry.file;
+    const reasonValue = entry.reason;
+
+    if (typeof fileValue !== 'string' || fileValue.trim().length === 0) {
+      problems.push(
+        [
+          'Invalid proof allowlist config:',
+          `  field: ${field}.file`,
+          `  value: ${formatUnknownValue(fileValue)}`,
+          '  reason: allowlist file must be a non-empty string.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    if (typeof reasonValue !== 'string' || reasonValue.trim().length === 0) {
+      problems.push(
+        [
+          'Invalid proof allowlist config:',
+          `  field: ${field}.reason`,
+          `  value: ${formatUnknownValue(reasonValue)}`,
+          '  reason: allowlist reason must be a non-empty string.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    entries.push({
+      filePath: normalizeAbsolutePath(path.join(config.rootDir, fileValue)),
+      reason: reasonValue.trim(),
+    });
+  });
+
+  return {
+    entries,
+    problems,
+  };
 }
 
 function addCoverage(
@@ -199,6 +414,7 @@ function collectCoverage(options: {
   config: ResolvedLatticeConfig;
   graphProjectPaths: string[];
   includeAllowlist?: boolean;
+  allowlistEntries: AllowlistEntry[];
   sidecarTargets: SidecarTarget[];
   sourceFiles: Set<string>;
 }): Map<string, CoverageSource[]> {
@@ -239,16 +455,12 @@ function collectCoverage(options: {
   }
 
   if (options.includeAllowlist !== false) {
-    for (const entry of options.config.proof?.allowlist ?? []) {
-      const filePath = normalizeAbsolutePath(
-        path.join(options.config.rootDir, entry.file),
-      );
-
-      if (!options.sourceFiles.has(filePath)) {
+    for (const entry of options.allowlistEntries) {
+      if (!options.sourceFiles.has(entry.filePath)) {
         continue;
       }
 
-      addCoverage(coverageByFile, filePath, {
+      addCoverage(coverageByFile, entry.filePath, {
         label: entry.reason,
         type: 'allowlist',
       });
@@ -620,29 +832,39 @@ function addTypecheckRouteProblems(options: {
 }
 
 function addAllowlistProblems(options: {
+  allowlistEntries: AllowlistEntry[];
   baseCoverageByFile: Map<string, CoverageSource[]>;
   config: ResolvedLatticeConfig;
   problems: string[];
+  sourceFiles: Set<string>;
 }): void {
-  for (const entry of options.config.proof?.allowlist ?? []) {
-    const filePath = normalizeAbsolutePath(
-      path.join(options.config.rootDir, entry.file),
-    );
-
-    if (!existsSync(filePath)) {
+  for (const entry of options.allowlistEntries) {
+    if (!existsSync(entry.filePath)) {
       options.problems.push(
         [
           'Typecheck proof allowlist references a missing file:',
-          `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
+          `  file: ${toRelativePath(options.config.rootDir, entry.filePath)}`,
         ].join('\n'),
       );
+      continue;
     }
 
-    if (options.baseCoverageByFile.has(filePath)) {
+    if (!options.sourceFiles.has(entry.filePath)) {
+      options.problems.push(
+        [
+          'Typecheck proof allowlist file is outside the configured source boundary:',
+          `  file: ${toRelativePath(options.config.rootDir, entry.filePath)}`,
+          '  reason: allowlist entries should only describe source files that proof would otherwise require coverage for.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    if (options.baseCoverageByFile.has(entry.filePath)) {
       options.problems.push(
         [
           'Typecheck proof allowlist file is already covered without the allowlist:',
-          `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
+          `  file: ${toRelativePath(options.config.rootDir, entry.filePath)}`,
         ].join('\n'),
       );
     }
@@ -718,9 +940,24 @@ async function runProofCheckInternal(
     return false;
   }
 
-  const sidecarTargets = collectConfiguredSidecarTargets(config);
+  const sidecarCollection = collectConfiguredSidecarTargets(config);
+  const sidecarTargets = sidecarCollection.targets;
+
+  problems.push(...sidecarCollection.problems);
+
+  if (problems.length > 0) {
+    ProofLogger.error(problems.join('\n\n'));
+    return false;
+  }
+
   const sourceFiles = await collectExpectedSourceFiles(config);
+  const allowlistCollection = collectConfiguredAllowlistEntries(config);
+  const allowlistEntries = allowlistCollection.entries;
+
+  problems.push(...allowlistCollection.problems);
+
   const baseCoverageByFile = collectCoverage({
+    allowlistEntries,
     config,
     graphProjectPaths,
     includeAllowlist: false,
@@ -728,6 +965,7 @@ async function runProofCheckInternal(
     sourceFiles,
   });
   const coverageByFile = collectCoverage({
+    allowlistEntries,
     config,
     graphProjectPaths,
     sidecarTargets,
@@ -755,9 +993,11 @@ async function runProofCheckInternal(
     problems,
   });
   addAllowlistProblems({
+    allowlistEntries,
     baseCoverageByFile,
     config,
     problems,
+    sourceFiles,
   });
   addUncoveredSourceProblems({
     config,

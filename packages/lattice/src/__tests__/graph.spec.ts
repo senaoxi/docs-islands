@@ -275,6 +275,37 @@ describe('runGraphCheck graph route', () => {
       await fixture.cleanup();
     }
   });
+
+  it('reports malformed graph reference entries', async () => {
+    const fixture = await createFixture({
+      'app/src/index.ts': 'export const value = 1;\n',
+      'app/tsconfig.lib.build.json': buildConfig({
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+      }),
+      'app/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+      'tsconfig.graph.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './app/tsconfig.lib.build.json',
+          },
+          {
+            pat: './app/tsconfig.other.build.json',
+          },
+          {
+            path: '',
+          },
+        ],
+      }),
+    });
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 });
 
 describe('runGraphCheck graph rules', () => {

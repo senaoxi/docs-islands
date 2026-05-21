@@ -329,6 +329,29 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
+  it('reports missing configured sidecar target configs', async () => {
+    const fixture = await createFixture(createPassingFiles());
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          proof: {
+            sidecarTargets: [
+              {
+                config: 'packages/pkg/tsconfig.missing.json',
+                label: 'missing sidecar',
+                tool: 'tsc',
+              },
+            ],
+          },
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('reports source files outside graph, sidecars, and allowlist coverage', async () => {
     const fixture = await createFixture(
       createPassingFiles({
@@ -338,6 +361,32 @@ describe('runProofCheck build config semantics', () => {
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports allowlist entries outside the configured source boundary', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'packages/pkg/fixtures/ignored.md': 'not part of source proof\n',
+      }),
+    );
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          proof: {
+            allowlist: [
+              {
+                file: 'packages/pkg/fixtures/ignored.md',
+                reason: 'markdown files are outside proof source boundary',
+              },
+            ],
+          },
+        }),
+      ).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }

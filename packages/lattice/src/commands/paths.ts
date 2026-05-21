@@ -8,7 +8,7 @@ import type { ResolvedLatticeConfig } from '../config';
 import type { LatticeFlowReporter } from '../flow';
 import { PathsLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
-  collectGraphProjectPaths,
+  collectGraphProjectRoute,
   getRawReferencePaths,
   readJsonConfig,
 } from '../tsconfig';
@@ -846,7 +846,13 @@ function createGeneratedConfigs(
 async function collectGeneratedConfigs(
   config: ResolvedLatticeConfig,
 ): Promise<GeneratedConfig[]> {
-  const projectPaths = collectGraphProjectPaths(config);
+  const graphRoute = collectGraphProjectRoute(config);
+  const projectPaths = graphRoute.projectPaths;
+
+  if (graphRoute.problems.length > 0) {
+    throw new Error(graphRoute.problems.join('\n\n'));
+  }
+
   const projects = projectPaths.map((projectPath) =>
     parseProject(config, projectPath),
   );

@@ -15,6 +15,11 @@ interface ReferencePathInfo {
   resolvedPath: string;
 }
 
+interface ReferencePathCollection {
+  problems: string[];
+  references: ReferencePathInfo[];
+}
+
 export interface CollectTypecheckTargetProjectPathsOptions {
   rootConfigPath: string;
   rootDir: string;
@@ -102,59 +107,111 @@ export function getRawReferencePathsForConfig(
   rootDir: string,
   configPath: string,
 ): string[] {
-  return getReferencePathInfosForConfig(rootDir, configPath).map(
+  return collectReferencePathInfosForConfig(rootDir, configPath).references.map(
     (reference) => reference.resolvedPath,
   );
 }
 
-function getReferencePathInfosForConfig(
-  rootDir: string,
-  configPath: string,
-): ReferencePathInfo[] {
-  const configObject = readJsonConfigFile(rootDir, configPath);
-
-  return getReferencePathInfosFromConfigObject(configPath, configObject);
-}
-
-function getReferencePathsFromConfigObject(
-  configPath: string,
-  configObject: JsonObject,
-): string[] {
-  return getReferencePathInfosFromConfigObject(configPath, configObject).map(
-    (reference) => reference.resolvedPath,
-  );
-}
-
-function getReferencePathInfosFromConfigObject(
-  configPath: string,
-  configObject: JsonObject,
-): ReferencePathInfo[] {
-  const references = configObject.references;
-
-  if (!Array.isArray(references)) {
-    return [];
+function formatUnknownValue(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
   }
 
-  return references.flatMap((reference) => {
+  return JSON.stringify(value);
+}
+
+function collectReferencePathInfosForConfig(
+  rootDir: string,
+  configPath: string,
+): ReferencePathCollection {
+  const configObject = readJsonConfigFile(rootDir, configPath);
+
+  return collectReferencePathInfosFromConfigObject(
+    rootDir,
+    configPath,
+    configObject,
+  );
+}
+
+function collectReferencePathInfosFromConfigObject(
+  rootDir: string,
+  configPath: string,
+  configObject: JsonObject,
+): ReferencePathCollection {
+  const references = configObject.references;
+  const problems: string[] = [];
+  const referenceInfos: ReferencePathInfo[] = [];
+  const formatConfigPath = (pathValue: string): string =>
+    toRelativePath(rootDir, pathValue);
+
+  if (references === undefined) {
+    return {
+      problems,
+      references: referenceInfos,
+    };
+  }
+
+  if (!Array.isArray(references)) {
+    problems.push(
+      [
+        'Invalid tsconfig references field:',
+        `  config: ${formatConfigPath(configPath)}`,
+        `  field: references`,
+        `  value: ${formatUnknownValue(references)}`,
+        '  reason: references must be an array of objects with a non-empty string path.',
+      ].join('\n'),
+    );
+    return {
+      problems,
+      references: referenceInfos,
+    };
+  }
+
+  references.forEach((reference, index) => {
+    const field = `references[${index}]`;
+
     if (
       !reference ||
       typeof reference !== 'object' ||
-      Array.isArray(reference) ||
-      typeof (reference as { path?: unknown }).path !== 'string'
+      Array.isArray(reference)
     ) {
-      return [];
+      problems.push(
+        [
+          'Invalid tsconfig reference entry:',
+          `  config: ${formatConfigPath(configPath)}`,
+          `  field: ${field}`,
+          `  value: ${formatUnknownValue(reference)}`,
+          '  reason: each reference entry must be an object with a non-empty string path.',
+        ].join('\n'),
+      );
+      return;
     }
 
-    return [
-      {
-        rawPath: (reference as { path: string }).path,
-        resolvedPath: resolveReferencePath(
-          configPath,
-          (reference as { path: string }).path,
-        ),
-      },
-    ];
+    const pathValue = (reference as { path?: unknown }).path;
+
+    if (typeof pathValue !== 'string' || pathValue.trim().length === 0) {
+      problems.push(
+        [
+          'Invalid tsconfig reference path:',
+          `  config: ${formatConfigPath(configPath)}`,
+          `  field: ${field}.path`,
+          `  value: ${formatUnknownValue(pathValue)}`,
+          '  reason: reference path must be a non-empty string.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    referenceInfos.push({
+      rawPath: pathValue,
+      resolvedPath: resolveReferencePath(configPath, pathValue),
+    });
   });
+
+  return {
+    problems,
+    references: referenceInfos,
+  };
 }
 
 function isNonEmptyStringArray(value: unknown): boolean {
@@ -266,10 +323,16 @@ export function collectTypecheckTargetProjectPaths(
     projectPaths.push(projectPath);
 
     const configObject = readJsonConfigFile(options.rootDir, projectPath);
-    const referencePaths = getReferencePathsFromConfigObject(
+    const referenceCollection = collectReferencePathInfosFromConfigObject(
+      options.rootDir,
       projectPath,
       configObject,
     );
+    const referencePaths = referenceCollection.references.map(
+      (reference) => reference.resolvedPath,
+    );
+
+    problems.push(...referenceCollection.problems);
 
     if (referencePaths.length === 0 || hasOwnTypecheckInputs(configObject)) {
       targetProjectPaths.push(projectPath);
@@ -343,16 +406,19 @@ export function collectGraphProjectRoute(
   const seen = new Set<string>();
   const orderedProjects: string[] = [];
   const problems: string[] = [];
-  const queue = getReferencePathInfosForConfig(
+  const rootReferences = collectReferencePathInfosForConfig(
     config.rootDir,
     rootGraphConfigPath,
-  ).map((reference) => ({
+  );
+  const queue = rootReferences.references.map((reference) => ({
     projectPath: reference.resolvedPath,
     rawReferencePath: reference.rawPath,
     referrerPath: rootGraphConfigPath,
   }));
   const formatConfigPath = (configPath: string): string =>
     toRelativePath(config.rootDir, configPath);
+
+  problems.push(...rootReferences.problems);
 
   for (const { projectPath } of queue) {
     seen.add(projectPath);
@@ -378,10 +444,14 @@ export function collectGraphProjectRoute(
 
     orderedProjects.push(projectPath);
 
-    for (const reference of getReferencePathInfosForConfig(
+    const referenceCollection = collectReferencePathInfosForConfig(
       config.rootDir,
       projectPath,
-    )) {
+    );
+
+    problems.push(...referenceCollection.problems);
+
+    for (const reference of referenceCollection.references) {
       const referencePath = reference.resolvedPath;
 
       if (seen.has(referencePath)) {
