@@ -6,7 +6,7 @@ import {
 import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { pack } from '@publint/pack';
 import { init, parse } from 'es-module-lexer';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { builtinModules } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -21,7 +21,7 @@ import type {
   ResolvedLatticeConfig,
   RuntimeEnvironment,
 } from '../config';
-import { PackageLogger } from '../logger';
+import { PackageLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import { toRelativePath } from '../utils/path';
 import { getPackageRootSpecifier } from '../workspace';
 
@@ -34,7 +34,7 @@ interface DistPackageJson {
 }
 
 export interface PublishedPackageBoundaryTarget {
-  distDir: string;
+  outDir: string;
   environment?:
     | RuntimeEnvironment
     | ((relativeFilePath: string) => RuntimeEnvironment);
@@ -48,7 +48,7 @@ export interface PublishedPackageBoundaryViolation {
   specifier: string;
 }
 
-interface PackedDistTarball {
+interface PackedPackageTarball {
   cleanup: () => Promise<void>;
   tarball: Buffer;
 }
@@ -61,8 +61,21 @@ interface SelfSpecifierMatchers {
 export interface RunPackageCheckOptions {
   attwProfile?: PackageAttwProfile;
   config: ResolvedLatticeConfig;
+  cwd?: string;
   targetName?: string;
   tool?: PackageCheckToolSelection;
+}
+
+interface PlannedPackageCheckTarget {
+  checks: PackageCheckTool[];
+  label: string;
+  outDir: string;
+  rawTarget: PackageCheckTarget;
+}
+
+interface PackageCheckPlan {
+  selectionReason: string;
+  targets: PlannedPackageCheckTarget[];
 }
 
 const DEFAULT_PACKAGE_CHECKS: PackageCheckTool[] = [
@@ -250,7 +263,7 @@ function validatePublishedSpecifier(options: {
       return null;
     }
 
-    return `self import "${specifier}" is not exposed by dist/package.json exports`;
+    return `self import "${specifier}" is not exposed by output package.json exports`;
   }
 
   if (allowedExternalPackages.has(packageRoot)) {
@@ -345,9 +358,179 @@ function selectTargetChecks(
   return configuredChecks.includes(requestedTool) ? [requestedTool] : [];
 }
 
-async function packDistTarball(distDir: string): Promise<PackedDistTarball> {
+function readCwdPackageName(cwd: string): string | undefined {
+  const packageJsonPath = path.join(cwd, 'package.json');
+
+  if (!existsSync(packageJsonPath)) {
+    return undefined;
+  }
+
+  try {
+    const manifest = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      name?: unknown;
+    };
+
+    return typeof manifest.name === 'string' && manifest.name.trim()
+      ? manifest.name.trim()
+      : undefined;
+  } catch (error) {
+    throw new Error(
+      `Unable to read package name from ${packageJsonPath}: ${formatErrorMessage(
+        error,
+      )}`,
+    );
+  }
+}
+
+function formatConfiguredTargetNames(targets: PackageCheckTarget[]): string {
+  const names = targets
+    .map((target) => target.name)
+    .filter((name): name is string => Boolean(name));
+
+  return names.length > 0 ? names.join(', ') : '(none)';
+}
+
+function resolveTargetOutDir(options: {
+  config: ResolvedLatticeConfig;
+  target: PackageCheckTarget;
+  targetIndex: number;
+}): string {
+  const outDir = (options.target as { outDir?: unknown }).outDir;
+
+  if (typeof outDir !== 'string' || outDir.trim().length === 0) {
+    throw new Error(
+      `Invalid package check target at packageChecks.targets[${options.targetIndex}].outDir. Expected a non-empty string.`,
+    );
+  }
+
+  return path.resolve(options.config.rootDir, outDir);
+}
+
+function getTargetLabel(
+  config: ResolvedLatticeConfig,
+  target: PackageCheckTarget,
+  outDir: string,
+): string {
+  return target.name ?? toRelativePath(config.rootDir, outDir);
+}
+
+function createTargetPlan(options: {
+  config: ResolvedLatticeConfig;
+  requestedTool: PackageCheckToolSelection | undefined;
+  target: PackageCheckTarget;
+  targetIndex: number;
+}): PlannedPackageCheckTarget {
+  const outDir = resolveTargetOutDir({
+    config: options.config,
+    target: options.target,
+    targetIndex: options.targetIndex,
+  });
+
+  return {
+    checks: selectTargetChecks(options.target, options.requestedTool),
+    label: getTargetLabel(options.config, options.target, outDir),
+    outDir,
+    rawTarget: options.target,
+  };
+}
+
+function createPackageCheckPlan(options: {
+  config: ResolvedLatticeConfig;
+  cwd: string;
+  targetName?: string;
+  tool?: PackageCheckToolSelection;
+}): PackageCheckPlan {
+  const targets = options.config.packageChecks?.targets ?? [];
+
+  if (targets.length === 0) {
+    throw new Error('No package check targets are configured.');
+  }
+
+  let selectedTargets: PackageCheckTarget[];
+  let selectionReason: string;
+
+  if (options.targetName) {
+    selectedTargets = targets.filter(
+      (target) => target.name === options.targetName,
+    );
+
+    if (selectedTargets.length === 0) {
+      throw new Error(
+        [
+          `No package check target named "${options.targetName}" is configured.`,
+          `Configured target names: ${formatConfiguredTargetNames(targets)}.`,
+        ].join(' '),
+      );
+    }
+
+    selectionReason = `--package "${options.targetName}" matched configured target name.`;
+  } else {
+    const cwdPackageName = readCwdPackageName(options.cwd);
+
+    if (cwdPackageName) {
+      selectedTargets = targets.filter(
+        (target) => target.name === cwdPackageName,
+      );
+
+      if (selectedTargets.length > 0) {
+        selectionReason = `cwd package.json name "${cwdPackageName}" matched configured target name.`;
+      } else {
+        selectedTargets = targets;
+        selectionReason = `cwd package.json name "${cwdPackageName}" did not match configured target names; running all configured targets.`;
+      }
+    } else {
+      selectedTargets = targets;
+      selectionReason =
+        'No package name was found in cwd/package.json; running all configured targets.';
+    }
+  }
+
+  return {
+    selectionReason,
+    targets: selectedTargets.map((target) =>
+      createTargetPlan({
+        config: options.config,
+        requestedTool: options.tool,
+        target,
+        targetIndex: targets.indexOf(target),
+      }),
+    ),
+  };
+}
+
+function logPackageCheckPlan(options: {
+  config: ResolvedLatticeConfig;
+  cwd: string;
+  plan: PackageCheckPlan;
+}): void {
+  PackageLogger.info(
+    [
+      'Package check plan:',
+      `  config: ${toRelativePath(
+        options.config.rootDir,
+        options.config.configPath,
+      )}`,
+      `  cwd: ${toRelativePath(options.config.rootDir, options.cwd)}`,
+      `  selection: ${options.plan.selectionReason}`,
+      '  targets:',
+      ...options.plan.targets.map((target) =>
+        [
+          `    - ${target.label}`,
+          `      outDir: ${toRelativePath(options.config.rootDir, target.outDir)}`,
+          `      checks: ${
+            target.checks.length > 0 ? target.checks.join(', ') : '(none)'
+          }`,
+        ].join('\n'),
+      ),
+    ].join('\n'),
+  );
+}
+
+async function packOutputTarball(
+  outDir: string,
+): Promise<PackedPackageTarball> {
   const destination = await mkdtemp(path.join(tmpdir(), '__LATTICE_PACKAGE__'));
-  const tarballPath = await pack(distDir, {
+  const tarballPath = await pack(outDir, {
     destination,
     ignoreScripts: true,
     packageManager: 'pnpm',
@@ -481,31 +664,34 @@ async function runPackageCheckTarget(options: {
   attwProfile?: PackageAttwProfile;
   checks: PackageCheckTool[];
   config: ResolvedLatticeConfig;
+  label: string;
+  outDir: string;
   rawTarget: PackageCheckTarget;
 }): Promise<boolean> {
   const target = {
     ...options.rawTarget,
-    distDir: path.resolve(options.config.rootDir, options.rawTarget.distDir),
+    outDir: options.outDir,
   };
-  const label =
-    options.rawTarget.name ??
-    toRelativePath(options.config.rootDir, target.distDir);
-  const distPkgPath = path.join(target.distDir, 'package.json');
+  const label = options.label;
+  const outputPackageJsonPath = path.join(target.outDir, 'package.json');
 
-  if (!existsSync(distPkgPath)) {
+  if (!existsSync(outputPackageJsonPath)) {
     throw new Error(
-      `dist/package.json not found for ${label}. Run the package build first.`,
+      `outDir package.json not found for ${label} at ${toRelativePath(
+        options.config.rootDir,
+        outputPackageJsonPath,
+      )}. Run the package build first.`,
     );
   }
 
-  let packedDist: PackedDistTarball | undefined;
+  let packedDist: PackedPackageTarball | undefined;
 
   try {
     if (options.checks.includes('publint') || options.checks.includes('attw')) {
-      PackageLogger.info(`dist tarball packing started: ${label}`);
+      PackageLogger.info(`package tarball packing started: ${label}`);
       const packElapsed = createElapsedTimer();
-      packedDist = await packDistTarball(target.distDir);
-      PackageLogger.success(`dist tarball packed: ${label}`, packElapsed());
+      packedDist = await packOutputTarball(target.outDir);
+      PackageLogger.success(`package tarball packed: ${label}`, packElapsed());
     }
 
     let passed = true;
@@ -533,7 +719,7 @@ async function runPackageCheckTarget(options: {
         (await runBoundaryCheck(
           {
             ...target.boundary,
-            distDir: target.distDir,
+            outDir: target.outDir,
           },
           label,
         )) && passed;
@@ -556,7 +742,7 @@ async function runPackageCheckTarget(options: {
 export async function auditPublishedPackageBoundaries(
   target: PublishedPackageBoundaryTarget,
 ): Promise<PublishedPackageBoundaryViolation[]> {
-  const manifestPath = path.join(target.distDir, 'package.json');
+  const manifestPath = path.join(target.outDir, 'package.json');
   const manifest = JSON.parse(
     await readFile(manifestPath, 'utf8'),
   ) as DistPackageJson;
@@ -570,13 +756,13 @@ export async function auditPublishedPackageBoundaries(
     manifest.name,
     manifest.exports,
   );
-  const publishedFiles = await collectPublishedModuleFiles(target.distDir);
+  const publishedFiles = await collectPublishedModuleFiles(target.outDir);
   const violations: PublishedPackageBoundaryViolation[] = [];
 
   await init;
 
   for (const filePath of publishedFiles) {
-    const relativeFilePath = path.relative(target.distDir, filePath);
+    const relativeFilePath = path.relative(target.outDir, filePath);
     const environment = classifyRuntimeEnvironment(target, relativeFilePath);
     const source = await readFile(filePath, 'utf8');
     const [importSpecifiers] = parse(source);
@@ -619,45 +805,65 @@ export async function auditPublishedPackageBoundaries(
 export async function runPackageCheck(
   options: RunPackageCheckOptions,
 ): Promise<boolean> {
-  const targets = (options.config.packageChecks?.targets ?? []).filter(
-    (target) => !options.targetName || target.name === options.targetName,
-  );
+  clearCliScreen();
 
-  if (targets.length === 0) {
-    throw new Error(
-      options.targetName
-        ? `No package check target named "${options.targetName}" is configured.`
-        : 'No package check targets are configured.',
+  const elapsed = createElapsedTimer();
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+
+  try {
+    PackageLogger.info('package check started');
+
+    const plan = createPackageCheckPlan({
+      config: options.config,
+      cwd,
+      targetName: options.targetName,
+      tool: options.tool,
+    });
+
+    logPackageCheckPlan({
+      config: options.config,
+      cwd,
+      plan,
+    });
+
+    const runnableTargets = plan.targets.filter(
+      (target) => target.checks.length > 0,
     );
-  }
 
-  let passed = true;
-  let ranCheck = false;
-
-  for (const rawTarget of targets) {
-    const checks = selectTargetChecks(rawTarget, options.tool);
-
-    if (checks.length === 0) {
-      continue;
+    if (runnableTargets.length === 0) {
+      throw new Error(
+        options.tool && options.tool !== 'all'
+          ? `No package check targets have "${options.tool}" enabled.`
+          : 'No package checks are enabled.',
+      );
     }
 
-    ranCheck = true;
-    passed =
-      (await runPackageCheckTarget({
-        attwProfile: options.attwProfile,
-        checks,
-        config: options.config,
-        rawTarget,
-      })) && passed;
-  }
+    let passed = true;
 
-  if (!ranCheck) {
-    throw new Error(
-      options.tool && options.tool !== 'all'
-        ? `No package check targets have "${options.tool}" enabled.`
-        : 'No package checks are enabled.',
+    for (const target of runnableTargets) {
+      passed =
+        (await runPackageCheckTarget({
+          attwProfile: options.attwProfile,
+          checks: target.checks,
+          config: options.config,
+          label: target.label,
+          outDir: target.outDir,
+          rawTarget: target.rawTarget,
+        })) && passed;
+    }
+
+    if (passed) {
+      PackageLogger.success('package check finished', elapsed());
+    } else {
+      PackageLogger.error('package check finished with failures', elapsed());
+    }
+
+    return passed;
+  } catch (error) {
+    PackageLogger.error(
+      `package check failed: ${formatErrorMessage(error)}`,
+      elapsed(),
     );
+    throw error;
   }
-
-  return passed;
 }

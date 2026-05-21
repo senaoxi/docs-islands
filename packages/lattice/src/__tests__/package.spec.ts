@@ -18,12 +18,12 @@ vi.mock('@publint/pack', async () => {
   return {
     pack: vi.fn(
       async (
-        distDir: string,
+        outDir: string,
         options: {
           destination: string;
         },
       ) => {
-        packageCheckMocks.packCalls.push(distDir);
+        packageCheckMocks.packCalls.push(outDir);
         const tarballPath = pathModule.join(options.destination, 'package.tgz');
 
         await fs.writeFile(tarballPath, 'mock tarball');
@@ -72,17 +72,17 @@ async function writeText(filePath: string, text: string): Promise<void> {
   await writeFile(filePath, text);
 }
 
-async function createDistPackage(
+async function createOutputPackage(
   files: Record<string, string>,
   manifest: Record<string, unknown> = {},
 ): Promise<{
   cleanup: () => Promise<void>;
-  distDir: string;
+  outDir: string;
 }> {
-  const distDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-'));
+  const outDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-'));
 
   await writeText(
-    path.join(distDir, 'package.json'),
+    path.join(outDir, 'package.json'),
     JSON.stringify({
       dependencies: {
         '@example/dep': '1.0.0',
@@ -96,17 +96,17 @@ async function createDistPackage(
   );
 
   for (const [relativePath, source] of Object.entries(files)) {
-    await writeText(path.join(distDir, relativePath), source);
+    await writeText(path.join(outDir, relativePath), source);
   }
 
   return {
     cleanup: async () => {
-      await rm(distDir, {
+      await rm(outDir, {
         force: true,
         recursive: true,
       });
     },
-    distDir,
+    outDir,
   };
 }
 
@@ -134,7 +134,7 @@ beforeEach(() => {
 
 describe('auditPublishedPackageBoundaries', () => {
   it('allows self exports, declared dependencies, relative imports, and node builtins in node output', async () => {
-    const pkg = await createDistPackage(
+    const pkg = await createOutputPackage(
       {
         'index.js': "import '@example/dep';\nimport './local.js';\n",
         'local.js': 'export const value = 1;\n',
@@ -152,7 +152,7 @@ describe('auditPublishedPackageBoundaries', () => {
     try {
       await expect(
         auditPublishedPackageBoundaries({
-          distDir: pkg.distDir,
+          outDir: pkg.outDir,
         }),
       ).resolves.toEqual([]);
     } finally {
@@ -161,14 +161,14 @@ describe('auditPublishedPackageBoundaries', () => {
   });
 
   it('reports browser node builtins, undeclared dependencies, and unexported self imports', async () => {
-    const pkg = await createDistPackage({
+    const pkg = await createOutputPackage({
       'index.js':
         "import 'node:fs';\nimport '@example/missing';\nimport '@example/pkg/private';\n",
     });
 
     try {
       const violations = await auditPublishedPackageBoundaries({
-        distDir: pkg.distDir,
+        outDir: pkg.outDir,
       });
 
       expect(violations.map((violation) => violation.specifier)).toEqual([
@@ -184,10 +184,10 @@ describe('auditPublishedPackageBoundaries', () => {
 
 describe('runPackageCheck', () => {
   it('filters configured targets by package name', async () => {
-    const validPackage = await createDistPackage({
+    const validPackage = await createOutputPackage({
       'index.js': "import '@example/dep';\n",
     });
-    const invalidPackage = await createDistPackage({
+    const invalidPackage = await createOutputPackage({
       'index.js': "import 'node:fs';\n",
     });
     const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-root-'));
@@ -198,12 +198,12 @@ describe('runPackageCheck', () => {
           config: createConfig(rootDir, [
             {
               checks: ['boundary'],
-              distDir: validPackage.distDir,
+              outDir: validPackage.outDir,
               name: '@example/valid',
             },
             {
               checks: ['boundary'],
-              distDir: invalidPackage.distDir,
+              outDir: invalidPackage.outDir,
               name: '@example/invalid',
             },
           ]),
@@ -220,24 +220,176 @@ describe('runPackageCheck', () => {
     }
   });
 
+  it('fails when an explicit package target is not configured', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-root-'));
+
+    try {
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/valid',
+              outDir: 'packages/valid/dist',
+            },
+          ]),
+          targetName: '@example/missing',
+        }),
+      ).rejects.toThrow(/No package check target named "@example\/missing"/u);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('uses cwd package.json name when it matches a configured target', async () => {
+    const validPackage = await createOutputPackage({
+      'index.js': "import '@example/dep';\n",
+    });
+    const invalidPackage = await createOutputPackage({
+      'index.js': "import 'node:fs';\n",
+    });
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-root-'));
+    const cwd = path.join(rootDir, 'packages/valid');
+
+    try {
+      await writeText(
+        path.join(cwd, 'package.json'),
+        JSON.stringify({
+          name: '@example/valid',
+        }),
+      );
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/valid',
+              outDir: validPackage.outDir,
+            },
+            {
+              checks: ['boundary'],
+              name: '@example/invalid',
+              outDir: invalidPackage.outDir,
+            },
+          ]),
+          cwd,
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await validPackage.cleanup();
+      await invalidPackage.cleanup();
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('runs all targets when cwd package.json name is not configured', async () => {
+    const validPackage = await createOutputPackage({
+      'index.js': "import '@example/dep';\n",
+    });
+    const invalidPackage = await createOutputPackage({
+      'index.js': "import 'node:fs';\n",
+    });
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-root-'));
+    const cwd = path.join(rootDir, 'packages/other');
+
+    try {
+      await writeText(
+        path.join(cwd, 'package.json'),
+        JSON.stringify({
+          name: '@example/other',
+        }),
+      );
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/valid',
+              outDir: validPackage.outDir,
+            },
+            {
+              checks: ['boundary'],
+              name: '@example/invalid',
+              outDir: invalidPackage.outDir,
+            },
+          ]),
+          cwd,
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await validPackage.cleanup();
+      await invalidPackage.cleanup();
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('runs all targets when cwd package.json is absent', async () => {
+    const validPackage = await createOutputPackage({
+      'index.js': "import '@example/dep';\n",
+    });
+    const invalidPackage = await createOutputPackage({
+      'index.js': "import 'node:fs';\n",
+    });
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-root-'));
+    const cwd = path.join(rootDir, 'packages/missing-manifest');
+
+    try {
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/valid',
+              outDir: validPackage.outDir,
+            },
+            {
+              checks: ['boundary'],
+              name: '@example/invalid',
+              outDir: invalidPackage.outDir,
+            },
+          ]),
+          cwd,
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await validPackage.cleanup();
+      await invalidPackage.cleanup();
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
   it('runs all package checks by default', async () => {
-    const pkg = await createDistPackage({
+    const pkg = await createOutputPackage({
       'index.js': "import '@example/dep';\n",
     });
 
     try {
       await expect(
         runPackageCheck({
-          config: createConfig(pkg.distDir, [
+          config: createConfig(pkg.outDir, [
             {
-              distDir: pkg.distDir,
+              outDir: pkg.outDir,
               name: '@example/pkg',
             },
           ]),
         }),
       ).resolves.toBe(true);
 
-      expect(packageCheckMocks.packCalls).toEqual([pkg.distDir]);
+      expect(packageCheckMocks.packCalls).toEqual([pkg.outDir]);
       expect(packageCheckMocks.publintCalls).toHaveLength(1);
       expect(packageCheckMocks.attwRuns).toBe(1);
     } finally {
@@ -246,16 +398,16 @@ describe('runPackageCheck', () => {
   });
 
   it('runs only the selected tool', async () => {
-    const pkg = await createDistPackage({
+    const pkg = await createOutputPackage({
       'index.js': "import 'node:fs';\n",
     });
 
     try {
       await expect(
         runPackageCheck({
-          config: createConfig(pkg.distDir, [
+          config: createConfig(pkg.outDir, [
             {
-              distDir: pkg.distDir,
+              outDir: pkg.outDir,
               name: '@example/pkg',
             },
           ]),
@@ -263,7 +415,7 @@ describe('runPackageCheck', () => {
         }),
       ).resolves.toBe(true);
 
-      expect(packageCheckMocks.packCalls).toEqual([pkg.distDir]);
+      expect(packageCheckMocks.packCalls).toEqual([pkg.outDir]);
       expect(packageCheckMocks.publintCalls).toHaveLength(1);
       expect(packageCheckMocks.attwRuns).toBe(0);
     } finally {
@@ -271,8 +423,40 @@ describe('runPackageCheck', () => {
     }
   });
 
+  it('prints the filtered checks in the package check plan', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const pkg = await createOutputPackage({
+      'index.js': "import 'node:fs';\n",
+    });
+
+    try {
+      await expect(
+        runPackageCheck({
+          config: createConfig(pkg.outDir, [
+            {
+              name: '@example/pkg',
+              outDir: pkg.outDir,
+            },
+          ]),
+          tool: 'publint',
+        }),
+      ).resolves.toBe(true);
+
+      const output = logSpy.mock.calls
+        .map((call) => call.map(String).join(' '))
+        .join('\n');
+
+      expect(output).toContain('Package check plan:');
+      expect(output).toContain('outDir: .');
+      expect(output).toContain('checks: publint');
+    } finally {
+      logSpy.mockRestore();
+      await pkg.cleanup();
+    }
+  });
+
   it('applies the default and overridden ATTW profile', async () => {
-    const pkg = await createDistPackage({
+    const pkg = await createOutputPackage({
       'index.js': 'export const value = 1;\n',
     });
     const node16CjsProblem = {
@@ -286,9 +470,9 @@ describe('runPackageCheck', () => {
 
       await expect(
         runPackageCheck({
-          config: createConfig(pkg.distDir, [
+          config: createConfig(pkg.outDir, [
             {
-              distDir: pkg.distDir,
+              outDir: pkg.outDir,
               name: '@example/pkg',
             },
           ]),
@@ -299,9 +483,9 @@ describe('runPackageCheck', () => {
       await expect(
         runPackageCheck({
           attwProfile: 'strict',
-          config: createConfig(pkg.distDir, [
+          config: createConfig(pkg.outDir, [
             {
-              distDir: pkg.distDir,
+              outDir: pkg.outDir,
               name: '@example/pkg',
             },
           ]),

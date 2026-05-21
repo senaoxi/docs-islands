@@ -102,11 +102,11 @@ export default defineConfig({
     targets: [
       {
         name: '@docs-islands/logger',
-        distDir: 'packages/logger/dist',
+        outDir: 'packages/logger/dist',
       },
       {
         name: '@docs-islands/vitepress',
-        distDir: 'packages/vitepress/dist',
+        outDir: 'packages/vitepress/dist',
       },
     ],
   },

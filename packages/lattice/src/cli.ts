@@ -51,6 +51,7 @@ async function load(
 async function runBuiltinTask(
   config: ResolvedLatticeConfig,
   taskName: BuiltinTaskName,
+  cwd: string,
 ): Promise<boolean> {
   switch (taskName) {
     case 'graph:check': {
@@ -60,7 +61,7 @@ async function runBuiltinTask(
       return runProofCheck(config);
     }
     case 'package:check': {
-      return runPackageCheck({ config });
+      return runPackageCheck({ config, cwd });
     }
     case 'tsc:run': {
       const result = await runTypecheck({
@@ -179,6 +180,7 @@ function runCommandStep(
 async function runPipeline(
   config: ResolvedLatticeConfig,
   pipelineName: string,
+  cwd = process.cwd(),
 ): Promise<boolean> {
   const steps = config.pipelines?.[pipelineName];
 
@@ -190,7 +192,7 @@ async function runPipeline(
     const step = normalizePipelineStep(rawStep);
     const passed =
       step.type === 'task'
-        ? await runBuiltinTask(config, step.name)
+        ? await runBuiltinTask(config, step.name, cwd)
         : runCommandStep(config, step);
 
     if (!passed) {
@@ -212,7 +214,7 @@ async function main(): Promise<void> {
     .command('check <pipeline>', 'Run a configured governance pipeline')
     .action(async (pipeline: string, flags: GlobalFlags) => {
       const config = await load(flags, 'check');
-      const passed = await runPipeline(config, pipeline);
+      const passed = await runPipeline(config, pipeline, process.cwd());
 
       if (!passed) {
         process.exitCode = 1;
@@ -295,6 +297,7 @@ async function main(): Promise<void> {
         !(await runPackageCheck({
           attwProfile: parsePackageAttwProfile(flags.attwProfile),
           config,
+          cwd: process.cwd(),
           targetName: flags.package,
           tool: parsePackageTool(flags.tool),
         }))

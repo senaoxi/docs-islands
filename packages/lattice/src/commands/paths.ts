@@ -1,10 +1,11 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import ts from 'typescript';
 import type { ResolvedLatticeConfig } from '../config';
-import { PathsLogger } from '../logger';
+import { PathsLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectGraphProjectPaths,
   getRawReferencePaths,
@@ -1086,7 +1087,7 @@ function logManualExtendsSuggestions(
   }
 }
 
-export async function runPaths(
+async function runPathsInternal(
   config: ResolvedLatticeConfig,
   options: { check?: boolean } = {},
 ): Promise<PathsResult> {
@@ -1127,4 +1128,34 @@ export async function runPaths(
     outputCount: generatedConfigs.length,
     suggestionCount,
   };
+}
+
+export async function runPaths(
+  config: ResolvedLatticeConfig,
+  options: { check?: boolean } = {},
+): Promise<PathsResult> {
+  clearCliScreen();
+
+  const elapsed = createElapsedTimer();
+  const action = options.check ? 'paths check' : 'paths generate';
+
+  PathsLogger.info(`${action} started`);
+
+  try {
+    const result = await runPathsInternal(config, options);
+
+    if (options.check && result.changed) {
+      PathsLogger.error(`${action} finished with stale files`, elapsed());
+    } else {
+      PathsLogger.success(`${action} finished`, elapsed());
+    }
+
+    return result;
+  } catch (error) {
+    PathsLogger.error(
+      `${action} failed: ${formatErrorMessage(error)}`,
+      elapsed(),
+    );
+    throw error;
+  }
 }

@@ -1,9 +1,10 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import ts from 'typescript';
 import type { ResolvedLatticeConfig } from '../config';
-import { ProofLogger } from '../logger';
+import { ProofLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectGraphProjectPaths,
   collectTypecheckTargetProjectPaths,
@@ -674,7 +675,7 @@ function addUncoveredSourceProblems(options: {
   );
 }
 
-export async function runProofCheck(
+async function runProofCheckInternal(
   config: ResolvedLatticeConfig,
 ): Promise<boolean> {
   const problems: string[] = [];
@@ -785,4 +786,32 @@ export async function runProofCheck(
   }
 
   return true;
+}
+
+export async function runProofCheck(
+  config: ResolvedLatticeConfig,
+): Promise<boolean> {
+  clearCliScreen();
+
+  const elapsed = createElapsedTimer();
+
+  ProofLogger.info('proof check started');
+
+  try {
+    const passed = await runProofCheckInternal(config);
+
+    if (passed) {
+      ProofLogger.success('proof check finished', elapsed());
+    } else {
+      ProofLogger.error('proof check finished with failures', elapsed());
+    }
+
+    return passed;
+  } catch (error) {
+    ProofLogger.error(
+      `proof check failed: ${formatErrorMessage(error)}`,
+      elapsed(),
+    );
+    throw error;
+  }
 }

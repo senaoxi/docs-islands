@@ -1,7 +1,8 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { spawn } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
-import { TypecheckLogger, formatErrorMessage } from '../logger';
+import { TypecheckLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectTypecheckTargetProjectPaths,
   resolveProjectConfigPath,
@@ -115,7 +116,7 @@ async function runWithConcurrency(
   return results;
 }
 
-export async function runTypecheck(
+async function runTypecheckInternal(
   options: RunTypecheckOptions = {},
 ): Promise<RunTypecheckResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
@@ -195,4 +196,32 @@ export async function runTypecheck(
     rootConfigPath,
     targetProjectPaths: route.targetProjectPaths,
   };
+}
+
+export async function runTypecheck(
+  options: RunTypecheckOptions = {},
+): Promise<RunTypecheckResult> {
+  clearCliScreen();
+
+  const elapsed = createElapsedTimer();
+
+  TypecheckLogger.info('tsc check started');
+
+  try {
+    const result = await runTypecheckInternal(options);
+
+    if (result.passed) {
+      TypecheckLogger.success('tsc check finished', elapsed());
+    } else {
+      TypecheckLogger.error('tsc check finished with failures', elapsed());
+    }
+
+    return result;
+  } catch (error) {
+    TypecheckLogger.error(
+      `tsc check failed: ${formatErrorMessage(error)}`,
+      elapsed(),
+    );
+    throw error;
+  }
 }

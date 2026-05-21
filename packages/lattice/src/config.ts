@@ -350,7 +350,7 @@ export interface PackageCheckTarget {
   /**
    * Built package directory to scan, relative to the inferred workspace root.
    */
-  distDir: string;
+  outDir: string;
   /**
    * Package check tools enabled for this target.
    *
@@ -372,7 +372,7 @@ export interface PackageCheckTarget {
   /**
    * Friendly target name used by CLI filters and reports.
    *
-   * Defaults to the `distDir` path.
+   * Defaults to the `outDir` path.
    */
   name?: string;
 }
@@ -509,9 +509,10 @@ export interface LoadConfigOptions {
    */
   command?: LatticeCommand;
   /**
-   * Config file path, resolved from `cwd`.
+   * Config file path, resolved from `cwd`. When omitted, Lattice searches for
+   * the nearest `lattice.config.mjs` from `cwd` upward.
    *
-   * @default "lattice.config.mjs"
+   * @default nearest "lattice.config.mjs" in `cwd` or its parents
    */
   configPath?: string;
   /**
@@ -541,6 +542,26 @@ function findPnpmWorkspaceRoot(startDir: string): string | null {
   while (true) {
     if (existsSync(path.join(currentDir, 'pnpm-workspace.yaml'))) {
       return currentDir;
+    }
+
+    const parentDir = path.dirname(currentDir);
+
+    if (parentDir === currentDir) {
+      return null;
+    }
+
+    currentDir = parentDir;
+  }
+}
+
+function findLatticeConfigPath(startDir: string): string | null {
+  let currentDir = path.resolve(startDir);
+
+  while (true) {
+    const candidatePath = path.join(currentDir, 'lattice.config.mjs');
+
+    if (existsSync(candidatePath)) {
+      return candidatePath;
     }
 
     const parentDir = path.dirname(currentDir);
@@ -585,13 +606,16 @@ export async function loadConfig(
   options: LoadConfigOptions = {},
 ): Promise<ResolvedLatticeConfig> {
   const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
-  const configPath = path.resolve(
-    cwd,
-    options.configPath ?? 'lattice.config.mjs',
-  );
+  const configPath = options.configPath
+    ? path.resolve(cwd, options.configPath)
+    : findLatticeConfigPath(cwd);
 
-  if (!existsSync(configPath)) {
-    throw new Error(`Unable to find lattice config at ${configPath}`);
+  if (!configPath || !existsSync(configPath)) {
+    throw new Error(
+      options.configPath
+        ? `Unable to find lattice config at ${configPath}`
+        : `Unable to find lattice config. Searched for lattice.config.mjs from ${cwd} and its parent directories.`,
+    );
   }
 
   const module = (await import(

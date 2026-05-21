@@ -1,5 +1,6 @@
 import { createLogger } from '@docs-islands/logger';
 import { formatErrorMessage } from '@docs-islands/logger/helper';
+import readline from 'node:readline';
 import type { ScopedLogger } from '@docs-islands/logger/types';
 
 const logger = createLogger({
@@ -14,5 +15,18 @@ export const PathsLogger: ScopedLogger = logger.getLoggerByGroup('task.paths');
 export const ProofLogger: ScopedLogger = logger.getLoggerByGroup('task.proof');
 export const TypecheckLogger: ScopedLogger =
   logger.getLoggerByGroup('task.typecheck');
+
+export function clearCliScreen(): void {
+  if (!process.stdout.isTTY || process.env.CI) {
+    return;
+  }
+
+  const repeatCount = (process.stdout.rows ?? 0) - 2;
+  const blank = repeatCount > 0 ? '\n'.repeat(repeatCount) : '';
+
+  process.stdout.write(blank);
+  readline.cursorTo(process.stdout, 0, 0);
+  readline.clearScreenDown(process.stdout);
+}
 
 export { formatErrorMessage };

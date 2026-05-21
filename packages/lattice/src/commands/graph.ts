@@ -1,8 +1,9 @@
+import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import type { ResolvedLatticeConfig } from '../config';
-import { GraphLogger } from '../logger';
+import { GraphLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectGraphProjectPaths,
   formatReferences,
@@ -1024,7 +1025,7 @@ function addWorkspaceReferenceDependencyProblems(
   }
 }
 
-export async function runGraphCheck(
+async function runGraphCheckInternal(
   config: ResolvedLatticeConfig,
 ): Promise<boolean> {
   const projectPaths = collectGraphProjectPaths(config);
@@ -1319,4 +1320,32 @@ export async function runGraphCheck(
     `Checked ${projects.length} graph projects; references are valid.`,
   );
   return true;
+}
+
+export async function runGraphCheck(
+  config: ResolvedLatticeConfig,
+): Promise<boolean> {
+  clearCliScreen();
+
+  const elapsed = createElapsedTimer();
+
+  GraphLogger.info('graph check started');
+
+  try {
+    const passed = await runGraphCheckInternal(config);
+
+    if (passed) {
+      GraphLogger.success('graph check finished', elapsed());
+    } else {
+      GraphLogger.error('graph check finished with failures', elapsed());
+    }
+
+    return passed;
+  } catch (error) {
+    GraphLogger.error(
+      `graph check failed: ${formatErrorMessage(error)}`,
+      elapsed(),
+    );
+    throw error;
+  }
 }

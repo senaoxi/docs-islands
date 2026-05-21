@@ -102,7 +102,7 @@ export default defineConfig({
     targets: [
       {
         name: '@acme/core',
-        distDir: 'packages/core/dist',
+        outDir: 'packages/core/dist',
         boundary: {
           ignoredExternalPackages: ['@acme/runtime-shim'],
         },
@@ -161,7 +161,7 @@ The typecheck route rejects `tsconfig*.build.json` and `tsconfig*.graph.json`, r
 
 ## Configuration
 
-`lattice.config.mjs` must default-export a config object, a Promise for one, or a function receiving `{ command, mode }`. Use `defineConfig(...)` for editor hints and typed package exports. `--mode` is forwarded to config functions; when omitted, Lattice uses `process.env.NODE_ENV` or `default`.
+`lattice.config.mjs` must default-export a config object, a Promise for one, or a function receiving `{ command, mode }`. Use `defineConfig(...)` for editor hints and typed package exports. `--mode` is forwarded to config functions; when omitted, Lattice uses `process.env.NODE_ENV` or `default`. When `--config` is omitted, Lattice searches for `lattice.config.mjs` from the command cwd upward; relative `--config` values are resolved from the command cwd, and absolute paths are used as-is.
 
 Lattice infers the workspace root by walking upward from the loaded config file until it finds `pnpm-workspace.yaml`. All config-relative paths below are resolved from that inferred root.
 
@@ -242,12 +242,15 @@ covered by the root graph, a configured sidecar target, or an allowlist entry.
 
 ### `packageChecks`
 
-Package checks inspect built package outputs under configured dist directories.
+Package checks inspect built package outputs under configured `outDir` directories.
+When `--package` is provided, it must exactly match `targets[].name`. Without
+`--package`, Lattice checks `cwd/package.json#name`; if that name matches a
+configured target, only that target runs, otherwise all targets run.
 
 | Field                                        | Description                                                                                  |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `targets[].name`                             | Target name used by `--package`. Usually the package name.                                   |
-| `targets[].distDir`                          | Directory containing built package files and `package.json`.                                 |
+| `targets[].outDir`                           | Directory containing built package files and `package.json`.                                 |
 | `targets[].checks`                           | Enabled tools: `publint`, `attw`, and/or `boundary`. Defaults to all three.                  |
 | `targets[].publint.strict`                   | Whether publint runs in strict mode. Defaults to `true`.                                     |
 | `targets[].attw.profile`                     | ATTW profile: `strict`, `node16`, or `esm-only`. Defaults to `esm-only`.                     |

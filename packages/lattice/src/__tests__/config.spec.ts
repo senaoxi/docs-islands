@@ -36,8 +36,8 @@ describe('defineConfig', () => {
               ignoredExternalPackages: ['@example/allowed'],
             },
             checks: ['publint', 'attw', 'boundary'],
-            distDir: 'packages/core/dist',
             name: '@example/core',
+            outDir: 'packages/core/dist',
             publint: {
               strict: true,
             },
@@ -146,6 +146,36 @@ export default defineConfig(async ({ command, mode }) => ({
     }
   });
 
+  it('finds the nearest lattice config from cwd parents by default', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {};
+`,
+      );
+      await writeText(path.join(rootDir, 'packages/core/package.json'), '{}\n');
+
+      const config = await loadConfig({
+        cwd: path.join(rootDir, 'packages/core'),
+      });
+
+      expect(config.configPath).toBe(path.join(rootDir, 'lattice.config.mjs'));
+      expect(config.rootDir).toBe(rootDir);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
   it('infers the pnpm workspace root from a parent directory', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
 
@@ -170,6 +200,52 @@ export default {};
         path.join(rootDir, 'tools/lattice.config.mjs'),
       );
       expect(config.rootDir).toBe(rootDir);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('accepts an absolute config path', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'tools/lattice.config.mjs'),
+        `
+export default {};
+`,
+      );
+
+      const configPath = path.join(rootDir, 'tools/lattice.config.mjs');
+      const config = await loadConfig({
+        configPath,
+        cwd: path.join(rootDir, 'packages/core'),
+      });
+
+      expect(config.configPath).toBe(configPath);
+      expect(config.rootDir).toBe(rootDir);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('fails clearly when no lattice config can be found upward', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /Searched for lattice\.config\.mjs from/u,
+      );
     } finally {
       await rm(rootDir, {
         force: true,
