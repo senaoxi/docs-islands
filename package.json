@@ -57,7 +57,7 @@
     "clean": "pnpm run _run clean && del-cli scripts/.tsbuild .eslintcache node_modules",
     "_run": "tsx scripts/run-workspace-script.ts",
     "preinstall": "npx only-allow pnpm",
-    "postinstall": "tsx scripts/postinstall.ts",
+    "postinstall": "node --import tsx scripts/postinstall.ts",
     "prepare": "husky"
   },
   "dependencies": {
