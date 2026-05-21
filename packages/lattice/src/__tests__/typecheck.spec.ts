@@ -7,6 +7,7 @@ import {
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from '../commands/typecheck';
+import { LatticeFlowReporter } from '../flow';
 import { collectTypecheckTargetProjectPaths } from '../tsconfig';
 
 async function writeText(filePath: string, text: string): Promise<void> {
@@ -59,7 +60,82 @@ function passingRunner(calls: TypecheckTarget[] = []) {
   };
 }
 
+function createFlow(): {
+  chunks: string[];
+  flow: LatticeFlowReporter;
+} {
+  const chunks: string[] = [];
+
+  return {
+    chunks,
+    flow: new LatticeFlowReporter({
+      env: {
+        CI: 'true',
+      },
+      forceTty: false,
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        isTTY: false,
+      },
+    }),
+  };
+}
+
 describe('runTypecheck', () => {
+  it('reports discovered targets and per-target status to the flow reporter', async () => {
+    const fixture = await createFixture({
+      'package.json': packageJson(),
+      'tsconfig.json': tsconfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+          {
+            path: './tsconfig.tools.json',
+          },
+        ],
+      }),
+      'tsconfig.lib.json': tsconfig({
+        include: ['src/**/*.ts'],
+      }),
+      'tsconfig.tools.json': tsconfig({
+        include: ['scripts/**/*.ts'],
+      }),
+    });
+    const { chunks, flow } = createFlow();
+
+    try {
+      const result = await runTypecheck({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+        flow,
+        runner: passingRunner(),
+      });
+
+      expect(result.passed).toBe(true);
+      expect(
+        chunks.some((chunk) =>
+          chunk.includes('[info] found 2 typecheck target config(s)'),
+        ),
+      ).toBe(true);
+      expect(
+        chunks.some((chunk) => chunk.includes('[pass] tsc: tsconfig.lib.json')),
+      ).toBe(true);
+      expect(
+        chunks.some((chunk) =>
+          chunk.includes('[pass] tsc: tsconfig.tools.json'),
+        ),
+      ).toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('runs a root tsconfig.json leaf directly', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({

@@ -96,7 +96,7 @@ export interface ReleasePackageManifest {
 }
 
 export interface ReleasePackageConfig {
-  key: 'logger' | 'vitepress';
+  key: 'logger' | 'lattice' | 'vitepress';
   packageName: string;
   relativeDir: string;
   publishRelativeDir: string;
@@ -195,6 +195,26 @@ const RELEASE_PACKAGE_CONFIGS: readonly ReleasePackageConfig[] = [
       'docs/zh/logger.md',
     ],
     tagPrefix: 'logger',
+    previewChecks: [
+      'test',
+      'build package',
+      'verify dist/package.json version',
+      'lattice package check',
+      'npm pack --dry-run',
+    ],
+  },
+  {
+    key: 'lattice',
+    packageName: '@docs-islands/lattice',
+    relativeDir: 'packages/lattice',
+    publishRelativeDir: 'packages/lattice/dist',
+    changelogRelativePath: 'packages/lattice/CHANGELOG.md',
+    changelogPaths: [
+      'packages/lattice',
+      'docs/en/lattice.md',
+      'docs/zh/lattice.md',
+    ],
+    tagPrefix: 'lattice',
     previewChecks: [
       'test',
       'build package',
@@ -337,11 +357,9 @@ export function getInternalDependencyNames(
   manifest: ReleasePackageManifest,
 ): Set<string> {
   const names = new Set<string>();
-  const dependencyMaps = [
-    manifest.dependencies,
-    manifest.devDependencies,
-    manifest.peerDependencies,
-  ];
+  // Release ordering follows publish-facing contracts. Dev dependencies can
+  // point back to local release tooling and create false package cycles.
+  const dependencyMaps = [manifest.dependencies, manifest.peerDependencies];
 
   for (const dependencyMap of dependencyMaps) {
     if (!dependencyMap) {

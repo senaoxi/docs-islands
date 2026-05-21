@@ -1,15 +1,11 @@
 {
   "name": "@docs-islands/lattice",
-  "private": true,
   "version": "0.0.1",
   "type": "module",
   "license": "MIT",
   "author": "Senao Xi",
   "description": "Configurable monorepo architecture and TypeScript graph governance CLI",
   "files": [
-    "README.md",
-    "README.zh-CN.md",
-    "bin",
     "dist"
   ],
   "keywords": [
@@ -46,6 +42,7 @@
   },
   "dependencies": {
     "@arethetypeswrong/core": "catalog:lint",
+    "@clack/prompts": "catalog:dev",
     "@docs-islands/logger": "catalog:prod",
     "@publint/pack": "catalog:lint",
     "cac": "catalog:dev",

@@ -144,26 +144,35 @@ function verifyDistVersion(plan: ReleasePlan): void {
   }
 }
 
+function runStandardPackageReleaseChecks(
+  plan: ReleasePlan,
+  options: ReleaseCliOptions,
+): void {
+  const { config } = plan;
+
+  if (!options.skipTests) {
+    getPackageScriptRunner(config, 'test');
+  }
+  if (!options.skipBuild) {
+    getPackageScriptRunner(config, 'build');
+    verifyDistVersion(plan);
+    runPackageArtifactChecks(config);
+    runCommand(getNpmCommand(), ['pack', '--dry-run'], {
+      cwd: config.publishDir,
+      stdio: 'inherit',
+      logger: ReleaseLogger,
+    });
+  }
+}
+
 function runPackageReleaseChecks(
   plan: ReleasePlan,
   options: ReleaseCliOptions,
 ): void {
   const { config } = plan;
 
-  if (config.key === 'logger') {
-    if (!options.skipTests) {
-      getPackageScriptRunner(config, 'test');
-    }
-    if (!options.skipBuild) {
-      getPackageScriptRunner(config, 'build');
-      verifyDistVersion(plan);
-      runPackageArtifactChecks(config);
-      runCommand(getNpmCommand(), ['pack', '--dry-run'], {
-        cwd: config.publishDir,
-        stdio: 'inherit',
-        logger: ReleaseLogger,
-      });
-    }
+  if (config.key !== 'vitepress') {
+    runStandardPackageReleaseChecks(plan, options);
     return;
   }
 

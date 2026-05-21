@@ -1,4 +1,4 @@
-# `@docs-islands/logger`
+# @docs-islands/logger
 
 `@docs-islands/logger` is the framework-agnostic logger package for docs-islands projects. Its root entry is intentionally small:
 

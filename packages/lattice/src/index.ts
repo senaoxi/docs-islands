@@ -35,6 +35,16 @@ export {
 } from './config';
 
 export {
+  LatticeFlowReporter,
+  createLatticeFlowReporter,
+  type LatticeFlowFailureOptions,
+  type LatticeFlowMessageOptions,
+  type LatticeFlowOutputOptions,
+  type LatticeFlowReporterOptions,
+  type LatticeFlowTask,
+} from './flow';
+
+export {
   runTypecheck,
   type RunTypecheckOptions,
   type RunTypecheckResult,

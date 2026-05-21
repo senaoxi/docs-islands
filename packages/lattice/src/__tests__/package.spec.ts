@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResolvedLatticeConfig } from '../config';
+import { LatticeFlowReporter } from '../flow';
 
 const packageCheckMocks = vi.hoisted(() => ({
   attwProblems: [] as unknown[],
@@ -125,6 +126,31 @@ function createConfig(
   };
 }
 
+function createFlow(): {
+  chunks: string[];
+  flow: LatticeFlowReporter;
+} {
+  const chunks: string[] = [];
+
+  return {
+    chunks,
+    flow: new LatticeFlowReporter({
+      env: {
+        CI: 'true',
+      },
+      forceTty: false,
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        isTTY: false,
+      },
+    }),
+  };
+}
+
 beforeEach(() => {
   packageCheckMocks.attwProblems = [];
   packageCheckMocks.attwRuns = 0;
@@ -183,6 +209,50 @@ describe('auditPublishedPackageBoundaries', () => {
 });
 
 describe('runPackageCheck', () => {
+  it('reports package target and sub-check states to the flow reporter', async () => {
+    const pkg = await createOutputPackage({
+      'index.js': "import '@example/dep';\n",
+    });
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-root-'));
+    const { chunks, flow } = createFlow();
+
+    try {
+      await expect(
+        runPackageCheck({
+          clearScreen: false,
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              outDir: pkg.outDir,
+              name: '@example/valid',
+            },
+          ]),
+          flow,
+        }),
+      ).resolves.toBe(true);
+
+      expect(
+        chunks.some((chunk) => chunk.includes('[start] package check')),
+      ).toBe(true);
+      expect(
+        chunks.some((chunk) =>
+          chunk.includes('[start] package target: @example/valid'),
+        ),
+      ).toBe(true);
+      expect(
+        chunks.some((chunk) =>
+          chunk.includes('[pass] package boundary: @example/valid'),
+        ),
+      ).toBe(true);
+    } finally {
+      await pkg.cleanup();
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
   it('filters configured targets by package name', async () => {
     const validPackage = await createOutputPackage({
       'index.js': "import '@example/dep';\n",
@@ -257,6 +327,52 @@ describe('runPackageCheck', () => {
     try {
       await writeText(
         path.join(cwd, 'package.json'),
+        JSON.stringify({
+          name: '@example/valid',
+        }),
+      );
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/valid',
+              outDir: validPackage.outDir,
+            },
+            {
+              checks: ['boundary'],
+              name: '@example/invalid',
+              outDir: invalidPackage.outDir,
+            },
+          ]),
+          cwd,
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await validPackage.cleanup();
+      await invalidPackage.cleanup();
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('uses nearest parent package.json name up to the workspace root', async () => {
+    const validPackage = await createOutputPackage({
+      'index.js': "import '@example/dep';\n",
+    });
+    const invalidPackage = await createOutputPackage({
+      'index.js': "import 'node:fs';\n",
+    });
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-package-root-'));
+    const packageDir = path.join(rootDir, 'packages/valid');
+    const cwd = path.join(packageDir, 'src/nested');
+
+    try {
+      await writeText(
+        path.join(packageDir, 'package.json'),
         JSON.stringify({
           name: '@example/valid',
         }),
@@ -366,6 +482,54 @@ describe('runPackageCheck', () => {
       await validPackage.cleanup();
       await invalidPackage.cleanup();
       await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('does not search beyond the workspace root for cwd package.json', async () => {
+    const validPackage = await createOutputPackage({
+      'index.js': "import '@example/dep';\n",
+    });
+    const invalidPackage = await createOutputPackage({
+      'index.js': "import 'node:fs';\n",
+    });
+    const parentDir = await mkdtemp(
+      path.join(tmpdir(), 'lattice-package-parent-'),
+    );
+    const rootDir = path.join(parentDir, 'repo');
+    const cwd = path.join(rootDir, 'packages/missing-manifest');
+
+    try {
+      await writeText(
+        path.join(parentDir, 'package.json'),
+        JSON.stringify({
+          name: '@example/valid',
+        }),
+      );
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/valid',
+              outDir: validPackage.outDir,
+            },
+            {
+              checks: ['boundary'],
+              name: '@example/invalid',
+              outDir: invalidPackage.outDir,
+            },
+          ]),
+          cwd,
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await validPackage.cleanup();
+      await invalidPackage.cleanup();
+      await rm(parentDir, {
         force: true,
         recursive: true,
       });

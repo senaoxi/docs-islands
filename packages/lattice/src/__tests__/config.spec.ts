@@ -239,10 +239,84 @@ export default {};
     }
   });
 
+  it('rejects explicit config paths outside the governed workspace', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+    const externalDir = await mkdtemp(
+      path.join(tmpdir(), 'lattice-external-config-'),
+    );
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      const externalConfigPath = path.join(externalDir, 'lattice.config.mjs');
+
+      await writeText(
+        externalConfigPath,
+        `
+throw new Error('external config should not be imported');
+`,
+      );
+
+      await expect(
+        loadConfig({
+          configPath: externalConfigPath,
+          cwd: rootDir,
+        }),
+      ).rejects.toThrow(/must be inside the governed pnpm workspace/u);
+    } finally {
+      await Promise.all([
+        rm(rootDir, {
+          force: true,
+          recursive: true,
+        }),
+        rm(externalDir, {
+          force: true,
+          recursive: true,
+        }),
+      ]);
+    }
+  });
+
+  it('does not search for default config beyond the workspace root', async () => {
+    const parentDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+    const rootDir = path.join(parentDir, 'workspace');
+
+    try {
+      await writeText(
+        path.join(parentDir, 'lattice.config.mjs'),
+        `
+throw new Error('parent config should not be imported');
+`,
+      );
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+
+      await expect(
+        loadConfig({
+          cwd: path.join(rootDir, 'packages/core'),
+        }),
+      ).rejects.toThrow(/up to the pnpm workspace root/u);
+    } finally {
+      await rm(parentDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
   it('fails clearly when no lattice config can be found upward', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
 
     try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
         /Searched for lattice\.config\.mjs from/u,
       );

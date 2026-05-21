@@ -2,6 +2,7 @@ import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { spawn } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
+import type { LatticeFlowReporter, LatticeFlowTask } from '../flow';
 import { TypecheckLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectTypecheckTargetProjectPaths,
@@ -27,8 +28,11 @@ export type TypecheckRunner = (
 ) => Promise<TypecheckTargetResult> | TypecheckTargetResult;
 
 export interface RunTypecheckOptions {
+  clearScreen?: boolean;
   concurrency?: number;
   cwd?: string;
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
   project?: string;
   runner?: TypecheckRunner;
   tscCommand?: string;
@@ -84,6 +88,13 @@ async function runWithConcurrency(
   targets: TypecheckTarget[],
   concurrency: number,
   runner: TypecheckRunner,
+  options: {
+    onTargetResult?: (
+      target: TypecheckTarget,
+      result: TypecheckTargetResult,
+    ) => void;
+    onTargetStart?: (target: TypecheckTarget) => void;
+  } = {},
 ): Promise<TypecheckTargetResult[]> {
   const results = new Array<TypecheckTargetResult>(targets.length);
   let nextIndex = 0;
@@ -101,13 +112,20 @@ async function runWithConcurrency(
         }
 
         try {
-          results[targetIndex] = await runner(targets[targetIndex]);
+          const target = targets[targetIndex];
+
+          options.onTargetStart?.(target);
+          results[targetIndex] = await runner(target);
+          options.onTargetResult?.(target, results[targetIndex]);
         } catch (error) {
+          const target = targets[targetIndex];
+
           results[targetIndex] = {
-            configPath: targets[targetIndex].configPath,
+            configPath: target.configPath,
             error: error instanceof Error ? error : new Error(String(error)),
             status: 1,
           };
+          options.onTargetResult?.(target, results[targetIndex]);
         }
       }
     }),
@@ -122,6 +140,7 @@ async function runTypecheckInternal(
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(cwd);
   const rootConfigPath = resolveProjectConfigPath(cwd, options.project);
+  const flowDepth = options.flowDepth ?? 0;
 
   const route = collectTypecheckTargetProjectPaths({
     rootConfigPath,
@@ -129,6 +148,9 @@ async function runTypecheckInternal(
   });
 
   if (route.problems.length > 0) {
+    options.flow?.fail('typecheck target discovery failed', {
+      depth: flowDepth + 1,
+    });
     TypecheckLogger.error(route.problems.join('\n\n'));
 
     return {
@@ -149,6 +171,13 @@ async function runTypecheckInternal(
     cwd: projectRootDir,
   }));
 
+  options.flow?.info(
+    `found ${targets.length} typecheck target config(s); concurrency ${concurrency}`,
+    {
+      depth: flowDepth + 1,
+    },
+  );
+
   TypecheckLogger.info(
     [
       `Running tsc for ${targets.length} typecheck target config(s).`,
@@ -157,10 +186,47 @@ async function runTypecheckInternal(
     ].join('\n'),
   );
 
+  const targetTasks = new Map<string, LatticeFlowTask>();
+
   const results = await runWithConcurrency(
     targets,
     concurrency,
     options.runner ?? createDefaultRunner(command),
+    {
+      onTargetResult: (_target, result) => {
+        const task = targetTasks.get(result.configPath);
+
+        if (!task) {
+          return;
+        }
+
+        if (result.status === 0) {
+          task.pass();
+        } else {
+          const suffix = result.error
+            ? formatErrorMessage(result.error)
+            : `exited with code ${result.status}`;
+
+          task.fail(undefined, { error: suffix });
+        }
+      },
+      onTargetStart: (target) => {
+        if (!options.flow) {
+          return;
+        }
+
+        targetTasks.set(
+          target.configPath,
+          options.flow.start(
+            `tsc: ${toRelativePath(projectRootDir, target.configPath)}`,
+            {
+              collapseOnSuccess: false,
+              depth: flowDepth + 1,
+            },
+          ),
+        );
+      },
+    },
   );
   const failedResults = results.filter((result) => result.status !== 0);
 
@@ -181,12 +247,14 @@ async function runTypecheckInternal(
       ].join('\n'),
     );
   } else {
-    TypecheckLogger.success(
-      `Checked ${targets.length} typecheck target config(s) from ${toRelativePath(
-        projectRootDir,
-        rootConfigPath,
-      )}.`,
-    );
+    if (!options.flow?.interactive) {
+      TypecheckLogger.success(
+        `Checked ${targets.length} typecheck target config(s) from ${toRelativePath(
+          projectRootDir,
+          rootConfigPath,
+        )}.`,
+      );
+    }
   }
 
   return {
@@ -201,9 +269,14 @@ async function runTypecheckInternal(
 export async function runTypecheck(
   options: RunTypecheckOptions = {},
 ): Promise<RunTypecheckResult> {
-  clearCliScreen();
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
 
   const elapsed = createElapsedTimer();
+  const task = options.flow?.start('tsc check', {
+    depth: options.flowDepth ?? 0,
+  });
 
   TypecheckLogger.info('tsc check started');
 
@@ -211,9 +284,14 @@ export async function runTypecheck(
     const result = await runTypecheckInternal(options);
 
     if (result.passed) {
-      TypecheckLogger.success('tsc check finished', elapsed());
+      if (!options.flow?.interactive) {
+        TypecheckLogger.success('tsc check finished', elapsed());
+      }
+
+      task?.pass();
     } else {
       TypecheckLogger.error('tsc check finished with failures', elapsed());
+      task?.fail('tsc check finished with failures');
     }
 
     return result;
@@ -222,6 +300,7 @@ export async function runTypecheck(
       `tsc check failed: ${formatErrorMessage(error)}`,
       elapsed(),
     );
+    task?.fail('tsc check failed', { error });
     throw error;
   }
 }

@@ -21,6 +21,7 @@ import type {
   ResolvedLatticeConfig,
   RuntimeEnvironment,
 } from '../config';
+import type { LatticeFlowReporter } from '../flow';
 import { PackageLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import { toRelativePath } from '../utils/path';
 import { getPackageRootSpecifier } from '../workspace';
@@ -60,8 +61,11 @@ interface SelfSpecifierMatchers {
 
 export interface RunPackageCheckOptions {
   attwProfile?: PackageAttwProfile;
+  clearScreen?: boolean;
   config: ResolvedLatticeConfig;
   cwd?: string;
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
   targetName?: string;
   tool?: PackageCheckToolSelection;
 }
@@ -358,10 +362,49 @@ function selectTargetChecks(
   return configuredChecks.includes(requestedTool) ? [requestedTool] : [];
 }
 
-function readCwdPackageName(cwd: string): string | undefined {
-  const packageJsonPath = path.join(cwd, 'package.json');
+function findNearestPackageJsonPath(
+  cwd: string,
+  rootDir: string,
+): string | undefined {
+  const resolvedRootDir = path.resolve(rootDir);
+  let currentDir = path.resolve(cwd);
 
-  if (!existsSync(packageJsonPath)) {
+  while (true) {
+    const relativeToRoot = path.relative(resolvedRootDir, currentDir);
+    const isWithinRoot =
+      relativeToRoot === '' ||
+      (relativeToRoot !== '..' &&
+        !relativeToRoot.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relativeToRoot));
+
+    if (!isWithinRoot) {
+      return undefined;
+    }
+
+    const packageJsonPath = path.join(currentDir, 'package.json');
+
+    if (existsSync(packageJsonPath)) {
+      return packageJsonPath;
+    }
+
+    if (currentDir === resolvedRootDir) {
+      return undefined;
+    }
+
+    const parentDir = path.dirname(currentDir);
+
+    if (parentDir === currentDir) {
+      return undefined;
+    }
+
+    currentDir = parentDir;
+  }
+}
+
+function readCwdPackageName(cwd: string, rootDir: string): string | undefined {
+  const packageJsonPath = findNearestPackageJsonPath(cwd, rootDir);
+
+  if (!packageJsonPath) {
     return undefined;
   }
 
@@ -465,7 +508,10 @@ function createPackageCheckPlan(options: {
 
     selectionReason = `--package "${options.targetName}" matched configured target name.`;
   } else {
-    const cwdPackageName = readCwdPackageName(options.cwd);
+    const cwdPackageName = readCwdPackageName(
+      options.cwd,
+      options.config.rootDir,
+    );
 
     if (cwdPackageName) {
       selectedTargets = targets.filter(
@@ -473,15 +519,15 @@ function createPackageCheckPlan(options: {
       );
 
       if (selectedTargets.length > 0) {
-        selectionReason = `cwd package.json name "${cwdPackageName}" matched configured target name.`;
+        selectionReason = `nearest package.json name "${cwdPackageName}" matched configured target name.`;
       } else {
         selectedTargets = targets;
-        selectionReason = `cwd package.json name "${cwdPackageName}" did not match configured target names; running all configured targets.`;
+        selectionReason = `nearest package.json name "${cwdPackageName}" did not match configured target names; running all configured targets.`;
       }
     } else {
       selectedTargets = targets;
       selectionReason =
-        'No package name was found in cwd/package.json; running all configured targets.';
+        'No package name was found from cwd up to the workspace root; running all configured targets.';
     }
   }
 
@@ -549,10 +595,16 @@ async function packOutputTarball(
 }
 
 async function runPublintCheck(options: {
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
   label: string;
   strict: boolean;
   tarball: Buffer;
 }): Promise<boolean> {
+  const task = options.flow?.start(`publint: ${options.label}`, {
+    depth: options.flowDepth ?? 0,
+  });
+
   PackageLogger.info(`publint started: ${options.label}`);
   const publintElapsed = createElapsedTimer();
   const { messages, pkg } = await publint({
@@ -561,7 +613,14 @@ async function runPublintCheck(options: {
   });
 
   if (messages.length === 0) {
-    PackageLogger.success(`publint passed: ${options.label}`, publintElapsed());
+    if (!options.flow?.interactive) {
+      PackageLogger.success(
+        `publint passed: ${options.label}`,
+        publintElapsed(),
+      );
+    }
+
+    task?.pass();
     return true;
   }
 
@@ -584,14 +643,21 @@ async function runPublintCheck(options: {
     `publint found ${messages.length} issue(s): ${options.label}`,
     publintElapsed(),
   );
+  task?.fail(`publint found ${messages.length} issue(s): ${options.label}`);
   return false;
 }
 
 async function runAttwCheck(options: {
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
   label: string;
   profile: PackageAttwProfile;
   tarball: Buffer;
 }): Promise<boolean> {
+  const task = options.flow?.start(`attw: ${options.label}`, {
+    depth: options.flowDepth ?? 0,
+  });
+
   PackageLogger.info(
     `attw started: ${options.label} (profile: ${options.profile})`,
   );
@@ -602,6 +668,7 @@ async function runAttwCheck(options: {
   if (!result.types) {
     PackageLogger.error(`[${options.label}] [attw] package has no types`);
     PackageLogger.error(`attw failed: ${options.label}`, attwElapsed());
+    task?.fail(`attw failed: ${options.label}`);
     return false;
   }
 
@@ -614,7 +681,11 @@ async function runAttwCheck(options: {
   });
 
   if (problems.length === 0) {
-    PackageLogger.success(`attw passed: ${options.label}`, attwElapsed());
+    if (!options.flow?.interactive) {
+      PackageLogger.success(`attw passed: ${options.label}`, attwElapsed());
+    }
+
+    task?.pass();
     return true;
   }
 
@@ -628,22 +699,35 @@ async function runAttwCheck(options: {
     `attw found ${problems.length} problem(s): ${options.label}`,
     attwElapsed(),
   );
+  task?.fail(`attw found ${problems.length} problem(s): ${options.label}`);
   return false;
 }
 
 async function runBoundaryCheck(
   target: PublishedPackageBoundaryTarget,
   label: string,
+  options: {
+    flow?: LatticeFlowReporter;
+    flowDepth?: number;
+  } = {},
 ): Promise<boolean> {
+  const task = options.flow?.start(`package boundary: ${label}`, {
+    depth: options.flowDepth ?? 0,
+  });
+
   PackageLogger.info(`package boundary started: ${label}`);
   const boundaryElapsed = createElapsedTimer();
   const violations = await auditPublishedPackageBoundaries(target);
 
   if (violations.length === 0) {
-    PackageLogger.success(
-      `package boundary passed: ${label}`,
-      boundaryElapsed(),
-    );
+    if (!options.flow?.interactive) {
+      PackageLogger.success(
+        `package boundary passed: ${label}`,
+        boundaryElapsed(),
+      );
+    }
+
+    task?.pass();
     return true;
   }
 
@@ -657,6 +741,7 @@ async function runBoundaryCheck(
     `package boundary found ${violations.length} issue(s): ${label}`,
     boundaryElapsed(),
   );
+  task?.fail(`package boundary found ${violations.length} issue(s): ${label}`);
   return false;
 }
 
@@ -664,6 +749,8 @@ async function runPackageCheckTarget(options: {
   attwProfile?: PackageAttwProfile;
   checks: PackageCheckTool[];
   config: ResolvedLatticeConfig;
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
   label: string;
   outDir: string;
   rawTarget: PackageCheckTarget;
@@ -674,24 +761,46 @@ async function runPackageCheckTarget(options: {
   };
   const label = options.label;
   const outputPackageJsonPath = path.join(target.outDir, 'package.json');
-
-  if (!existsSync(outputPackageJsonPath)) {
-    throw new Error(
-      `outDir package.json not found for ${label} at ${toRelativePath(
-        options.config.rootDir,
-        outputPackageJsonPath,
-      )}. Run the package build first.`,
-    );
-  }
+  const task = options.flow?.start(`package target: ${label}`, {
+    depth: options.flowDepth ?? 0,
+  });
 
   let packedDist: PackedPackageTarball | undefined;
 
   try {
+    if (!existsSync(outputPackageJsonPath)) {
+      throw new Error(
+        `outDir package.json not found for ${label} at ${toRelativePath(
+          options.config.rootDir,
+          outputPackageJsonPath,
+        )}. Run the package build first.`,
+      );
+    }
+
     if (options.checks.includes('publint') || options.checks.includes('attw')) {
+      const packTask = options.flow?.start(`package tarball: ${label}`, {
+        depth: (options.flowDepth ?? 0) + 1,
+      });
       PackageLogger.info(`package tarball packing started: ${label}`);
       const packElapsed = createElapsedTimer();
-      packedDist = await packOutputTarball(target.outDir);
-      PackageLogger.success(`package tarball packed: ${label}`, packElapsed());
+      try {
+        packedDist = await packOutputTarball(target.outDir);
+      } catch (error) {
+        PackageLogger.error(
+          `package tarball failed: ${label}: ${formatErrorMessage(error)}`,
+          packElapsed(),
+        );
+        packTask?.fail(`package tarball failed: ${label}`, { error });
+        throw error;
+      }
+      if (!options.flow?.interactive) {
+        PackageLogger.success(
+          `package tarball packed: ${label}`,
+          packElapsed(),
+        );
+      }
+
+      packTask?.pass();
     }
 
     let passed = true;
@@ -699,6 +808,8 @@ async function runPackageCheckTarget(options: {
     if (options.checks.includes('publint')) {
       passed =
         (await runPublintCheck({
+          flow: options.flow,
+          flowDepth: (options.flowDepth ?? 0) + 1,
           label,
           strict: target.publint?.strict ?? true,
           tarball: packedDist!.tarball,
@@ -708,6 +819,8 @@ async function runPackageCheckTarget(options: {
     if (options.checks.includes('attw')) {
       passed =
         (await runAttwCheck({
+          flow: options.flow,
+          flowDepth: (options.flowDepth ?? 0) + 1,
           label,
           profile: options.attwProfile ?? target.attw?.profile ?? 'esm-only',
           tarball: packedDist!.tarball,
@@ -722,16 +835,31 @@ async function runPackageCheckTarget(options: {
             outDir: target.outDir,
           },
           label,
+          {
+            flow: options.flow,
+            flowDepth: (options.flowDepth ?? 0) + 1,
+          },
         )) && passed;
     }
 
     if (passed) {
-      PackageLogger.success(`package checks passed: ${label}`);
+      if (!options.flow?.interactive) {
+        PackageLogger.success(`package checks passed: ${label}`);
+      }
+
+      task?.pass();
     } else {
       PackageLogger.error(`package checks failed: ${label}`);
+      task?.fail(`package checks failed: ${label}`);
     }
 
     return passed;
+  } catch (error) {
+    PackageLogger.error(
+      `package checks failed: ${label}: ${formatErrorMessage(error)}`,
+    );
+    task?.fail(`package checks failed: ${label}`, { error });
+    throw error;
   } finally {
     if (packedDist) {
       await packedDist.cleanup();
@@ -805,10 +933,15 @@ export async function auditPublishedPackageBoundaries(
 export async function runPackageCheck(
   options: RunPackageCheckOptions,
 ): Promise<boolean> {
-  clearCliScreen();
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
 
   const elapsed = createElapsedTimer();
   const cwd = path.resolve(options.cwd ?? process.cwd());
+  const task = options.flow?.start('package check', {
+    depth: options.flowDepth ?? 0,
+  });
 
   try {
     PackageLogger.info('package check started');
@@ -846,6 +979,8 @@ export async function runPackageCheck(
           attwProfile: options.attwProfile,
           checks: target.checks,
           config: options.config,
+          flow: options.flow,
+          flowDepth: (options.flowDepth ?? 0) + 1,
           label: target.label,
           outDir: target.outDir,
           rawTarget: target.rawTarget,
@@ -853,9 +988,14 @@ export async function runPackageCheck(
     }
 
     if (passed) {
-      PackageLogger.success('package check finished', elapsed());
+      if (!options.flow?.interactive) {
+        PackageLogger.success('package check finished', elapsed());
+      }
+
+      task?.pass();
     } else {
       PackageLogger.error('package check finished with failures', elapsed());
+      task?.fail('package check finished with failures');
     }
 
     return passed;
@@ -864,6 +1004,7 @@ export async function runPackageCheck(
       `package check failed: ${formatErrorMessage(error)}`,
       elapsed(),
     );
+    task?.fail('package check failed', { error });
     throw error;
   }
 }

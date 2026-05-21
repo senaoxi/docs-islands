@@ -105,6 +105,13 @@ export default defineConfig({
         outDir: 'packages/logger/dist',
       },
       {
+        name: '@docs-islands/lattice',
+        outDir: 'packages/lattice/dist',
+        boundary: {
+          environment: 'node',
+        },
+      },
+      {
         name: '@docs-islands/vitepress',
         outDir: 'packages/vitepress/dist',
       },

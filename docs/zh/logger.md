@@ -1,4 +1,4 @@
-# `@docs-islands/logger`
+# @docs-islands/logger
 
 `@docs-islands/logger` 是 docs-islands 项目的框架无关 logger 包。它的 root 入口刻意保持很小：
 

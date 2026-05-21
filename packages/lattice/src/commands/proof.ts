@@ -4,6 +4,7 @@ import path from 'node:path';
 import { glob } from 'tinyglobby';
 import ts from 'typescript';
 import type { ResolvedLatticeConfig } from '../config';
+import type { LatticeFlowReporter } from '../flow';
 import { ProofLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectGraphProjectPaths,
@@ -24,6 +25,12 @@ interface SidecarTarget {
 interface CoverageSource {
   label: string;
   type: 'allowlist' | 'graph' | 'sidecar';
+}
+
+export interface RunProofCheckOptions {
+  clearScreen?: boolean;
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
 }
 
 type ConfigFileOwners = Map<string, string[]>;
@@ -677,6 +684,7 @@ function addUncoveredSourceProblems(options: {
 
 async function runProofCheckInternal(
   config: ResolvedLatticeConfig,
+  options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
   const problems: string[] = [];
   const graphProjectPaths = collectGraphProjectPaths(config);
@@ -768,16 +776,21 @@ async function runProofCheckInternal(
     sources.some((source) => source.type === 'sidecar'),
   ).length;
 
-  ProofLogger.success(
-    [
-      `Checked ${graphProjectPaths.length} graph projects and ${buildConfigPaths.length} build configs.`,
-      `IDE/typecheck route covers ${typecheckProjectPaths.length} configs from ${typecheckRootConfig(config)}.`,
-      `Root graph covers ${graphFileCount} files; configured sidecars cover ${sidecarFileCount} files.`,
-      `Configured source boundary covers ${sourceFiles.size} files.`,
-    ].join('\n'),
-  );
+  if (options.logSuccess ?? true) {
+    ProofLogger.success(
+      [
+        `Checked ${graphProjectPaths.length} graph projects and ${buildConfigPaths.length} build configs.`,
+        `IDE/typecheck route covers ${typecheckProjectPaths.length} configs from ${typecheckRootConfig(config)}.`,
+        `Root graph covers ${graphFileCount} files; configured sidecars cover ${sidecarFileCount} files.`,
+        `Configured source boundary covers ${sourceFiles.size} files.`,
+      ].join('\n'),
+    );
+  }
 
-  if ((config.proof?.allowlist ?? []).length > 0) {
+  if (
+    (options.logSuccess ?? true) &&
+    (config.proof?.allowlist ?? []).length > 0
+  ) {
     ProofLogger.info(
       `Explicit typecheck proof allowlist: ${(config.proof?.allowlist ?? [])
         .map((entry) => entry.file)
@@ -790,20 +803,32 @@ async function runProofCheckInternal(
 
 export async function runProofCheck(
   config: ResolvedLatticeConfig,
+  options: RunProofCheckOptions = {},
 ): Promise<boolean> {
-  clearCliScreen();
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
 
   const elapsed = createElapsedTimer();
+  const task = options.flow?.start('proof check', {
+    depth: options.flowDepth ?? 0,
+  });
 
   ProofLogger.info('proof check started');
 
   try {
-    const passed = await runProofCheckInternal(config);
+    const logSuccess = !options.flow?.interactive;
+    const passed = await runProofCheckInternal(config, { logSuccess });
 
     if (passed) {
-      ProofLogger.success('proof check finished', elapsed());
+      if (logSuccess) {
+        ProofLogger.success('proof check finished', elapsed());
+      }
+
+      task?.pass();
     } else {
       ProofLogger.error('proof check finished with failures', elapsed());
+      task?.fail('proof check finished with failures');
     }
 
     return passed;
@@ -812,6 +837,7 @@ export async function runProofCheck(
       `proof check failed: ${formatErrorMessage(error)}`,
       elapsed(),
     );
+    task?.fail('proof check failed', { error });
     throw error;
   }
 }

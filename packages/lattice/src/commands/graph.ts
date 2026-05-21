@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import type { ResolvedLatticeConfig } from '../config';
+import type { LatticeFlowReporter } from '../flow';
 import { GraphLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectGraphProjectPaths,
@@ -36,6 +37,12 @@ interface ImportRecord {
   filePath: string;
   line: number;
   specifier: string;
+}
+
+export interface RunGraphCheckOptions {
+  clearScreen?: boolean;
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
 }
 
 interface GraphRuleRefDeny {
@@ -1027,6 +1034,7 @@ function addWorkspaceReferenceDependencyProblems(
 
 async function runGraphCheckInternal(
   config: ResolvedLatticeConfig,
+  options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
   const projectPaths = collectGraphProjectPaths(config);
   const projects = projectPaths.map((projectPath) =>
@@ -1316,28 +1324,43 @@ async function runGraphCheckInternal(
     return false;
   }
 
-  GraphLogger.success(
-    `Checked ${projects.length} graph projects; references are valid.`,
-  );
+  if (options.logSuccess ?? true) {
+    GraphLogger.success(
+      `Checked ${projects.length} graph projects; references are valid.`,
+    );
+  }
+
   return true;
 }
 
 export async function runGraphCheck(
   config: ResolvedLatticeConfig,
+  options: RunGraphCheckOptions = {},
 ): Promise<boolean> {
-  clearCliScreen();
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
 
   const elapsed = createElapsedTimer();
+  const task = options.flow?.start('graph check', {
+    depth: options.flowDepth ?? 0,
+  });
 
   GraphLogger.info('graph check started');
 
   try {
-    const passed = await runGraphCheckInternal(config);
+    const logSuccess = !options.flow?.interactive;
+    const passed = await runGraphCheckInternal(config, { logSuccess });
 
     if (passed) {
-      GraphLogger.success('graph check finished', elapsed());
+      if (logSuccess) {
+        GraphLogger.success('graph check finished', elapsed());
+      }
+
+      task?.pass();
     } else {
       GraphLogger.error('graph check finished with failures', elapsed());
+      task?.fail('graph check finished with failures');
     }
 
     return passed;
@@ -1346,6 +1369,7 @@ export async function runGraphCheck(
       `graph check failed: ${formatErrorMessage(error)}`,
       elapsed(),
     );
+    task?.fail('graph check failed', { error });
     throw error;
   }
 }

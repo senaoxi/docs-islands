@@ -5,6 +5,7 @@ import path from 'node:path';
 import { glob } from 'tinyglobby';
 import ts from 'typescript';
 import type { ResolvedLatticeConfig } from '../config';
+import type { LatticeFlowReporter } from '../flow';
 import { PathsLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectGraphProjectPaths,
@@ -53,6 +54,13 @@ interface PathsResult {
   changed: boolean;
   outputCount: number;
   suggestionCount: number;
+}
+
+export interface RunPathsOptions {
+  check?: boolean;
+  clearScreen?: boolean;
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
 }
 
 const defaultSourceExtensions = [
@@ -1132,12 +1140,17 @@ async function runPathsInternal(
 
 export async function runPaths(
   config: ResolvedLatticeConfig,
-  options: { check?: boolean } = {},
+  options: RunPathsOptions = {},
 ): Promise<PathsResult> {
-  clearCliScreen();
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
 
   const elapsed = createElapsedTimer();
   const action = options.check ? 'paths check' : 'paths generate';
+  const task = options.flow?.start(action, {
+    depth: options.flowDepth ?? 0,
+  });
 
   PathsLogger.info(`${action} started`);
 
@@ -1146,8 +1159,13 @@ export async function runPaths(
 
     if (options.check && result.changed) {
       PathsLogger.error(`${action} finished with stale files`, elapsed());
+      task?.fail(`${action} finished with stale files`);
     } else {
-      PathsLogger.success(`${action} finished`, elapsed());
+      if (!options.flow?.interactive) {
+        PathsLogger.success(`${action} finished`, elapsed());
+      }
+
+      task?.pass();
     }
 
     return result;
@@ -1156,6 +1174,7 @@ export async function runPaths(
       `${action} failed: ${formatErrorMessage(error)}`,
       elapsed(),
     );
+    task?.fail(`${action} failed`, { error });
     throw error;
   }
 }

@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 import { cac } from 'cac';
-import { spawnSync } from 'node:child_process';
-import path from 'node:path';
 import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runPaths } from './commands/paths';
@@ -9,14 +7,14 @@ import { runProofCheck } from './commands/proof';
 import { runTypecheck } from './commands/typecheck';
 import {
   loadConfig,
-  type BuiltinTaskName,
   type LatticeCommand,
   type PackageAttwProfile,
   type PackageCheckToolSelection,
-  type PipelineStep,
   type ResolvedLatticeConfig,
 } from './config';
-import { CliLogger, formatErrorMessage } from './logger';
+import { createLatticeFlowReporter } from './flow';
+import { CliLogger, clearCliScreen, formatErrorMessage } from './logger';
+import { runPipeline } from './pipeline';
 
 interface GlobalFlags {
   config?: string;
@@ -34,8 +32,6 @@ interface TscFlags extends GlobalFlags {
   project?: string;
 }
 
-type NormalizedPipelineStep = Exclude<PipelineStep, string>;
-
 async function load(
   flags: GlobalFlags,
   command: LatticeCommand,
@@ -46,61 +42,6 @@ async function load(
     cwd: process.cwd(),
     mode: flags.mode,
   });
-}
-
-async function runBuiltinTask(
-  config: ResolvedLatticeConfig,
-  taskName: BuiltinTaskName,
-  cwd: string,
-): Promise<boolean> {
-  switch (taskName) {
-    case 'graph:check': {
-      return runGraphCheck(config);
-    }
-    case 'proof:check': {
-      return runProofCheck(config);
-    }
-    case 'package:check': {
-      return runPackageCheck({ config, cwd });
-    }
-    case 'tsc:run': {
-      const result = await runTypecheck({
-        cwd: config.rootDir,
-      });
-
-      return result.passed;
-    }
-  }
-}
-
-function normalizePipelineStep(step: PipelineStep): NormalizedPipelineStep {
-  if (typeof step !== 'string') {
-    return step;
-  }
-
-  if (
-    step === 'graph:check' ||
-    step === 'proof:check' ||
-    step === 'package:check' ||
-    step === 'tsc:run'
-  ) {
-    return {
-      name: step,
-      type: 'task',
-    };
-  }
-
-  const [command, ...args] = step.split(/\s+/u).filter(Boolean);
-
-  if (!command) {
-    throw new Error('Pipeline command step must not be empty.');
-  }
-
-  return {
-    args,
-    command,
-    type: 'command',
-  };
 }
 
 function parsePackageTool(
@@ -156,51 +97,10 @@ function parseConcurrency(value: string | undefined): number | undefined {
   return parsed;
 }
 
-function runCommandStep(
-  config: ResolvedLatticeConfig,
-  step: Extract<PipelineStep, { type: 'command' }>,
-): boolean {
-  const result = spawnSync(step.command, step.args ?? [], {
-    cwd: step.cwd ? path.resolve(config.rootDir, step.cwd) : config.rootDir,
-    env: {
-      ...process.env,
-      ...step.env,
-    },
-    shell: process.platform === 'win32',
-    stdio: 'inherit',
-  });
+function createCliFlow() {
+  clearCliScreen();
 
-  if (result.error) {
-    throw result.error;
-  }
-
-  return (result.status ?? 1) === 0;
-}
-
-async function runPipeline(
-  config: ResolvedLatticeConfig,
-  pipelineName: string,
-  cwd = process.cwd(),
-): Promise<boolean> {
-  const steps = config.pipelines?.[pipelineName];
-
-  if (!steps) {
-    throw new Error(`Unknown lattice pipeline "${pipelineName}".`);
-  }
-
-  for (const rawStep of steps) {
-    const step = normalizePipelineStep(rawStep);
-    const passed =
-      step.type === 'task'
-        ? await runBuiltinTask(config, step.name, cwd)
-        : runCommandStep(config, step);
-
-    if (!passed) {
-      return false;
-    }
-  }
-
-  return true;
+  return createLatticeFlowReporter();
 }
 
 async function main(): Promise<void> {
@@ -213,12 +113,19 @@ async function main(): Promise<void> {
   cli
     .command('check <pipeline>', 'Run a configured governance pipeline')
     .action(async (pipeline: string, flags: GlobalFlags) => {
+      const flow = createCliFlow();
+      flow.intro('lattice check');
       const config = await load(flags, 'check');
-      const passed = await runPipeline(config, pipeline, process.cwd());
+      const passed = await runPipeline(config, pipeline, {
+        cwd: process.cwd(),
+        flow,
+      });
 
       if (!passed) {
         process.exitCode = 1;
       }
+
+      flow.outro(passed ? 'lattice check passed' : 'lattice check failed');
     });
 
   cli
@@ -232,12 +139,24 @@ async function main(): Promise<void> {
           `Unknown paths action "${action}". Expected generate, apply, or check.`,
         );
       }
+      const flow = createCliFlow();
+      flow.intro(`lattice paths ${action}`);
       const config = await load(flags, 'paths');
-      const result = await runPaths(config, { check: action === 'check' });
+      const result = await runPaths(config, {
+        check: action === 'check',
+        clearScreen: false,
+        flow,
+      });
 
       if (action === 'check' && result.changed) {
         process.exitCode = 1;
       }
+
+      flow.outro(
+        action === 'check' && result.changed
+          ? 'lattice paths failed'
+          : 'lattice paths passed',
+      );
     });
 
   cli
@@ -246,11 +165,19 @@ async function main(): Promise<void> {
       if (action !== 'check') {
         throw new Error(`Unknown graph action "${action}". Expected check.`);
       }
+      const flow = createCliFlow();
+      flow.intro('lattice graph check');
       const config = await load(flags, 'graph');
+      const passed = await runGraphCheck(config, {
+        clearScreen: false,
+        flow,
+      });
 
-      if (!(await runGraphCheck(config))) {
+      if (!passed) {
         process.exitCode = 1;
       }
+
+      flow.outro(passed ? 'lattice graph passed' : 'lattice graph failed');
     });
 
   cli
@@ -259,11 +186,19 @@ async function main(): Promise<void> {
       if (action !== 'check') {
         throw new Error(`Unknown proof action "${action}". Expected check.`);
       }
+      const flow = createCliFlow();
+      flow.intro('lattice proof check');
       const config = await load(flags, 'proof');
+      const passed = await runProofCheck(config, {
+        clearScreen: false,
+        flow,
+      });
 
-      if (!(await runProofCheck(config))) {
+      if (!passed) {
         process.exitCode = 1;
       }
+
+      flow.outro(passed ? 'lattice proof passed' : 'lattice proof failed');
     });
 
   cli
@@ -271,15 +206,21 @@ async function main(): Promise<void> {
     .option('-p, --project <path>', 'Tsconfig file or directory')
     .option('--concurrency <n>', 'Maximum concurrent tsc processes')
     .action(async (flags: TscFlags) => {
+      const flow = createCliFlow();
+      flow.intro('lattice tsc');
       const result = await runTypecheck({
+        clearScreen: false,
         concurrency: parseConcurrency(flags.concurrency),
         cwd: process.cwd(),
+        flow,
         project: flags.project,
       });
 
       if (!result.passed) {
         process.exitCode = 1;
       }
+
+      flow.outro(result.passed ? 'lattice tsc passed' : 'lattice tsc failed');
     });
 
   cli
@@ -291,19 +232,24 @@ async function main(): Promise<void> {
       if (action !== 'check') {
         throw new Error(`Unknown package action "${action}". Expected check.`);
       }
+      const flow = createCliFlow();
+      flow.intro('lattice package check');
       const config = await load(flags, 'package');
+      const passed = await runPackageCheck({
+        attwProfile: parsePackageAttwProfile(flags.attwProfile),
+        clearScreen: false,
+        config,
+        cwd: process.cwd(),
+        flow,
+        targetName: flags.package,
+        tool: parsePackageTool(flags.tool),
+      });
 
-      if (
-        !(await runPackageCheck({
-          attwProfile: parsePackageAttwProfile(flags.attwProfile),
-          config,
-          cwd: process.cwd(),
-          targetName: flags.package,
-          tool: parsePackageTool(flags.tool),
-        }))
-      ) {
+      if (!passed) {
         process.exitCode = 1;
       }
+
+      flow.outro(passed ? 'lattice package passed' : 'lattice package failed');
     });
 
   cli.parse(process.argv, { run: false });

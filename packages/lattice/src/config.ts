@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isPathInsideDirectory } from './utils/path';
 
 /**
  * Runtime label used by package boundary checks.
@@ -465,7 +466,7 @@ export interface ResolvedLatticeConfig extends LatticeConfig {
    */
   configPath: string;
   /**
-   * Absolute workspace root inferred from the nearest parent `pnpm-workspace.yaml`.
+   * Absolute workspace root inferred from `cwd` and its parent directories.
    */
   rootDir: string;
 }
@@ -510,9 +511,10 @@ export interface LoadConfigOptions {
   command?: LatticeCommand;
   /**
    * Config file path, resolved from `cwd`. When omitted, Lattice searches for
-   * the nearest `lattice.config.mjs` from `cwd` upward.
+   * the nearest `lattice.config.mjs` from `cwd` upward to the inferred pnpm
+   * workspace root.
    *
-   * @default nearest "lattice.config.mjs" in `cwd` or its parents
+   * @default nearest "lattice.config.mjs" in `cwd` or workspace parents
    */
   configPath?: string;
   /**
@@ -554,14 +556,22 @@ function findPnpmWorkspaceRoot(startDir: string): string | null {
   }
 }
 
-function findLatticeConfigPath(startDir: string): string | null {
+function findLatticeConfigPath(
+  startDir: string,
+  rootDir: string,
+): string | null {
   let currentDir = path.resolve(startDir);
+  const workspaceRootDir = path.resolve(rootDir);
 
-  while (true) {
+  while (isPathInsideDirectory(currentDir, workspaceRootDir)) {
     const candidatePath = path.join(currentDir, 'lattice.config.mjs');
 
     if (existsSync(candidatePath)) {
       return candidatePath;
+    }
+
+    if (currentDir === workspaceRootDir) {
+      return null;
     }
 
     const parentDir = path.dirname(currentDir);
@@ -572,22 +582,39 @@ function findLatticeConfigPath(startDir: string): string | null {
 
     currentDir = parentDir;
   }
+
+  return null;
 }
 
-function inferWorkspaceRoot(configPath: string): string {
-  const configDir = path.dirname(configPath);
-  const rootDir = findPnpmWorkspaceRoot(configDir);
+function inferWorkspaceRoot(startDir: string): string {
+  const rootDir = findPnpmWorkspaceRoot(startDir);
 
   if (!rootDir) {
     throw new Error(
       [
-        `Unable to infer Lattice workspace root from ${configPath}:`,
+        `Unable to infer Lattice workspace root from ${startDir}:`,
         'no pnpm-workspace.yaml was found in this directory or its parents.',
       ].join(' '),
     );
   }
 
   return rootDir;
+}
+
+function validateConfigPathInsideWorkspace(
+  configPath: string,
+  rootDir: string,
+): void {
+  if (isPathInsideDirectory(configPath, rootDir)) {
+    return;
+  }
+
+  throw new Error(
+    [
+      `Unable to load Lattice config at ${configPath}:`,
+      `config file must be inside the governed pnpm workspace at ${rootDir}.`,
+    ].join(' '),
+  );
 }
 
 async function resolveConfigExport(
@@ -606,15 +633,20 @@ export async function loadConfig(
   options: LoadConfigOptions = {},
 ): Promise<ResolvedLatticeConfig> {
   const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
+  const rootDir = inferWorkspaceRoot(cwd);
   const configPath = options.configPath
     ? path.resolve(cwd, options.configPath)
-    : findLatticeConfigPath(cwd);
+    : findLatticeConfigPath(cwd, rootDir);
+
+  if (configPath) {
+    validateConfigPathInsideWorkspace(configPath, rootDir);
+  }
 
   if (!configPath || !existsSync(configPath)) {
     throw new Error(
       options.configPath
         ? `Unable to find lattice config at ${configPath}`
-        : `Unable to find lattice config. Searched for lattice.config.mjs from ${cwd} and its parent directories.`,
+        : `Unable to find lattice config. Searched for lattice.config.mjs from ${cwd} up to the pnpm workspace root at ${rootDir}.`,
     );
   }
 
@@ -627,7 +659,6 @@ export async function loadConfig(
     module.default,
     createConfigEnv(options),
   );
-  const rootDir = inferWorkspaceRoot(configPath);
 
   return {
     ...config,
