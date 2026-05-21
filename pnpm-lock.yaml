@@ -699,6 +699,9 @@ importers:
       '@docs-islands/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
+      '@docs-islands/lattice':
+        specifier: link:./dist
+        version: link:dist
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
