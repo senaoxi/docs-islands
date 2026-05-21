@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { defineConfig, loadConfig } from '../config';
+import { defineConfig, getActiveCheckers, loadConfig } from '../config';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -13,9 +13,14 @@ describe('defineConfig', () => {
   it('returns the explicit user config unchanged', () => {
     const config = defineConfig({
       config: {
-        roots: {
-          graph: 'tsconfig.graph.custom.json',
-          typecheck: 'tsconfig.check.json',
+        checkers: {
+          typescript: {
+            preset: 'tsc',
+            routes: {
+              build: 'tsconfig.graph.custom.json',
+              typecheck: 'tsconfig.check.json',
+            },
+          },
         },
         source: {
           include: ['src/**/*.ts'],
@@ -46,8 +51,12 @@ describe('defineConfig', () => {
       },
     });
 
-    expect(config.config?.roots?.graph).toBe('tsconfig.graph.custom.json');
-    expect(config.config?.roots?.typecheck).toBe('tsconfig.check.json');
+    expect(config.config?.checkers?.typescript?.routes?.build).toBe(
+      'tsconfig.graph.custom.json',
+    );
+    expect(config.config?.checkers?.typescript?.routes?.typecheck).toBe(
+      'tsconfig.check.json',
+    );
     expect(config.config?.source?.include).toEqual(['src/**/*.ts']);
     expect(config.config?.source?.exclude).toEqual(['dist']);
     expect(config.pipelines?.package).toEqual(['package:check']);
@@ -58,19 +67,66 @@ describe('defineConfig', () => {
     ]);
   });
 
+  it('resolves built-in checker defaults and ignores checkers without routes', () => {
+    const activeCheckers = getActiveCheckers({
+      config: {
+        checkers: {
+          inactive: {
+            preset: 'vue-tsc',
+          },
+          typescript: {
+            preset: 'tsc',
+            routes: {
+              typecheck: 'tsconfig.json',
+            },
+          },
+        },
+      },
+    });
+
+    expect(activeCheckers).toHaveLength(1);
+    expect(activeCheckers[0]).toMatchObject({
+      extensions: [
+        '.d.cts',
+        '.d.mts',
+        '.d.ts',
+        '.json',
+        '.cts',
+        '.mts',
+        '.tsx',
+        '.ts',
+      ],
+      name: 'typescript',
+      preset: 'tsc',
+      routes: {
+        typecheck: 'tsconfig.json',
+      },
+    });
+  });
+
   it('returns config factories unchanged', async () => {
     const config = defineConfig(async ({ command, mode }) => ({
       config: {
-        roots: {
-          graph: `tsconfig.${command}.${mode}.json`,
+        checkers: {
+          typescript: {
+            preset: 'tsc',
+            routes: {
+              build: `tsconfig.${command}.${mode}.json`,
+            },
+          },
         },
       },
     }));
 
     await expect(config({ command: 'graph', mode: 'ci' })).resolves.toEqual({
       config: {
-        roots: {
-          graph: 'tsconfig.graph.ci.json',
+        checkers: {
+          typescript: {
+            preset: 'tsc',
+            routes: {
+              build: 'tsconfig.graph.ci.json',
+            },
+          },
         },
       },
     });
@@ -121,8 +177,13 @@ import { defineConfig } from '${new URL('../config.ts', import.meta.url).href}';
 
 export default defineConfig(async ({ command, mode }) => ({
   config: {
-    roots: {
-      graph: \`tsconfig.\${command}.\${mode}.json\`,
+    checkers: {
+      typescript: {
+        preset: 'tsc',
+        routes: {
+          build: \`tsconfig.\${command}.\${mode}.json\`,
+        },
+      },
     },
   },
 }));
@@ -137,7 +198,9 @@ export default defineConfig(async ({ command, mode }) => ({
 
       expect(config.configPath).toBe(path.join(rootDir, 'lattice.config.mjs'));
       expect(config.rootDir).toBe(rootDir);
-      expect(config.config?.roots?.graph).toBe('tsconfig.paths.ci.json');
+      expect(config.config?.checkers?.typescript?.routes?.build).toBe(
+        'tsconfig.paths.ci.json',
+      );
     } finally {
       await rm(rootDir, {
         force: true,
@@ -276,6 +339,113 @@ throw new Error('external config should not be imported');
           recursive: true,
         }),
       ]);
+    }
+  });
+
+  it('rejects removed roots and proof sidecar fields', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    roots: {
+      graph: 'tsconfig.graph.json',
+    },
+  },
+  proof: {
+    sidecarTargets: [],
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /config\.roots[\s\S]*proof\.sidecarTargets/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects empty checker routes', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      vue: {
+        preset: 'vue-tsc',
+        routes: {},
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /routes must include typecheck or build/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects custom checker presets without explicit extensions', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      custom: {
+        preset: 'custom-checker',
+        routes: {
+          typecheck: 'tsconfig.custom.json',
+        },
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /extensions may only be omitted for built-in presets/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
     }
   });
 

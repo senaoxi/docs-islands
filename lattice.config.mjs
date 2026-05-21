@@ -1,14 +1,25 @@
 import { defineConfig } from '@docs-islands/lattice/config';
 
 export default defineConfig({
-  // Shared roots used by graph, proof, paths, and typecheck checks.
+  // Shared checker routes used by graph, proof, paths, and typecheck checks.
   config: {
-    roots: {
-      graph: 'tsconfig.graph.json',
-      typecheck: 'tsconfig.json',
+    checkers: {
+      typescript: {
+        preset: 'tsc',
+        routes: {
+          typecheck: 'tsconfig.json',
+          build: 'tsconfig.graph.json',
+        },
+      },
+      vue: {
+        preset: 'vue-tsc',
+        routes: {
+          typecheck: 'tsconfig.vue.json',
+          build: 'tsconfig.vue.graph.json',
+        },
+      },
     },
     source: {
-      include: ['**/*.{ts,tsx,cts,mts}', '**/*.d.{ts,cts,mts}', '**/*.json'],
       exclude: [
         'node_modules',
         'dist',
@@ -56,26 +67,8 @@ export default defineConfig({
     },
   },
   // Typecheck coverage proof. Source files must be covered by the root graph,
-  // a sidecar typecheck, or an explicit allowlist entry.
+  // an active checker route, or an explicit allowlist entry.
   proof: {
-    // Extra typecheck targets outside the root graph, such as Vue SFC checks.
-    sidecarTargets: [
-      {
-        config: 'docs/tsconfig.json',
-        label: 'docs vue typecheck',
-        tool: 'vue-tsc',
-      },
-      {
-        config: 'packages/vitepress/docs/tsconfig.json',
-        label: 'vitepress docs vue typecheck',
-        tool: 'vue-tsc',
-      },
-      {
-        config: 'packages/vitepress/theme/tsconfig.lib.json',
-        label: 'vitepress theme vue typecheck',
-        tool: 'vue-tsc',
-      },
-    ],
     // Intentional exceptions. Each entry must explain why it is safe.
     allowlist: [
       {
@@ -120,7 +113,7 @@ export default defineConfig({
   // Reusable command pipelines. Run them with `lattice check <name>`.
   pipelines: {
     // Main typecheck pipeline: build required plugins, then run graph checks,
-    // proof checks, and the actual tsc/vue-tsc commands.
+    // proof checks, and the configured checker routes.
     typecheck: [
       {
         type: 'command',
@@ -131,16 +124,6 @@ export default defineConfig({
       'proof:check',
       'tsc:run',
       'tsc:build',
-      {
-        type: 'command',
-        command: 'vue-tsc',
-        args: ['-p', 'docs/tsconfig.json', '--noEmit'],
-      },
-      {
-        type: 'command',
-        command: 'vue-tsc',
-        args: ['-p', 'packages/vitepress/theme/tsconfig.lib.json', '--noEmit'],
-      },
     ],
     // Validation pipeline for consumer docs, playground, and smoke projects.
     consumer: [

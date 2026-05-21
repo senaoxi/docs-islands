@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  runTscBuild,
   runTypecheck,
   type TypecheckTarget,
   type TypecheckTargetResult,
@@ -156,6 +157,105 @@ describe('runTypecheck', () => {
       ]);
       expect(calls).toHaveLength(1);
       expect(calls[0].args).toEqual(['-p', 'tsconfig.json', '--noEmit']);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('runs configured checker typecheck routes and ignores inactive checkers', async () => {
+    const calls: TypecheckTarget[] = [];
+    const fixture = await createFixture({
+      'tsconfig.json': tsconfig({
+        include: ['src/**/*.ts'],
+      }),
+      'tsconfig.vue.json': tsconfig({
+        include: ['docs/**/*.vue'],
+      }),
+    });
+
+    try {
+      const result = await runTypecheck({
+        config: {
+          config: {
+            checkers: {
+              inactive: {
+                preset: 'svelte-check',
+              },
+              typescript: {
+                preset: 'tsc',
+                routes: {
+                  typecheck: 'tsconfig.json',
+                },
+              },
+              vue: {
+                preset: 'vue-tsc',
+                routes: {
+                  typecheck: 'tsconfig.vue.json',
+                },
+              },
+            },
+          },
+          configPath: path.join(fixture.rootDir, 'lattice.config.mjs'),
+          rootDir: fixture.rootDir,
+        },
+        cwd: fixture.rootDir,
+        runner: passingRunner(calls),
+      });
+
+      expect(result.passed).toBe(true);
+      expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
+      expect(calls.map((target) => target.args)).toEqual([
+        ['-p', 'tsconfig.json', '--noEmit'],
+        ['-p', 'tsconfig.vue.json', '--noEmit'],
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('runs configured checker build routes', async () => {
+    const calls: TypecheckTarget[] = [];
+    const fixture = await createFixture({
+      'tsconfig.graph.json': tsconfig({
+        files: [],
+      }),
+      'tsconfig.vue.graph.json': tsconfig({
+        files: [],
+      }),
+    });
+
+    try {
+      const result = await runTscBuild({
+        config: {
+          config: {
+            checkers: {
+              typescript: {
+                preset: 'tsc',
+                routes: {
+                  build: 'tsconfig.graph.json',
+                },
+              },
+              vue: {
+                preset: 'vue-tsc',
+                routes: {
+                  build: 'tsconfig.vue.graph.json',
+                },
+              },
+            },
+          },
+          configPath: path.join(fixture.rootDir, 'lattice.config.mjs'),
+          rootDir: fixture.rootDir,
+        },
+        cwd: fixture.rootDir,
+        runner: passingRunner(calls),
+      });
+
+      expect(result.passed).toBe(true);
+      expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
+      expect(calls.map((target) => target.args)).toEqual([
+        ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
+        ['-b', 'tsconfig.vue.graph.json', '--pretty', 'false'],
+      ]);
     } finally {
       await fixture.cleanup();
     }

@@ -23,16 +23,16 @@ Large TypeScript workspaces often need more than `tsc --noEmit`:
 - `workspace:*` dependencies should resolve to source during graph checks;
 - generated compatibility `paths` should not silently drift;
 - built package outputs need consumer-facing checks before release;
-- Vue, docs, playground, and smoke checks may need sidecar tooling outside native `tsc -b`.
+- Vue, docs, playground, and smoke checks may need checker-specific tooling outside native `tsc -b`.
 
 Lattice makes these rules reviewable, runnable, and suitable for CI.
 
 ## Features
 
 - **Project graph validation**: checks reachable TypeScript build leaves, references, graph-owned imports, package boundaries, and label-based deny rules.
-- **Typecheck coverage proof**: verifies that build configs match strict local typecheck companions and that source files are covered by graph, sidecar, or allowlist entries.
+- **Typecheck coverage proof**: verifies that build configs match strict local typecheck companions and that source files are covered by graph, checker routes, or allowlist entries.
 - **Compatibility path generation**: writes opt-in `tsconfig.graph.paths.generated.json` files for `workspace:*` dependencies whose package exports still point at build artifacts.
-- **TypeScript target runner**: discovers ordinary `tsconfig*.json` typecheck targets and runs `tsc --noEmit` without mixing in graph/build configs.
+- **Checker target runner**: runs configured TypeScript and UI-framework checker routes for `typecheck` and `build`.
 - **Published package checks**: validates built package outputs with `publint`, Are The Types Wrong, and a runtime import boundary audit.
 - **Composable pipelines**: combines built-in checks and shell commands into named workflows such as `typecheck`, `package`, and `publish`.
 - **Typed configuration**: ships `defineConfig(...)` for editor hints and typed user configs.
@@ -59,9 +59,21 @@ import { defineConfig } from '@docs-islands/lattice/config';
 
 export default defineConfig({
   config: {
-    roots: {
-      graph: 'tsconfig.graph.json',
-      typecheck: 'tsconfig.json',
+    checkers: {
+      typescript: {
+        preset: 'tsc',
+        routes: {
+          typecheck: 'tsconfig.json',
+          build: 'tsconfig.graph.json',
+        },
+      },
+      vue: {
+        preset: 'vue-tsc',
+        routes: {
+          typecheck: 'tsconfig.vue.json',
+          build: 'tsconfig.vue.graph.json',
+        },
+      },
     },
   },
 
@@ -81,13 +93,6 @@ export default defineConfig({
   },
 
   proof: {
-    sidecarTargets: [
-      {
-        config: 'docs/tsconfig.json',
-        label: 'docs vue typecheck',
-        tool: 'vue-tsc',
-      },
-    ],
     allowlist: [
       {
         file: 'src/generated/runtime.d.ts',
@@ -106,7 +111,7 @@ export default defineConfig({
   },
 
   pipelines: {
-    typecheck: ['graph:check', 'proof:check', 'tsc:run'],
+    typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
     package: ['package:check'],
     publish: ['graph:check', 'proof:check', 'package:check'],
   },
@@ -137,11 +142,11 @@ pnpm exec lattice package check --package @acme/core
 
 ### Build graph route
 
-Starts at `config.roots.graph`, usually `tsconfig.graph.json`, and reaches `tsconfig*.build.json` leaves used by `tsc -b` and architecture checks.
+For the TypeScript checker, starts at `config.checkers.<name>.routes.build`, usually `tsconfig.graph.json`, and reaches `tsconfig*.build.json` leaves used by `tsc -b` and architecture checks.
 
 ### Typecheck route
 
-Starts at `config.roots.typecheck`, usually `tsconfig.json`, and reaches ordinary local `tsconfig*.json` configs used by editors and `tsc --noEmit`.
+For the TypeScript checker, starts at `config.checkers.<name>.routes.typecheck`, usually `tsconfig.json`, and reaches ordinary local `tsconfig*.json` configs used by editors and `tsc --noEmit`.
 
 Build leaves should have strict local companions. For example, `tsconfig.lib.build.json` should pair with `tsconfig.lib.json`.
 
@@ -169,7 +174,8 @@ lattice [--config lattice.config.mjs] [--mode mode] <command>
 | `lattice paths generate`                         | Generate compatibility source `paths` configs for artifact-facing workspace exports. |
 | `lattice paths apply`                            | Compatibility alias for `paths generate`.                                            |
 | `lattice paths check`                            | Fail when generated path files are stale.                                            |
-| `lattice tsc`                                    | Discover ordinary typecheck targets from the current cwd and run `tsc --noEmit`.     |
+| `lattice tsc`                                    | Run configured checker `typecheck` routes, or discover ordinary `tsconfig` targets.  |
+| `lattice tsc --build`                            | Run configured checker `build` routes.                                               |
 | `lattice tsc -p <path>`                          | Start typecheck target discovery from a specific config file or directory.           |
 | `lattice tsc --concurrency <n>`                  | Limit concurrent `tsc` processes.                                                    |
 | `lattice package check`                          | Run configured package output checks.                                                |
@@ -183,18 +189,29 @@ lattice [--config lattice.config.mjs] [--mode mode] <command>
 
 ```js
 config: {
-  roots: {
-    graph: 'tsconfig.graph.json',
-    typecheck: 'tsconfig.json',
+  checkers: {
+    typescript: {
+      preset: 'tsc',
+      routes: {
+        typecheck: 'tsconfig.json',
+        build: 'tsconfig.graph.json',
+      },
+    },
+    vue: {
+      preset: 'vue-tsc',
+      routes: {
+        typecheck: 'tsconfig.vue.json',
+        build: 'tsconfig.vue.graph.json',
+      },
+    },
   },
   source: {
-    include: ['**/*.{ts,tsx,cts,mts}', '**/*.d.{ts,cts,mts}', '**/*.json'],
     exclude: ['node_modules', 'dist', '.tsbuild'],
   },
 }
 ```
 
-`config.roots` defines graph and typecheck entrypoints. `config.source` defines the source boundary that proof must cover.
+`config.checkers` defines active checker routes. Built-in presets can omit `extensions`; if `source.include` is omitted, Lattice derives the source boundary from active checker extensions, then applies `source.exclude`.
 
 ### `graph`
 
@@ -247,13 +264,6 @@ Use generated paths only when a workspace package must keep artifact-facing expo
 
 ```js
 proof: {
-  sidecarTargets: [
-    {
-      config: 'docs/tsconfig.json',
-      label: 'docs vue typecheck',
-      tool: 'vue-tsc',
-    },
-  ],
   allowlist: [
     {
       file: 'src/generated/runtime.d.ts',
@@ -263,7 +273,7 @@ proof: {
 }
 ```
 
-Sidecar targets cover files checked outside the build graph. Allowlist entries should be rare and must include a reason.
+Checker routes cover files checked outside the TypeScript build graph. Allowlist entries should be rare and must include a reason.
 
 ### `packageChecks`
 
@@ -291,7 +301,7 @@ packageChecks: {
 
 ```js
 pipelines: {
-  typecheck: ['graph:check', 'proof:check', 'tsc:run'],
+  typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
   package: [
     { type: 'command', command: 'pnpm', args: ['build'] },
     'package:check',

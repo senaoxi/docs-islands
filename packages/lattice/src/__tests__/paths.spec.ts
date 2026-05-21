@@ -40,6 +40,17 @@ async function createFixture(files: Record<string, string>): Promise<{
       });
     },
     config: {
+      config: {
+        checkers: {
+          typescript: {
+            preset: 'tsc',
+            routes: {
+              build: 'tsconfig.graph.json',
+              typecheck: 'tsconfig.json',
+            },
+          },
+        },
+      },
       configPath: path.join(rootDir, 'lattice.config.mjs'),
       rootDir,
     },
@@ -214,8 +225,15 @@ describe('runPaths', () => {
         runGraphCheck({
           ...fixture.config,
           config: {
-            roots: {
-              graph: 'tsconfig.custom.graph.json',
+            ...fixture.config.config,
+            checkers: {
+              typescript: {
+                preset: 'tsc',
+                routes: {
+                  build: 'tsconfig.custom.graph.json',
+                  typecheck: 'tsconfig.json',
+                },
+              },
             },
           },
         }),

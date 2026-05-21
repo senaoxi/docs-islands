@@ -71,37 +71,62 @@ export type BuiltinTaskName =
   | 'tsc:build'
   | 'tsc:run';
 
+export type BuiltinCheckerPreset = 'svelte-check' | 'tsc' | 'vue-tsc';
+
+export type CheckerPreset = BuiltinCheckerPreset | (string & {});
+
+export type CheckerRouteKind = 'build' | 'typecheck';
+
 /**
- * Shared TypeScript route roots used by several Lattice checks.
+ * Project routes used by one checker.
  */
-export interface LatticeRootsConfig {
+export interface CheckerRoutesConfig {
   /**
-   * Root solution tsconfig for build graph traversal, relative to
-   * the inferred workspace root.
-   *
-   * @default "tsconfig.graph.json"
-   */
-  graph?: string;
-  /**
-   * Root IDE/typecheck solution config, relative to the inferred workspace root.
-   *
-   * @default "tsconfig.json"
+   * Route used by `lattice tsc` / `tsc:run`.
    */
   typecheck?: string;
+  /**
+   * Route used by `lattice tsc --build` / `tsc:build`.
+   */
+  build?: string;
 }
 
 /**
- * Source boundary that must be covered by graph, sidecar, or allowlist proof.
+ * Checker capability for one source module family.
+ */
+export interface CheckerConfig {
+  /**
+   * Built-in checker preset, such as `tsc`, `vue-tsc`, or `svelte-check`.
+   */
+  preset: CheckerPreset;
+  /**
+   * Source file suffixes covered by this checker.
+   *
+   * Built-in presets may omit this and use their default suffixes.
+   */
+  extensions?: string[];
+  /**
+   * Typecheck/build routes. Omit routes to keep the checker inactive.
+   */
+  routes?: CheckerRoutesConfig;
+}
+
+export interface ResolvedCheckerConfig {
+  extensions: string[];
+  name: string;
+  preset: CheckerPreset;
+  routes: Required<Pick<CheckerConfig, 'routes'>>['routes'];
+}
+
+/**
+ * Source boundary that must be covered by graph, checker routes, or allowlist proof.
  */
 export interface SourceBoundaryConfig {
   /**
    * Glob patterns for source files that need proof coverage.
    *
-   * @default: [
-   *   "**\/*.{ts,tsx,cts,mts}",
-   *   "**\/*.d.{ts,cts,mts}",
-   *   "**\/*.json",
-   * ]
+   * When omitted, Lattice derives the source boundary from active checker
+   * extensions and then applies `exclude`.
    */
   include?: string[];
   /**
@@ -128,9 +153,9 @@ export interface SourceBoundaryConfig {
  */
 export interface SharedLatticeConfig {
   /**
-   * TypeScript route roots shared by checks.
+   * Checker capabilities shared by graph, proof, paths, and tsc tasks.
    */
-  roots?: LatticeRootsConfig;
+  checkers?: Record<string, CheckerConfig>;
   /**
    * Source file boundary used by coverage proof.
    */
@@ -253,24 +278,6 @@ export interface ProofAllowlistEntry {
 }
 
 /**
- * Additional typecheck target that covers files outside the main graph.
- */
-export interface ProofSidecarTarget {
-  /**
-   * Tsconfig path for the sidecar typecheck, relative to the inferred workspace root.
-   */
-  config: string;
-  /**
-   * Friendly name shown in reports.
-   */
-  label?: string;
-  /**
-   * Typecheck command used for this target, for example `tsc` or `vue-tsc`.
-   */
-  tool: 'tsc' | 'vue-tsc' | string;
-}
-
-/**
  * Typecheck coverage proof settings.
  */
 export interface ProofConfig {
@@ -278,10 +285,6 @@ export interface ProofConfig {
    * Intentional file-level exceptions.
    */
   allowlist?: ProofAllowlistEntry[];
-  /**
-   * Extra typecheck targets that are not part of the root graph.
-   */
-  sidecarTargets?: ProofSidecarTarget[];
 }
 
 /**
@@ -394,7 +397,7 @@ export interface PackageChecksConfig {
  */
 export interface LatticeConfig {
   /**
-   * Shared project facts, such as TypeScript route roots and source boundary.
+   * Shared project facts, such as checker routes and source boundary.
    */
   config?: SharedLatticeConfig;
   /**
@@ -414,7 +417,7 @@ export interface LatticeConfig {
    */
   pipelines?: Record<string, PipelineStep[]>;
   /**
-   * Rules that prove source files are covered by graph or sidecar typechecks.
+   * Rules that prove source files are covered by graph or checker routes.
    */
   proof?: ProofConfig;
 }
@@ -497,12 +500,312 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+const builtinCheckerExtensions = {
+  'svelte-check': ['.svelte'],
+  tsc: ['.ts', '.tsx', '.cts', '.mts', '.d.ts', '.d.cts', '.d.mts', '.json'],
+  'vue-tsc': ['.vue'],
+} satisfies Record<BuiltinCheckerPreset, string[]>;
+
+function formatUnknownValue(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+
+  return JSON.stringify(value);
+}
+
+function isBuiltinCheckerPreset(value: string): value is BuiltinCheckerPreset {
+  return Object.hasOwn(builtinCheckerExtensions, value);
+}
+
+function normalizeExtensions(extensions: string[]): string[] {
+  return [...new Set(extensions)].sort((left, right) => {
+    const lengthDelta = right.length - left.length;
+
+    return lengthDelta === 0 ? left.localeCompare(right) : lengthDelta;
+  });
+}
+
+function getCheckerExtensions(checker: CheckerConfig): string[] {
+  if (checker.extensions) {
+    return normalizeExtensions(checker.extensions);
+  }
+
+  if (isBuiltinCheckerPreset(checker.preset)) {
+    return normalizeExtensions(builtinCheckerExtensions[checker.preset]);
+  }
+
+  throw new Error(
+    `Checker preset "${checker.preset}" must declare non-empty extensions because it is not a built-in preset.`,
+  );
+}
+
+function validateRouteValue(options: {
+  field: string;
+  problems: string[];
+  value: unknown;
+}): void {
+  if (typeof options.value === 'string' && options.value.trim().length > 0) {
+    return;
+  }
+
+  options.problems.push(
+    [
+      'Invalid Lattice checker route config:',
+      `  field: ${options.field}`,
+      `  value: ${formatUnknownValue(options.value)}`,
+      '  reason: checker routes must be non-empty string paths.',
+    ].join('\n'),
+  );
+}
+
+function collectCheckerConfigProblems(config: LatticeConfig): string[] {
+  const problems: string[] = [];
+
+  if (isRecord(config.config) && Object.hasOwn(config.config, 'roots')) {
+    problems.push(
+      [
+        'Unsupported Lattice config field: config.roots',
+        '  reason: config.roots was removed by the checker configuration breaking change.',
+        '  fix: move graph/typecheck routes to config.checkers.typescript.routes.build/typecheck.',
+      ].join('\n'),
+    );
+  }
+
+  if (isRecord(config.proof) && Object.hasOwn(config.proof, 'sidecarTargets')) {
+    problems.push(
+      [
+        'Unsupported Lattice config field: proof.sidecarTargets',
+        '  reason: proof.sidecarTargets was removed by the checker configuration breaking change.',
+        '  fix: move framework checker routes to config.checkers.<name>.routes.',
+      ].join('\n'),
+    );
+  }
+
+  const checkers = config.config?.checkers;
+
+  if (checkers === undefined) {
+    return problems;
+  }
+
+  if (!isRecord(checkers)) {
+    problems.push(
+      [
+        'Invalid Lattice checker config:',
+        '  field: config.checkers',
+        `  value: ${formatUnknownValue(checkers)}`,
+        '  reason: config.checkers must be an object keyed by checker name.',
+      ].join('\n'),
+    );
+
+    return problems;
+  }
+
+  for (const [checkerName, checker] of Object.entries(checkers)) {
+    const field = `config.checkers.${checkerName}`;
+
+    if (!isRecord(checker)) {
+      problems.push(
+        [
+          'Invalid Lattice checker config:',
+          `  field: ${field}`,
+          `  value: ${formatUnknownValue(checker)}`,
+          '  reason: checker entries must be objects.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    const preset = checker.preset;
+
+    if (typeof preset !== 'string' || preset.trim().length === 0) {
+      problems.push(
+        [
+          'Invalid Lattice checker config:',
+          `  field: ${field}.preset`,
+          `  value: ${formatUnknownValue(preset)}`,
+          '  reason: checker preset must be a non-empty string.',
+        ].join('\n'),
+      );
+    }
+
+    const extensions = checker.extensions;
+
+    if (extensions !== undefined) {
+      if (
+        !Array.isArray(extensions) ||
+        extensions.length === 0 ||
+        extensions.some(
+          (extension) =>
+            typeof extension !== 'string' ||
+            extension.trim().length === 0 ||
+            !extension.startsWith('.'),
+        )
+      ) {
+        problems.push(
+          [
+            'Invalid Lattice checker config:',
+            `  field: ${field}.extensions`,
+            `  value: ${formatUnknownValue(extensions)}`,
+            '  reason: checker extensions must be a non-empty array of dot-prefixed strings.',
+          ].join('\n'),
+        );
+      }
+    } else if (typeof preset === 'string' && !isBuiltinCheckerPreset(preset)) {
+      problems.push(
+        [
+          'Invalid Lattice checker config:',
+          `  field: ${field}.extensions`,
+          '  value: undefined',
+          '  reason: extensions may only be omitted for built-in presets.',
+        ].join('\n'),
+      );
+    }
+
+    const routes = checker.routes;
+
+    if (routes === undefined) {
+      continue;
+    }
+
+    if (!isRecord(routes)) {
+      problems.push(
+        [
+          'Invalid Lattice checker route config:',
+          `  field: ${field}.routes`,
+          `  value: ${formatUnknownValue(routes)}`,
+          '  reason: checker routes must be an object with typecheck and/or build.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    const hasTypecheckRoute =
+      Object.hasOwn(routes, 'typecheck') && routes.typecheck !== undefined;
+    const hasBuildRoute =
+      Object.hasOwn(routes, 'build') && routes.build !== undefined;
+
+    if (!hasTypecheckRoute && !hasBuildRoute) {
+      problems.push(
+        [
+          'Invalid Lattice checker route config:',
+          `  field: ${field}.routes`,
+          `  value: ${formatUnknownValue(routes)}`,
+          '  reason: routes must include typecheck or build; remove routes entirely to keep this checker inactive.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    if (hasTypecheckRoute) {
+      validateRouteValue({
+        field: `${field}.routes.typecheck`,
+        problems,
+        value: routes.typecheck,
+      });
+    }
+
+    if (hasBuildRoute) {
+      validateRouteValue({
+        field: `${field}.routes.build`,
+        problems,
+        value: routes.build,
+      });
+    }
+  }
+
+  return problems;
+}
+
+export function validateLatticeConfig(config: LatticeConfig): void {
+  const problems = collectCheckerConfigProblems(config);
+
+  if (problems.length > 0) {
+    throw new Error(problems.join('\n\n'));
+  }
+}
+
+export function getActiveCheckers(
+  config: LatticeConfig,
+): ResolvedCheckerConfig[] {
+  validateLatticeConfig(config);
+
+  const checkers = config.config?.checkers;
+
+  if (!checkers) {
+    return [];
+  }
+
+  return Object.entries(checkers)
+    .flatMap(([name, checker]) => {
+      if (!checker.routes) {
+        return [];
+      }
+
+      const routes: CheckerRoutesConfig = {};
+
+      if (checker.routes.typecheck !== undefined) {
+        routes.typecheck = checker.routes.typecheck.trim();
+      }
+
+      if (checker.routes.build !== undefined) {
+        routes.build = checker.routes.build.trim();
+      }
+
+      return [
+        {
+          extensions: getCheckerExtensions(checker),
+          name,
+          preset: checker.preset,
+          routes,
+        },
+      ];
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export function getActiveCheckerExtensions(config: LatticeConfig): string[] {
+  return normalizeExtensions(
+    getActiveCheckers(config).flatMap((checker) => checker.extensions),
+  );
+}
+
+export function getTypeScriptRoute(
+  config: LatticeConfig,
+  routeKind: CheckerRouteKind,
+): string {
+  const matchingCheckers = getActiveCheckers(config).filter(
+    (checker) =>
+      checker.preset === 'tsc' && checker.routes[routeKind] !== undefined,
+  );
+
+  if (matchingCheckers.length === 0) {
+    throw new Error(
+      `Missing TypeScript ${routeKind} route: configure config.checkers.<name> with preset "tsc" and routes.${routeKind}.`,
+    );
+  }
+
+  if (matchingCheckers.length > 1) {
+    throw new Error(
+      `Multiple TypeScript ${routeKind} routes are configured: ${matchingCheckers
+        .map((checker) => checker.name)
+        .join(', ')}.`,
+    );
+  }
+
+  return matchingCheckers[0].routes[routeKind]!;
+}
+
 function normalizeConfig(value: unknown): LatticeConfig {
   if (!isRecord(value)) {
     throw new Error('lattice config must export or return an object.');
   }
 
-  return value as LatticeConfig;
+  const config = value as LatticeConfig;
+
+  validateLatticeConfig(config);
+
+  return config;
 }
 
 export interface LoadConfigOptions {

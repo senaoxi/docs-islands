@@ -215,9 +215,10 @@ async function main(): Promise<void> {
         const config = await load(flags, 'check');
         const result = await runTscBuild({
           clearScreen: false,
+          config,
           cwd: process.cwd(),
           flow,
-          project: flags.project ?? config.config?.roots?.graph,
+          project: flags.project,
         });
 
         if (!result.passed) {
@@ -229,8 +230,10 @@ async function main(): Promise<void> {
         return;
       }
 
+      const config = await load(flags, 'check');
       const result = await runTypecheck({
         clearScreen: false,
+        config,
         concurrency: parseConcurrency(flags.concurrency),
         cwd: process.cwd(),
         flow,

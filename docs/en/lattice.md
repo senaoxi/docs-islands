@@ -12,7 +12,7 @@ Lattice is a good fit when your project:
 - uses TypeScript project references or plans to migrate to a `tsc -b` build graph;
 - wants to enforce dependency direction between production code, tools, and tests;
 - maintains both browser/client runtime and Node/server runtime code;
-- wants CI to prove that every source file is covered by graph, sidecar typecheck, or allowlist;
+- wants CI to prove that every source file is covered by graph, checker routes, or allowlist;
 - wants to check package exports, type resolution, and runtime import boundaries before publishing dist packages;
 - has docs, playground, smoke, Vue SFC, or similar projects that do not fit cleanly inside native `tsc -b`.
 
@@ -121,13 +121,18 @@ import { defineConfig } from '@docs-islands/lattice/config';
 
 export default defineConfig({
   config: {
-    roots: {
-      graph: 'tsconfig.graph.json',
-      typecheck: 'tsconfig.json',
+    checkers: {
+      typescript: {
+        preset: 'tsc',
+        routes: {
+          typecheck: 'tsconfig.json',
+          build: 'tsconfig.graph.json',
+        },
+      },
     },
   },
   pipelines: {
-    typecheck: ['graph:check', 'proof:check', 'tsc:run'],
+    typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
   },
 });
 ```
@@ -219,18 +224,38 @@ The build leaf extends the local config and graph base, and only adds build outp
 
 ## Configuration details
 
-### `config.roots`
+### `config.checkers`
 
 ```js
 config: {
-  roots: {
-    graph: 'tsconfig.graph.json',
-    typecheck: 'tsconfig.json',
+  checkers: {
+    typescript: {
+      preset: 'tsc',
+      routes: {
+        typecheck: 'tsconfig.json',
+        build: 'tsconfig.graph.json',
+      },
+    },
+    vue: {
+      preset: 'vue-tsc',
+      routes: {
+        typecheck: 'tsconfig.vue.json',
+        build: 'tsconfig.vue.graph.json',
+      },
+    },
+    svelte: {
+      preset: 'svelte-check',
+      routes: {
+        typecheck: 'tsconfig.svelte.json',
+      },
+    },
   },
 }
 ```
 
-`graph` is the entrypoint of the build graph. `typecheck` is the entrypoint of the IDE/typecheck route. Lattice's graph and proof checks use both routes to determine relationships between build configs, local configs, and source coverage.
+`config.checkers` is the single entrypoint for TypeScript and UI framework checking. A checker without `routes` is ignored. A checker with `routes: {}` is invalid. `routes.typecheck` participates in `lattice tsc` / `tsc:run`; `routes.build` participates in `lattice tsc --build` / `tsc:build`.
+
+Built-in presets can omit `extensions`. Defaults are `.ts`, `.tsx`, `.cts`, `.mts`, `.d.ts`, `.d.cts`, `.d.mts`, `.json` for `tsc`; `.vue` for `vue-tsc`; and `.svelte` for `svelte-check`. Explicit `extensions` replace the preset default.
 
 ### `config.source`
 
@@ -251,7 +276,7 @@ config: {
 }
 ```
 
-`proof:check` scans this source boundary and requires every file to be covered by graph, sidecar target, or allowlist. Whether JSON should be included depends on whether your repository needs proof coverage for JSON examples or runtime data.
+If `source.include` is omitted, `proof:check` derives the effective source boundary from all active checker extensions. If `source.include` is present, that list is the complete source boundary and checker extensions are not merged in. `source.exclude` always filters from the effective source boundary; it never decides which modules are valid by itself.
 
 ### `graph.rules`
 
@@ -320,21 +345,22 @@ Lattice generates `tsconfig.graph.paths.generated.json` and tells you to add it 
 
 Treat generated paths as a migration bridge, not a long-term default architecture. The long-term solution is to make package exports for workspace source dependencies point directly to source entries.
 
-### `proof.sidecarTargets`
+### Checker coverage
 
 ```js
-proof: {
-  sidecarTargets: [
-    {
-      config: 'docs/tsconfig.json',
-      label: 'docs vue typecheck',
-      tool: 'vue-tsc',
+config: {
+  checkers: {
+    vue: {
+      preset: 'vue-tsc',
+      routes: {
+        typecheck: 'docs/tsconfig.json',
+      },
     },
-  ],
+  },
 }
 ```
 
-A sidecar target means: these files do not enter the `tsc -b` graph, but are still covered by another typecheck tool. Common examples include Vue SFCs, VitePress docs, themes, and special fixture projects.
+Checker routes cover files that do not enter the TypeScript build graph but are still validated by a framework-aware tool. Common examples include Vue SFCs, Svelte components, VitePress docs, themes, and special fixture projects.
 
 ### `proof.allowlist`
 
@@ -411,11 +437,7 @@ pipelines: {
     'graph:check',
     'proof:check',
     'tsc:run',
-    {
-      type: 'command',
-      command: 'vue-tsc',
-      args: ['-p', 'docs/tsconfig.json', '--noEmit'],
-    },
+    'tsc:build',
   ],
   package: [
     {
@@ -430,7 +452,7 @@ pipelines: {
 
 A pipeline can contain two types of steps:
 
-- built-in tasks: `graph:check`, `proof:check`, `tsc:run`, `package:check`;
+- built-in tasks: `graph:check`, `proof:check`, `tsc:run`, `tsc:build`, `package:check`;
 - command steps: expressed as `{ type: 'command', command, args, cwd, env }`.
 
 Command steps run from the workspace root by default and inherit `process.env`.
@@ -476,7 +498,7 @@ Common failure reasons:
 - a build leaf has no same-name local config;
 - a local config is not reachable from the root typecheck route;
 - the build leaf and local config do not cover the same file set;
-- a source file is not covered by graph, sidecar, or allowlist.
+- a source file is not covered by graph, checker routes, or allowlist.
 
 ### `lattice paths generate`
 
@@ -494,7 +516,7 @@ pnpm exec lattice paths check
 
 ### `lattice tsc`
 
-Discovers ordinary `tsconfig*.json` targets and runs `tsc --noEmit`.
+Runs configured checker `typecheck` routes. With `-p`, starts from an explicit TypeScript config or directory and runs ordinary `tsc --noEmit` targets.
 
 ```sh
 pnpm exec lattice tsc
@@ -502,7 +524,11 @@ pnpm exec lattice tsc -p packages/core/tsconfig.json
 pnpm exec lattice tsc --concurrency 4
 ```
 
-`lattice tsc` does not load `lattice.config.mjs`. It only discovers ordinary typecheck targets from the current cwd or the path passed to `-p`, and rejects build graph configs.
+`lattice tsc --build` runs configured checker `build` routes.
+
+```sh
+pnpm exec lattice tsc --build
+```
 
 ### `lattice package check`
 
@@ -537,7 +563,7 @@ A recommended `typecheck` pipeline includes:
 2. `graph:check`;
 3. `proof:check`;
 4. `tsc:run`;
-5. required sidecar commands such as `vue-tsc`.
+5. `tsc:build` when build-mode validation is required.
 
 ### Pre-publish checks
 
@@ -633,14 +659,14 @@ Generated paths are a compatibility bridge. The long-term design should make pac
 Every allowlist entry should answer:
 
 - Why is this file not part of the graph?
-- Which sidecar, build step, or runtime mechanism covers it?
+- Which checker route, build step, or runtime mechanism covers it?
 - Where will CI fail if it breaks?
 
 ## FAQ
 
-### Why does `lattice tsc` not load `lattice.config.mjs`?
+### How does `lattice tsc` choose targets?
 
-`lattice tsc` is an ordinary TypeScript typecheck target runner. It discovers ordinary tsconfigs from the cwd or from `-p`, then runs `tsc --noEmit`. This lets it work as a package-local script without depending on the root governance config.
+By default, `lattice tsc` loads `lattice.config.mjs` and runs every active checker that declares `routes.typecheck`. Passing `-p` selects an explicit TypeScript config or directory and runs ordinary `tsc --noEmit` targets from there.
 
 ### Why do package checks require a build first?
 
@@ -652,7 +678,7 @@ Package checks inspect published outputs under `outDir`, not the source director
 
 ### Should Vue SFCs be placed in the graph?
 
-Usually no. Put Vue/VitePress/SFC projects in `proof.sidecarTargets` and run `vue-tsc` explicitly in the pipeline.
+Usually no. Put Vue/VitePress/SFC projects in `config.checkers.<name>.routes` with the `vue-tsc` preset, then let `tsc:run` and `tsc:build` dispatch the matching routes.
 
 ### When should I use `--mode`?
 
@@ -661,7 +687,7 @@ Use `--mode` when `lattice.config.mjs` exports a function and returns different 
 ```js
 export default defineConfig(({ mode }) => ({
   pipelines: {
-    typecheck: mode === 'ci' ? ['graph:check', 'proof:check', 'tsc:run'] : ['tsc:run'],
+    typecheck: mode === 'ci' ? ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'] : ['tsc:run'],
   },
 }));
 ```
@@ -691,7 +717,7 @@ Before publishing `@docs-islands/lattice` itself, check that:
 - **build leaf**: a `tsconfig*.build.json` actually built or checked by `tsc -b`.
 - **graph aggregator**: a graph config that only contains `files: []` and `references`.
 - **local companion config**: the ordinary typecheck config paired with a build leaf, such as `tsconfig.lib.json`.
-- **sidecar target**: a typecheck target covered by a tool such as `vue-tsc`, but not included in the build graph.
+- **checker route**: a `typecheck` or `build` route covered by a tool such as `tsc`, `vue-tsc`, or `svelte-check`.
 - **artifact dependency**: a built or published artifact dependency consumed through `link:`, `file:`, `catalog:`, or semver.
 - **source dependency**: a source dependency consumed through `workspace:*` and expected to be represented in TypeScript project references.
 

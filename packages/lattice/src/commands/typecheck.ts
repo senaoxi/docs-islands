@@ -2,6 +2,12 @@ import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { spawn } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
+import {
+  getActiveCheckers,
+  type CheckerRouteKind,
+  type ResolvedCheckerConfig,
+  type ResolvedLatticeConfig,
+} from '../config';
 import type { LatticeFlowReporter, LatticeFlowTask } from '../flow';
 import { TypecheckLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
@@ -12,9 +18,12 @@ import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
 export interface TypecheckTarget {
   args: string[];
+  checkerName?: string;
   configPath: string;
   cwd: string;
   command: string;
+  label?: string;
+  routeKind?: CheckerRouteKind;
 }
 
 export interface TypecheckTargetResult {
@@ -29,6 +38,7 @@ export type TypecheckRunner = (
 
 export interface RunTypecheckOptions {
   clearScreen?: boolean;
+  config?: ResolvedLatticeConfig;
   concurrency?: number;
   cwd?: string;
   flow?: LatticeFlowReporter;
@@ -58,10 +68,126 @@ function normalizeConcurrency(value: number | undefined): number {
   return value;
 }
 
-function createDefaultRunner(command: string): TypecheckRunner {
+function createSyntheticTypeScriptChecker(
+  route: string,
+): ResolvedCheckerConfig {
+  return {
+    extensions: [
+      '.d.cts',
+      '.d.mts',
+      '.d.ts',
+      '.cts',
+      '.json',
+      '.mts',
+      '.tsx',
+      '.ts',
+    ],
+    name: 'typescript',
+    preset: 'tsc',
+    routes: {
+      typecheck: route,
+      build: route,
+    },
+  };
+}
+
+function getRouteCheckers(options: {
+  config?: ResolvedLatticeConfig;
+  project?: string;
+  routeKind: CheckerRouteKind;
+}): ResolvedCheckerConfig[] {
+  if (options.project) {
+    return [createSyntheticTypeScriptChecker(options.project)];
+  }
+
+  if (options.config) {
+    return getActiveCheckers(options.config).filter(
+      (checker) => checker.routes[options.routeKind] !== undefined,
+    );
+  }
+
+  return [createSyntheticTypeScriptChecker('tsconfig.json')];
+}
+
+function resolveRouteConfigPath(rootDir: string, route: string): string {
+  return resolveProjectConfigPath(rootDir, route);
+}
+
+function createCheckerTarget(options: {
+  checker: ResolvedCheckerConfig;
+  commandOverride?: string;
+  configPath: string;
+  projectRootDir: string;
+  routeKind: CheckerRouteKind;
+}): TypecheckTarget {
+  const relativeConfigPath = toRelativePath(
+    options.projectRootDir,
+    options.configPath,
+  );
+
+  if (options.checker.preset === 'tsc') {
+    return {
+      args:
+        options.routeKind === 'build'
+          ? ['-b', relativeConfigPath, '--pretty', 'false']
+          : ['-p', relativeConfigPath, '--noEmit'],
+      checkerName: options.checker.name,
+      command: options.commandOverride ?? 'tsc',
+      configPath: options.configPath,
+      cwd: options.projectRootDir,
+      label:
+        options.routeKind === 'build'
+          ? `tsc -b ${relativeConfigPath}`
+          : `tsc: ${relativeConfigPath}`,
+      routeKind: options.routeKind,
+    };
+  }
+
+  if (options.checker.preset === 'vue-tsc') {
+    return {
+      args:
+        options.routeKind === 'build'
+          ? ['-b', relativeConfigPath, '--pretty', 'false']
+          : ['-p', relativeConfigPath, '--noEmit'],
+      checkerName: options.checker.name,
+      command: 'vue-tsc',
+      configPath: options.configPath,
+      cwd: options.projectRootDir,
+      label:
+        options.routeKind === 'build'
+          ? `${options.checker.name}: vue-tsc -b ${relativeConfigPath}`
+          : `${options.checker.name}: vue-tsc -p ${relativeConfigPath}`,
+      routeKind: options.routeKind,
+    };
+  }
+
+  if (options.checker.preset === 'svelte-check') {
+    if (options.routeKind === 'build') {
+      throw new Error(
+        `Checker "${options.checker.name}" uses svelte-check, which does not support routes.build.`,
+      );
+    }
+
+    return {
+      args: ['--tsconfig', relativeConfigPath],
+      checkerName: options.checker.name,
+      command: 'svelte-check',
+      configPath: options.configPath,
+      cwd: options.projectRootDir,
+      label: `${options.checker.name}: svelte-check --tsconfig ${relativeConfigPath}`,
+      routeKind: options.routeKind,
+    };
+  }
+
+  throw new Error(
+    `Checker "${options.checker.name}" uses unsupported preset "${options.checker.preset}".`,
+  );
+}
+
+function createDefaultRunner(): TypecheckRunner {
   return async (target) =>
     await new Promise<TypecheckTargetResult>((resolve) => {
-      const child = spawn(command, target.args, {
+      const child = spawn(target.command, target.args, {
         cwd: target.cwd,
         shell: process.platform === 'win32',
         stdio: 'inherit',
@@ -138,41 +264,83 @@ async function runTypecheckInternal(
   options: RunTypecheckOptions = {},
 ): Promise<RunTypecheckResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  const projectRootDir = normalizeAbsolutePath(cwd);
-  const rootConfigPath = resolveProjectConfigPath(cwd, options.project);
+  const projectRootDir = normalizeAbsolutePath(options.config?.rootDir ?? cwd);
+  const checkers = getRouteCheckers({
+    config: options.config,
+    project: options.project,
+    routeKind: 'typecheck',
+  });
+  const rootRoute =
+    options.project ??
+    checkers.find((checker) => checker.preset === 'tsc')?.routes.typecheck ??
+    checkers[0]?.routes.typecheck;
+  const rootConfigPath = resolveProjectConfigPath(projectRootDir, rootRoute);
   const flowDepth = options.flowDepth ?? 0;
 
-  const route = collectTypecheckTargetProjectPaths({
-    rootConfigPath,
-    rootDir: projectRootDir,
-  });
+  const concurrency = normalizeConcurrency(options.concurrency);
+  const problems: string[] = [];
+  const targetProjectPaths: string[] = [];
+  const targets: TypecheckTarget[] = [];
 
-  if (route.problems.length > 0) {
+  for (const checker of checkers) {
+    const route = checker.routes.typecheck;
+
+    if (!route) {
+      continue;
+    }
+
+    const checkerRootConfigPath = resolveRouteConfigPath(projectRootDir, route);
+
+    if (checker.preset === 'tsc') {
+      const routeCollection = collectTypecheckTargetProjectPaths({
+        rootConfigPath: checkerRootConfigPath,
+        rootDir: projectRootDir,
+      });
+
+      problems.push(...routeCollection.problems);
+      targetProjectPaths.push(...routeCollection.targetProjectPaths);
+      targets.push(
+        ...routeCollection.targetProjectPaths.map((configPath) =>
+          createCheckerTarget({
+            checker,
+            commandOverride: options.tscCommand,
+            configPath,
+            projectRootDir,
+            routeKind: 'typecheck',
+          }),
+        ),
+      );
+      continue;
+    }
+
+    targetProjectPaths.push(checkerRootConfigPath);
+    targets.push(
+      createCheckerTarget({
+        checker,
+        configPath: checkerRootConfigPath,
+        projectRootDir,
+        routeKind: 'typecheck',
+      }),
+    );
+  }
+
+  if (problems.length > 0) {
     options.flow?.fail('typecheck target discovery failed', {
       depth: flowDepth + 1,
     });
-    TypecheckLogger.error(route.problems.join('\n\n'));
+    TypecheckLogger.error(problems.join('\n\n'));
 
     return {
       passed: false,
       projectRootDir,
       results: [],
       rootConfigPath,
-      targetProjectPaths: route.targetProjectPaths,
+      targetProjectPaths,
     };
   }
 
-  const concurrency = normalizeConcurrency(options.concurrency);
-  const command = options.tscCommand ?? 'tsc';
-  const targets = route.targetProjectPaths.map((configPath) => ({
-    args: ['-p', toRelativePath(projectRootDir, configPath), '--noEmit'],
-    command,
-    configPath,
-    cwd: projectRootDir,
-  }));
-
   options.flow?.info(
-    `found ${targets.length} typecheck target config(s); concurrency ${concurrency}`,
+    `found ${targets.length} typecheck target config(s) across ${checkers.length} checker(s); concurrency ${concurrency}`,
     {
       depth: flowDepth + 1,
     },
@@ -180,7 +348,7 @@ async function runTypecheckInternal(
 
   TypecheckLogger.info(
     [
-      `Running tsc for ${targets.length} typecheck target config(s).`,
+      `Running checker typechecks for ${targets.length} target config(s).`,
       `CWD: ${toRelativePath(cwd, projectRootDir)}`,
       `Project: ${toRelativePath(projectRootDir, rootConfigPath)}`,
     ].join('\n'),
@@ -191,7 +359,7 @@ async function runTypecheckInternal(
   const results = await runWithConcurrency(
     targets,
     concurrency,
-    options.runner ?? createDefaultRunner(command),
+    options.runner ?? createDefaultRunner(),
     {
       onTargetResult: (_target, result) => {
         const task = targetTasks.get(result.configPath);
@@ -218,7 +386,8 @@ async function runTypecheckInternal(
         targetTasks.set(
           target.configPath,
           options.flow.start(
-            `tsc: ${toRelativePath(projectRootDir, target.configPath)}`,
+            target.label ??
+              `tsc: ${toRelativePath(projectRootDir, target.configPath)}`,
             {
               collapseOnSuccess: false,
               depth: flowDepth + 1,
@@ -262,7 +431,7 @@ async function runTypecheckInternal(
     projectRootDir,
     results,
     rootConfigPath,
-    targetProjectPaths: route.targetProjectPaths,
+    targetProjectPaths,
   };
 }
 
@@ -307,10 +476,12 @@ export async function runTypecheck(
 
 export interface RunTscBuildOptions {
   clearScreen?: boolean;
+  config?: ResolvedLatticeConfig;
   cwd?: string;
   flow?: LatticeFlowReporter;
   flowDepth?: number;
   project?: string;
+  runner?: TypecheckRunner;
   tscCommand?: string;
 }
 
@@ -324,81 +495,110 @@ async function runTscBuildInternal(
   options: RunTscBuildOptions = {},
 ): Promise<RunTscBuildResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  const projectRootDir = normalizeAbsolutePath(cwd);
-  const rootConfigPath = resolveProjectConfigPath(
-    cwd,
-    options.project ?? 'tsconfig.graph.json',
-  );
+  const projectRootDir = normalizeAbsolutePath(options.config?.rootDir ?? cwd);
+  const checkers = getRouteCheckers({
+    config: options.config,
+    project: options.project,
+    routeKind: 'build',
+  });
+  const rootRoute =
+    options.project ??
+    checkers.find((checker) => checker.preset === 'tsc')?.routes.build ??
+    checkers[0]?.routes.build;
+  const rootConfigPath = rootRoute
+    ? resolveProjectConfigPath(projectRootDir, rootRoute)
+    : projectRootDir;
   const flowDepth = options.flowDepth ?? 0;
-  const command = options.tscCommand ?? 'tsc';
-  const relativeRootConfigPath = toRelativePath(projectRootDir, rootConfigPath);
-  const args = ['-b', relativeRootConfigPath, '--pretty', 'false'];
+  const targets = checkers.flatMap((checker) => {
+    const route = checker.routes.build;
 
-  options.flow?.info(
-    `found 1 build graph root; running tsc -b ${relativeRootConfigPath}`,
-    {
-      depth: flowDepth + 1,
-    },
-  );
+    if (!route) {
+      return [];
+    }
 
-  TypecheckLogger.info(
-    [
-      `Running tsc -b for ${relativeRootConfigPath}.`,
-      `CWD: ${toRelativePath(cwd, projectRootDir)}`,
-      `Project: ${relativeRootConfigPath}`,
-    ].join('\n'),
-  );
+    return [
+      createCheckerTarget({
+        checker,
+        commandOverride: options.tscCommand,
+        configPath: resolveRouteConfigPath(projectRootDir, route),
+        projectRootDir,
+        routeKind: 'build',
+      }),
+    ];
+  });
 
-  const task = options.flow?.start(`tsc -b ${relativeRootConfigPath}`, {
-    collapseOnSuccess: false,
+  options.flow?.info(`found ${targets.length} build graph root(s)`, {
     depth: flowDepth + 1,
   });
 
-  const result = await new Promise<{ error?: Error; status: number }>(
-    (resolve) => {
-      const child = spawn(command, args, {
-        cwd: projectRootDir,
-        shell: process.platform === 'win32',
-        stdio: 'inherit',
-      });
-
-      child.on('error', (error) => {
-        resolve({ error, status: 1 });
-      });
-
-      child.on('close', (code) => {
-        resolve({ status: code ?? 1 });
-      });
-    },
+  TypecheckLogger.info(
+    [
+      `Running build checks for ${targets.length} graph root(s).`,
+      `CWD: ${toRelativePath(cwd, projectRootDir)}`,
+      `Project: ${toRelativePath(projectRootDir, rootConfigPath)}`,
+    ].join('\n'),
   );
 
-  const passed = result.status === 0;
+  const targetTasks = new Map<string, LatticeFlowTask>();
+  const results = await runWithConcurrency(
+    targets,
+    1,
+    options.runner ?? createDefaultRunner(),
+    {
+      onTargetResult: (target, result) => {
+        const task = targetTasks.get(target.configPath);
 
-  if (passed) {
-    task?.pass();
-  } else {
-    const suffix = result.error
-      ? formatErrorMessage(result.error)
-      : `exited with code ${result.status}`;
+        if (!task) {
+          return;
+        }
 
-    task?.fail(undefined, { error: suffix });
-  }
+        if (result.status === 0) {
+          task.pass();
+        } else {
+          const suffix = result.error
+            ? formatErrorMessage(result.error)
+            : `exited with code ${result.status}`;
+
+          task.fail(undefined, { error: suffix });
+        }
+      },
+      onTargetStart: (target) => {
+        if (!options.flow) {
+          return;
+        }
+
+        targetTasks.set(
+          target.configPath,
+          options.flow.start(
+            target.label ??
+              `tsc -b ${toRelativePath(projectRootDir, target.configPath)}`,
+            {
+              collapseOnSuccess: false,
+              depth: flowDepth + 1,
+            },
+          ),
+        );
+      },
+    },
+  );
+  const failedResults = results.filter((result) => result.status !== 0);
+  const passed = failedResults.length === 0;
 
   if (!passed) {
     TypecheckLogger.error(
       [
-        'tsc -b failed:',
-        `  ${relativeRootConfigPath}${
-          result.error
+        'build checks failed:',
+        ...failedResults.map((result) => {
+          const suffix = result.error
             ? `: ${formatErrorMessage(result.error)}`
-            : ` exited with code ${result.status}`
-        }`,
+            : ` exited with code ${result.status}`;
+
+          return `  ${toRelativePath(projectRootDir, result.configPath)}${suffix}`;
+        }),
       ].join('\n'),
     );
   } else if (!options.flow?.interactive) {
-    TypecheckLogger.success(
-      `Checked build graph at ${relativeRootConfigPath}.`,
-    );
+    TypecheckLogger.success(`Checked ${targets.length} build graph root(s).`);
   }
 
   return {

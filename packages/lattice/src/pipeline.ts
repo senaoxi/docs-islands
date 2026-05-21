@@ -70,6 +70,7 @@ export async function runBuiltinTask(
     case 'tsc:run': {
       const result = await runTypecheck({
         clearScreen: false,
+        config,
         cwd: config.rootDir,
         flow: options.flow,
         flowDepth: 1,
@@ -80,10 +81,10 @@ export async function runBuiltinTask(
     case 'tsc:build': {
       const result = await runTscBuild({
         clearScreen: false,
+        config,
         cwd: config.rootDir,
         flow: options.flow,
         flowDepth: 1,
-        project: config.config?.roots?.graph,
       });
 
       return result.passed;

@@ -41,6 +41,17 @@ async function createFixture(
       });
     },
     config: {
+      config: {
+        checkers: {
+          typescript: {
+            preset: 'tsc',
+            routes: {
+              build: 'tsconfig.graph.json',
+              typecheck: 'tsconfig.json',
+            },
+          },
+        },
+      },
       configPath: path.join(rootDir, 'lattice.config.mjs'),
       graph,
       rootDir,

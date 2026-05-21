@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Root Vue build route. Docs projects stay check-only; the package theme emits declarations.
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/vitepress/theme/tsconfig.lib.build.json"
+    }
+  ]
+}

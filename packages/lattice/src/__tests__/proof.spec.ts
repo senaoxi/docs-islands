@@ -31,6 +31,17 @@ async function createFixture(files: Record<string, string>): Promise<{
       });
     },
     config: {
+      config: {
+        checkers: {
+          typescript: {
+            preset: 'tsc',
+            routes: {
+              build: 'tsconfig.graph.json',
+              typecheck: 'tsconfig.json',
+            },
+          },
+        },
+      },
       configPath: path.join(rootDir, 'lattice.config.mjs'),
       rootDir,
     },
@@ -259,7 +270,7 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('accepts configured sidecars outside the root graph route', async () => {
+  it('accepts configured checker routes outside the root graph route', async () => {
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
       'packages/pkg/tsconfig.test.build.json': JSON.stringify({
@@ -314,13 +325,17 @@ describe('runProofCheck build config semantics', () => {
       await expect(
         runProofCheck({
           ...fixture.config,
-          proof: {
-            sidecarTargets: [
-              {
-                config: 'packages/pkg/tsconfig.vue.json',
-                tool: 'vue-tsc',
+          config: {
+            ...fixture.config.config,
+            checkers: {
+              ...fixture.config.config?.checkers,
+              vue: {
+                preset: 'vue-tsc',
+                routes: {
+                  typecheck: 'packages/pkg/tsconfig.vue.json',
+                },
               },
-            ],
+            },
           },
         }),
       ).resolves.toBe(true);
@@ -329,21 +344,24 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports missing configured sidecar target configs', async () => {
+  it('reports missing configured checker route configs', async () => {
     const fixture = await createFixture(createPassingFiles());
 
     try {
       await expect(
         runProofCheck({
           ...fixture.config,
-          proof: {
-            sidecarTargets: [
-              {
-                config: 'packages/pkg/tsconfig.missing.json',
-                label: 'missing sidecar',
-                tool: 'tsc',
+          config: {
+            ...fixture.config.config,
+            checkers: {
+              ...fixture.config.config?.checkers,
+              vue: {
+                preset: 'vue-tsc',
+                routes: {
+                  typecheck: 'packages/pkg/tsconfig.missing.json',
+                },
               },
-            ],
+            },
           },
         }),
       ).resolves.toBe(false);
@@ -352,7 +370,7 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports source files outside graph, sidecars, and allowlist coverage', async () => {
+  it('reports source files outside graph, checker routes, and allowlist coverage', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/fixtures/uncovered.ts': 'export const uncovered = 1;\n',
@@ -361,6 +379,30 @@ describe('runProofCheck build config semantics', () => {
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('uses explicit source include as the complete source boundary', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'docs/page.md': '# page\n',
+      }),
+    );
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          config: {
+            ...fixture.config.config,
+            source: {
+              include: ['docs/*.md'],
+            },
+          },
+        }),
+      ).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -418,10 +460,12 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('accepts source files covered by a sidecar target', async () => {
+  it('accepts source files covered by a checker route', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tools/covered.ts': 'export const covered = 1;\n',
+        'tools/covered.vue':
+          '<script setup lang="ts">const value = 1;</script>\n',
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
             module: 'ESNext',
@@ -430,7 +474,7 @@ describe('runProofCheck build config semantics', () => {
             target: 'ES2023',
             types: [],
           },
-          include: ['covered.ts'],
+          include: ['covered.ts', 'covered.vue'],
         }),
       }),
     );
@@ -439,13 +483,17 @@ describe('runProofCheck build config semantics', () => {
       await expect(
         runProofCheck({
           ...fixture.config,
-          proof: {
-            sidecarTargets: [
-              {
-                config: 'tools/tsconfig.json',
-                tool: 'tsc',
+          config: {
+            ...fixture.config.config,
+            checkers: {
+              ...fixture.config.config?.checkers,
+              vue: {
+                preset: 'vue-tsc',
+                routes: {
+                  typecheck: 'tools/tsconfig.json',
+                },
               },
-            ],
+            },
           },
         }),
       ).resolves.toBe(true);
@@ -468,6 +516,7 @@ describe('runProofCheck build config semantics', () => {
         runProofCheck({
           ...fixture.config,
           config: {
+            ...fixture.config.config,
             source: {
               include: ['package.json'],
               exclude: ['package.json'],
@@ -503,8 +552,15 @@ describe('runProofCheck build config semantics', () => {
         runProofCheck({
           ...fixture.config,
           config: {
-            roots: {
-              typecheck: 'tsconfig.check.json',
+            ...fixture.config.config,
+            checkers: {
+              typescript: {
+                preset: 'tsc',
+                routes: {
+                  build: 'tsconfig.graph.json',
+                  typecheck: 'tsconfig.check.json',
+                },
+              },
             },
           },
         }),
@@ -537,8 +593,15 @@ describe('runProofCheck build config semantics', () => {
         runProofCheck({
           ...fixture.config,
           config: {
-            roots: {
-              graph: 'tsconfig.custom.graph.json',
+            ...fixture.config.config,
+            checkers: {
+              typescript: {
+                preset: 'tsc',
+                routes: {
+                  build: 'tsconfig.custom.graph.json',
+                  typecheck: 'tsconfig.json',
+                },
+              },
             },
           },
         }),

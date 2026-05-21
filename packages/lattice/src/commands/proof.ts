@@ -3,28 +3,36 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import ts from 'typescript';
-import type { ResolvedLatticeConfig } from '../config';
+import {
+  getActiveCheckerExtensions,
+  getActiveCheckers,
+  getTypeScriptRoute,
+  type CheckerRouteKind,
+  type ResolvedCheckerConfig,
+  type ResolvedLatticeConfig,
+} from '../config';
 import type { LatticeFlowReporter } from '../flow';
 import { ProofLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectGraphProjectRoute,
   collectTypecheckTargetProjectPaths,
+  createExtensionPattern,
   createFormatHost,
   parseProjectFileNames,
+  parseProjectFileNamesForExtensions,
 } from '../tsconfig';
 import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
-type TypecheckTool = 'tsc' | 'vue-tsc' | string;
-
-interface SidecarTarget {
+interface CheckerCoverageTarget {
+  checker: ResolvedCheckerConfig;
   configPath: string;
   label: string;
-  tool: TypecheckTool;
+  routeKind: CheckerRouteKind;
 }
 
-interface SidecarTargetCollection {
+interface CheckerCoverageTargetCollection {
   problems: string[];
-  targets: SidecarTarget[];
+  targets: CheckerCoverageTarget[];
 }
 
 interface AllowlistEntry {
@@ -39,7 +47,7 @@ interface AllowlistEntryCollection {
 
 interface CoverageSource {
   label: string;
-  type: 'allowlist' | 'graph' | 'sidecar';
+  type: 'allowlist' | 'checker' | 'graph';
 }
 
 export interface RunProofCheckOptions {
@@ -56,12 +64,6 @@ interface ParsedConfig {
 }
 
 const buildConfigPattern = '**/tsconfig*.build.json';
-const proofFilePattern = /\.(?:[cm]?tsx?|d\.[cm]?ts|json)$/u;
-const defaultSourceInclude = [
-  '**/*.{ts,tsx,cts,mts}',
-  '**/*.d.{ts,cts,mts}',
-  '**/*.json',
-];
 const defaultSourceExclude = [
   'node_modules',
   'dist',
@@ -126,7 +128,7 @@ async function collectBuildConfigPaths(
 }
 
 function typecheckRootConfig(config: ResolvedLatticeConfig): string {
-  return config.config?.roots?.typecheck ?? 'tsconfig.json';
+  return getTypeScriptRoute(config, 'typecheck');
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -174,7 +176,13 @@ function normalizeSourceExcludePattern(pattern: string): string[] {
 }
 
 function sourceIncludePatterns(config: ResolvedLatticeConfig): string[] {
-  return config.config?.source?.include ?? defaultSourceInclude;
+  if (config.config?.source?.include) {
+    return config.config.source.include;
+  }
+
+  return getActiveCheckerExtensions(config).map(
+    (extension) => `**/*${extension}`,
+  );
 }
 
 function sourceExcludePatterns(config: ResolvedLatticeConfig): string[] {
@@ -186,6 +194,10 @@ function sourceExcludePatterns(config: ResolvedLatticeConfig): string[] {
 async function collectExpectedSourceFiles(
   config: ResolvedLatticeConfig,
 ): Promise<Set<string>> {
+  const explicitInclude = config.config?.source?.include !== undefined;
+  const proofFilePattern = explicitInclude
+    ? null
+    : createExtensionPattern(getActiveCheckerExtensions(config));
   const files = await glob(sourceIncludePatterns(config), {
     cwd: config.rootDir,
     absolute: true,
@@ -196,119 +208,53 @@ async function collectExpectedSourceFiles(
   return new Set(
     files
       .map(normalizeAbsolutePath)
-      .filter((filePath) => proofFilePattern.test(filePath))
+      .filter((filePath) => proofFilePattern?.test(filePath) ?? true)
       .sort(),
   );
 }
 
-function collectConfiguredSidecarTargets(
+function collectCheckerCoverageTargets(
   config: ResolvedLatticeConfig,
-): SidecarTargetCollection {
+): CheckerCoverageTargetCollection {
   const problems: string[] = [];
-  const targets: SidecarTarget[] = [];
-  const rawTargets = config.proof?.sidecarTargets;
+  const targets: CheckerCoverageTarget[] = [];
 
-  if (rawTargets === undefined) {
-    return {
-      problems,
-      targets,
-    };
+  for (const checker of getActiveCheckers(config)) {
+    if (checker.preset === 'tsc') {
+      continue;
+    }
+
+    for (const routeKind of ['typecheck', 'build'] as const) {
+      const route = checker.routes[routeKind];
+
+      if (!route) {
+        continue;
+      }
+
+      const configPath = normalizeAbsolutePath(
+        path.join(config.rootDir, route),
+      );
+
+      if (!existsSync(configPath)) {
+        problems.push(
+          [
+            'Checker proof route references a missing tsconfig:',
+            `  checker: ${checker.name}`,
+            `  route: ${routeKind}`,
+            `  config: ${toRelativePath(config.rootDir, configPath)}`,
+          ].join('\n'),
+        );
+        continue;
+      }
+
+      targets.push({
+        checker,
+        configPath,
+        label: `${checker.name}:${routeKind}`,
+        routeKind,
+      });
+    }
   }
-
-  if (!Array.isArray(rawTargets)) {
-    problems.push(
-      [
-        'Invalid proof sidecar target config:',
-        '  field: proof.sidecarTargets',
-        `  value: ${formatUnknownValue(rawTargets)}`,
-        '  reason: proof.sidecarTargets must be an array.',
-      ].join('\n'),
-    );
-    return {
-      problems,
-      targets,
-    };
-  }
-
-  rawTargets.forEach((target, index) => {
-    const field = `proof.sidecarTargets[${index}]`;
-
-    if (!isPlainRecord(target)) {
-      problems.push(
-        [
-          'Invalid proof sidecar target config:',
-          `  field: ${field}`,
-          `  value: ${formatUnknownValue(target)}`,
-          '  reason: sidecar targets must be objects with non-empty config and tool fields.',
-        ].join('\n'),
-      );
-      return;
-    }
-
-    const configValue = target.config;
-    const toolValue = target.tool;
-    const labelValue = target.label;
-
-    if (typeof configValue !== 'string' || configValue.trim().length === 0) {
-      problems.push(
-        [
-          'Invalid proof sidecar target config:',
-          `  field: ${field}.config`,
-          `  value: ${formatUnknownValue(configValue)}`,
-          '  reason: sidecar target config must be a non-empty string.',
-        ].join('\n'),
-      );
-      return;
-    }
-
-    if (typeof toolValue !== 'string' || toolValue.trim().length === 0) {
-      problems.push(
-        [
-          'Invalid proof sidecar target config:',
-          `  field: ${field}.tool`,
-          `  value: ${formatUnknownValue(toolValue)}`,
-          '  reason: sidecar target tool must be a non-empty string.',
-        ].join('\n'),
-      );
-      return;
-    }
-
-    if (
-      labelValue !== undefined &&
-      (typeof labelValue !== 'string' || labelValue.trim().length === 0)
-    ) {
-      problems.push(
-        [
-          'Invalid proof sidecar target config:',
-          `  field: ${field}.label`,
-          `  value: ${formatUnknownValue(labelValue)}`,
-          '  reason: sidecar target label must be a non-empty string when provided.',
-        ].join('\n'),
-      );
-      return;
-    }
-
-    const configPath = normalizeAbsolutePath(
-      path.join(config.rootDir, configValue),
-    );
-
-    if (!existsSync(configPath)) {
-      problems.push(
-        [
-          'Typecheck proof sidecar target references a missing tsconfig:',
-          `  field: ${field}.config`,
-          `  config: ${toRelativePath(config.rootDir, configPath)}`,
-        ].join('\n'),
-      );
-      return;
-    }
-
-    targets.push({
-      configPath,
-      label: labelValue?.trim() ?? 'configured-sidecar',
-      tool: toolValue.trim(),
-    });
-  });
 
   return {
     problems,
@@ -415,10 +361,16 @@ function collectCoverage(options: {
   graphProjectPaths: string[];
   includeAllowlist?: boolean;
   allowlistEntries: AllowlistEntry[];
-  sidecarTargets: SidecarTarget[];
+  checkerTargets: CheckerCoverageTarget[];
   sourceFiles: Set<string>;
 }): Map<string, CoverageSource[]> {
   const coverageByFile = new Map<string, CoverageSource[]>();
+  const proofFilePattern = createExtensionPattern(
+    getActiveCheckerExtensions(options.config),
+  );
+  const typeScriptChecker = getActiveCheckers(options.config).find(
+    (checker) => checker.preset === 'tsc',
+  );
 
   for (const graphProjectPath of options.graphProjectPaths) {
     for (const filePath of parseProjectFileNames(
@@ -437,19 +389,27 @@ function collectCoverage(options: {
     }
   }
 
-  for (const sidecarTarget of options.sidecarTargets) {
-    for (const filePath of parseProjectFileNames(
+  for (const checkerTarget of options.checkerTargets) {
+    const checkerExtensions = [
+      ...(typeScriptChecker?.extensions ?? []),
+      ...checkerTarget.checker.extensions,
+    ];
+
+    for (const filePath of parseProjectFileNamesForExtensions(
       options.config,
-      sidecarTarget.configPath,
-      proofFilePattern,
+      checkerTarget.configPath,
+      checkerExtensions,
     )) {
       if (!options.sourceFiles.has(filePath)) {
         continue;
       }
 
       addCoverage(coverageByFile, filePath, {
-        label: `${toRelativePath(options.config.rootDir, sidecarTarget.configPath)} via ${sidecarTarget.tool}`,
-        type: 'sidecar',
+        label: `${toRelativePath(
+          options.config.rootDir,
+          checkerTarget.configPath,
+        )} via ${checkerTarget.label}`,
+        type: 'checker',
       });
     }
   }
@@ -699,6 +659,9 @@ function collectConfigFileOwners(
   sourceFiles: Set<string>,
 ): ConfigFileOwners {
   const ownersByFile: ConfigFileOwners = new Map();
+  const proofFilePattern = createExtensionPattern(
+    getActiveCheckerExtensions(config),
+  );
 
   for (const configPath of configPaths) {
     if (!existsSync(configPath)) {
@@ -897,7 +860,7 @@ function addUncoveredSourceProblems(options: {
       uncoveredFiles.length > 20
         ? `  ... ${uncoveredFiles.length - 20} more`
         : '',
-      '  reason: every file in config.source must be covered by the root graph, a sidecar typecheck target, or an explicit allowlist entry.',
+      '  reason: every file in config.source must be covered by the root graph, an active checker route, or an explicit allowlist entry.',
     ]
       .filter(Boolean)
       .join('\n'),
@@ -940,10 +903,10 @@ async function runProofCheckInternal(
     return false;
   }
 
-  const sidecarCollection = collectConfiguredSidecarTargets(config);
-  const sidecarTargets = sidecarCollection.targets;
+  const checkerTargetCollection = collectCheckerCoverageTargets(config);
+  const checkerTargets = checkerTargetCollection.targets;
 
-  problems.push(...sidecarCollection.problems);
+  problems.push(...checkerTargetCollection.problems);
 
   if (problems.length > 0) {
     ProofLogger.error(problems.join('\n\n'));
@@ -958,17 +921,17 @@ async function runProofCheckInternal(
 
   const baseCoverageByFile = collectCoverage({
     allowlistEntries,
+    checkerTargets,
     config,
     graphProjectPaths,
     includeAllowlist: false,
-    sidecarTargets,
     sourceFiles,
   });
   const coverageByFile = collectCoverage({
     allowlistEntries,
+    checkerTargets,
     config,
     graphProjectPaths,
-    sidecarTargets,
     sourceFiles,
   });
   const graphFileOwners = collectConfigFileOwners(
@@ -1014,8 +977,8 @@ async function runProofCheckInternal(
   const graphFileCount = [...coverageByFile.values()].filter((sources) =>
     sources.some((source) => source.type === 'graph'),
   ).length;
-  const sidecarFileCount = [...coverageByFile.values()].filter((sources) =>
-    sources.some((source) => source.type === 'sidecar'),
+  const checkerFileCount = [...coverageByFile.values()].filter((sources) =>
+    sources.some((source) => source.type === 'checker'),
   ).length;
 
   if (options.logSuccess ?? true) {
@@ -1023,7 +986,7 @@ async function runProofCheckInternal(
       [
         `Checked ${graphProjectPaths.length} graph projects and ${buildConfigPaths.length} build configs.`,
         `IDE/typecheck route covers ${typecheckProjectPaths.length} configs from ${typecheckRootConfig(config)}.`,
-        `Root graph covers ${graphFileCount} files; configured sidecars cover ${sidecarFileCount} files.`,
+        `Root graph covers ${graphFileCount} files; active checker routes cover ${checkerFileCount} files.`,
         `Configured source boundary covers ${sourceFiles.size} files.`,
       ].join('\n'),
     );

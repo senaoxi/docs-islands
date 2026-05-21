@@ -1,7 +1,7 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-import type { ResolvedLatticeConfig } from './config';
+import { getTypeScriptRoute, type ResolvedLatticeConfig } from './config';
 import { normalizeAbsolutePath, toRelativePath } from './utils/path';
 
 export type JsonObject = Record<string, unknown>;
@@ -42,6 +42,51 @@ export function createFormatHost(rootDir: string): ts.FormatDiagnosticsHost {
     getCurrentDirectory: () => rootDir,
     getNewLine: () => '\n',
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+export function createExtensionPattern(extensions: string[]): RegExp {
+  if (extensions.length === 0) {
+    return /$./u;
+  }
+
+  return new RegExp(
+    `(?:${extensions
+      .sort((left, right) => right.length - left.length)
+      .map(escapeRegExp)
+      .join('|')})$`,
+    'u',
+  );
+}
+
+function createExtraFileExtensions(
+  extensions: string[],
+): ts.FileExtensionInfo[] {
+  const nativeExtensions = new Set([
+    '.ts',
+    '.tsx',
+    '.cts',
+    '.mts',
+    '.d.ts',
+    '.d.cts',
+    '.d.mts',
+    '.js',
+    '.jsx',
+    '.cjs',
+    '.mjs',
+    '.json',
+  ]);
+
+  return extensions
+    .filter((extension) => !nativeExtensions.has(extension))
+    .map((extension) => ({
+      extension,
+      isMixedContent: true,
+      scriptKind: ts.ScriptKind.Deferred,
+    }));
 }
 
 function readJsonConfigFile(rootDir: string, configPath: string): JsonObject {
@@ -401,7 +446,7 @@ export function collectGraphProjectRoute(
 ): CollectGraphProjectPathsResult {
   const rootGraphConfigPath = path.join(
     config.rootDir,
-    config.config?.roots?.graph ?? 'tsconfig.graph.json',
+    getTypeScriptRoute(config, 'build'),
   );
   const seen = new Set<string>();
   const orderedProjects: string[] = [];
@@ -484,19 +529,28 @@ export function parseProjectFileNames(
   configPath: string,
   pattern = /\.(?:[cm]?tsx?|d\.[cm]?ts|json)$/u,
 ): string[] {
+  return parseProjectFileNamesForExtensions(config, configPath, [], pattern);
+}
+
+export function parseProjectFileNamesForExtensions(
+  config: ResolvedLatticeConfig,
+  configPath: string,
+  extensions: string[],
+  pattern = createExtensionPattern(extensions),
+): string[] {
   const diagnostics: ts.Diagnostic[] = [];
-  const parsed = ts.getParsedCommandLineOfConfigFile(
-    configPath,
+  const configObject = readJsonConfig(config, configPath);
+  const parsed = ts.parseJsonConfigFileContent(
+    configObject,
+    ts.sys,
+    path.dirname(configPath),
     {},
-    {
-      ...ts.sys,
-      onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
-        diagnostics.push(diagnostic);
-      },
-    },
+    configPath,
+    undefined,
+    createExtraFileExtensions(extensions),
   );
 
-  if (!parsed) {
+  if (diagnostics.length > 0) {
     throw new Error(
       ts.formatDiagnosticsWithColorAndContext(
         diagnostics,

@@ -319,8 +319,8 @@ Current risk:
 
 Break:
 
-- Keep root docs and package theme checks as source-owned `vue-tsc` sidecar
-  checks after runtime source checks.
+- Keep root docs and package theme checks as source-owned `vue-tsc` checker
+  routes after runtime source checks.
 - Keep package docs, playground, and smoke checks as consumer checks after
   package builds.
 - Do not make runtime source projects depend on docs, theme, playground, or
@@ -405,7 +405,7 @@ surface: the package that consumers actually install.
     after the graph check.
 11. After parity is proven, make root `tsconfig.json` the IDE/typecheck
     solution over ordinary `tsconfig*.json` configs. Keep `tsconfig.graph.json`
-    as the build graph entry for `tsc -b`, and keep `vue-tsc` sidecars
+    as the build graph entry for `tsc -b`, and keep `vue-tsc` checker routes
     explicit.
 
 ## Uncertainties For Later Code-Change Tasks
