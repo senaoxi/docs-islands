@@ -4,14 +4,15 @@
   "type": "module",
   "scripts": {
     "docs:dev": "vitepress dev",
-    "docs:build": "vitepress build",
+    "docs:build": "pnpm clean:e2e-fixtures && vitepress build",
     "docs:preview": "vitepress preview",
     "test:e2e": "vitest run",
     "test:e2e:watch": "DEBUG=1 vitest",
     "typecheck": "lattice tsc",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "pnpm clean:remaining && del-cli .tsbuild .eslintcache .vitepress/dist .vitepress/cache node_modules",
-    "clean:remaining": "del-cli .vitepress/config.ts.timestamp-*.mjs || true"
+    "clean:remaining": "del-cli .vitepress/config.ts.timestamp-*.mjs error-handling/invalid-syntax.md error-handling/multiple-react-scripts.md script-content-changes/import-path-error.md || true",
+    "clean:e2e-fixtures": "del-cli error-handling/invalid-syntax.md error-handling/multiple-react-scripts.md script-content-changes/import-path-error.md || true"
   },
   "dependencies": {
     "vue": "catalog:prod",

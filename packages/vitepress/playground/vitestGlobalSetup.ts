@@ -12,6 +12,11 @@ let browserServer: BrowserServer;
 let server: ViteDevServer | Server;
 
 const root = fileURLToPath(new URL('.', import.meta.url));
+const generatedMarkdownFixturePaths = [
+  'error-handling/invalid-syntax.md',
+  'error-handling/multiple-react-scripts.md',
+  'script-content-changes/import-path-error.md',
+];
 
 const { ci, debug, runtime } = loadEnv();
 
@@ -47,7 +52,21 @@ const resolveChromiumExecutablePath = () => {
   return candidatePaths.find((candidatePath) => fs.existsSync(candidatePath));
 };
 
+function materializeMarkdownFixtures(): void {
+  for (const relativePath of generatedMarkdownFixturePaths) {
+    const targetPath = path.join(root, relativePath);
+    fs.copyFileSync(`${targetPath}.fixture`, targetPath);
+  }
+}
+
+function removeMarkdownFixtures(): void {
+  for (const relativePath of generatedMarkdownFixturePaths) {
+    fs.rmSync(path.join(root, relativePath), { force: true });
+  }
+}
+
 export async function setup(): Promise<void> {
+  materializeMarkdownFixtures();
   browserServer = await chromium.launchServer({
     headless: !debug,
     args: ci ? ['--no-sandbox', '--disable-setuid-sandbox'] : undefined,
@@ -63,14 +82,18 @@ export async function setup(): Promise<void> {
 }
 
 export async function teardown(): Promise<void> {
-  if (browserServer) {
-    await browserServer.close();
-  }
-  if (server) {
-    await ('ws' in server
-      ? server.close()
-      : new Promise<void>((resolve, reject) => {
-          server.close((error) => (error ? reject(error) : resolve()));
-        }));
+  try {
+    if (browserServer) {
+      await browserServer.close();
+    }
+    if (server) {
+      await ('ws' in server
+        ? server.close()
+        : new Promise<void>((resolve, reject) => {
+            server.close((error) => (error ? reject(error) : resolve()));
+          }));
+    }
+  } finally {
+    removeMarkdownFixtures();
   }
 }

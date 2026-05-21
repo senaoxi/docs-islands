@@ -10,9 +10,6 @@
   "references": [
     {
       "path": "./tsconfig.lib.build.json"
-    },
-    {
-      "path": "../../utils/tsconfig.lib.build.json"
     }
   ]
 }

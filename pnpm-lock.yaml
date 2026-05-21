@@ -758,8 +758,8 @@ importers:
         specifier: link:../plugins/license
         version: link:../plugins/license
       '@docs-islands/utils':
-        specifier: workspace:*
-        version: link:../../utils
+        specifier: link:../../utils/dist
+        version: link:../../utils/dist
       '@rollup/plugin-replace':
         specifier: catalog:dev
         version: 6.0.3(rollup@4.59.0)
@@ -1013,8 +1013,8 @@ importers:
   packages/vitepress/docs:
     dependencies:
       '@docs-islands/logger':
-        specifier: workspace:*
-        version: link:../../logger
+        specifier: catalog:prod
+        version: 0.0.5(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       react:
         specifier: catalog:dev
         version: 18.3.1

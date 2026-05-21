@@ -40,11 +40,33 @@ const waitForHMRSelector = async (selector: string, timeout = 5000) => {
   }
 };
 
+const waitForMarkdownImportFailure = async (pathname: string) => {
+  const markdownModulePath = `${pathname}.md`;
+  await page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url());
+
+    return (
+      url.pathname.endsWith(markdownModulePath) &&
+      url.searchParams.has('import') &&
+      candidate.status() >= 500
+    );
+  });
+};
+
 async function expectDevPageFailure(pathname: string): Promise<void> {
+  const failureResponse = waitForMarkdownImportFailure(pathname);
   const response = await page.goto(`http://localhost:${TEST.port}${pathname}`);
 
   expect(response).toBeTruthy();
-  await expect(page.locator('body')).toContainText('PAGE NOT FOUND');
+  await failureResponse;
+}
+
+async function expectCurrentPageFailure(pathname: string): Promise<void> {
+  const failureResponse = waitForMarkdownImportFailure(pathname);
+  const response = await page.reload();
+
+  expect(response).toBeTruthy();
+  await failureResponse;
 }
 
 describe('Script Content Changes', () => {
@@ -139,8 +161,7 @@ describe('HMR: Changing Render Component References', () => {
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
-      await page.reload();
-      await expect(page.locator('body')).toContainText('PAGE NOT FOUND');
+      await expectCurrentPageFailure('/script-content-changes/hmr-test');
     } finally {
       await restoreFileContent(hmrTestFilePath, originalMarkdownContent);
       await goto('/script-content-changes/hmr-test');
@@ -246,8 +267,7 @@ describe('HMR: Adding New Render Component References', () => {
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
-      await page.reload();
-      await expect(page.locator('body')).toContainText('PAGE NOT FOUND');
+      await expectCurrentPageFailure('/script-content-changes/hmr-test');
     } finally {
       await restoreFileContent(hmrTestFilePath, originalMarkdownContent);
       await goto('/script-content-changes/hmr-test');

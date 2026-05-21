@@ -9,11 +9,25 @@ import {
 const TestLogger = getPlaygroundLogger('test.playground.error-handling');
 const { test: TEST } = loadEnv();
 
+const waitForMarkdownImportFailure = async (pathname: string) => {
+  const markdownModulePath = `${pathname}.md`;
+  await page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url());
+
+    return (
+      url.pathname.endsWith(markdownModulePath) &&
+      url.searchParams.has('import') &&
+      candidate.status() >= 500
+    );
+  });
+};
+
 async function expectDevPageFailure(pathname: string) {
+  const failureResponse = waitForMarkdownImportFailure(pathname);
   const response = await page.goto(`http://localhost:${TEST.port}${pathname}`);
 
   expect(response).toBeTruthy();
-  await expect(page.locator('body')).toContainText('PAGE NOT FOUND');
+  await failureResponse;
 }
 
 describe('Error Handling and Edge Cases', () => {

@@ -50,7 +50,7 @@
     "@types/babel__traverse": "catalog:dev",
     "@types/node": "catalog:dev",
     "@typescript-eslint/parser": "catalog:lint",
-    "@docs-islands/utils": "workspace:*",
+    "@docs-islands/utils": "link:../../utils/dist",
     "@docs-islands/plugin-license": "link:../plugins/license",
     "es-module-lexer": "catalog:dev",
     "globals": "catalog:test",
