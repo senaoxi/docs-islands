@@ -7,7 +7,7 @@ import type { ResolvedLatticeConfig } from '../config';
 import type { LatticeFlowReporter } from '../flow';
 import { ProofLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
-  collectGraphProjectPaths,
+  collectGraphProjectRoute,
   collectTypecheckTargetProjectPaths,
   createFormatHost,
   parseProjectFileNames,
@@ -687,7 +687,8 @@ async function runProofCheckInternal(
   options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
   const problems: string[] = [];
-  const graphProjectPaths = collectGraphProjectPaths(config);
+  const graphRoute = collectGraphProjectRoute(config);
+  const graphProjectPaths = graphRoute.projectPaths;
   const graphProjectPathSet = new Set(graphProjectPaths);
   const buildConfigPaths = await collectBuildConfigPaths(config);
   const typecheckRoute = collectTypecheckTargetProjectPaths({
@@ -696,6 +697,7 @@ async function runProofCheckInternal(
   });
   const typecheckProjectPaths = typecheckRoute.projectPaths;
 
+  problems.push(...graphRoute.problems);
   problems.push(...typecheckRoute.problems);
 
   addBuildConfigProblems({

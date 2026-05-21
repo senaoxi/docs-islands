@@ -6,7 +6,7 @@ import type { ResolvedLatticeConfig } from '../config';
 import type { LatticeFlowReporter } from '../flow';
 import { GraphLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
-  collectGraphProjectPaths,
+  collectGraphProjectRoute,
   formatReferences,
   getRawReferencePaths,
   readJsonConfig,
@@ -1036,7 +1036,8 @@ async function runGraphCheckInternal(
   config: ResolvedLatticeConfig,
   options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
-  const projectPaths = collectGraphProjectPaths(config);
+  const graphRoute = collectGraphProjectRoute(config);
+  const projectPaths = graphRoute.projectPaths;
   const projects = projectPaths.map((projectPath) =>
     parseProject(config, projectPath),
   );
@@ -1046,7 +1047,7 @@ async function runGraphCheckInternal(
   const fileOwnerLookup = createFileOwnerLookup(projects);
   const packages = await collectWorkspacePackages(config);
   const importers = collectImporters(config, packages);
-  const problems: string[] = [];
+  const problems: string[] = [...graphRoute.problems];
   const graphRules = normalizeGraphRules({
     config,
     packages,

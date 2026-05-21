@@ -4,7 +4,7 @@ import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runPaths } from './commands/paths';
 import { runProofCheck } from './commands/proof';
-import { runTypecheck } from './commands/typecheck';
+import { runTscBuild, runTypecheck } from './commands/typecheck';
 import {
   loadConfig,
   type LatticeCommand,
@@ -28,6 +28,7 @@ interface PackageFlags extends GlobalFlags {
 }
 
 interface TscFlags extends GlobalFlags {
+  build?: boolean;
   concurrency?: string;
   project?: string;
 }
@@ -202,12 +203,32 @@ async function main(): Promise<void> {
     });
 
   cli
-    .command('tsc', 'Run tsc for TypeScript typecheck target configs')
+    .command('tsc', 'Run tsc for TypeScript typecheck or build-graph configs')
     .option('-p, --project <path>', 'Tsconfig file or directory')
     .option('--concurrency <n>', 'Maximum concurrent tsc processes')
+    .option('--build', 'Run "tsc -b" against the build graph root')
     .action(async (flags: TscFlags) => {
       const flow = createCliFlow();
       flow.intro('lattice tsc');
+
+      if (flags.build) {
+        const config = await load(flags, 'check');
+        const result = await runTscBuild({
+          clearScreen: false,
+          cwd: process.cwd(),
+          flow,
+          project: flags.project ?? config.config?.roots?.graph,
+        });
+
+        if (!result.passed) {
+          process.exitCode = 1;
+        }
+
+        flow.outro(result.passed ? 'lattice tsc passed' : 'lattice tsc failed');
+
+        return;
+      }
+
       const result = await runTypecheck({
         clearScreen: false,
         concurrency: parseConcurrency(flags.concurrency),

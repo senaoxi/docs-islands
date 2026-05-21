@@ -304,3 +304,145 @@ export async function runTypecheck(
     throw error;
   }
 }
+
+export interface RunTscBuildOptions {
+  clearScreen?: boolean;
+  cwd?: string;
+  flow?: LatticeFlowReporter;
+  flowDepth?: number;
+  project?: string;
+  tscCommand?: string;
+}
+
+export interface RunTscBuildResult {
+  passed: boolean;
+  projectRootDir: string;
+  rootConfigPath: string;
+}
+
+async function runTscBuildInternal(
+  options: RunTscBuildOptions = {},
+): Promise<RunTscBuildResult> {
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const projectRootDir = normalizeAbsolutePath(cwd);
+  const rootConfigPath = resolveProjectConfigPath(
+    cwd,
+    options.project ?? 'tsconfig.graph.json',
+  );
+  const flowDepth = options.flowDepth ?? 0;
+  const command = options.tscCommand ?? 'tsc';
+  const relativeRootConfigPath = toRelativePath(projectRootDir, rootConfigPath);
+  const args = ['-b', relativeRootConfigPath, '--pretty', 'false'];
+
+  options.flow?.info(
+    `found 1 build graph root; running tsc -b ${relativeRootConfigPath}`,
+    {
+      depth: flowDepth + 1,
+    },
+  );
+
+  TypecheckLogger.info(
+    [
+      `Running tsc -b for ${relativeRootConfigPath}.`,
+      `CWD: ${toRelativePath(cwd, projectRootDir)}`,
+      `Project: ${relativeRootConfigPath}`,
+    ].join('\n'),
+  );
+
+  const task = options.flow?.start(`tsc -b ${relativeRootConfigPath}`, {
+    collapseOnSuccess: false,
+    depth: flowDepth + 1,
+  });
+
+  const result = await new Promise<{ error?: Error; status: number }>(
+    (resolve) => {
+      const child = spawn(command, args, {
+        cwd: projectRootDir,
+        shell: process.platform === 'win32',
+        stdio: 'inherit',
+      });
+
+      child.on('error', (error) => {
+        resolve({ error, status: 1 });
+      });
+
+      child.on('close', (code) => {
+        resolve({ status: code ?? 1 });
+      });
+    },
+  );
+
+  const passed = result.status === 0;
+
+  if (passed) {
+    task?.pass();
+  } else {
+    const suffix = result.error
+      ? formatErrorMessage(result.error)
+      : `exited with code ${result.status}`;
+
+    task?.fail(undefined, { error: suffix });
+  }
+
+  if (!passed) {
+    TypecheckLogger.error(
+      [
+        'tsc -b failed:',
+        `  ${relativeRootConfigPath}${
+          result.error
+            ? `: ${formatErrorMessage(result.error)}`
+            : ` exited with code ${result.status}`
+        }`,
+      ].join('\n'),
+    );
+  } else if (!options.flow?.interactive) {
+    TypecheckLogger.success(
+      `Checked build graph at ${relativeRootConfigPath}.`,
+    );
+  }
+
+  return {
+    passed,
+    projectRootDir,
+    rootConfigPath,
+  };
+}
+
+export async function runTscBuild(
+  options: RunTscBuildOptions = {},
+): Promise<RunTscBuildResult> {
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
+
+  const elapsed = createElapsedTimer();
+  const task = options.flow?.start('tsc build', {
+    depth: options.flowDepth ?? 0,
+  });
+
+  TypecheckLogger.info('tsc build started');
+
+  try {
+    const result = await runTscBuildInternal(options);
+
+    if (result.passed) {
+      if (!options.flow?.interactive) {
+        TypecheckLogger.success('tsc build finished', elapsed());
+      }
+
+      task?.pass();
+    } else {
+      TypecheckLogger.error('tsc build finished with failures', elapsed());
+      task?.fail('tsc build finished with failures');
+    }
+
+    return result;
+  } catch (error) {
+    TypecheckLogger.error(
+      `tsc build failed: ${formatErrorMessage(error)}`,
+      elapsed(),
+    );
+    task?.fail('tsc build failed', { error });
+    throw error;
+  }
+}

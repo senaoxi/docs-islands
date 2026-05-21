@@ -68,6 +68,7 @@ export type BuiltinTaskName =
   | 'graph:check'
   | 'package:check'
   | 'proof:check'
+  | 'tsc:build'
   | 'tsc:run';
 
 /**

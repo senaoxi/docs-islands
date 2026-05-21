@@ -10,6 +10,11 @@ const buildConfigFilePattern = /^tsconfig(?:\..+)?\.build\.json$/u;
 const graphConfigFilePattern = /^tsconfig(?:\..+)?\.graph\.json$/u;
 const tsconfigFilePattern = /^tsconfig(?:\..+)?\.json$/u;
 
+interface ReferencePathInfo {
+  rawPath: string;
+  resolvedPath: string;
+}
+
 export interface CollectTypecheckTargetProjectPathsOptions {
   rootConfigPath: string;
   rootDir: string;
@@ -19,6 +24,11 @@ export interface CollectTypecheckTargetProjectPathsResult {
   problems: string[];
   projectPaths: string[];
   targetProjectPaths: string[];
+}
+
+export interface CollectGraphProjectPathsResult {
+  problems: string[];
+  projectPaths: string[];
 }
 
 export function createFormatHost(rootDir: string): ts.FormatDiagnosticsHost {
@@ -92,15 +102,33 @@ export function getRawReferencePathsForConfig(
   rootDir: string,
   configPath: string,
 ): string[] {
+  return getReferencePathInfosForConfig(rootDir, configPath).map(
+    (reference) => reference.resolvedPath,
+  );
+}
+
+function getReferencePathInfosForConfig(
+  rootDir: string,
+  configPath: string,
+): ReferencePathInfo[] {
   const configObject = readJsonConfigFile(rootDir, configPath);
 
-  return getReferencePathsFromConfigObject(configPath, configObject);
+  return getReferencePathInfosFromConfigObject(configPath, configObject);
 }
 
 function getReferencePathsFromConfigObject(
   configPath: string,
   configObject: JsonObject,
 ): string[] {
+  return getReferencePathInfosFromConfigObject(configPath, configObject).map(
+    (reference) => reference.resolvedPath,
+  );
+}
+
+function getReferencePathInfosFromConfigObject(
+  configPath: string,
+  configObject: JsonObject,
+): ReferencePathInfo[] {
   const references = configObject.references;
 
   if (!Array.isArray(references)) {
@@ -118,7 +146,13 @@ function getReferencePathsFromConfigObject(
     }
 
     return [
-      resolveReferencePath(configPath, (reference as { path: string }).path),
+      {
+        rawPath: (reference as { path: string }).path,
+        resolvedPath: resolveReferencePath(
+          configPath,
+          (reference as { path: string }).path,
+        ),
+      },
     ];
   });
 }
@@ -299,39 +333,80 @@ export function collectTypecheckTargetProjectPaths(
   };
 }
 
-export function collectGraphProjectPaths(
+export function collectGraphProjectRoute(
   config: ResolvedLatticeConfig,
-): string[] {
+): CollectGraphProjectPathsResult {
   const rootGraphConfigPath = path.join(
     config.rootDir,
     config.config?.roots?.graph ?? 'tsconfig.graph.json',
   );
   const seen = new Set<string>();
   const orderedProjects: string[] = [];
-  const queue = getRawReferencePaths(config, rootGraphConfigPath);
+  const problems: string[] = [];
+  const queue = getReferencePathInfosForConfig(
+    config.rootDir,
+    rootGraphConfigPath,
+  ).map((reference) => ({
+    projectPath: reference.resolvedPath,
+    rawReferencePath: reference.rawPath,
+    referrerPath: rootGraphConfigPath,
+  }));
+  const formatConfigPath = (configPath: string): string =>
+    toRelativePath(config.rootDir, configPath);
 
-  for (const projectPath of queue) {
+  for (const { projectPath } of queue) {
     seen.add(projectPath);
   }
 
-  for (const projectPath of queue) {
-    if (!projectPath || !existsSync(projectPath)) {
+  for (const { projectPath, rawReferencePath, referrerPath } of queue) {
+    if (!projectPath) {
+      continue;
+    }
+
+    if (!existsSync(projectPath)) {
+      problems.push(
+        [
+          'Graph route references a missing tsconfig:',
+          `  from: ${formatConfigPath(referrerPath)}`,
+          `  reference: ${rawReferencePath}`,
+          `  resolved: ${formatConfigPath(projectPath)}`,
+          '  reason: every project reference reachable from the root graph must point to an existing tsconfig file or directory with tsconfig.json.',
+        ].join('\n'),
+      );
       continue;
     }
 
     orderedProjects.push(projectPath);
 
-    for (const referencePath of getRawReferencePaths(config, projectPath)) {
+    for (const reference of getReferencePathInfosForConfig(
+      config.rootDir,
+      projectPath,
+    )) {
+      const referencePath = reference.resolvedPath;
+
       if (seen.has(referencePath)) {
         continue;
       }
 
       seen.add(referencePath);
-      queue.push(referencePath);
+      queue.push({
+        projectPath: referencePath,
+        rawReferencePath: reference.rawPath,
+        referrerPath: projectPath,
+      });
     }
   }
 
-  return orderedProjects;
+  return {
+    problems,
+    projectPaths: orderedProjects,
+  };
+}
+
+export function collectGraphProjectPaths(
+  config: ResolvedLatticeConfig,
+): string[] {
+  return collectGraphProjectRoute(config).projectPaths;
 }
 
 export function parseProjectFileNames(

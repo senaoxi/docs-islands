@@ -239,6 +239,44 @@ const denyInternalDep: GraphConfig = {
   },
 };
 
+describe('runGraphCheck graph route', () => {
+  it('reports missing graph references from nested aggregators', async () => {
+    const fixture = await createFixture({
+      'app/src/index.ts': 'export const value = 1;\n',
+      'app/tsconfig.lib.build.json': buildConfig({
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+      }),
+      'app/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+      'tsconfig.graph.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.graph.json',
+          },
+        ],
+      }),
+      'tsconfig.lib.graph.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './app/tsconfig.lib.build.json',
+          },
+          {
+            path: './app/tsconfig.missing.graph.jsonx',
+          },
+        ],
+      }),
+    });
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+});
+
 describe('runGraphCheck graph rules', () => {
   it('denies imports to configured build refs for labeled projects', async () => {
     const fixture = await createFixture(

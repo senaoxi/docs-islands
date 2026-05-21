@@ -22,7 +22,7 @@
       "path": "./packages/lattice/tsconfig.lib.build.json"
     },
     {
-      "path": "./packages/vitepress/tsconfig.lib.graph.json"
+      "path": "./packages/vitepress/tsconfig.graph.json"
     }
   ]
 }

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
-import { runTypecheck } from './commands/typecheck';
+import { runTscBuild, runTypecheck } from './commands/typecheck';
 import type {
   BuiltinTaskName,
   PipelineStep,
@@ -22,6 +22,7 @@ const builtInTaskNames = new Set<string>([
   'graph:check',
   'package:check',
   'proof:check',
+  'tsc:build',
   'tsc:run',
 ]);
 
@@ -72,6 +73,17 @@ export async function runBuiltinTask(
         cwd: config.rootDir,
         flow: options.flow,
         flowDepth: 1,
+      });
+
+      return result.passed;
+    }
+    case 'tsc:build': {
+      const result = await runTscBuild({
+        clearScreen: false,
+        cwd: config.rootDir,
+        flow: options.flow,
+        flowDepth: 1,
+        project: config.config?.roots?.graph,
       });
 
       return result.passed;

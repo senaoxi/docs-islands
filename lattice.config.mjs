@@ -130,6 +130,7 @@ export default defineConfig({
       'graph:check',
       'proof:check',
       'tsc:run',
+      'tsc:build',
       {
         type: 'command',
         command: 'vue-tsc',
