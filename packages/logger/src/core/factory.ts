@@ -1,8 +1,10 @@
 import type {
   CreateLoggerOptions,
+  Logger as LoggerApi,
   LoggerLogOptions,
   LoggerScopeId,
   LogKind,
+  ScopedLogger as ScopedLoggerApi,
 } from '../types';
 import { assertLoggerConfigRegisteredForScope } from './config';
 import { emitLoggerMessage } from './console';
@@ -34,34 +36,34 @@ const createMainLoggerCacheKey = (
   )}` as MainLoggerCacheKey;
 };
 
-export class Logger {
+class LoggerImpl implements LoggerApi {
   readonly #main: string;
   readonly #scopeId: LoggerScopeId;
-  readonly #scopedLoggers = new Map<string, ScopedLogger>();
+  readonly #scopedLoggers = new Map<string, ScopedLoggerImpl>();
 
   /** Cache for main loggers. */
-  static readonly #mainCacheMap = new Map<MainLoggerCacheKey, Logger>();
+  static readonly #mainCacheMap = new Map<MainLoggerCacheKey, LoggerImpl>();
 
   private constructor(scopeId: LoggerScopeId, main: string) {
     this.#main = normalizeLoggerMain(main);
     this.#scopeId = normalizeLoggerScopeId(scopeId);
   }
 
-  static getOrCreate(main: string, scopeId: LoggerScopeId): Logger {
+  static getOrCreate(main: string, scopeId: LoggerScopeId): LoggerImpl {
     const cacheKey = createMainLoggerCacheKey(scopeId, main);
-    const cachedLogger = Logger.#mainCacheMap.get(cacheKey);
+    const cachedLogger = LoggerImpl.#mainCacheMap.get(cacheKey);
 
     if (cachedLogger) {
       return cachedLogger;
     }
 
-    const logger = new Logger(scopeId, main);
-    Logger.#mainCacheMap.set(cacheKey, logger);
+    const logger = new LoggerImpl(scopeId, main);
+    LoggerImpl.#mainCacheMap.set(cacheKey, logger);
 
     return logger;
   }
 
-  getLoggerByGroup(group: string): ScopedLogger {
+  getLoggerByGroup(group: string): ScopedLoggerApi {
     const normalizedGroup = normalizeLoggerGroup(group);
     const cachedScopedLogger = this.#scopedLoggers.get(normalizedGroup);
 
@@ -69,7 +71,7 @@ export class Logger {
       return cachedScopedLogger;
     }
 
-    const scopedLogger = new ScopedLogger(
+    const scopedLogger = new ScopedLoggerImpl(
       this.#scopeId,
       this.#main,
       normalizedGroup,
@@ -80,7 +82,7 @@ export class Logger {
   }
 }
 
-export class ScopedLogger {
+class ScopedLoggerImpl implements ScopedLoggerApi {
   readonly #group: string;
   readonly #main: string;
   readonly #scopeId: LoggerScopeId;
@@ -143,8 +145,6 @@ export class ScopedLogger {
   }
 }
 
-export default Logger;
-
 /**
  * Creates a logger instance for a specific scope with a given main module identifier.
  *
@@ -168,10 +168,10 @@ export default Logger;
 export const createScopedLogger = (
   options: CreateLoggerOptions,
   scopeId: LoggerScopeId,
-): Logger => {
+): LoggerApi => {
   const normalizedScopeId = assertLoggerConfigRegisteredForScope(scopeId);
 
-  return Logger.getOrCreate(options.main, normalizedScopeId);
+  return LoggerImpl.getOrCreate(options.main, normalizedScopeId);
 };
 
 /**
@@ -191,6 +191,6 @@ export const createScopedLogger = (
  * groupLogger.info('Application initialized');
  * ```
  */
-export function createLogger(options: CreateLoggerOptions): Logger {
+export function createLogger(options: CreateLoggerOptions): LoggerApi {
   return createScopedLogger(options, DEFAULT_LOGGER_SCOPE_ID);
 }
