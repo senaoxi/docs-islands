@@ -30,7 +30,7 @@ Lattice makes these rules reviewable, runnable, and suitable for CI.
 ## Features
 
 - **Project graph validation**: checks reachable TypeScript build leaves, references, graph-owned imports, package boundaries, and label-based deny rules.
-- **Typecheck coverage proof**: verifies that build configs match strict local typecheck companions and that source files are covered by graph, checker routes, or allowlist entries.
+- **Typecheck coverage proof**: verifies that graph-capable checker build configs match strict local typecheck companions and that source files are covered by checker routes or allowlist entries.
 - **Compatibility path generation**: writes opt-in `tsconfig.graph.paths.generated.json` files for `workspace:*` dependencies whose package exports still point at build artifacts.
 - **Checker target runner**: runs configured TypeScript and UI-framework checker routes for `typecheck` and `build`.
 - **Published package checks**: validates built package outputs with `publint`, Are The Types Wrong, and a runtime import boundary audit.
@@ -111,7 +111,7 @@ export default defineConfig({
   },
 
   pipelines: {
-    typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
+    typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
     package: ['package:check'],
     publish: ['graph:check', 'proof:check', 'package:check'],
   },
@@ -174,10 +174,9 @@ lattice [--config lattice.config.mjs] [--mode mode] <command>
 | `lattice paths generate`                         | Generate compatibility source `paths` configs for artifact-facing workspace exports. |
 | `lattice paths apply`                            | Compatibility alias for `paths generate`.                                            |
 | `lattice paths check`                            | Fail when generated path files are stale.                                            |
-| `lattice tsc`                                    | Run configured checker `typecheck` routes, or discover ordinary `tsconfig` targets.  |
-| `lattice tsc --build`                            | Run configured checker `build` routes.                                               |
-| `lattice tsc -p <path>`                          | Start typecheck target discovery from a specific config file or directory.           |
-| `lattice tsc --concurrency <n>`                  | Limit concurrent `tsc` processes.                                                    |
+| `lattice checker typecheck`                      | Run configured checker `typecheck` routes.                                           |
+| `lattice checker build`                          | Run configured checker `build` routes.                                               |
+| `lattice checker typecheck --concurrency <n>`    | Limit concurrent checker processes.                                                  |
 | `lattice package check`                          | Run configured package output checks.                                                |
 | `lattice package check --package <name>`         | Check one configured package target.                                                 |
 | `lattice package check --tool <tool>`            | Run only `publint`, `attw`, or `boundary`.                                           |
@@ -273,7 +272,7 @@ proof: {
 }
 ```
 
-Checker routes cover files checked outside the TypeScript build graph. Allowlist entries should be rare and must include a reason.
+Checker routes cover files validated by TypeScript or framework-aware tools. Allowlist entries are the final fallback after all configured checker routes fail to cover a source file; they should be rare and must include a reason.
 
 ### `packageChecks`
 
@@ -301,7 +300,7 @@ packageChecks: {
 
 ```js
 pipelines: {
-  typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
+  typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
   package: [
     { type: 'command', command: 'pnpm', args: ['build'] },
     'package:check',

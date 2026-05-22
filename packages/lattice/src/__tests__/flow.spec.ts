@@ -40,7 +40,7 @@ describe('LatticeFlowReporter', () => {
       depth: 1,
       error: new Error('first line\nsecond line'),
     });
-    flow.skip('tsc:run', { depth: 1 });
+    flow.skip('checker:typecheck', { depth: 1 });
     flow.outro('lattice check failed');
 
     expect(chunks).toEqual([
@@ -48,7 +48,7 @@ describe('LatticeFlowReporter', () => {
       '  [start] graph check\n',
       '  [pass] graph check (120ms)\n',
       '  [fail] proof check: first line second line\n',
-      '  [skip] tsc:run\n',
+      '  [skip] checker:typecheck\n',
       '[done] lattice check failed\n',
     ]);
   });
@@ -81,18 +81,21 @@ describe('LatticeFlowReporter', () => {
       },
     });
 
-    flow.intro('lattice tsc');
+    flow.intro('lattice checker typecheck');
     const task = flow.start('proof check');
     task.info('proof check started');
     task.pass('proof check', { elapsedTimeMs: 1000 });
-    flow.outro('lattice tsc passed');
+    flow.outro('lattice checker passed');
 
-    expect(calls).toEqual(['intro:lattice tsc', 'outro:lattice tsc passed']);
+    expect(calls).toEqual([
+      'intro:lattice checker typecheck',
+      'outro:lattice checker passed',
+    ]);
     expect(chunks).toEqual([
       '◇    proof check\n',
       '│      proof check started\n',
       '\r\u001B[H\u001B[2J\u001B[3J',
-      '┌  lattice tsc\n',
+      '┌  lattice checker typecheck\n',
       `${green('◆')}    proof check (1.00s)\n`,
     ]);
   });

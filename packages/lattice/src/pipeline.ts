@@ -3,7 +3,7 @@ import path from 'node:path';
 import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
-import { runTscBuild, runTypecheck } from './commands/typecheck';
+import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
 import type {
   BuiltinTaskName,
   PipelineStep,
@@ -19,11 +19,11 @@ interface RunPipelineOptions {
 type NormalizedPipelineStep = Exclude<PipelineStep, string>;
 
 const builtInTaskNames = new Set<string>([
+  'checker:build',
+  'checker:typecheck',
   'graph:check',
   'package:check',
   'proof:check',
-  'tsc:build',
-  'tsc:run',
 ]);
 
 function isBuiltinTaskName(value: string): value is BuiltinTaskName {
@@ -67,8 +67,8 @@ export async function runBuiltinTask(
         flowDepth: 1,
       });
     }
-    case 'tsc:run': {
-      const result = await runTypecheck({
+    case 'checker:typecheck': {
+      const result = await runCheckerTypecheck({
         clearScreen: false,
         config,
         cwd: config.rootDir,
@@ -78,8 +78,8 @@ export async function runBuiltinTask(
 
       return result.passed;
     }
-    case 'tsc:build': {
-      const result = await runTscBuild({
+    case 'checker:build': {
+      const result = await runCheckerBuild({
         clearScreen: false,
         config,
         cwd: config.rootDir,

@@ -339,7 +339,7 @@ function addNormalizedRuleRef(options: {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.path`,
       `  path: ${pathValue}`,
-      '  reason: deny.refs path must point to a project reachable from the root graph config.',
+      '  reason: deny.refs path must point to a project reachable from a checker graph route.',
     ]);
     return;
   }
@@ -1294,7 +1294,7 @@ async function runGraphCheckInternal(
         if (!projectsByPath.has(targetProjectPath)) {
           problems.push(
             [
-              'Expected graph target is not reachable from root graph config:',
+              'Expected graph target is not reachable from any checker graph route:',
               `  importing project: ${toRelativePath(config.rootDir, project.configPath)}`,
               `  file: ${toRelativePath(config.rootDir, importRecord.filePath)}:${importRecord.line}`,
               `  imported specifier: ${importRecord.specifier}`,

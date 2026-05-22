@@ -29,7 +29,7 @@
     "lint:package:publint": "lattice package check --tool publint",
     "lint:package:attw": "lattice package check --tool attw",
     "lint:package:boundary": "lattice package check --tool boundary",
-    "typecheck": "lattice tsc",
+    "typecheck": "lattice checker typecheck",
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "test": "vitest run",

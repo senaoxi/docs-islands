@@ -27,14 +27,13 @@ check. It runs the full graph check, then runs the Vue SFC checks.
 - `pnpm typecheck:lib`: production library/runtime declaration graph
   check through `tsconfig.lib.graph.json`.
 - `pnpm typecheck:vue`: Vue SFC/template checks for source-owned Vue configs
-  such as `docs/tsconfig.json` and `packages/vitepress/theme/tsconfig.json`.
+  through the root `tsconfig.vue.json` checker route.
 - `pnpm tsconfig:graph:paths`: compatibility helper that generates source
   `paths` configs only for `workspace:*` dependencies whose package exports
   still resolve to build artifacts.
 
-Pass one-off build-mode flags directly to `typecheck:graph` when needed, for
-example `pnpm typecheck:graph -- --force` or
-`pnpm typecheck:graph -- --verbose`.
+For one-off build-mode flags, run the raw TypeScript build command directly,
+for example `pnpm exec tsc -b tsconfig.graph.json --pretty false --force`.
 
 Run `vue-tsc` through `pnpm typecheck:vue` or the package-local Vue scripts
 whenever changing `.vue` files, VitePress theme files, or docs theme code.
@@ -348,21 +347,23 @@ Break:
 These should not be converted to plain `tsc` checks because they include Vue SFC
 files or VitePress site SFC typing:
 
+- `tsconfig.vue.json`
 - `docs/tsconfig.json`
 - `packages/vitepress/docs/tsconfig.json`
-- `packages/vitepress/theme/tsconfig.json`
+- `packages/vitepress/theme/tsconfig.lib.json`
 
 The current scripts are correct in principle:
 
+- root `package.json`: `lattice check vue`
 - `docs/package.json`: `vue-tsc --noEmit`
 - `packages/vitepress/docs/package.json`: `vue-tsc --noEmit`
-- `packages/vitepress/package.json`: `vue-tsc -p theme/tsconfig.json --noEmit`
+- `packages/vitepress/package.json`: `vue-tsc -p theme/tsconfig.lib.json --noEmit`
 
-The source pipeline runs root docs and package theme after the `tsc -b` graph
-check. Package docs stay in the consumer pipeline because they intentionally
-consume `@docs-islands/vitepress` through `link:../dist`. All of them should
-remain separate from plain TypeScript build mode unless a later task proves
-`vue-tsc` build-mode references are safe for these configs.
+The source pipeline runs the root Vue checker route after the `tsc -b` graph
+check. Consumer-style docs still run in the consumer pipeline after dist output
+exists. All of them should remain separate from plain TypeScript build mode
+unless a later task proves `vue-tsc` build-mode references are safe for these
+configs.
 
 ## Configs And Scripts That Should Remain Dist Artifact Checks
 

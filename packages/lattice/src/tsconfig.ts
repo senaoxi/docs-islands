@@ -1,7 +1,8 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-import { getTypeScriptRoute, type ResolvedLatticeConfig } from './config';
+import { getCheckerAdapter } from './checkers';
+import { getActiveCheckers, type ResolvedLatticeConfig } from './config';
 import { normalizeAbsolutePath, toRelativePath } from './utils/path';
 
 export type JsonObject = Record<string, unknown>;
@@ -34,6 +35,17 @@ export interface CollectTypecheckTargetProjectPathsResult {
 export interface CollectGraphProjectPathsResult {
   problems: string[];
   projectPaths: string[];
+}
+
+export interface CheckerGraphProjectRoute {
+  checkerName: string;
+  projectPaths: string[];
+  rootConfigPath: string;
+}
+
+export interface CollectCheckerGraphProjectRoutesResult {
+  problems: string[];
+  routes: CheckerGraphProjectRoute[];
 }
 
 export function createFormatHost(rootDir: string): ts.FormatDiagnosticsHost {
@@ -327,7 +339,7 @@ export function collectTypecheckTargetProjectPaths(
       [
         'Circular reference in typecheck route:',
         `  cycle: ${cyclePaths.map(formatConfigPath).join(' -> ')}`,
-        '  reason: ordinary tsconfig references used by lattice tsc must form an acyclic route.',
+        '  reason: ordinary tsconfig references used by lattice checker typecheck must form an acyclic route.',
         '  fix: remove one reference from the cycle, or move shared options into extends instead of references.',
       ].join('\n'),
     );
@@ -429,7 +441,7 @@ export function collectTypecheckTargetProjectPaths(
       [
         'Typecheck route has no tsconfig targets:',
         `  root: ${toRelativePath(options.rootDir, rootConfigPath)}`,
-        '  reason: lattice tsc runs ordinary tsconfig*.json files without references, plus configs that have references and their own source inputs.',
+        '  reason: lattice checker typecheck runs ordinary tsconfig*.json files without references, plus configs that have references and their own source inputs.',
       ].join('\n'),
     );
   }
@@ -441,18 +453,16 @@ export function collectTypecheckTargetProjectPaths(
   };
 }
 
-export function collectGraphProjectRoute(
-  config: ResolvedLatticeConfig,
-): CollectGraphProjectPathsResult {
-  const rootGraphConfigPath = path.join(
-    config.rootDir,
-    getTypeScriptRoute(config, 'build'),
-  );
+export function collectGraphProjectRouteFromRoot(options: {
+  rootConfigPath: string;
+  rootDir: string;
+}): CollectGraphProjectPathsResult {
+  const rootGraphConfigPath = normalizeAbsolutePath(options.rootConfigPath);
   const seen = new Set<string>();
   const orderedProjects: string[] = [];
   const problems: string[] = [];
   const rootReferences = collectReferencePathInfosForConfig(
-    config.rootDir,
+    options.rootDir,
     rootGraphConfigPath,
   );
   const queue = rootReferences.references.map((reference) => ({
@@ -461,9 +471,14 @@ export function collectGraphProjectRoute(
     referrerPath: rootGraphConfigPath,
   }));
   const formatConfigPath = (configPath: string): string =>
-    toRelativePath(config.rootDir, configPath);
+    toRelativePath(options.rootDir, configPath);
 
   problems.push(...rootReferences.problems);
+
+  if (isBuildConfigPath(rootGraphConfigPath)) {
+    seen.add(rootGraphConfigPath);
+    orderedProjects.push(rootGraphConfigPath);
+  }
 
   for (const { projectPath } of queue) {
     seen.add(projectPath);
@@ -481,7 +496,7 @@ export function collectGraphProjectRoute(
           `  from: ${formatConfigPath(referrerPath)}`,
           `  reference: ${rawReferencePath}`,
           `  resolved: ${formatConfigPath(projectPath)}`,
-          '  reason: every project reference reachable from the root graph must point to an existing tsconfig file or directory with tsconfig.json.',
+          '  reason: every project reference reachable from a checker graph route must point to an existing tsconfig file or directory with tsconfig.json.',
         ].join('\n'),
       );
       continue;
@@ -490,7 +505,7 @@ export function collectGraphProjectRoute(
     orderedProjects.push(projectPath);
 
     const referenceCollection = collectReferencePathInfosForConfig(
-      config.rootDir,
+      options.rootDir,
       projectPath,
     );
 
@@ -515,6 +530,53 @@ export function collectGraphProjectRoute(
   return {
     problems,
     projectPaths: orderedProjects,
+  };
+}
+
+export function collectGraphProjectRoutes(
+  config: ResolvedLatticeConfig,
+): CollectCheckerGraphProjectRoutesResult {
+  const routes: CheckerGraphProjectRoute[] = [];
+  const problems: string[] = [];
+
+  for (const checker of getActiveCheckers(config)) {
+    const adapter = getCheckerAdapter(checker.preset);
+    const route = checker.routes.build;
+
+    if (!adapter?.graph || !route) {
+      continue;
+    }
+
+    const rootConfigPath = resolveProjectConfigPath(config.rootDir, route);
+    const routeCollection = collectGraphProjectRouteFromRoot({
+      rootConfigPath,
+      rootDir: config.rootDir,
+    });
+
+    problems.push(...routeCollection.problems);
+    routes.push({
+      checkerName: checker.name,
+      projectPaths: routeCollection.projectPaths,
+      rootConfigPath,
+    });
+  }
+
+  return {
+    problems,
+    routes,
+  };
+}
+
+export function collectGraphProjectRoute(
+  config: ResolvedLatticeConfig,
+): CollectGraphProjectPathsResult {
+  const routeCollection = collectGraphProjectRoutes(config);
+
+  return {
+    problems: routeCollection.problems,
+    projectPaths: [
+      ...new Set(routeCollection.routes.flatMap((route) => route.projectPaths)),
+    ].sort(),
   };
 }
 

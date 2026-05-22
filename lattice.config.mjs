@@ -66,8 +66,8 @@ export default defineConfig({
       },
     },
   },
-  // Typecheck coverage proof. Source files must be covered by the root graph,
-  // an active checker route, or an explicit allowlist entry.
+  // Typecheck coverage proof. Source files must be covered by checker graph
+  // routes, active checker routes, or an explicit allowlist entry.
   proof: {
     // Intentional exceptions. Each entry must explain why it is safe.
     allowlist: [
@@ -122,8 +122,38 @@ export default defineConfig({
       },
       'graph:check',
       'proof:check',
-      'tsc:run',
-      'tsc:build',
+      'checker:typecheck',
+      'checker:build',
+    ],
+    // Default TypeScript project-reference graph check.
+    graph: [
+      {
+        type: 'command',
+        command: 'pnpm',
+        args: ['--filter', '@docs-islands/plugin-license', 'build'],
+      },
+      'graph:check',
+      {
+        type: 'command',
+        command: 'tsc',
+        args: ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
+      },
+    ],
+    // Production library/runtime declaration graph.
+    lib: [
+      {
+        type: 'command',
+        command: 'tsc',
+        args: ['-b', 'tsconfig.lib.graph.json', '--pretty', 'false'],
+      },
+    ],
+    // Source-owned Vue SFC checks that are intentionally outside native tsc -b.
+    vue: [
+      {
+        type: 'command',
+        command: 'vue-tsc',
+        args: ['-p', 'tsconfig.vue.json', '--noEmit'],
+      },
     ],
     // Validation pipeline for consumer docs, playground, and smoke projects.
     consumer: [

@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  runTscBuild,
-  runTypecheck,
+  runCheckerBuild,
+  runCheckerTypecheck,
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from '../commands/typecheck';
+import type { CheckerRoutesConfig, ResolvedLatticeConfig } from '../config';
 import { LatticeFlowReporter } from '../flow';
 import { collectTypecheckTargetProjectPaths } from '../tsconfig';
 
@@ -61,6 +62,26 @@ function passingRunner(calls: TypecheckTarget[] = []) {
   };
 }
 
+function createLatticeConfig(
+  rootDir: string,
+  routes: CheckerRoutesConfig = {
+    typecheck: 'tsconfig.json',
+  },
+): ResolvedLatticeConfig {
+  return {
+    config: {
+      checkers: {
+        typescript: {
+          preset: 'tsc',
+          routes,
+        },
+      },
+    },
+    configPath: path.join(rootDir, 'lattice.config.mjs'),
+    rootDir,
+  };
+}
+
 function createFlow(): {
   chunks: string[];
   flow: LatticeFlowReporter;
@@ -86,7 +107,7 @@ function createFlow(): {
   };
 }
 
-describe('runTypecheck', () => {
+describe('runCheckerTypecheck', () => {
   it('reports discovered targets and per-target status to the flow reporter', async () => {
     const fixture = await createFixture({
       'package.json': packageJson(),
@@ -111,8 +132,9 @@ describe('runTypecheck', () => {
     const { chunks, flow } = createFlow();
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
         clearScreen: false,
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         flow,
         runner: passingRunner(),
@@ -146,7 +168,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
@@ -174,7 +197,7 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
         config: {
           config: {
             checkers: {
@@ -225,7 +248,7 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTscBuild({
+      const result = await runCheckerBuild({
         config: {
           config: {
             checkers: {
@@ -233,6 +256,7 @@ describe('runTypecheck', () => {
                 preset: 'tsc',
                 routes: {
                   build: 'tsconfig.graph.json',
+                  typecheck: 'tsconfig.json',
                 },
               },
               vue: {
@@ -261,7 +285,7 @@ describe('runTypecheck', () => {
     }
   });
 
-  it('resolves relative -p values from the command cwd', async () => {
+  it('resolves configured relative checker route values from the command cwd', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
       'configs/tsconfig.json': tsconfig({
@@ -270,16 +294,18 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir, {
+          typecheck: 'configs',
+        }),
         cwd: fixture.rootDir,
-        project: 'configs',
         runner: passingRunner(calls),
       });
 
       expect(result.passed).toBe(true);
-      expect(result.rootConfigPath).toBe(
+      expect(result.rootConfigPaths).toEqual([
         path.join(fixture.rootDir, 'configs/tsconfig.json'),
-      );
+      ]);
       expect(calls[0].args).toEqual([
         '-p',
         'configs/tsconfig.json',
@@ -290,7 +316,7 @@ describe('runTypecheck', () => {
     }
   });
 
-  it('accepts absolute -p values', async () => {
+  it('accepts absolute configured checker route values', async () => {
     const fixture = await createFixture({
       'nested/tsconfig.custom.json': tsconfig({
         include: ['src/**/*.ts'],
@@ -302,14 +328,16 @@ describe('runTypecheck', () => {
     );
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir, {
+          typecheck: projectPath,
+        }),
         cwd: fixture.rootDir,
-        project: projectPath,
         runner: passingRunner(),
       });
 
       expect(result.passed).toBe(true);
-      expect(result.rootConfigPath).toBe(projectPath);
+      expect(result.rootConfigPaths).toEqual([projectPath]);
     } finally {
       await fixture.cleanup();
     }
@@ -339,7 +367,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
@@ -371,7 +400,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
@@ -403,7 +433,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
@@ -434,7 +465,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
@@ -474,7 +506,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(),
       });
@@ -516,7 +549,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
@@ -534,7 +568,8 @@ describe('runTypecheck', () => {
     const fixture = await createFixture({});
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(),
       });
@@ -560,7 +595,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(),
       });
@@ -596,7 +632,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
@@ -632,7 +669,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         cwd: fixture.rootDir,
         runner: passingRunner(),
       });
@@ -668,7 +706,8 @@ describe('runTypecheck', () => {
     });
 
     try {
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
+        config: createLatticeConfig(fixture.rootDir),
         concurrency: 2,
         cwd: fixture.rootDir,
         runner: async (target) => {

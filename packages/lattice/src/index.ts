@@ -2,7 +2,6 @@ export {
   defineConfig,
   getActiveCheckerExtensions,
   getActiveCheckers,
-  getTypeScriptRoute,
   loadConfig,
   validateLatticeConfig,
   type BuiltinCheckerPreset,
@@ -54,9 +53,12 @@ export {
 } from './flow';
 
 export {
-  runTypecheck,
-  type RunTypecheckOptions,
-  type RunTypecheckResult,
+  runCheckerBuild,
+  runCheckerTypecheck,
+  type RunCheckerBuildOptions,
+  type RunCheckerBuildResult,
+  type RunCheckerTypecheckOptions,
+  type RunCheckerTypecheckResult,
   type TypecheckRunner,
   type TypecheckTarget,
   type TypecheckTargetResult,

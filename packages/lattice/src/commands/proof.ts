@@ -3,10 +3,10 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import ts from 'typescript';
+import { getCheckerAdapter } from '../checkers';
 import {
   getActiveCheckerExtensions,
   getActiveCheckers,
-  getTypeScriptRoute,
   type CheckerRouteKind,
   type ResolvedCheckerConfig,
   type ResolvedLatticeConfig,
@@ -14,18 +14,21 @@ import {
 import type { LatticeFlowReporter } from '../flow';
 import { ProofLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
-  collectGraphProjectRoute,
+  collectGraphProjectRouteFromRoot,
+  collectGraphProjectRoutes,
   collectTypecheckTargetProjectPaths,
   createExtensionPattern,
   createFormatHost,
   parseProjectFileNames,
   parseProjectFileNamesForExtensions,
+  resolveProjectConfigPath,
 } from '../tsconfig';
 import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
 interface CheckerCoverageTarget {
   checker: ResolvedCheckerConfig;
   configPath: string;
+  coverageConfigPaths: string[];
   label: string;
   routeKind: CheckerRouteKind;
 }
@@ -127,10 +130,6 @@ async function collectBuildConfigPaths(
   return paths.map(normalizeAbsolutePath).sort();
 }
 
-function typecheckRootConfig(config: ResolvedLatticeConfig): string {
-  return getTypeScriptRoute(config, 'typecheck');
-}
-
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -220,10 +219,6 @@ function collectCheckerCoverageTargets(
   const targets: CheckerCoverageTarget[] = [];
 
   for (const checker of getActiveCheckers(config)) {
-    if (checker.preset === 'tsc') {
-      continue;
-    }
-
     for (const routeKind of ['typecheck', 'build'] as const) {
       const route = checker.routes[routeKind];
 
@@ -231,9 +226,7 @@ function collectCheckerCoverageTargets(
         continue;
       }
 
-      const configPath = normalizeAbsolutePath(
-        path.join(config.rootDir, route),
-      );
+      const configPath = resolveProjectConfigPath(config.rootDir, route);
 
       if (!existsSync(configPath)) {
         problems.push(
@@ -247,9 +240,34 @@ function collectCheckerCoverageTargets(
         continue;
       }
 
+      const adapter = getCheckerAdapter(checker.preset);
+      let coverageConfigPaths = [configPath];
+
+      if (
+        routeKind === 'typecheck' &&
+        adapter?.typecheckDiscovery === 'references'
+      ) {
+        const routeCollection = collectTypecheckTargetProjectPaths({
+          rootConfigPath: configPath,
+          rootDir: config.rootDir,
+        });
+
+        problems.push(...routeCollection.problems);
+        coverageConfigPaths = routeCollection.targetProjectPaths;
+      } else if (routeKind === 'build' && adapter?.graph) {
+        const routeCollection = collectGraphProjectRouteFromRoot({
+          rootConfigPath: configPath,
+          rootDir: config.rootDir,
+        });
+
+        problems.push(...routeCollection.problems);
+        coverageConfigPaths = routeCollection.projectPaths;
+      }
+
       targets.push({
         checker,
         configPath,
+        coverageConfigPaths,
         label: `${checker.name}:${routeKind}`,
         routeKind,
       });
@@ -395,22 +413,24 @@ function collectCoverage(options: {
       ...checkerTarget.checker.extensions,
     ];
 
-    for (const filePath of parseProjectFileNamesForExtensions(
-      options.config,
-      checkerTarget.configPath,
-      checkerExtensions,
-    )) {
-      if (!options.sourceFiles.has(filePath)) {
-        continue;
-      }
+    for (const configPath of checkerTarget.coverageConfigPaths) {
+      for (const filePath of parseProjectFileNamesForExtensions(
+        options.config,
+        configPath,
+        checkerExtensions,
+      )) {
+        if (!options.sourceFiles.has(filePath)) {
+          continue;
+        }
 
-      addCoverage(coverageByFile, filePath, {
-        label: `${toRelativePath(
-          options.config.rootDir,
-          checkerTarget.configPath,
-        )} via ${checkerTarget.label}`,
-        type: 'checker',
-      });
+        addCoverage(coverageByFile, filePath, {
+          label: `${toRelativePath(
+            options.config.rootDir,
+            configPath,
+          )} via ${checkerTarget.label}`,
+          type: 'checker',
+        });
+      }
     }
   }
 
@@ -600,7 +620,7 @@ function addBuildConfigProblems(options: {
     if (!options.graphProjectPaths.has(configPath)) {
       options.problems.push(
         [
-          'Build config is not reachable from root graph config:',
+          'Build config is not reachable from any graph-capable checker build route:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
         ].join('\n'),
       );
@@ -706,7 +726,7 @@ function addDuplicateGraphCoverageProblems(options: {
 
     options.problems.push(
       [
-        'Duplicate root graph coverage:',
+        'Duplicate checker graph coverage:',
         `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
         '  covered by:',
         ...uniqueOwners
@@ -719,7 +739,7 @@ function addDuplicateGraphCoverageProblems(options: {
             (configPath) =>
               `    - ${toRelativePath(options.config.rootDir, configPath)}`,
           ),
-        '  reason: a root graph file must have a single build owner; move the file to one build leaf or narrow include/exclude patterns.',
+        '  reason: a checker graph file must have a single build owner; move the file to one build leaf or narrow include/exclude patterns.',
       ].join('\n'),
     );
   }
@@ -763,14 +783,41 @@ function addDuplicateTypecheckCoverageProblems(options: {
   }
 }
 
+function addDuplicateGraphOwnerProblems(options: {
+  config: ResolvedLatticeConfig;
+  graphOwnersByConfigPath: Map<string, string[]>;
+  problems: string[];
+}): void {
+  for (const [
+    configPath,
+    ownerCheckerNames,
+  ] of options.graphOwnersByConfigPath.entries()) {
+    const uniqueOwnerCheckerNames = [...new Set(ownerCheckerNames)].sort();
+
+    if (uniqueOwnerCheckerNames.length <= 1) {
+      continue;
+    }
+
+    options.problems.push(
+      [
+        'Duplicate checker graph build owner:',
+        `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
+        '  owned by:',
+        ...uniqueOwnerCheckerNames.map((checkerName) => `    - ${checkerName}`),
+        '  reason: each tsconfig*.build.json must be reached by exactly one graph-capable checker build route.',
+      ].join('\n'),
+    );
+  }
+}
+
 function addTypecheckRouteProblems(options: {
   buildConfigPaths: string[];
   config: ResolvedLatticeConfig;
+  graphOwnersByConfigPath: Map<string, string[]>;
   problems: string[];
-  typecheckProjectPaths: string[];
+  typecheckProjectPathsByChecker: Map<string, string[]>;
+  typecheckRootByChecker: Map<string, string>;
 }): void {
-  const typecheckProjectPathSet = new Set(options.typecheckProjectPaths);
-
   for (const buildConfigPath of options.buildConfigPaths) {
     const localConfigPath = getStrictLocalConfigPath(buildConfigPath);
 
@@ -778,19 +825,33 @@ function addTypecheckRouteProblems(options: {
       continue;
     }
 
-    if (typecheckProjectPathSet.has(localConfigPath)) {
-      continue;
-    }
+    const ownerCheckerNames =
+      options.graphOwnersByConfigPath.get(buildConfigPath) ?? [];
 
-    options.problems.push(
-      [
-        'Build companion config is not reachable from IDE/typecheck route:',
-        `  build config: ${toRelativePath(options.config.rootDir, buildConfigPath)}`,
-        `  expected local config: ${toRelativePath(options.config.rootDir, localConfigPath)}`,
-        `  root: ${typecheckRootConfig(options.config)}`,
-        '  reason: every tsconfig*.build.json companion must be reachable from the ordinary tsconfig.json route used by editors and local typecheck analysis.',
-      ].join('\n'),
-    );
+    for (const checkerName of ownerCheckerNames) {
+      const typecheckProjectPathSet = new Set(
+        options.typecheckProjectPathsByChecker.get(checkerName) ?? [],
+      );
+
+      if (typecheckProjectPathSet.has(localConfigPath)) {
+        continue;
+      }
+
+      options.problems.push(
+        [
+          'Build companion config is not reachable from checker typecheck route:',
+          `  checker: ${checkerName}`,
+          `  build config: ${toRelativePath(options.config.rootDir, buildConfigPath)}`,
+          `  expected local config: ${toRelativePath(options.config.rootDir, localConfigPath)}`,
+          `  root: ${toRelativePath(
+            options.config.rootDir,
+            options.typecheckRootByChecker.get(checkerName) ??
+              options.config.rootDir,
+          )}`,
+          '  reason: every graph-capable checker build route must pair each tsconfig*.build.json companion with the same checker typecheck route.',
+        ].join('\n'),
+      );
+    }
   }
 }
 
@@ -860,11 +921,22 @@ function addUncoveredSourceProblems(options: {
       uncoveredFiles.length > 20
         ? `  ... ${uncoveredFiles.length - 20} more`
         : '',
-      '  reason: every file in config.source must be covered by the root graph, an active checker route, or an explicit allowlist entry.',
+      '  reason: every file in config.source must be covered by a checker graph route, an active checker route, or an explicit allowlist entry.',
     ]
       .filter(Boolean)
       .join('\n'),
   );
+}
+
+function addGraphOwner(
+  ownersByConfigPath: Map<string, string[]>,
+  configPath: string,
+  checkerName: string,
+): void {
+  const owners = ownersByConfigPath.get(configPath) ?? [];
+
+  owners.push(checkerName);
+  ownersByConfigPath.set(configPath, owners);
 }
 
 async function runProofCheckInternal(
@@ -872,18 +944,52 @@ async function runProofCheckInternal(
   options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
   const problems: string[] = [];
-  const graphRoute = collectGraphProjectRoute(config);
-  const graphProjectPaths = graphRoute.projectPaths;
+  const graphRouteCollection = collectGraphProjectRoutes(config);
+  const graphProjectPaths = [
+    ...new Set(
+      graphRouteCollection.routes.flatMap((route) => route.projectPaths),
+    ),
+  ].sort();
   const graphProjectPathSet = new Set(graphProjectPaths);
   const buildConfigPaths = await collectBuildConfigPaths(config);
-  const typecheckRoute = collectTypecheckTargetProjectPaths({
-    rootConfigPath: path.join(config.rootDir, typecheckRootConfig(config)),
-    rootDir: config.rootDir,
-  });
-  const typecheckProjectPaths = typecheckRoute.projectPaths;
+  const graphOwnersByConfigPath = new Map<string, string[]>();
+  const typecheckProjectPathsByChecker = new Map<string, string[]>();
+  const typecheckRootByChecker = new Map<string, string>();
+  const referenceTypecheckProjectPaths: string[] = [];
 
-  problems.push(...graphRoute.problems);
-  problems.push(...typecheckRoute.problems);
+  problems.push(...graphRouteCollection.problems);
+
+  for (const route of graphRouteCollection.routes) {
+    for (const projectPath of route.projectPaths) {
+      addGraphOwner(graphOwnersByConfigPath, projectPath, route.checkerName);
+    }
+  }
+
+  for (const checker of getActiveCheckers(config)) {
+    const adapter = getCheckerAdapter(checker.preset);
+    const typecheckRoute = checker.routes.typecheck;
+
+    if (!adapter?.graph || !checker.routes.build || !typecheckRoute) {
+      continue;
+    }
+
+    const rootConfigPath = resolveProjectConfigPath(
+      config.rootDir,
+      typecheckRoute,
+    );
+    const routeCollection = collectTypecheckTargetProjectPaths({
+      rootConfigPath,
+      rootDir: config.rootDir,
+    });
+
+    problems.push(...routeCollection.problems);
+    typecheckProjectPathsByChecker.set(
+      checker.name,
+      routeCollection.projectPaths,
+    );
+    typecheckRootByChecker.set(checker.name, rootConfigPath);
+    referenceTypecheckProjectPaths.push(...routeCollection.projectPaths);
+  }
 
   addBuildConfigProblems({
     buildConfigPaths,
@@ -891,11 +997,18 @@ async function runProofCheckInternal(
     graphProjectPaths: graphProjectPathSet,
     problems,
   });
+  addDuplicateGraphOwnerProblems({
+    config,
+    graphOwnersByConfigPath,
+    problems,
+  });
   addTypecheckRouteProblems({
     buildConfigPaths,
     config,
+    graphOwnersByConfigPath,
     problems,
-    typecheckProjectPaths,
+    typecheckProjectPathsByChecker,
+    typecheckRootByChecker,
   });
 
   if (problems.length > 0) {
@@ -941,7 +1054,7 @@ async function runProofCheckInternal(
   );
   const typecheckFileOwners = collectConfigFileOwners(
     config,
-    typecheckProjectPaths,
+    [...new Set(referenceTypecheckProjectPaths)].sort(),
     sourceFiles,
   );
 
@@ -985,8 +1098,8 @@ async function runProofCheckInternal(
     ProofLogger.success(
       [
         `Checked ${graphProjectPaths.length} graph projects and ${buildConfigPaths.length} build configs.`,
-        `IDE/typecheck route covers ${typecheckProjectPaths.length} configs from ${typecheckRootConfig(config)}.`,
-        `Root graph covers ${graphFileCount} files; active checker routes cover ${checkerFileCount} files.`,
+        `Graph-capable checker typecheck routes cover ${new Set(referenceTypecheckProjectPaths).size} configs.`,
+        `Checker graph routes cover ${graphFileCount} files; active checker routes cover ${checkerFileCount} files.`,
         `Configured source boundary covers ${sourceFiles.size} files.`,
       ].join('\n'),
     );

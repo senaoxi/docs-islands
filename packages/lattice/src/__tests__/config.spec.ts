@@ -112,6 +112,7 @@ describe('defineConfig', () => {
             preset: 'tsc',
             routes: {
               build: `tsconfig.${command}.${mode}.json`,
+              typecheck: `tsconfig.${command}.${mode}.check.json`,
             },
           },
         },
@@ -125,6 +126,7 @@ describe('defineConfig', () => {
             preset: 'tsc',
             routes: {
               build: 'tsconfig.graph.ci.json',
+              typecheck: 'tsconfig.graph.ci.check.json',
             },
           },
         },
@@ -182,6 +184,7 @@ export default defineConfig(async ({ command, mode }) => ({
         preset: 'tsc',
         routes: {
           build: \`tsconfig.\${command}.\${mode}.json\`,
+          typecheck: \`tsconfig.\${command}.\${mode}.check.json\`,
         },
       },
     },
@@ -200,6 +203,9 @@ export default defineConfig(async ({ command, mode }) => ({
       expect(config.rootDir).toBe(rootDir);
       expect(config.config?.checkers?.typescript?.routes?.build).toBe(
         'tsconfig.paths.ci.json',
+      );
+      expect(config.config?.checkers?.typescript?.routes?.typecheck).toBe(
+        'tsconfig.paths.ci.check.json',
       );
     } finally {
       await rm(rootDir, {
@@ -342,41 +348,6 @@ throw new Error('external config should not be imported');
     }
   });
 
-  it('rejects removed roots and proof sidecar fields', async () => {
-    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
-
-    try {
-      await writeText(
-        path.join(rootDir, 'pnpm-workspace.yaml'),
-        'packages: []\n',
-      );
-      await writeText(
-        path.join(rootDir, 'lattice.config.mjs'),
-        `
-export default {
-  config: {
-    roots: {
-      graph: 'tsconfig.graph.json',
-    },
-  },
-  proof: {
-    sidecarTargets: [],
-  },
-};
-`,
-      );
-
-      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /config\.roots[\s\S]*proof\.sidecarTargets/u,
-      );
-    } finally {
-      await rm(rootDir, {
-        force: true,
-        recursive: true,
-      });
-    }
-  });
-
   it('rejects empty checker routes', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
 
@@ -440,6 +411,118 @@ export default {
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
         /extensions may only be omitted for built-in presets/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects active custom checker presets without an adapter', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      custom: {
+        preset: 'custom-checker',
+        extensions: ['.custom'],
+        routes: {
+          typecheck: 'tsconfig.custom.json',
+        },
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /active checker routes require a built-in checker adapter/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects unsupported checker routes', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      svelte: {
+        preset: 'svelte-check',
+        routes: {
+          build: 'tsconfig.svelte.build.json',
+        },
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /does not support routes\.build/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('requires graph-capable checker build routes to have typecheck routes', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      typescript: {
+        preset: 'tsc',
+        routes: {
+          build: 'tsconfig.graph.json',
+        },
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /must configure routes\.typecheck/u,
       );
     } finally {
       await rm(rootDir, {

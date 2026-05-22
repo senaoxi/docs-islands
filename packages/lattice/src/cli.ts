@@ -4,7 +4,7 @@ import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runPaths } from './commands/paths';
 import { runProofCheck } from './commands/proof';
-import { runTscBuild, runTypecheck } from './commands/typecheck';
+import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
 import {
   loadConfig,
   type LatticeCommand,
@@ -27,10 +27,8 @@ interface PackageFlags extends GlobalFlags {
   tool?: string;
 }
 
-interface TscFlags extends GlobalFlags {
-  build?: boolean;
+interface CheckerFlags extends GlobalFlags {
   concurrency?: string;
-  project?: string;
 }
 
 async function load(
@@ -203,48 +201,57 @@ async function main(): Promise<void> {
     });
 
   cli
-    .command('tsc', 'Run tsc for TypeScript typecheck or build-graph configs')
-    .option('-p, --project <path>', 'Tsconfig file or directory')
-    .option('--concurrency <n>', 'Maximum concurrent tsc processes')
-    .option('--build', 'Run "tsc -b" against the build graph root')
-    .action(async (flags: TscFlags) => {
-      const flow = createCliFlow();
-      flow.intro('lattice tsc');
+    .command(
+      'checker <action>',
+      'Run configured checker typecheck or build routes',
+    )
+    .option('--concurrency <n>', 'Maximum concurrent checker processes')
+    .action(async (action: string, flags: CheckerFlags) => {
+      if (action !== 'typecheck' && action !== 'build') {
+        throw new Error(
+          `Unknown checker action "${action}". Expected typecheck or build.`,
+        );
+      }
 
-      if (flags.build) {
+      const flow = createCliFlow();
+      flow.intro(`lattice checker ${action}`);
+
+      if (action === 'build') {
         const config = await load(flags, 'check');
-        const result = await runTscBuild({
+        const result = await runCheckerBuild({
           clearScreen: false,
           config,
           cwd: process.cwd(),
           flow,
-          project: flags.project,
         });
 
         if (!result.passed) {
           process.exitCode = 1;
         }
 
-        flow.outro(result.passed ? 'lattice tsc passed' : 'lattice tsc failed');
+        flow.outro(
+          result.passed ? 'lattice checker passed' : 'lattice checker failed',
+        );
 
         return;
       }
 
       const config = await load(flags, 'check');
-      const result = await runTypecheck({
+      const result = await runCheckerTypecheck({
         clearScreen: false,
         config,
         concurrency: parseConcurrency(flags.concurrency),
         cwd: process.cwd(),
         flow,
-        project: flags.project,
       });
 
       if (!result.passed) {
         process.exitCode = 1;
       }
 
-      flow.outro(result.passed ? 'lattice tsc passed' : 'lattice tsc failed');
+      flow.outro(
+        result.passed ? 'lattice checker passed' : 'lattice checker failed',
+      );
     });
 
   cli

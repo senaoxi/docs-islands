@@ -39,7 +39,7 @@
     "lint:package:attw": "lattice package check --tool attw",
     "lint:package:boundary": "lattice package check --tool boundary",
     "smoke": "pnpm --dir ./smoke test",
-    "typecheck": "lattice tsc && pnpm typecheck:theme",
+    "typecheck": "lattice checker typecheck",
     "typecheck:theme": "vue-tsc -p theme/tsconfig.lib.json --noEmit",
     "build": "rolldown --config rolldown.config.ts && pnpm build:theme && pnpm build-types-check",
     "build:theme": "rolldown --config rolldown.theme.config.ts",

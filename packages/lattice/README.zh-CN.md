@@ -30,7 +30,7 @@ Lattice 让这些规则变得可审查、可执行，并适合放进 CI。
 ## 特性
 
 - **Project graph validation**：检查可达的 TypeScript build leaf、references、graph-owned imports、包边界和基于 label 的 deny rules。
-- **Typecheck coverage proof**：验证 build config 与严格的本地 typecheck companion 保持一致，并确认源码文件被 graph、checker routes 或 allowlist 覆盖。
+- **Typecheck coverage proof**：验证具备 graph 能力的 checker build config 与严格的本地 typecheck companion 保持一致，并确认源码文件被 checker routes 或 allowlist 覆盖。
 - **Compatibility path generation**：当 `workspace:*` 依赖的 package exports 仍指向 build artifacts 时，生成可选的 `tsconfig.graph.paths.generated.json` 源码 paths 配置。
 - **Checker target runner**：运行已配置的 TypeScript 与 UI 框架 checker routes，覆盖 `typecheck` 与 `build` 两类能力。
 - **Published package checks**：使用 `publint`、Are The Types Wrong 和 runtime import boundary audit 校验构建后的 package output。
@@ -121,7 +121,7 @@ export default defineConfig({
   },
 
   pipelines: {
-    typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
+    typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
     package: ['package:check'],
     publish: ['graph:check', 'proof:check', 'package:check'],
   },
@@ -176,22 +176,21 @@ Source graph checks 不能证明安装后的 package 对消费者可用。`latti
 lattice [--config lattice.config.mjs] [--mode mode] <command>
 ```
 
-| 命令                                             | 说明                                                                |
-| ------------------------------------------------ | ------------------------------------------------------------------- |
-| `lattice check <pipeline>`                       | 运行 `pipelines` 中的命名 pipeline。                                |
-| `lattice graph check`                            | 校验 project references 和架构 import 规则。                        |
-| `lattice proof check`                            | 证明 build configs、本地 typecheck configs 和源码覆盖保持一致。     |
-| `lattice paths generate`                         | 为 artifact-facing workspace exports 生成源码 `paths` 兼容配置。    |
-| `lattice paths apply`                            | `paths generate` 的兼容别名。                                       |
-| `lattice paths check`                            | 当 generated path files 过期时失败。                                |
-| `lattice tsc`                                    | 运行配置的 checker `typecheck` routes，或发现普通 `tsconfig` 目标。 |
-| `lattice tsc --build`                            | 运行配置的 checker `build` routes。                                 |
-| `lattice tsc -p <path>`                          | 从指定 config 文件或目录开始发现 typecheck targets。                |
-| `lattice tsc --concurrency <n>`                  | 限制并发 `tsc` 进程数。                                             |
-| `lattice package check`                          | 运行已配置的 package output checks。                                |
-| `lattice package check --package <name>`         | 检查单个已配置 package target。                                     |
-| `lattice package check --tool <tool>`            | 只运行 `publint`、`attw` 或 `boundary`。                            |
-| `lattice package check --attw-profile <profile>` | 覆盖 ATTW profile：`strict`、`node16` 或 `esm-only`。               |
+| 命令                                             | 说明                                                             |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| `lattice check <pipeline>`                       | 运行 `pipelines` 中的命名 pipeline。                             |
+| `lattice graph check`                            | 校验 project references 和架构 import 规则。                     |
+| `lattice proof check`                            | 证明 build configs、本地 typecheck configs 和源码覆盖保持一致。  |
+| `lattice paths generate`                         | 为 artifact-facing workspace exports 生成源码 `paths` 兼容配置。 |
+| `lattice paths apply`                            | `paths generate` 的兼容别名。                                    |
+| `lattice paths check`                            | 当 generated path files 过期时失败。                             |
+| `lattice checker typecheck`                      | 运行配置的 checker `typecheck` routes。                          |
+| `lattice checker build`                          | 运行配置的 checker `build` routes。                              |
+| `lattice checker typecheck --concurrency <n>`    | 限制并发 checker 进程数。                                        |
+| `lattice package check`                          | 运行已配置的 package output checks。                             |
+| `lattice package check --package <name>`         | 检查单个已配置 package target。                                  |
+| `lattice package check --tool <tool>`            | 只运行 `publint`、`attw` 或 `boundary`。                         |
+| `lattice package check --attw-profile <profile>` | 覆盖 ATTW profile：`strict`、`node16` 或 `esm-only`。            |
 
 ## 配置参考
 
@@ -283,7 +282,7 @@ proof: {
 }
 ```
 
-Checker routes 会覆盖 TypeScript build graph 之外的文件。Allowlist 应该很少出现，并且必须写清楚原因。
+Checker routes 覆盖由 TypeScript 或框架感知工具验证的文件。allowlist 是所有 checker routes 都无法覆盖某个源码文件后的最后兜底；条目应该少而明确，并且必须包含 reason。
 
 ### `packageChecks`
 
@@ -311,7 +310,7 @@ packageChecks: {
 
 ```js
 pipelines: {
-  typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
+  typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
   package: [
     { type: 'command', command: 'pnpm', args: ['build'] },
     'package:check',

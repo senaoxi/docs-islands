@@ -270,6 +270,39 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
+  it('reports duplicate graph-capable checker build owners', async () => {
+    const fixture = await createFixture(createPassingFiles());
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          config: {
+            ...fixture.config.config,
+            checkers: {
+              primary: {
+                preset: 'tsc',
+                routes: {
+                  build: 'tsconfig.graph.json',
+                  typecheck: 'tsconfig.json',
+                },
+              },
+              secondary: {
+                preset: 'tsc',
+                routes: {
+                  build: 'tsconfig.graph.json',
+                  typecheck: 'tsconfig.json',
+                },
+              },
+            },
+          },
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('accepts configured checker routes outside the root graph route', async () => {
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
@@ -370,7 +403,7 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports source files outside graph, checker routes, and allowlist coverage', async () => {
+  it('reports source files outside checker routes and allowlist coverage', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/fixtures/uncovered.ts': 'export const uncovered = 1;\n',
@@ -599,6 +632,32 @@ describe('runProofCheck build config semantics', () => {
                 preset: 'tsc',
                 routes: {
                   build: 'tsconfig.custom.graph.json',
+                  typecheck: 'tsconfig.json',
+                },
+              },
+            },
+          },
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('accepts a direct graph-capable build route', async () => {
+    const fixture = await createFixture(createPassingFiles());
+
+    try {
+      await expect(
+        runProofCheck({
+          ...fixture.config,
+          config: {
+            ...fixture.config.config,
+            checkers: {
+              typescript: {
+                preset: 'tsc',
+                routes: {
+                  build: 'packages/pkg/tsconfig.lib.build.json',
                   typecheck: 'tsconfig.json',
                 },
               },

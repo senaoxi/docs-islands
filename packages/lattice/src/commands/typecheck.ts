@@ -2,6 +2,7 @@ import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { spawn } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
+import { getCheckerAdapter } from '../checkers';
 import {
   getActiveCheckers,
   type CheckerRouteKind,
@@ -36,23 +37,22 @@ export type TypecheckRunner = (
   target: TypecheckTarget,
 ) => Promise<TypecheckTargetResult> | TypecheckTargetResult;
 
-export interface RunTypecheckOptions {
+export interface RunCheckerTypecheckOptions {
   clearScreen?: boolean;
-  config?: ResolvedLatticeConfig;
+  config: ResolvedLatticeConfig;
   concurrency?: number;
   cwd?: string;
   flow?: LatticeFlowReporter;
   flowDepth?: number;
-  project?: string;
   runner?: TypecheckRunner;
   tscCommand?: string;
 }
 
-export interface RunTypecheckResult {
+export interface RunCheckerTypecheckResult {
   passed: boolean;
   projectRootDir: string;
   results: TypecheckTargetResult[];
-  rootConfigPath: string;
+  rootConfigPaths: string[];
   targetProjectPaths: string[];
 }
 
@@ -68,45 +68,13 @@ function normalizeConcurrency(value: number | undefined): number {
   return value;
 }
 
-function createSyntheticTypeScriptChecker(
-  route: string,
-): ResolvedCheckerConfig {
-  return {
-    extensions: [
-      '.d.cts',
-      '.d.mts',
-      '.d.ts',
-      '.cts',
-      '.json',
-      '.mts',
-      '.tsx',
-      '.ts',
-    ],
-    name: 'typescript',
-    preset: 'tsc',
-    routes: {
-      typecheck: route,
-      build: route,
-    },
-  };
-}
-
 function getRouteCheckers(options: {
-  config?: ResolvedLatticeConfig;
-  project?: string;
+  config: ResolvedLatticeConfig;
   routeKind: CheckerRouteKind;
 }): ResolvedCheckerConfig[] {
-  if (options.project) {
-    return [createSyntheticTypeScriptChecker(options.project)];
-  }
-
-  if (options.config) {
-    return getActiveCheckers(options.config).filter(
-      (checker) => checker.routes[options.routeKind] !== undefined,
-    );
-  }
-
-  return [createSyntheticTypeScriptChecker('tsconfig.json')];
+  return getActiveCheckers(options.config).filter(
+    (checker) => checker.routes[options.routeKind] !== undefined,
+  );
 }
 
 function resolveRouteConfigPath(rootDir: string, route: string): string {
@@ -120,68 +88,23 @@ function createCheckerTarget(options: {
   projectRootDir: string;
   routeKind: CheckerRouteKind;
 }): TypecheckTarget {
-  const relativeConfigPath = toRelativePath(
-    options.projectRootDir,
-    options.configPath,
-  );
+  const adapter = getCheckerAdapter(options.checker.preset);
 
-  if (options.checker.preset === 'tsc') {
-    return {
-      args:
-        options.routeKind === 'build'
-          ? ['-b', relativeConfigPath, '--pretty', 'false']
-          : ['-p', relativeConfigPath, '--noEmit'],
-      checkerName: options.checker.name,
-      command: options.commandOverride ?? 'tsc',
-      configPath: options.configPath,
-      cwd: options.projectRootDir,
-      label:
-        options.routeKind === 'build'
-          ? `tsc -b ${relativeConfigPath}`
-          : `tsc: ${relativeConfigPath}`,
-      routeKind: options.routeKind,
-    };
+  if (!adapter) {
+    throw new Error(
+      `Checker "${options.checker.name}" uses unsupported preset "${options.checker.preset}".`,
+    );
   }
 
-  if (options.checker.preset === 'vue-tsc') {
-    return {
-      args:
-        options.routeKind === 'build'
-          ? ['-b', relativeConfigPath, '--pretty', 'false']
-          : ['-p', relativeConfigPath, '--noEmit'],
-      checkerName: options.checker.name,
-      command: 'vue-tsc',
-      configPath: options.configPath,
-      cwd: options.projectRootDir,
-      label:
-        options.routeKind === 'build'
-          ? `${options.checker.name}: vue-tsc -b ${relativeConfigPath}`
-          : `${options.checker.name}: vue-tsc -p ${relativeConfigPath}`,
-      routeKind: options.routeKind,
-    };
-  }
+  const commandTarget = adapter.createCommandTarget(options);
 
-  if (options.checker.preset === 'svelte-check') {
-    if (options.routeKind === 'build') {
-      throw new Error(
-        `Checker "${options.checker.name}" uses svelte-check, which does not support routes.build.`,
-      );
-    }
-
-    return {
-      args: ['--tsconfig', relativeConfigPath],
-      checkerName: options.checker.name,
-      command: 'svelte-check',
-      configPath: options.configPath,
-      cwd: options.projectRootDir,
-      label: `${options.checker.name}: svelte-check --tsconfig ${relativeConfigPath}`,
-      routeKind: options.routeKind,
-    };
-  }
-
-  throw new Error(
-    `Checker "${options.checker.name}" uses unsupported preset "${options.checker.preset}".`,
-  );
+  return {
+    ...commandTarget,
+    checkerName: options.checker.name,
+    configPath: options.configPath,
+    cwd: options.projectRootDir,
+    routeKind: options.routeKind,
+  };
 }
 
 function createDefaultRunner(): TypecheckRunner {
@@ -260,27 +183,31 @@ async function runWithConcurrency(
   return results;
 }
 
-async function runTypecheckInternal(
-  options: RunTypecheckOptions = {},
-): Promise<RunTypecheckResult> {
+async function runCheckerTypecheckInternal(
+  options: RunCheckerTypecheckOptions,
+): Promise<RunCheckerTypecheckResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  const projectRootDir = normalizeAbsolutePath(options.config?.rootDir ?? cwd);
+  const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
   const checkers = getRouteCheckers({
     config: options.config,
-    project: options.project,
     routeKind: 'typecheck',
   });
-  const rootRoute =
-    options.project ??
-    checkers.find((checker) => checker.preset === 'tsc')?.routes.typecheck ??
-    checkers[0]?.routes.typecheck;
-  const rootConfigPath = resolveProjectConfigPath(projectRootDir, rootRoute);
   const flowDepth = options.flowDepth ?? 0;
 
   const concurrency = normalizeConcurrency(options.concurrency);
   const problems: string[] = [];
+  const rootConfigPaths: string[] = [];
   const targetProjectPaths: string[] = [];
   const targets: TypecheckTarget[] = [];
+
+  if (checkers.length === 0) {
+    problems.push(
+      [
+        'No checker typecheck routes configured:',
+        '  reason: configure config.checkers.<name>.routes.typecheck before running checker:typecheck.',
+      ].join('\n'),
+    );
+  }
 
   for (const checker of checkers) {
     const route = checker.routes.typecheck;
@@ -290,8 +217,11 @@ async function runTypecheckInternal(
     }
 
     const checkerRootConfigPath = resolveRouteConfigPath(projectRootDir, route);
+    const adapter = getCheckerAdapter(checker.preset);
 
-    if (checker.preset === 'tsc') {
+    rootConfigPaths.push(checkerRootConfigPath);
+
+    if (adapter?.typecheckDiscovery === 'references') {
       const routeCollection = collectTypecheckTargetProjectPaths({
         rootConfigPath: checkerRootConfigPath,
         rootDir: projectRootDir,
@@ -334,7 +264,7 @@ async function runTypecheckInternal(
       passed: false,
       projectRootDir,
       results: [],
-      rootConfigPath,
+      rootConfigPaths,
       targetProjectPaths,
     };
   }
@@ -350,7 +280,9 @@ async function runTypecheckInternal(
     [
       `Running checker typechecks for ${targets.length} target config(s).`,
       `CWD: ${toRelativePath(cwd, projectRootDir)}`,
-      `Project: ${toRelativePath(projectRootDir, rootConfigPath)}`,
+      `Routes: ${rootConfigPaths
+        .map((configPath) => toRelativePath(projectRootDir, configPath))
+        .join(', ')}`,
     ].join('\n'),
   );
 
@@ -387,7 +319,7 @@ async function runTypecheckInternal(
           target.configPath,
           options.flow.start(
             target.label ??
-              `tsc: ${toRelativePath(projectRootDir, target.configPath)}`,
+              `checker: ${toRelativePath(projectRootDir, target.configPath)}`,
             {
               collapseOnSuccess: false,
               depth: flowDepth + 1,
@@ -418,10 +350,7 @@ async function runTypecheckInternal(
   } else {
     if (!options.flow?.interactive) {
       TypecheckLogger.success(
-        `Checked ${targets.length} typecheck target config(s) from ${toRelativePath(
-          projectRootDir,
-          rootConfigPath,
-        )}.`,
+        `Checked ${targets.length} typecheck target config(s) from ${rootConfigPaths.length} checker route(s).`,
       );
     }
   }
@@ -430,85 +359,80 @@ async function runTypecheckInternal(
     passed: failedResults.length === 0,
     projectRootDir,
     results,
-    rootConfigPath,
+    rootConfigPaths,
     targetProjectPaths,
   };
 }
 
-export async function runTypecheck(
-  options: RunTypecheckOptions = {},
-): Promise<RunTypecheckResult> {
+export async function runCheckerTypecheck(
+  options: RunCheckerTypecheckOptions,
+): Promise<RunCheckerTypecheckResult> {
   if (options.clearScreen ?? true) {
     clearCliScreen();
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('tsc check', {
+  const task = options.flow?.start('checker typecheck', {
     depth: options.flowDepth ?? 0,
   });
 
-  TypecheckLogger.info('tsc check started');
+  TypecheckLogger.info('checker typecheck started');
 
   try {
-    const result = await runTypecheckInternal(options);
+    const result = await runCheckerTypecheckInternal(options);
 
     if (result.passed) {
       if (!options.flow?.interactive) {
-        TypecheckLogger.success('tsc check finished', elapsed());
+        TypecheckLogger.success('checker typecheck finished', elapsed());
       }
 
       task?.pass();
     } else {
-      TypecheckLogger.error('tsc check finished with failures', elapsed());
-      task?.fail('tsc check finished with failures');
+      TypecheckLogger.error(
+        'checker typecheck finished with failures',
+        elapsed(),
+      );
+      task?.fail('checker typecheck finished with failures');
     }
 
     return result;
   } catch (error) {
     TypecheckLogger.error(
-      `tsc check failed: ${formatErrorMessage(error)}`,
+      `checker typecheck failed: ${formatErrorMessage(error)}`,
       elapsed(),
     );
-    task?.fail('tsc check failed', { error });
+    task?.fail('checker typecheck failed', { error });
     throw error;
   }
 }
 
-export interface RunTscBuildOptions {
+export interface RunCheckerBuildOptions {
   clearScreen?: boolean;
-  config?: ResolvedLatticeConfig;
+  config: ResolvedLatticeConfig;
   cwd?: string;
   flow?: LatticeFlowReporter;
   flowDepth?: number;
-  project?: string;
   runner?: TypecheckRunner;
   tscCommand?: string;
 }
 
-export interface RunTscBuildResult {
+export interface RunCheckerBuildResult {
   passed: boolean;
   projectRootDir: string;
-  rootConfigPath: string;
+  rootConfigPaths: string[];
 }
 
-async function runTscBuildInternal(
-  options: RunTscBuildOptions = {},
-): Promise<RunTscBuildResult> {
+async function runCheckerBuildInternal(
+  options: RunCheckerBuildOptions,
+): Promise<RunCheckerBuildResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  const projectRootDir = normalizeAbsolutePath(options.config?.rootDir ?? cwd);
+  const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
   const checkers = getRouteCheckers({
     config: options.config,
-    project: options.project,
     routeKind: 'build',
   });
-  const rootRoute =
-    options.project ??
-    checkers.find((checker) => checker.preset === 'tsc')?.routes.build ??
-    checkers[0]?.routes.build;
-  const rootConfigPath = rootRoute
-    ? resolveProjectConfigPath(projectRootDir, rootRoute)
-    : projectRootDir;
   const flowDepth = options.flowDepth ?? 0;
+  const rootConfigPaths: string[] = [];
   const targets = checkers.flatMap((checker) => {
     const route = checker.routes.build;
 
@@ -516,11 +440,15 @@ async function runTscBuildInternal(
       return [];
     }
 
+    const configPath = resolveRouteConfigPath(projectRootDir, route);
+
+    rootConfigPaths.push(configPath);
+
     return [
       createCheckerTarget({
         checker,
         commandOverride: options.tscCommand,
-        configPath: resolveRouteConfigPath(projectRootDir, route),
+        configPath,
         projectRootDir,
         routeKind: 'build',
       }),
@@ -535,7 +463,9 @@ async function runTscBuildInternal(
     [
       `Running build checks for ${targets.length} graph root(s).`,
       `CWD: ${toRelativePath(cwd, projectRootDir)}`,
-      `Project: ${toRelativePath(projectRootDir, rootConfigPath)}`,
+      `Routes: ${rootConfigPaths
+        .map((configPath) => toRelativePath(projectRootDir, configPath))
+        .join(', ')}`,
     ].join('\n'),
   );
 
@@ -571,7 +501,7 @@ async function runTscBuildInternal(
           target.configPath,
           options.flow.start(
             target.label ??
-              `tsc -b ${toRelativePath(projectRootDir, target.configPath)}`,
+              `checker build: ${toRelativePath(projectRootDir, target.configPath)}`,
             {
               collapseOnSuccess: false,
               depth: flowDepth + 1,
@@ -604,45 +534,45 @@ async function runTscBuildInternal(
   return {
     passed,
     projectRootDir,
-    rootConfigPath,
+    rootConfigPaths,
   };
 }
 
-export async function runTscBuild(
-  options: RunTscBuildOptions = {},
-): Promise<RunTscBuildResult> {
+export async function runCheckerBuild(
+  options: RunCheckerBuildOptions,
+): Promise<RunCheckerBuildResult> {
   if (options.clearScreen ?? true) {
     clearCliScreen();
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('tsc build', {
+  const task = options.flow?.start('checker build', {
     depth: options.flowDepth ?? 0,
   });
 
-  TypecheckLogger.info('tsc build started');
+  TypecheckLogger.info('checker build started');
 
   try {
-    const result = await runTscBuildInternal(options);
+    const result = await runCheckerBuildInternal(options);
 
     if (result.passed) {
       if (!options.flow?.interactive) {
-        TypecheckLogger.success('tsc build finished', elapsed());
+        TypecheckLogger.success('checker build finished', elapsed());
       }
 
       task?.pass();
     } else {
-      TypecheckLogger.error('tsc build finished with failures', elapsed());
-      task?.fail('tsc build finished with failures');
+      TypecheckLogger.error('checker build finished with failures', elapsed());
+      task?.fail('checker build finished with failures');
     }
 
     return result;
   } catch (error) {
     TypecheckLogger.error(
-      `tsc build failed: ${formatErrorMessage(error)}`,
+      `checker build failed: ${formatErrorMessage(error)}`,
       elapsed(),
     );
-    task?.fail('tsc build failed', { error });
+    task?.fail('checker build failed', { error });
     throw error;
   }
 }

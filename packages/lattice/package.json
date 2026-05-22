@@ -36,7 +36,7 @@
   "scripts": {
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
-    "typecheck": "lattice tsc",
+    "typecheck": "lattice checker typecheck",
     "test": "vitest run",
     "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"
   },

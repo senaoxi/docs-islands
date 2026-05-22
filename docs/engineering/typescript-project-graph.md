@@ -19,9 +19,8 @@ into each other.
   `workspace:*` dependencies whose package exports still point at build
   artifacts.
 
-Pass one-off build-mode flags directly to `typecheck:graph` when needed, for
-example `pnpm typecheck:graph -- --force` or
-`pnpm typecheck:graph -- --verbose`.
+For one-off build-mode flags, run the raw TypeScript build command directly,
+for example `pnpm exec tsc -b tsconfig.graph.json --pretty false --force`.
 
 Do not add dist artifact checks to normal `pnpm typecheck` unless the command
 also builds the corresponding dist output first.
@@ -182,7 +181,7 @@ native graph references the adjacent `tsconfig.build.json` files.
 | `packages/vitepress/src/node/tsconfig.build.json`                                         | runtime leaf    | Node runtime graph.                                                                |
 | `packages/vitepress/src/client/tsconfig.build.json`                                       | runtime leaf    | Client runtime graph; no Node ambient types.                                       |
 | `packages/vitepress/playground/tsconfig*.json`, `packages/vitepress/smoke/tsconfig*.json` | consumer checks | Dist consumer checks run after package build output exists.                        |
-| `docs/tsconfig.json`, `packages/vitepress/theme/tsconfig.json`                            | vue-tsc         | Source-owned Vue SFC/template checks outside native `tsc -b`.                      |
+| `tsconfig.vue.json`, `packages/vitepress/theme/tsconfig.lib.json`                         | vue-tsc         | Source-owned Vue SFC/template checks outside native `tsc -b`.                      |
 | `packages/vitepress/docs/tsconfig.json`                                                   | consumer check  | VitePress docs consume `@docs-islands/vitepress` through `link:../dist`.           |
 | `tsconfig.check.json`, `packages/vitepress/tsconfig.check.json`                           | dist checks     | Post-build artifact validation only.                                               |
 

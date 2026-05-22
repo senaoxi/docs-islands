@@ -8,7 +8,7 @@
     "docs:preview": "vitepress preview",
     "test:e2e": "vitest run",
     "test:e2e:watch": "DEBUG=1 vitest",
-    "typecheck": "lattice tsc",
+    "typecheck": "lattice checker typecheck",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "pnpm clean:remaining && del-cli .tsbuild .eslintcache .vitepress/dist .vitepress/cache node_modules",
     "clean:remaining": "del-cli .vitepress/config.ts.timestamp-*.mjs error-handling/invalid-syntax.md error-handling/multiple-react-scripts.md script-content-changes/import-path-error.md || true",

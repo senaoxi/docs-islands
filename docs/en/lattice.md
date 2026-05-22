@@ -12,7 +12,7 @@ Lattice is a good fit when your project:
 - uses TypeScript project references or plans to migrate to a `tsc -b` build graph;
 - wants to enforce dependency direction between production code, tools, and tests;
 - maintains both browser/client runtime and Node/server runtime code;
-- wants CI to prove that every source file is covered by graph, checker routes, or allowlist;
+- wants CI to prove that every source file is covered by checker routes or allowlist;
 - wants to check package exports, type resolution, and runtime import boundaries before publishing dist packages;
 - has docs, playground, smoke, Vue SFC, or similar projects that do not fit cleanly inside native `tsc -b`.
 
@@ -132,7 +132,7 @@ export default defineConfig({
     },
   },
   pipelines: {
-    typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
+    typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
   },
 });
 ```
@@ -255,7 +255,7 @@ const latticeConfig = {
 };
 ```
 
-`config.checkers` is the single entrypoint for TypeScript and UI framework checking. A checker without `routes` is ignored. A checker with `routes: {}` is invalid. `routes.typecheck` participates in `lattice tsc` / `tsc:run`; `routes.build` participates in `lattice tsc --build` / `tsc:build`.
+`config.checkers` is the single entrypoint for TypeScript and UI framework checking. A checker without `routes` is ignored. A checker with `routes: {}` is invalid. `routes.typecheck` participates in `lattice checker typecheck` / `checker:typecheck`; `routes.build` participates in `lattice checker build` / `checker:build`.
 
 Built-in presets can omit `extensions`. Defaults are `.ts`, `.tsx`, `.cts`, `.mts`, `.d.ts`, `.d.cts`, `.d.mts`, `.json` for `tsc`; `.vue` for `vue-tsc`; and `.svelte` for `svelte-check`. Explicit `extensions` replace the preset default.
 
@@ -387,7 +387,7 @@ const latticeConfig = {
 };
 ```
 
-Allowlist is the last resort. Every entry must explain why it is safe. New allowlist entries should be reviewed strictly during code review.
+Allowlist is the last resort after all configured checker routes fail to cover a source file. Every entry must explain why it is safe. New allowlist entries should be reviewed strictly during code review.
 
 ### `packageChecks.targets`
 
@@ -448,7 +448,7 @@ pnpm exec lattice package check --package @acme/core --attw-profile strict
 ```js
 const latticeConfig = {
   pipelines: {
-    typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
+    typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
     package: [
       {
         type: 'command',
@@ -463,7 +463,7 @@ const latticeConfig = {
 
 A pipeline can contain two types of steps:
 
-- built-in tasks: `graph:check`, `proof:check`, `tsc:run`, `tsc:build`, `package:check`;
+- built-in tasks: `graph:check`, `proof:check`, `checker:typecheck`, `checker:build`, `package:check`;
 - command steps: expressed as `{ type: 'command', command, args, cwd, env }`.
 
 Command steps run from the workspace root by default and inherit `process.env`.
@@ -509,7 +509,7 @@ Common failure reasons:
 - a build leaf has no same-name local config;
 - a local config is not reachable from the root typecheck route;
 - the build leaf and local config do not cover the same file set;
-- a source file is not covered by graph, checker routes, or allowlist.
+- a source file is not covered by checker routes or allowlist.
 
 ### `lattice paths generate`
 
@@ -525,20 +525,19 @@ To make CI fail when generated files are stale:
 pnpm exec lattice paths check
 ```
 
-### `lattice tsc`
+### `lattice checker typecheck`
 
-Runs configured checker `typecheck` routes. With `-p`, starts from an explicit TypeScript config or directory and runs ordinary `tsc --noEmit` targets.
+Runs every configured checker `typecheck` route. The route registry in `config.checkers` is the only target source.
 
 ```sh
-pnpm exec lattice tsc
-pnpm exec lattice tsc -p packages/core/tsconfig.json
-pnpm exec lattice tsc --concurrency 4
+pnpm exec lattice checker typecheck
+pnpm exec lattice checker typecheck --concurrency 4
 ```
 
-`lattice tsc --build` runs configured checker `build` routes.
+`lattice checker build` runs configured checker `build` routes.
 
 ```sh
-pnpm exec lattice tsc --build
+pnpm exec lattice checker build
 ```
 
 ### `lattice package check`
@@ -558,7 +557,7 @@ Build the relevant package first. Otherwise the `outDir` may not contain publish
 ### Local development
 
 ```sh
-pnpm exec lattice tsc
+pnpm exec lattice checker typecheck
 pnpm exec lattice graph check
 ```
 
@@ -573,8 +572,8 @@ A recommended `typecheck` pipeline includes:
 1. building any internal tools needed before graph checks;
 2. `graph:check`;
 3. `proof:check`;
-4. `tsc:run`;
-5. `tsc:build` when build-mode validation is required.
+4. `checker:typecheck`;
+5. `checker:build` when build-mode validation is required.
 
 ### Pre-publish checks
 
@@ -675,9 +674,9 @@ Every allowlist entry should answer:
 
 ## FAQ
 
-### How does `lattice tsc` choose targets?
+### How does `lattice checker typecheck` choose targets?
 
-By default, `lattice tsc` loads `lattice.config.mjs` and runs every active checker that declares `routes.typecheck`. Passing `-p` selects an explicit TypeScript config or directory and runs ordinary `tsc --noEmit` targets from there.
+`lattice checker typecheck` loads `lattice.config.mjs` and runs every active checker that declares `routes.typecheck`. One-off TypeScript projects should be added to `config.checkers.<name>.routes` instead of passed through a CLI override.
 
 ### Why do package checks require a build first?
 
@@ -689,7 +688,7 @@ Package checks inspect published outputs under `outDir`, not the source director
 
 ### Should Vue SFCs be placed in the graph?
 
-Usually no. Put Vue/VitePress/SFC projects in `config.checkers.<name>.routes` with the `vue-tsc` preset, then let `tsc:run` and `tsc:build` dispatch the matching routes.
+Usually no. Put Vue/VitePress/SFC projects in `config.checkers.<name>.routes` with the `vue-tsc` preset, then let `checker:typecheck` and `checker:build` dispatch the matching routes.
 
 ### When should I use `--mode`?
 
@@ -698,7 +697,10 @@ Use `--mode` when `lattice.config.mjs` exports a function and returns different 
 ```js
 export default defineConfig(({ mode }) => ({
   pipelines: {
-    typecheck: mode === 'ci' ? ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'] : ['tsc:run'],
+    typecheck:
+      mode === 'ci'
+        ? ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build']
+        : ['checker:typecheck'],
   },
 }));
 ```

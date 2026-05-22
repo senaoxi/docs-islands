@@ -5,7 +5,7 @@
   "scripts": {
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
-    "typecheck": "lattice tsc",
+    "typecheck": "lattice checker typecheck",
     "lint": "del-cli .eslintcache || true && eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },
