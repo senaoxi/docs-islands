@@ -1,23 +1,38 @@
 import { createElapsedTimer } from '@docs-islands/logger/helper';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import type { ResolvedLatticeConfig } from '../config';
 import type { LatticeFlowReporter } from '../flow';
+import {
+  collectImportsFromFile,
+  createFileOwnerLookup,
+  findImporterForFile,
+  findPackageForFile,
+  findTargetProject,
+  formatArtifactDependencyPolicy,
+  getTypecheckConfigPath,
+  inferPackageProject,
+  isDtsProjectConfig,
+  isRelativeSpecifier,
+  isWorkspacePackageFile,
+  parseProject,
+  resolveInternalImport,
+  shouldResolveThroughGraph,
+  type ImportRecord,
+  type ProjectInfo,
+} from '../graph-context';
+import {
+  getDeniedRefRule,
+  getDeniedWorkspaceDepRule,
+  normalizeGraphRules,
+  type GraphRuleDepDeny,
+  type GraphRuleRefDeny,
+  type NormalizedGraphRules,
+} from '../graph-rules';
 import { GraphLogger, clearCliScreen, formatErrorMessage } from '../logger';
-import {
-  collectGraphProjectRoute,
-  formatReferences,
-  getDtsCompanionConfigPath,
-  getRawReferencePaths,
-  isDtsConfigPath,
-  readJsonConfig,
-} from '../tsconfig';
-import {
-  isPathInsideDirectory,
-  normalizeAbsolutePath,
-  toRelativePath,
-} from '../utils/path';
+import { collectGraphProjectRoute, formatReferences } from '../tsconfig';
+import { toRelativePath } from '../utils/path';
 import {
   collectImporters,
   collectWorkspacePackages,
@@ -26,40 +41,10 @@ import {
   type WorkspacePackage,
 } from '../workspace';
 
-interface ProjectInfo {
-  configPath: string;
-  fileNames: string[];
-  label: string | null;
-  labelProblem: string | null;
-  options: ts.CompilerOptions;
-  references: Set<string>;
-}
-
-interface ImportRecord {
-  filePath: string;
-  line: number;
-  specifier: string;
-}
-
 export interface RunGraphCheckOptions {
   clearScreen?: boolean;
   flow?: LatticeFlowReporter;
   flowDepth?: number;
-}
-
-interface GraphRuleRefDeny {
-  path: string;
-  reason: string;
-}
-
-interface GraphRuleDepDeny {
-  name: string;
-  reason: string;
-}
-
-interface NormalizedGraphRules {
-  depsByLabel: Map<string, Map<string, GraphRuleDepDeny>>;
-  refsByLabel: Map<string, Map<string, GraphRuleRefDeny>>;
 }
 
 const requiredDtsCompilerOptions: [keyof ts.CompilerOptions, unknown][] = [
@@ -115,122 +100,6 @@ const comparableTypecheckOptions: (keyof ts.CompilerOptions)[] = [
   'verbatimModuleSyntax',
 ];
 
-function isRelativeSpecifier(specifier: string): boolean {
-  return (
-    specifier === '.' ||
-    specifier === '..' ||
-    specifier.startsWith('./') ||
-    specifier.startsWith('../')
-  );
-}
-
-function isDtsProjectConfig(configPath: string): boolean {
-  return isDtsConfigPath(configPath);
-}
-
-function getTypecheckConfigPath(dtsConfigPath: string): string {
-  return getDtsCompanionConfigPath(dtsConfigPath);
-}
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
-}
-
-function readProjectLabel(
-  config: ResolvedLatticeConfig,
-  configPath: string,
-): Pick<ProjectInfo, 'label' | 'labelProblem'> {
-  if (!isDtsProjectConfig(configPath)) {
-    return {
-      label: null,
-      labelProblem: null,
-    };
-  }
-
-  const configObject = readJsonConfig(config, configPath);
-
-  if (!Object.hasOwn(configObject, 'lattice')) {
-    return {
-      label: null,
-      labelProblem: null,
-    };
-  }
-
-  const value = configObject.lattice;
-
-  if (typeof value === 'string' && value.trim()) {
-    return {
-      label: value.trim(),
-      labelProblem: null,
-    };
-  }
-
-  return {
-    label: null,
-    labelProblem: [
-      'Invalid Lattice graph label:',
-      `  project: ${toRelativePath(config.rootDir, configPath)}`,
-      `  field: lattice`,
-      `  value: ${formatUnknownValue(value)}`,
-      '  reason: tsconfig*.dts.json may declare one non-empty string label with "lattice".',
-    ].join('\n'),
-  };
-}
-
-function parseProject(
-  config: ResolvedLatticeConfig,
-  configPath: string,
-): ProjectInfo {
-  const diagnostics: ts.Diagnostic[] = [];
-  const parsed = ts.getParsedCommandLineOfConfigFile(
-    configPath,
-    {},
-    {
-      ...ts.sys,
-      onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
-        diagnostics.push(diagnostic);
-      },
-    },
-  );
-
-  if (!parsed) {
-    throw new Error(
-      ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-        getCanonicalFileName: (fileName) => fileName,
-        getCurrentDirectory: () => config.rootDir,
-        getNewLine: () => '\n',
-      }),
-    );
-  }
-
-  if (parsed.errors.length > 0) {
-    throw new Error(
-      ts.formatDiagnosticsWithColorAndContext(parsed.errors, {
-        getCanonicalFileName: (fileName) => fileName,
-        getCurrentDirectory: () => config.rootDir,
-        getNewLine: () => '\n',
-      }),
-    );
-  }
-
-  const labelInfo = readProjectLabel(config, configPath);
-
-  return {
-    configPath: normalizeAbsolutePath(configPath),
-    fileNames: parsed.fileNames
-      .filter((fileName) => /\.(?:[cm]?tsx?|d\.[cm]?ts)$/u.test(fileName))
-      .map(normalizeAbsolutePath),
-    label: labelInfo.label,
-    labelProblem: labelInfo.labelProblem,
-    options: parsed.options,
-    references: new Set(getRawReferencePaths(config, configPath)),
-  };
-}
-
 function formatCompilerOptionValue(value: unknown): string {
   if (value === undefined) {
     return 'undefined';
@@ -241,280 +110,6 @@ function formatCompilerOptionValue(value: unknown): string {
 
 function compilerOptionEquals(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function getRulesRecord(
-  config: ResolvedLatticeConfig,
-  problems: string[],
-): Record<string, unknown> {
-  const rules = config.graph?.rules;
-
-  if (rules === undefined) {
-    return {};
-  }
-
-  if (!isPlainRecord(rules)) {
-    problems.push(
-      [
-        'Invalid graph rules config:',
-        '  field: graph.rules',
-        `  value: ${formatUnknownValue(rules)}`,
-        '  reason: graph.rules must be an object keyed by Lattice labels.',
-      ].join('\n'),
-    );
-    return {};
-  }
-
-  return rules;
-}
-
-function addRuleEntryConfigProblem(
-  problems: string[],
-  details: string[],
-): void {
-  problems.push(['Invalid graph rule config:', ...details].join('\n'));
-}
-
-function addNormalizedRuleRef(options: {
-  config: ResolvedLatticeConfig;
-  entry: unknown;
-  index: number;
-  label: string;
-  problems: string[];
-  projectPathSet: Set<string>;
-  refsByLabel: Map<string, Map<string, GraphRuleRefDeny>>;
-}): void {
-  const field = `graph.rules.${options.label}.deny.refs[${options.index}]`;
-
-  if (!isPlainRecord(options.entry)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}`,
-      `  value: ${formatUnknownValue(options.entry)}`,
-      '  reason: deny.refs entries must be objects with non-empty path and reason fields.',
-    ]);
-    return;
-  }
-
-  const pathValue = options.entry.path;
-  const reasonValue = options.entry.reason;
-
-  if (!isNonEmptyString(pathValue)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.path`,
-      `  value: ${formatUnknownValue(pathValue)}`,
-      '  reason: deny.refs path is required and must be a non-empty string.',
-    ]);
-    return;
-  }
-
-  if (!isNonEmptyString(reasonValue)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.reason`,
-      `  value: ${formatUnknownValue(reasonValue)}`,
-      '  reason: deny.refs reason is required and must be a non-empty string.',
-    ]);
-    return;
-  }
-
-  const refPath = normalizeAbsolutePath(
-    path.resolve(options.config.rootDir, pathValue),
-  );
-
-  if (!options.projectPathSet.has(refPath)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.path`,
-      `  path: ${pathValue}`,
-      '  reason: deny.refs path must point to a project reachable from a checker entry.',
-    ]);
-    return;
-  }
-
-  if (!isDtsProjectConfig(refPath)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.path`,
-      `  path: ${pathValue}`,
-      '  reason: deny.refs path must point to a tsconfig*.dts.json declaration leaf.',
-    ]);
-    return;
-  }
-
-  const refs = options.refsByLabel.get(options.label) ?? new Map();
-
-  refs.set(refPath, {
-    path: refPath,
-    reason: reasonValue.trim(),
-  });
-  options.refsByLabel.set(options.label, refs);
-}
-
-function addNormalizedRuleDep(options: {
-  depsByLabel: Map<string, Map<string, GraphRuleDepDeny>>;
-  entry: unknown;
-  index: number;
-  label: string;
-  packageNames: Set<string>;
-  problems: string[];
-}): void {
-  const field = `graph.rules.${options.label}.deny.deps[${options.index}]`;
-
-  if (!isPlainRecord(options.entry)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}`,
-      `  value: ${formatUnknownValue(options.entry)}`,
-      '  reason: deny.deps entries must be objects with non-empty name and reason fields.',
-    ]);
-    return;
-  }
-
-  const nameValue = options.entry.name;
-  const reasonValue = options.entry.reason;
-
-  if (!isNonEmptyString(nameValue)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.name`,
-      `  value: ${formatUnknownValue(nameValue)}`,
-      '  reason: deny.deps name is required and must be a non-empty string.',
-    ]);
-    return;
-  }
-
-  if (!isNonEmptyString(reasonValue)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.reason`,
-      `  value: ${formatUnknownValue(reasonValue)}`,
-      '  reason: deny.deps reason is required and must be a non-empty string.',
-    ]);
-    return;
-  }
-
-  const packageName = nameValue.trim();
-
-  if (!options.packageNames.has(packageName)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.name`,
-      `  name: ${packageName}`,
-      '  reason: deny.deps name must match a discovered workspace package.',
-    ]);
-    return;
-  }
-
-  const deps = options.depsByLabel.get(options.label) ?? new Map();
-
-  deps.set(packageName, {
-    name: packageName,
-    reason: reasonValue.trim(),
-  });
-  options.depsByLabel.set(options.label, deps);
-}
-
-function normalizeGraphRules(options: {
-  config: ResolvedLatticeConfig;
-  packages: WorkspacePackage[];
-  problems: string[];
-  projectPaths: string[];
-}): NormalizedGraphRules {
-  const refsByLabel = new Map<string, Map<string, GraphRuleRefDeny>>();
-  const depsByLabel = new Map<string, Map<string, GraphRuleDepDeny>>();
-  const projectPathSet = new Set(options.projectPaths);
-  const packageNames = new Set(
-    options.packages.map((workspacePackage) => workspacePackage.name),
-  );
-
-  for (const [rawLabel, rawRule] of Object.entries(
-    getRulesRecord(options.config, options.problems),
-  )) {
-    const label = rawLabel.trim();
-
-    if (!label) {
-      addRuleEntryConfigProblem(options.problems, [
-        '  field: graph.rules',
-        '  reason: graph.rules keys must be non-empty labels.',
-      ]);
-      continue;
-    }
-
-    if (!isPlainRecord(rawRule)) {
-      addRuleEntryConfigProblem(options.problems, [
-        `  field: graph.rules.${rawLabel}`,
-        `  value: ${formatUnknownValue(rawRule)}`,
-        '  reason: each graph rule must be an object.',
-      ]);
-      continue;
-    }
-
-    if (rawRule.deny === undefined) {
-      continue;
-    }
-
-    if (!isPlainRecord(rawRule.deny)) {
-      addRuleEntryConfigProblem(options.problems, [
-        `  field: graph.rules.${label}.deny`,
-        `  value: ${formatUnknownValue(rawRule.deny)}`,
-        '  reason: graph rule deny must be an object.',
-      ]);
-      continue;
-    }
-
-    const refs = rawRule.deny.refs;
-
-    if (refs !== undefined) {
-      if (!Array.isArray(refs)) {
-        addRuleEntryConfigProblem(options.problems, [
-          `  field: graph.rules.${label}.deny.refs`,
-          `  value: ${formatUnknownValue(refs)}`,
-          '  reason: deny.refs must be an array.',
-        ]);
-      } else {
-        refs.forEach((entry, index) => {
-          addNormalizedRuleRef({
-            config: options.config,
-            entry,
-            index,
-            label,
-            problems: options.problems,
-            projectPathSet,
-            refsByLabel,
-          });
-        });
-      }
-    }
-
-    const deps = rawRule.deny.deps;
-
-    if (deps !== undefined) {
-      if (!Array.isArray(deps)) {
-        addRuleEntryConfigProblem(options.problems, [
-          `  field: graph.rules.${label}.deny.deps`,
-          `  value: ${formatUnknownValue(deps)}`,
-          '  reason: deny.deps must be an array.',
-        ]);
-      } else {
-        deps.forEach((entry, index) => {
-          addNormalizedRuleDep({
-            depsByLabel,
-            entry,
-            index,
-            label,
-            packageNames,
-            problems: options.problems,
-          });
-        });
-      }
-    }
-  }
-
-  return {
-    depsByLabel,
-    refsByLabel,
-  };
 }
 
 function addDtsOptionProblems(
@@ -633,247 +228,6 @@ function addTypecheckParityProblems(
   );
 }
 
-function getSourceFileKind(filePath: string): ts.ScriptKind {
-  if (filePath.endsWith('.tsx')) {
-    return ts.ScriptKind.TSX;
-  }
-
-  if (filePath.endsWith('.jsx')) {
-    return ts.ScriptKind.JSX;
-  }
-
-  return ts.ScriptKind.TS;
-}
-
-function stringLiteralValue(node: ts.Node | undefined): string | null {
-  return node && ts.isStringLiteralLike(node) ? node.text : null;
-}
-
-function collectImportsFromFile(filePath: string): ImportRecord[] {
-  const sourceText = readFileSync(filePath, 'utf8');
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    getSourceFileKind(filePath),
-  );
-  const imports: ImportRecord[] = [];
-  const addImport = (specifier: string, node: ts.Node): void => {
-    const location = sourceFile.getLineAndCharacterOfPosition(
-      node.getStart(sourceFile),
-    );
-
-    imports.push({
-      filePath,
-      line: location.line + 1,
-      specifier,
-    });
-  };
-  const visit = (node: ts.Node): void => {
-    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-      const specifier = stringLiteralValue(node.moduleSpecifier);
-
-      if (specifier) {
-        addImport(specifier, node);
-      }
-    } else if (ts.isImportTypeNode(node)) {
-      const specifier = ts.isLiteralTypeNode(node.argument)
-        ? stringLiteralValue(node.argument.literal)
-        : null;
-
-      if (specifier) {
-        addImport(specifier, node);
-      }
-    } else if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword
-    ) {
-      const specifier = stringLiteralValue(node.arguments[0]);
-
-      if (specifier) {
-        addImport(specifier, node);
-      }
-    }
-
-    ts.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
-
-  return imports;
-}
-
-function resolveInternalImport(
-  specifier: string,
-  containingFile: string,
-  options: ts.CompilerOptions,
-): string | null {
-  const resolved = ts.resolveModuleName(
-    specifier,
-    containingFile,
-    options,
-    ts.sys,
-  ).resolvedModule;
-
-  return resolved?.resolvedFileName
-    ? normalizeAbsolutePath(resolved.resolvedFileName)
-    : null;
-}
-
-function getDeniedRefRule(
-  rules: NormalizedGraphRules,
-  label: string | null,
-  targetProjectPath: string,
-): GraphRuleRefDeny | null {
-  if (!label) {
-    return null;
-  }
-
-  return rules.refsByLabel.get(label)?.get(targetProjectPath) ?? null;
-}
-
-function getDeniedDepRule(
-  rules: NormalizedGraphRules,
-  label: string | null,
-  targetPackageName: string,
-): GraphRuleDepDeny | null {
-  if (!label) {
-    return null;
-  }
-
-  return rules.depsByLabel.get(label)?.get(targetPackageName) ?? null;
-}
-
-function chooseOwningProject(projectPaths: string[]): string {
-  return [...projectPaths].sort((left, right) => {
-    const directoryDepthDelta =
-      path.dirname(right).length - path.dirname(left).length;
-
-    return directoryDepthDelta === 0
-      ? left.localeCompare(right)
-      : directoryDepthDelta;
-  })[0]!;
-}
-
-function findPackageForFile(
-  filePath: string,
-  packages: WorkspacePackage[],
-): WorkspacePackage | null {
-  return (
-    [...packages]
-      .sort((left, right) => right.directory.length - left.directory.length)
-      .find((workspacePackage) =>
-        isPathInsideDirectory(filePath, workspacePackage.directory),
-      ) ?? null
-  );
-}
-
-function isWorkspacePackageFile(
-  filePath: string,
-  packages: WorkspacePackage[],
-): boolean {
-  return packages.some((workspacePackage) =>
-    isPathInsideDirectory(filePath, workspacePackage.directory),
-  );
-}
-
-function findImporterForFile(
-  filePath: string,
-  importers: ImporterInfo[],
-): ImporterInfo | null {
-  return (
-    importers.find((importer) =>
-      isPathInsideDirectory(filePath, importer.directory),
-    ) ?? null
-  );
-}
-
-function shouldResolveThroughGraph(
-  importer: ImporterInfo | null,
-  targetPackage: WorkspacePackage | null,
-): boolean {
-  if (!importer || !targetPackage) {
-    return false;
-  }
-
-  return (
-    importer.name === targetPackage.name ||
-    importer.workspaceDependencies.has(targetPackage.name)
-  );
-}
-
-function formatArtifactDependencyPolicy(
-  targetPackage: WorkspacePackage,
-): string {
-  return targetPackage.manifest.private === true
-    ? 'private workspace packages cannot be consumed from a registry, so artifact consumers should use link: and should not keep a project reference.'
-    : 'artifact consumers should use link: for local dist output, or catalog:/semver to consume the published production package, and should not keep a project reference.';
-}
-
-function inferPackageProject(
-  resolvedFilePath: string,
-  workspacePackage: WorkspacePackage,
-  projectPaths: string[],
-): string | null {
-  if (!isPathInsideDirectory(resolvedFilePath, workspacePackage.directory)) {
-    return null;
-  }
-
-  return (
-    projectPaths.find((projectPath) => {
-      return (
-        projectPath.startsWith(`${workspacePackage.directory}/`) &&
-        projectPath.endsWith('/tsconfig.lib.dts.json')
-      );
-    }) ?? null
-  );
-}
-
-function createFileOwnerLookup(projects: ProjectInfo[]): Map<string, string[]> {
-  const ownerLookup = new Map<string, string[]>();
-
-  for (const project of projects) {
-    for (const fileName of project.fileNames) {
-      const owners = ownerLookup.get(fileName) ?? [];
-
-      owners.push(project.configPath);
-      ownerLookup.set(fileName, owners);
-    }
-  }
-
-  return ownerLookup;
-}
-
-function findTargetProject(options: {
-  fileOwnerLookup: Map<string, string[]>;
-  packages: WorkspacePackage[];
-  projectPaths: string[];
-  resolvedFilePath: string;
-  specifier: string;
-}): string | null {
-  const ownerProjects = options.fileOwnerLookup.get(options.resolvedFilePath);
-
-  if (ownerProjects && ownerProjects.length > 0) {
-    return chooseOwningProject(ownerProjects);
-  }
-
-  const workspacePackage = findPackageForSpecifier(
-    options.specifier,
-    options.packages,
-  );
-
-  if (!workspacePackage) {
-    return null;
-  }
-
-  return inferPackageProject(
-    options.resolvedFilePath,
-    workspacePackage,
-    options.projectPaths,
-  );
-}
-
 function addDeniedReferenceProblems(options: {
   config: ResolvedLatticeConfig;
   packages: WorkspacePackage[];
@@ -898,7 +252,7 @@ function addDeniedReferenceProblems(options: {
     );
     const targetPackage = findPackageForFile(referencePath, options.packages);
     const deniedDepRule = targetPackage
-      ? getDeniedDepRule(
+      ? getDeniedWorkspaceDepRule(
           options.rules,
           options.project.label,
           targetPackage.name,
@@ -1043,6 +397,11 @@ async function runGraphCheckInternal(
   const problems: string[] = [...graphRoute.problems];
   const graphRules = normalizeGraphRules({
     config,
+    include: {
+      nodeBuiltins: false,
+      refs: true,
+      workspaceDeps: true,
+    },
     packages,
     problems,
     projectPaths,
@@ -1087,7 +446,11 @@ async function runGraphCheckInternal(
           ? findImporterForFile(importRecord.filePath, importers)
           : null;
         const unresolvedDeniedDepRule = targetPackage
-          ? getDeniedDepRule(graphRules, project.label, targetPackage.name)
+          ? getDeniedWorkspaceDepRule(
+              graphRules,
+              project.label,
+              targetPackage.name,
+            )
           : null;
 
         if (!resolvedFilePath) {
@@ -1125,10 +488,14 @@ async function runGraphCheckInternal(
         );
         const deniedDepRule =
           (targetPackage
-            ? getDeniedDepRule(graphRules, project.label, targetPackage.name)
+            ? getDeniedWorkspaceDepRule(
+                graphRules,
+                project.label,
+                targetPackage.name,
+              )
             : null) ??
           (targetWorkspacePackageForResolved
-            ? getDeniedDepRule(
+            ? getDeniedWorkspaceDepRule(
                 graphRules,
                 project.label,
                 targetWorkspacePackageForResolved.name,

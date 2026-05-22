@@ -76,7 +76,8 @@ export type BuiltinTaskName =
   | 'checker:typecheck'
   | 'graph:check'
   | 'package:check'
-  | 'proof:check';
+  | 'proof:check'
+  | 'source:check';
 
 export type BuiltinCheckerPreset = 'svelte-check' | 'tsc' | 'vue-tsc';
 
@@ -209,6 +210,36 @@ export interface GraphRuleRefDenyEntry {
 export interface GraphRuleDepDenyEntry {
   /**
    * Target workspace package name.
+   *
+   * @deprecated Use `workspaceDeps` for new configs.
+   */
+  name: string;
+  /**
+   * Human-readable explanation shown when the rule fails.
+   */
+  reason: string;
+}
+
+/**
+ * Workspace package dependency denied to projects with a matching Lattice label.
+ */
+export interface GraphRuleWorkspaceDepDenyEntry {
+  /**
+   * Target workspace package name.
+   */
+  name: string;
+  /**
+   * Human-readable explanation shown when the rule fails.
+   */
+  reason: string;
+}
+
+/**
+ * Node builtin denied to source files with a matching Lattice label.
+ */
+export interface GraphRuleNodeBuiltinDenyEntry {
+  /**
+   * Target Node builtin name, such as `fs`, `node:fs`, or `node:*`.
    */
   name: string;
   /**
@@ -227,8 +258,18 @@ export interface GraphRuleDenyConfig {
   refs?: GraphRuleRefDenyEntry[];
   /**
    * Workspace packages that matching projects must not reference or import.
+   *
+   * @deprecated Use `workspaceDeps` for new configs.
    */
   deps?: GraphRuleDepDenyEntry[];
+  /**
+   * Node builtins that matching projects must not import.
+   */
+  nodeBuiltins?: GraphRuleNodeBuiltinDenyEntry[];
+  /**
+   * Workspace packages that matching projects must not reference or import.
+   */
+  workspaceDeps?: GraphRuleWorkspaceDepDenyEntry[];
 }
 
 /**
@@ -424,6 +465,7 @@ export type LatticeCommand =
   | 'package'
   | 'paths'
   | 'proof'
+  | 'source'
   | (string & {});
 
 /**

@@ -27,6 +27,13 @@ export interface WorkspacePackage {
   name: string;
 }
 
+export interface PackageOwner {
+  directory: string;
+  manifest: PackageManifest;
+  name?: string;
+  packageJsonPath: string;
+}
+
 export interface PnpmWorkspaceListEntry {
   name?: string;
   path?: string;
@@ -326,6 +333,40 @@ export async function collectWorkspacePackages(
   ]);
 
   return mergeWorkspacePackages([...pnpmPackages, ...patternPackages]);
+}
+
+export async function collectPackageOwners(
+  config: ResolvedLatticeConfig,
+): Promise<PackageOwner[]> {
+  const packageJsonPaths = await glob(['package.json', '**/package.json'], {
+    cwd: config.rootDir,
+    absolute: false,
+    ignore: [
+      '**/.git/**',
+      '**/.pnpm-store/**',
+      '**/.tsbuild/**',
+      '**/coverage/**',
+      '**/dist/**',
+      '**/node_modules/**',
+    ],
+  });
+
+  return [...new Set(packageJsonPaths)]
+    .sort()
+    .map((packageJsonPath) => {
+      const absolutePackageJsonPath = normalizeAbsolutePath(
+        path.join(config.rootDir, packageJsonPath),
+      );
+      const manifest = readJsonFile<PackageManifest>(absolutePackageJsonPath);
+
+      return {
+        directory: normalizeAbsolutePath(path.dirname(absolutePackageJsonPath)),
+        manifest,
+        name: manifest.name,
+        packageJsonPath: absolutePackageJsonPath,
+      };
+    })
+    .sort((left, right) => right.directory.length - left.directory.length);
 }
 
 export function getDependencySections(

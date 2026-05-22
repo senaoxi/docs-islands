@@ -11,6 +11,9 @@
     },
     {
       "path": "./tsconfig.test.dts.json"
+    },
+    {
+      "path": "./src/plugin/__tests__/tsconfig.dts.json"
     }
   ]
 }

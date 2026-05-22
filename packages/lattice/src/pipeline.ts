@@ -3,6 +3,7 @@ import path from 'node:path';
 import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
+import { runSourceCheck } from './commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
 import type {
   BuiltinTaskName,
@@ -24,6 +25,7 @@ const builtInTaskNames = new Set<string>([
   'graph:check',
   'package:check',
   'proof:check',
+  'source:check',
 ]);
 
 function isBuiltinTaskName(value: string): value is BuiltinTaskName {
@@ -53,6 +55,13 @@ export async function runBuiltinTask(
     }
     case 'proof:check': {
       return runProofCheck(config, {
+        clearScreen: false,
+        flow: options.flow,
+        flowDepth: 1,
+      });
+    }
+    case 'source:check': {
+      return runSourceCheck(config, {
         clearScreen: false,
         flow: options.flow,
         flowDepth: 1,

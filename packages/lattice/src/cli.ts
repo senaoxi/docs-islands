@@ -4,6 +4,7 @@ import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runPaths } from './commands/paths';
 import { runProofCheck } from './commands/proof';
+import { runSourceCheck } from './commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
 import {
   loadConfig,
@@ -198,6 +199,27 @@ async function main(): Promise<void> {
       }
 
       flow.outro(passed ? 'lattice proof passed' : 'lattice proof failed');
+    });
+
+  cli
+    .command('source <action>', 'Check source package boundaries')
+    .action(async (action: string, flags: GlobalFlags) => {
+      if (action !== 'check') {
+        throw new Error(`Unknown source action "${action}". Expected check.`);
+      }
+      const flow = createCliFlow();
+      flow.intro('lattice source check');
+      const config = await load(flags, 'source');
+      const passed = await runSourceCheck(config, {
+        clearScreen: false,
+        flow,
+      });
+
+      if (!passed) {
+        process.exitCode = 1;
+      }
+
+      flow.outro(passed ? 'lattice source passed' : 'lattice source failed');
     });
 
   cli

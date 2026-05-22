@@ -29,13 +29,20 @@ export default defineConfig({
     },
   },
   // TypeScript project graph policy. This checks project references,
-  // cross-project imports, package exports, and label-based package boundaries.
+  // cross-project imports, workspace source dependencies, and label-based graph
+  // boundaries.
   graph: {
     // Label-based package and declaration boundary rules. Labels are declared
     // inside tsconfig*.dts.json with "lattice": "<label>".
     rules: {
       'runtime-client': {
         deny: {
+          nodeBuiltins: [
+            {
+              name: 'node:*',
+              reason: 'client runtime must stay free of Node builtin imports',
+            },
+          ],
           refs: [
             {
               path: 'packages/vitepress/src/node/tsconfig.dts.json',
@@ -46,6 +53,13 @@ export default defineConfig({
       },
       'runtime-shared': {
         deny: {
+          nodeBuiltins: [
+            {
+              name: 'node:*',
+              reason:
+                'shared runtime must stay portable across client and node runtimes',
+            },
+          ],
           refs: [
             {
               path: 'packages/vitepress/src/node/tsconfig.dts.json',
@@ -106,10 +120,11 @@ export default defineConfig({
   },
   // Reusable command pipelines. Run them with `lattice check <name>`.
   pipelines: {
-    // Main typecheck pipeline: build required plugins, then run graph checks,
+    // Main typecheck pipeline: run graph checks, source authority checks,
     // proof checks, and the configured checker entries.
     typecheck: [
       'graph:check',
+      'source:check',
       'proof:check',
       'checker:typecheck',
       'checker:build',
@@ -170,6 +185,6 @@ export default defineConfig({
     // Package artifact checks for dist output.
     package: ['package:check'],
     // Governance checks to run before publishing.
-    publish: ['graph:check', 'proof:check', 'package:check'],
+    publish: ['graph:check', 'source:check', 'proof:check', 'package:check'],
   },
 });

@@ -848,6 +848,9 @@ importers:
       vite:
         specifier: catalog:prod
         version: 5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(terser@5.46.2)
+      vitest:
+        specifier: catalog:test
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.0)(jsdom@28.0.0)(less@4.4.2)(terser@5.46.2)
       webpack:
         specifier: catalog:dev
         version: 5.106.2(esbuild@0.27.3)

@@ -237,7 +237,7 @@ const denyInternalDep: GraphConfig = {
   rules: {
     runtime: {
       deny: {
-        deps: [
+        workspaceDeps: [
           {
             name: '@example/internal',
             reason: 'runtime package must not consume internal directly',
@@ -419,6 +419,35 @@ describe('runGraphCheck graph rules', () => {
 
     try {
       await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not validate source-only Node builtin deny entries', async () => {
+    const fixture = await createFixture(
+      createLocalBoundaryFiles({
+        lattice: 'runtime',
+        runtimeSource: 'export const runtimeValue = 1;\n',
+      }),
+      {
+        rules: {
+          runtime: {
+            deny: {
+              nodeBuiltins: [
+                {
+                  name: 'not-a-node-builtin',
+                  reason: 'source check owns Node builtin deny rules',
+                },
+              ],
+            },
+          },
+        },
+      },
+    );
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }

@@ -13,7 +13,9 @@ export {
   type GraphRule,
   type GraphRuleDenyConfig,
   type GraphRuleDepDenyEntry,
+  type GraphRuleNodeBuiltinDenyEntry,
   type GraphRuleRefDenyEntry,
+  type GraphRuleWorkspaceDepDenyEntry,
   type LatticeCommand,
   type LatticeConfig,
   type LatticeConfigEnv,
@@ -51,6 +53,7 @@ export {
   type LatticeFlowTask,
 } from './flow';
 
+export { runSourceCheck, type RunSourceCheckOptions } from './commands/source';
 export {
   runCheckerBuild,
   runCheckerTypecheck,

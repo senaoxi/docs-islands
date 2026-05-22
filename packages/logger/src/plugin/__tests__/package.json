@@ -12,6 +12,7 @@
     "rolldown": "catalog:dev",
     "rollup": "catalog:dev",
     "vite": "catalog:prod",
+    "vitest": "catalog:test",
     "webpack": "catalog:dev"
   }
 }

@@ -9,5 +9,6 @@
     "src/**/__tests__/**/*.ts",
     "**/types/**/*.d.ts",
     "vitest.config.ts"
-  ]
+  ],
+  "exclude": ["src/plugin/__tests__/**"]
 }

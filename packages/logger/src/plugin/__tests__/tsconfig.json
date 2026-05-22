@@ -1,0 +1,9 @@
+{
+  // Nested package test check. Declaration leaf: tsconfig.dts.json.
+  "extends": "../../../../../tsconfig.test.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node", "vitest/globals"],
+  },
+  "include": ["*.ts", "fixtures/**/*.ts"],
+}

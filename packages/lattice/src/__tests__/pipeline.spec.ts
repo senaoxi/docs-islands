@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ResolvedLatticeConfig } from '../config';
 import { LatticeFlowReporter } from '../flow';
-import { runPipeline } from '../pipeline';
+import { normalizePipelineStep, runPipeline } from '../pipeline';
 
 const green = (message: string): string => `\u001B[32m${message}\u001B[0m`;
 
@@ -85,6 +85,13 @@ function createTtyFlow(): {
 }
 
 describe('runPipeline', () => {
+  it('recognizes source:check as a built-in task', () => {
+    expect(normalizePipelineStep('source:check')).toEqual({
+      name: 'source:check',
+      type: 'task',
+    });
+  });
+
   it('passes all command steps in order', async () => {
     const fixture = await createConfig();
     const { chunks, flow } = createFlow();
