@@ -3,7 +3,12 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
-import { getCheckerAdapter } from '../checkers';
+import {
+  collectMissingCheckerPeerDependencies,
+  formatMissingCheckerPeerDependencies,
+  getCheckerAdapter,
+  type CheckerPackageResolver,
+} from '../checkers';
 import {
   getActiveCheckers,
   type CheckerExecutionKind,
@@ -40,6 +45,11 @@ export type TypecheckRunner = (
   target: TypecheckTarget,
 ) => Promise<TypecheckTargetResult> | TypecheckTargetResult;
 
+interface TypecheckTargetFlowState {
+  label: string;
+  startedAt: number;
+}
+
 export interface RunCheckerTypecheckOptions {
   clearScreen?: boolean;
   config: ResolvedLatticeConfig;
@@ -47,6 +57,7 @@ export interface RunCheckerTypecheckOptions {
   cwd?: string;
   flow?: LatticeFlowReporter;
   flowDepth?: number;
+  checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
   tscCommand?: string;
 }
@@ -72,14 +83,30 @@ function normalizeConcurrency(value: number | undefined): number {
 }
 
 function getExecutionCheckers(options: {
-  config: ResolvedLatticeConfig;
+  checkers: ResolvedCheckerConfig[];
   executionKind: CheckerExecutionKind;
 }): ResolvedCheckerConfig[] {
-  return getActiveCheckers(options.config).filter((checker) => {
+  return options.checkers.filter((checker) => {
     const adapter = getCheckerAdapter(checker.preset);
 
     return adapter?.supportedExecutions.includes(options.executionKind);
   });
+}
+
+function collectCheckerPeerDependencyProblems(options: {
+  checkers: ResolvedCheckerConfig[];
+  projectRootDir: string;
+  resolvePackage?: CheckerPackageResolver;
+}): string[] {
+  const missingDependencies = collectMissingCheckerPeerDependencies({
+    checkers: options.checkers,
+    projectRootDir: options.projectRootDir,
+    resolvePackage: options.resolvePackage,
+  });
+
+  return missingDependencies.length === 0
+    ? []
+    : [formatMissingCheckerPeerDependencies(missingDependencies)];
 }
 
 function createCheckerTarget(options: {
@@ -259,17 +286,37 @@ async function runCheckerTypecheckInternal(
 ): Promise<RunCheckerTypecheckResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
+  const allCheckers = getActiveCheckers(options.config);
   const checkers = getExecutionCheckers({
-    config: options.config,
+    checkers: allCheckers,
     executionKind: 'typecheck',
   });
   const flowDepth = options.flowDepth ?? 0;
 
   const concurrency = normalizeConcurrency(options.concurrency);
-  const problems: string[] = [];
+  const problems = collectCheckerPeerDependencyProblems({
+    checkers: allCheckers,
+    projectRootDir,
+    resolvePackage: options.checkerPackageResolver,
+  });
   const rootConfigPaths: string[] = [];
   const targetProjectPaths: string[] = [];
   const targets: TypecheckTarget[] = [];
+
+  if (problems.length > 0) {
+    options.flow?.fail('checker dependency preflight failed', {
+      depth: flowDepth + 1,
+    });
+    TypecheckLogger.error(problems.join('\n\n'));
+
+    return {
+      passed: false,
+      projectRootDir,
+      results: [],
+      rootConfigPaths,
+      targetProjectPaths,
+    };
+  }
 
   if (checkers.length === 0) {
     problems.push(
@@ -334,28 +381,40 @@ async function runCheckerTypecheckInternal(
     ].join('\n'),
   );
 
-  const targetTasks = new Map<string, LatticeFlowTask>();
+  const targetFlowStates = new Map<string, TypecheckTargetFlowState>();
 
   const results = await runWithConcurrency(
     targets,
     concurrency,
     options.runner ?? createDefaultRunner(),
     {
-      onTargetResult: (_target, result) => {
-        const task = targetTasks.get(result.configPath);
-
-        if (!task) {
+      onTargetResult: (target, result) => {
+        if (!options.flow) {
           return;
         }
 
+        const flowState = targetFlowStates.get(target.configPath);
+
+        if (!flowState) {
+          return;
+        }
+
+        const resultOptions = {
+          depth: flowDepth + 1,
+          elapsedTimeMs: performance.now() - flowState.startedAt,
+        };
+
         if (result.status === 0) {
-          task.pass();
+          options.flow.pass(flowState.label, resultOptions);
         } else {
           const suffix = result.error
             ? formatErrorMessage(result.error)
             : `exited with code ${result.status}`;
 
-          task.fail(undefined, { error: suffix });
+          options.flow.fail(flowState.label, {
+            ...resultOptions,
+            error: suffix,
+          });
         }
       },
       onTargetStart: (target) => {
@@ -363,17 +422,12 @@ async function runCheckerTypecheckInternal(
           return;
         }
 
-        targetTasks.set(
-          target.configPath,
-          options.flow.start(
+        targetFlowStates.set(target.configPath, {
+          label:
             target.label ??
-              `checker: ${toRelativePath(projectRootDir, target.configPath)}`,
-            {
-              collapseOnSuccess: false,
-              depth: flowDepth + 1,
-            },
-          ),
-        );
+            `checker: ${toRelativePath(projectRootDir, target.configPath)}`,
+          startedAt: performance.now(),
+        });
       },
     },
   );
@@ -460,6 +514,7 @@ export interface RunCheckerBuildOptions {
   cwd?: string;
   flow?: LatticeFlowReporter;
   flowDepth?: number;
+  checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
   tscCommand?: string;
 }
@@ -475,12 +530,32 @@ async function runCheckerBuildInternal(
 ): Promise<RunCheckerBuildResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
+  const allCheckers = getActiveCheckers(options.config);
   const checkers = getExecutionCheckers({
-    config: options.config,
+    checkers: allCheckers,
     executionKind: 'build',
   });
   const flowDepth = options.flowDepth ?? 0;
   const rootConfigPaths: string[] = [];
+  const problems = collectCheckerPeerDependencyProblems({
+    checkers: allCheckers,
+    projectRootDir,
+    resolvePackage: options.checkerPackageResolver,
+  });
+
+  if (problems.length > 0) {
+    options.flow?.fail('checker dependency preflight failed', {
+      depth: flowDepth + 1,
+    });
+    TypecheckLogger.error(problems.join('\n\n'));
+
+    return {
+      passed: false,
+      projectRootDir,
+      rootConfigPaths,
+    };
+  }
+
   const targets = checkers.flatMap((checker) => {
     const configPath = resolveProjectConfigPath(projectRootDir, checker.entry);
 

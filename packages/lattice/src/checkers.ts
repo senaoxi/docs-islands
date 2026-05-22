@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import type {
   BuiltinCheckerPreset,
   CheckerConfig,
@@ -27,9 +29,20 @@ export interface CheckerAdapter {
   ) => CheckerCommandTarget;
   defaultExtensions?: string[];
   graph: boolean;
+  packageName: string;
   preset: BuiltinCheckerPreset;
   supportedExecutions: CheckerExecutionKind[];
 }
+
+export interface MissingCheckerPeerDependency {
+  checkerNames: string[];
+  packageName: string;
+}
+
+export type CheckerPackageResolver = (options: {
+  packageName: string;
+  projectRootDir: string;
+}) => string | undefined;
 
 function createTscCommandTarget(
   options: CheckerCommandTargetOptions,
@@ -99,6 +112,7 @@ const builtinCheckerAdapters = {
     createCommandTarget: createSvelteCheckCommandTarget,
     defaultExtensions: ['.svelte'],
     graph: false,
+    packageName: 'svelte-check',
     preset: 'svelte-check',
     supportedExecutions: ['typecheck'],
   },
@@ -115,6 +129,7 @@ const builtinCheckerAdapters = {
       '.json',
     ],
     graph: true,
+    packageName: 'typescript',
     preset: 'tsc',
     supportedExecutions: ['typecheck', 'build'],
   },
@@ -122,6 +137,7 @@ const builtinCheckerAdapters = {
     createCommandTarget: createVueTscCommandTarget,
     defaultExtensions: ['.vue'],
     graph: false,
+    packageName: 'vue-tsc',
     preset: 'vue-tsc',
     supportedExecutions: ['typecheck', 'build'],
   },
@@ -137,6 +153,101 @@ export function getCheckerAdapter(
   preset: CheckerPreset,
 ): CheckerAdapter | null {
   return isBuiltinCheckerPreset(preset) ? builtinCheckerAdapters[preset] : null;
+}
+
+export function resolveCheckerPackageFromRoot(options: {
+  packageName: string;
+  projectRootDir: string;
+}): string | undefined {
+  const requireFromRoot = createRequire(
+    path.join(options.projectRootDir, 'package.json'),
+  );
+
+  try {
+    return requireFromRoot.resolve(`${options.packageName}/package.json`);
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+    ) {
+      return options.packageName;
+    }
+
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'MODULE_NOT_FOUND'
+    ) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+export function collectMissingCheckerPeerDependencies(options: {
+  checkers: ResolvedCheckerConfig[];
+  projectRootDir: string;
+  resolvePackage?: CheckerPackageResolver;
+}): MissingCheckerPeerDependency[] {
+  const resolvePackage =
+    options.resolvePackage ?? resolveCheckerPackageFromRoot;
+  const missingCheckersByPackage = new Map<string, Set<string>>();
+
+  for (const checker of options.checkers) {
+    const packageName = getCheckerAdapter(checker.preset)?.packageName;
+
+    if (!packageName) {
+      continue;
+    }
+
+    if (
+      resolvePackage({
+        packageName,
+        projectRootDir: options.projectRootDir,
+      })
+    ) {
+      continue;
+    }
+
+    const checkerNames =
+      missingCheckersByPackage.get(packageName) ?? new Set<string>();
+
+    checkerNames.add(checker.name);
+    missingCheckersByPackage.set(packageName, checkerNames);
+  }
+
+  return [...missingCheckersByPackage.entries()]
+    .map(([packageName, checkerNames]) => ({
+      checkerNames: [...checkerNames].sort((left, right) =>
+        left.localeCompare(right),
+      ),
+      packageName,
+    }))
+    .sort((left, right) => left.packageName.localeCompare(right.packageName));
+}
+
+export function formatMissingCheckerPeerDependencies(
+  missingDependencies: MissingCheckerPeerDependency[],
+): string {
+  const packageNames = missingDependencies.map(
+    (dependency) => dependency.packageName,
+  );
+
+  return [
+    'Missing checker peer dependencies:',
+    ...missingDependencies.map((dependency) => {
+      const checkerList = dependency.checkerNames
+        .map((checkerName) => `"${checkerName}"`)
+        .join(', ');
+
+      return `  - ${dependency.packageName} (used by checker ${checkerList})`;
+    }),
+    `Fix: pnpm add -D ${packageNames.join(' ')}`,
+  ].join('\n');
 }
 
 export function getCheckerExtensions(checker: CheckerConfig): string[] {

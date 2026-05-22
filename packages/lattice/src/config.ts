@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { z } from 'zod';
 import {
   getCheckerAdapter,
   getResolvedCheckers,
@@ -488,9 +489,29 @@ export function defineConfig(config: LatticeConfigExport): LatticeConfigExport {
   return config;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+const nonEmptyStringSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0);
+
+const dotPrefixedStringSchema = nonEmptyStringSchema.refine((value) =>
+  value.startsWith('.'),
+);
+
+const checkerObjectSchema = z.looseObject({});
+
+const checkerConfigShapeSchema = z.looseObject({
+  entry: nonEmptyStringSchema,
+  extensions: z.array(dotPrefixedStringSchema).nonempty().optional(),
+  preset: nonEmptyStringSchema,
+});
+
+const latticeConfigShapeSchema = z.looseObject({
+  config: z
+    .looseObject({
+      checkers: z.record(z.string(), checkerConfigShapeSchema).optional(),
+    })
+    .optional(),
+});
 
 function formatUnknownValue(value: unknown): string {
   if (value === undefined) {
@@ -500,27 +521,130 @@ function formatUnknownValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function validateEntryValue(options: {
-  field: string;
-  problems: string[];
-  value: unknown;
-}): void {
-  if (typeof options.value === 'string' && options.value.trim().length > 0) {
-    return;
+function formatZodPath(pathSegments: readonly PropertyKey[]): string {
+  return pathSegments
+    .map((segment) =>
+      typeof segment === 'number' ? `[${segment}]` : `.${String(segment)}`,
+    )
+    .join('')
+    .replace(/^\./u, '');
+}
+
+function getValueAtPath(
+  value: unknown,
+  pathSegments: readonly PropertyKey[],
+): unknown {
+  let current = value;
+
+  for (const segment of pathSegments) {
+    if (current === undefined || current === null) {
+      return undefined;
+    }
+
+    current = (current as Record<PropertyKey, unknown>)[segment];
   }
 
-  options.problems.push(
-    [
-      'Invalid Lattice checker entry config:',
-      `  field: ${options.field}`,
-      `  value: ${formatUnknownValue(options.value)}`,
-      '  reason: checker entry must be a non-empty string path.',
-    ].join('\n'),
+  return current;
+}
+
+function formatLatticeConfigShapeIssue(
+  value: unknown,
+  issue: z.core.$ZodIssue,
+): string {
+  const pathSegments = issue.path as PropertyKey[];
+  const field = formatZodPath(pathSegments);
+
+  if (pathSegments.length === 0) {
+    return 'lattice config must export or return an object.';
+  }
+
+  if (field === 'config') {
+    return [
+      'Invalid Lattice config:',
+      '  field: config',
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      '  reason: config must be an object.',
+    ].join('\n');
+  }
+
+  if (field === 'config.checkers') {
+    return [
+      'Invalid Lattice checker config:',
+      '  field: config.checkers',
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      '  reason: config.checkers must be an object keyed by checker name.',
+    ].join('\n');
+  }
+
+  if (pathSegments[0] === 'config' && pathSegments[1] === 'checkers') {
+    const checkerName = pathSegments[2];
+    const checkerField = `config.checkers.${String(checkerName)}`;
+
+    if (pathSegments.length === 3) {
+      return [
+        'Invalid Lattice checker config:',
+        `  field: ${checkerField}`,
+        `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+        '  reason: checker entries must be objects.',
+      ].join('\n');
+    }
+
+    if (pathSegments[3] === 'preset') {
+      return [
+        'Invalid Lattice checker config:',
+        `  field: ${checkerField}.preset`,
+        `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+        '  reason: checker preset must be a non-empty string.',
+      ].join('\n');
+    }
+
+    if (pathSegments[3] === 'entry') {
+      return [
+        'Invalid Lattice checker entry config:',
+        `  field: ${checkerField}.entry`,
+        `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+        '  reason: checker entry must be a non-empty string path.',
+      ].join('\n');
+    }
+
+    if (pathSegments[3] === 'extensions') {
+      const extensionsPath = pathSegments.slice(0, 4);
+
+      return [
+        'Invalid Lattice checker config:',
+        `  field: ${checkerField}.extensions`,
+        `  value: ${formatUnknownValue(getValueAtPath(value, extensionsPath))}`,
+        '  reason: checker extensions must be a non-empty array of dot-prefixed strings.',
+      ].join('\n');
+    }
+  }
+
+  return [
+    'Invalid Lattice config:',
+    `  field: ${field}`,
+    `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+    `  reason: ${issue.message}`,
+  ].join('\n');
+}
+
+function collectLatticeConfigShapeProblems(value: unknown): string[] {
+  const result = latticeConfigShapeSchema.safeParse(value);
+
+  if (result.success) {
+    return [];
+  }
+
+  return result.error.issues.map((issue) =>
+    formatLatticeConfigShapeIssue(value, issue),
   );
 }
 
 function collectCheckerConfigProblems(config: LatticeConfig): string[] {
-  const problems: string[] = [];
+  const problems = collectLatticeConfigShapeProblems(config);
+
+  if (!checkerObjectSchema.safeParse(config).success) {
+    return problems;
+  }
 
   const checkers = config.config?.checkers;
 
@@ -528,70 +652,28 @@ function collectCheckerConfigProblems(config: LatticeConfig): string[] {
     return problems;
   }
 
-  if (!isRecord(checkers)) {
-    problems.push(
-      [
-        'Invalid Lattice checker config:',
-        '  field: config.checkers',
-        `  value: ${formatUnknownValue(checkers)}`,
-        '  reason: config.checkers must be an object keyed by checker name.',
-      ].join('\n'),
-    );
-
+  if (!checkerObjectSchema.safeParse(checkers).success) {
     return problems;
   }
 
   for (const [checkerName, checker] of Object.entries(checkers)) {
     const field = `config.checkers.${checkerName}`;
 
-    if (!isRecord(checker)) {
-      problems.push(
-        [
-          'Invalid Lattice checker config:',
-          `  field: ${field}`,
-          `  value: ${formatUnknownValue(checker)}`,
-          '  reason: checker entries must be objects.',
-        ].join('\n'),
-      );
+    const checkerObjectResult = checkerObjectSchema.safeParse(checker);
+
+    if (!checkerObjectResult.success) {
       continue;
     }
 
-    const preset = checker.preset;
+    const checkerRecord = checkerObjectResult.data;
+    const preset = checkerRecord.preset;
+    const extensions = checkerRecord.extensions;
 
-    if (typeof preset !== 'string' || preset.trim().length === 0) {
-      problems.push(
-        [
-          'Invalid Lattice checker config:',
-          `  field: ${field}.preset`,
-          `  value: ${formatUnknownValue(preset)}`,
-          '  reason: checker preset must be a non-empty string.',
-        ].join('\n'),
-      );
-    }
-
-    const extensions = checker.extensions;
-
-    if (extensions !== undefined) {
-      if (
-        !Array.isArray(extensions) ||
-        extensions.length === 0 ||
-        extensions.some(
-          (extension) =>
-            typeof extension !== 'string' ||
-            extension.trim().length === 0 ||
-            !extension.startsWith('.'),
-        )
-      ) {
-        problems.push(
-          [
-            'Invalid Lattice checker config:',
-            `  field: ${field}.extensions`,
-            `  value: ${formatUnknownValue(extensions)}`,
-            '  reason: checker extensions must be a non-empty array of dot-prefixed strings.',
-          ].join('\n'),
-        );
-      }
-    } else if (typeof preset === 'string' && !isBuiltinCheckerPreset(preset)) {
+    if (
+      extensions === undefined &&
+      typeof preset === 'string' &&
+      !isBuiltinCheckerPreset(preset)
+    ) {
       problems.push(
         [
           'Invalid Lattice checker config:',
@@ -602,24 +684,16 @@ function collectCheckerConfigProblems(config: LatticeConfig): string[] {
       );
     }
 
-    if (Object.hasOwn(checker, 'routes')) {
+    if (Object.hasOwn(checkerRecord, 'routes')) {
       problems.push(
         [
           'Invalid Lattice checker config:',
           `  field: ${field}.routes`,
-          `  value: ${formatUnknownValue(checker.routes)}`,
+          `  value: ${formatUnknownValue(checkerRecord.routes)}`,
           '  reason: checker routes are not supported; move routes.build to entry and migrate routes.typecheck targets to tsconfig*.dts.json leaves reachable from that entry with local companions.',
         ].join('\n'),
       );
     }
-
-    const entry = checker.entry;
-
-    validateEntryValue({
-      field: `${field}.entry`,
-      problems,
-      value: entry,
-    });
 
     if (typeof preset !== 'string' || preset.trim().length === 0) {
       continue;
@@ -665,10 +739,6 @@ export function getActiveCheckerExtensions(config: LatticeConfig): string[] {
 }
 
 function normalizeConfig(value: unknown): LatticeConfig {
-  if (!isRecord(value)) {
-    throw new Error('lattice config must export or return an object.');
-  }
-
   const config = value as LatticeConfig;
 
   validateLatticeConfig(config);

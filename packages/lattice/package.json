@@ -49,7 +49,8 @@
     "es-module-lexer": "catalog:dev",
     "publint": "catalog:lint",
     "tinyglobby": "catalog:prod",
-    "yaml": "catalog:dev"
+    "yaml": "catalog:dev",
+    "zod": "catalog:dev"
   },
   "devDependencies": {
     "@docs-islands/eslint-config": "workspace:*",
@@ -64,7 +65,20 @@
     "vitest": "catalog:test"
   },
   "peerDependencies": {
-    "typescript": "catalog:dev"
+    "svelte-check": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vue-tsc": "catalog:dev"
+  },
+  "peerDependenciesMeta": {
+    "svelte-check": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    },
+    "vue-tsc": {
+      "optional": true
+    }
   },
   "types": "./src/index.ts",
   "exports": {

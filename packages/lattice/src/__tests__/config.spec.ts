@@ -323,6 +323,200 @@ throw new Error('external config should not be imported');
     }
   });
 
+  it('rejects non-object config exports', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default null;
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /lattice config must export or return an object/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects non-object checker maps', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: ['typescript'],
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /config\.checkers must be an object keyed by checker name/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects non-object checker entries', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      typescript: 'tsconfig.build.json',
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /checker entries must be objects/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects non-string checker presets', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      typescript: {
+        preset: 1,
+        entry: 'tsconfig.build.json',
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /checker preset must be a non-empty string/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects non-string checker entries', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      typescript: {
+        preset: 'tsc',
+        entry: 1,
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /checker entry must be a non-empty string path/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects invalid checker extension lists', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      typescript: {
+        preset: 'tsc',
+        entry: 'tsconfig.build.json',
+        extensions: ['ts'],
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /checker extensions must be a non-empty array of dot-prefixed strings/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
   it('rejects removed checker routes config', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
 

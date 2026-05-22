@@ -43,4 +43,6 @@ const dtsConfig: RolldownOptions = defineConfig({
   ],
 });
 
-export default [moduleConfig, dtsConfig];
+const rolldownConfig: RolldownOptions[] = [moduleConfig, dtsConfig];
+
+export default rolldownConfig;

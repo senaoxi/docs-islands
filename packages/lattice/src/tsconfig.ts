@@ -760,7 +760,7 @@ export function collectGraphProjectPaths(
 export function parseProjectFileNames(
   config: ResolvedLatticeConfig,
   configPath: string,
-  pattern = /\.(?:[cm]?tsx?|d\.[cm]?ts|json)$/u,
+  pattern: RegExp = /\.(?:[cm]?tsx?|d\.[cm]?ts|json)$/u,
 ): string[] {
   return parseProjectFileNamesForExtensions(config, configPath, [], pattern);
 }
@@ -769,7 +769,7 @@ export function parseProjectFileNamesForExtensions(
   config: ResolvedLatticeConfig,
   configPath: string,
   extensions: string[],
-  pattern = createExtensionPattern(extensions),
+  pattern: RegExp = createExtensionPattern(extensions),
 ): string[] {
   const diagnostics: ts.Diagnostic[] = [];
   const configObject = readJsonConfig(config, configPath);
