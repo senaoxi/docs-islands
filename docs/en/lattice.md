@@ -227,30 +227,32 @@ The build leaf extends the local config and graph base, and only adds build outp
 ### `config.checkers`
 
 ```js
-config: {
-  checkers: {
-    typescript: {
-      preset: 'tsc',
-      routes: {
-        typecheck: 'tsconfig.json',
-        build: 'tsconfig.graph.json',
+const latticeConfig = {
+  config: {
+    checkers: {
+      typescript: {
+        preset: 'tsc',
+        routes: {
+          typecheck: 'tsconfig.json',
+          build: 'tsconfig.graph.json',
+        },
       },
-    },
-    vue: {
-      preset: 'vue-tsc',
-      routes: {
-        typecheck: 'tsconfig.vue.json',
-        build: 'tsconfig.vue.graph.json',
+      vue: {
+        preset: 'vue-tsc',
+        routes: {
+          typecheck: 'tsconfig.vue.json',
+          build: 'tsconfig.vue.graph.json',
+        },
       },
-    },
-    svelte: {
-      preset: 'svelte-check',
-      routes: {
-        typecheck: 'tsconfig.svelte.json',
+      svelte: {
+        preset: 'svelte-check',
+        routes: {
+          typecheck: 'tsconfig.svelte.json',
+        },
       },
     },
   },
-}
+};
 ```
 
 `config.checkers` is the single entrypoint for TypeScript and UI framework checking. A checker without `routes` is ignored. A checker with `routes: {}` is invalid. `routes.typecheck` participates in `lattice tsc` / `tsc:run`; `routes.build` participates in `lattice tsc --build` / `tsc:build`.
@@ -260,20 +262,22 @@ Built-in presets can omit `extensions`. Defaults are `.ts`, `.tsx`, `.cts`, `.mt
 ### `config.source`
 
 ```js
-config: {
-  source: {
-    include: ['**/*.{ts,tsx,cts,mts}', '**/*.d.{ts,cts,mts}', '**/*.json'],
-    exclude: [
-      'node_modules',
-      'dist',
-      '.git',
-      '.tsbuild',
-      'coverage',
-      '**/tsconfig*.json',
-      '**/package.json',
-    ],
+const latticeConfig = {
+  config: {
+    source: {
+      include: ['**/*.{ts,tsx,cts,mts}', '**/*.d.{ts,cts,mts}', '**/*.json'],
+      exclude: [
+        'node_modules',
+        'dist',
+        '.git',
+        '.tsbuild',
+        'coverage',
+        '**/tsconfig*.json',
+        '**/package.json',
+      ],
+    },
   },
-}
+};
 ```
 
 If `source.include` is omitted, `proof:check` derives the effective source boundary from all active checker extensions. If `source.include` is present, that list is the complete source boundary and checker extensions are not merged in. `source.exclude` always filters from the effective source boundary; it never decides which modules are valid by itself.
@@ -281,26 +285,28 @@ If `source.include` is omitted, `proof:check` derives the effective source bound
 ### `graph.rules`
 
 ```js
-graph: {
-  rules: {
-    'runtime-client': {
-      deny: {
-        refs: [
-          {
-            path: 'packages/app/src/node/tsconfig.lib.build.json',
-            reason: 'client runtime must not depend on node runtime',
-          },
-        ],
-        deps: [
-          {
-            name: '@acme/node-only',
-            reason: 'client runtime must not consume node-only packages',
-          },
-        ],
+const latticeConfig = {
+  graph: {
+    rules: {
+      'runtime-client': {
+        deny: {
+          refs: [
+            {
+              path: 'packages/app/src/node/tsconfig.lib.build.json',
+              reason: 'client runtime must not depend on node runtime',
+            },
+          ],
+          deps: [
+            {
+              name: '@acme/node-only',
+              reason: 'client runtime must not consume node-only packages',
+            },
+          ],
+        },
       },
     },
   },
-}
+};
 ```
 
 Declare the label in a build leaf:
@@ -318,11 +324,13 @@ When that project references or imports a denied target, `lattice graph check` f
 ### `paths`
 
 ```js
-paths: {
-  generatedFileName: 'tsconfig.graph.paths.generated.json',
-  conditionPriority: ['source', 'development', 'types'],
-  artifactDirectories: ['dist', 'build', 'lib', 'esm', 'cjs', 'out'],
-}
+const latticeConfig = {
+  paths: {
+    generatedFileName: 'tsconfig.graph.paths.generated.json',
+    conditionPriority: ['source', 'development', 'types'],
+    artifactDirectories: ['dist', 'build', 'lib', 'esm', 'cjs', 'out'],
+  },
+};
 ```
 
 Use case: a `workspace:*` dependency still points to `dist` in package exports, but is also consumed as a source dependency inside the build graph. Run:
@@ -348,16 +356,18 @@ Treat generated paths as a migration bridge, not a long-term default architectur
 ### Checker coverage
 
 ```js
-config: {
-  checkers: {
-    vue: {
-      preset: 'vue-tsc',
-      routes: {
-        typecheck: 'docs/tsconfig.json',
+const latticeConfig = {
+  config: {
+    checkers: {
+      vue: {
+        preset: 'vue-tsc',
+        routes: {
+          typecheck: 'docs/tsconfig.json',
+        },
       },
     },
   },
-}
+};
 ```
 
 Checker routes cover files that do not enter the TypeScript build graph but are still validated by a framework-aware tool. Common examples include Vue SFCs, Svelte components, VitePress docs, themes, and special fixture projects.
@@ -365,14 +375,16 @@ Checker routes cover files that do not enter the TypeScript build graph but are 
 ### `proof.allowlist`
 
 ```js
-proof: {
-  allowlist: [
-    {
-      file: 'src/generated/runtime.d.ts',
-      reason: 'Generated declaration-only runtime shim copied into dist.',
-    },
-  ],
-}
+const latticeConfig = {
+  proof: {
+    allowlist: [
+      {
+        file: 'src/generated/runtime.d.ts',
+        reason: 'Generated declaration-only runtime shim copied into dist.',
+      },
+    ],
+  },
+};
 ```
 
 Allowlist is the last resort. Every entry must explain why it is safe. New allowlist entries should be reviewed strictly during code review.
@@ -380,25 +392,27 @@ Allowlist is the last resort. Every entry must explain why it is safe. New allow
 ### `packageChecks.targets`
 
 ```js
-packageChecks: {
-  targets: [
-    {
-      name: '@acme/core',
-      outDir: 'packages/core/dist',
-      checks: ['publint', 'attw', 'boundary'],
-      publint: {
-        strict: true,
+const latticeConfig = {
+  packageChecks: {
+    targets: [
+      {
+        name: '@acme/core',
+        outDir: 'packages/core/dist',
+        checks: ['publint', 'attw', 'boundary'],
+        publint: {
+          strict: true,
+        },
+        attw: {
+          profile: 'esm-only',
+        },
+        boundary: {
+          environment: (file) => (file.startsWith('node/') ? 'node' : 'browser'),
+          ignoredExternalPackages: ['@acme/runtime-shim'],
+        },
       },
-      attw: {
-        profile: 'esm-only',
-      },
-      boundary: {
-        environment: (file) => file.startsWith('node/') ? 'node' : 'browser',
-        ignoredExternalPackages: ['@acme/runtime-shim'],
-      },
-    },
-  ],
-}
+    ],
+  },
+};
 ```
 
 `outDir` must point to the already-built, publish-ready package output directory. It should contain the built `package.json`, JavaScript files, and type declarations.
@@ -432,22 +446,19 @@ pnpm exec lattice package check --package @acme/core --attw-profile strict
 ### `pipelines`
 
 ```js
-pipelines: {
-  typecheck: [
-    'graph:check',
-    'proof:check',
-    'tsc:run',
-    'tsc:build',
-  ],
-  package: [
-    {
-      type: 'command',
-      command: 'pnpm',
-      args: ['build'],
-    },
-    'package:check',
-  ],
-}
+const latticeConfig = {
+  pipelines: {
+    typecheck: ['graph:check', 'proof:check', 'tsc:run', 'tsc:build'],
+    package: [
+      {
+        type: 'command',
+        command: 'pnpm',
+        args: ['build'],
+      },
+      'package:check',
+    ],
+  },
+};
 ```
 
 A pipeline can contain two types of steps:
