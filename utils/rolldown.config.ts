@@ -64,7 +64,7 @@ const dtsConfig: RolldownOptions = defineConfig({
   external: [/^[\w@][^:]/],
   plugins: [
     dts({
-      tsconfig: './tsconfig.lib.json',
+      tsconfig: './tsconfig.lib.dts.json',
       emitDtsOnly: true,
       sourcemap,
     }),

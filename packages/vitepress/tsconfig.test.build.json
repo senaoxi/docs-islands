@@ -1,36 +1,22 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  // Test build leaf. Tests may depend on runtime/tools projects; runtime projects must not depend on tests.
-  "extends": ["./tsconfig.test.json", "../../tsconfig.graph.base.json"],
-  "compilerOptions": {
-    "rootDir": ".",
-    "outDir": "./.tsbuild",
-    "tsBuildInfoFile": "./.tsbuild/test.tsbuildinfo"
-  },
+  // VitePress package graph aggregator.
+  "files": [],
   "references": [
     {
-      "path": "./src/types/tsconfig.lib.build.json"
+      "path": "./tsconfig.test.dts.json"
     },
     {
-      "path": "./src/shared/tsconfig.lib.build.json"
+      "path": "./playground/tsconfig.lib.dts.json"
     },
     {
-      "path": "./src/node/tsconfig.lib.build.json"
+      "path": "./playground/tsconfig.test.dts.json"
     },
     {
-      "path": "./src/client/tsconfig.lib.build.json"
+      "path": "./smoke/tsconfig.lib.dts.json"
     },
     {
-      "path": "./theme/tsconfig.lib.build.json"
-    },
-    {
-      "path": "./tsconfig.tools.build.json"
-    },
-    {
-      "path": "../../packages/logger/tsconfig.lib.build.json"
-    },
-    {
-      "path": "../../packages/core/tsconfig.lib.build.json"
+      "path": "./smoke/tsconfig.test.dts.json"
     }
   ]
 }

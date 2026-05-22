@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "lattice": "runtime-client",
+  // Client runtime declaration leaf; keep Node ambient types out.
+  "extends": ["./tsconfig.json", "../../../../tsconfig.dts.base.json"],
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "./.tsbuild",
+    "tsBuildInfoFile": "./.tsbuild/build.tsbuildinfo"
+  },
+  "references": [
+    {
+      "path": "../types/tsconfig.dts.json"
+    },
+    {
+      "path": "../shared/tsconfig.dts.json"
+    },
+    {
+      "path": "../../../logger/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "../../../core/tsconfig.lib.dts.json"
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 import type {
   BuiltinCheckerPreset,
   CheckerConfig,
+  CheckerExecutionKind,
   CheckerPreset,
-  CheckerRouteKind,
   ResolvedCheckerConfig,
 } from './config';
 import { toRelativePath } from './utils/path';
@@ -17,8 +17,8 @@ export interface CheckerCommandTargetOptions {
   checker: ResolvedCheckerConfig;
   commandOverride?: string;
   configPath: string;
+  executionKind: CheckerExecutionKind;
   projectRootDir: string;
-  routeKind: CheckerRouteKind;
 }
 
 export interface CheckerAdapter {
@@ -28,8 +28,7 @@ export interface CheckerAdapter {
   defaultExtensions?: string[];
   graph: boolean;
   preset: BuiltinCheckerPreset;
-  supportedRoutes: CheckerRouteKind[];
-  typecheckDiscovery: 'references' | 'route';
+  supportedExecutions: CheckerExecutionKind[];
 }
 
 function createTscCommandTarget(
@@ -42,12 +41,12 @@ function createTscCommandTarget(
 
   return {
     args:
-      options.routeKind === 'build'
+      options.executionKind === 'build'
         ? ['-b', relativeConfigPath, '--pretty', 'false']
         : ['-p', relativeConfigPath, '--noEmit'],
     command: options.commandOverride ?? 'tsc',
     label:
-      options.routeKind === 'build'
+      options.executionKind === 'build'
         ? `tsc -b ${relativeConfigPath}`
         : `tsc: ${relativeConfigPath}`,
   };
@@ -63,12 +62,12 @@ function createVueTscCommandTarget(
 
   return {
     args:
-      options.routeKind === 'build'
+      options.executionKind === 'build'
         ? ['-b', relativeConfigPath, '--pretty', 'false']
         : ['-p', relativeConfigPath, '--noEmit'],
     command: 'vue-tsc',
     label:
-      options.routeKind === 'build'
+      options.executionKind === 'build'
         ? `${options.checker.name}: vue-tsc -b ${relativeConfigPath}`
         : `${options.checker.name}: vue-tsc -p ${relativeConfigPath}`,
   };
@@ -77,9 +76,9 @@ function createVueTscCommandTarget(
 function createSvelteCheckCommandTarget(
   options: CheckerCommandTargetOptions,
 ): CheckerCommandTarget {
-  if (options.routeKind === 'build') {
+  if (options.executionKind === 'build') {
     throw new Error(
-      `Checker "${options.checker.name}" uses svelte-check, which does not support routes.build.`,
+      `Checker "${options.checker.name}" uses svelte-check, which does not support checker:build.`,
     );
   }
 
@@ -101,8 +100,7 @@ const builtinCheckerAdapters = {
     defaultExtensions: ['.svelte'],
     graph: false,
     preset: 'svelte-check',
-    supportedRoutes: ['typecheck'],
-    typecheckDiscovery: 'route',
+    supportedExecutions: ['typecheck'],
   },
   tsc: {
     createCommandTarget: createTscCommandTarget,
@@ -118,16 +116,14 @@ const builtinCheckerAdapters = {
     ],
     graph: true,
     preset: 'tsc',
-    supportedRoutes: ['typecheck', 'build'],
-    typecheckDiscovery: 'references',
+    supportedExecutions: ['typecheck', 'build'],
   },
   'vue-tsc': {
     createCommandTarget: createVueTscCommandTarget,
     defaultExtensions: ['.vue'],
     graph: false,
     preset: 'vue-tsc',
-    supportedRoutes: ['typecheck', 'build'],
-    typecheckDiscovery: 'route',
+    supportedExecutions: ['typecheck', 'build'],
   },
 } satisfies Record<BuiltinCheckerPreset, CheckerAdapter>;
 
@@ -169,30 +165,12 @@ export function getResolvedCheckers(config: {
   }
 
   return Object.entries(checkers)
-    .flatMap(([name, checker]) => {
-      if (!checker.routes) {
-        return [];
-      }
-
-      const routes: Partial<Record<CheckerRouteKind, string>> = {};
-
-      if (checker.routes.typecheck !== undefined) {
-        routes.typecheck = checker.routes.typecheck.trim();
-      }
-
-      if (checker.routes.build !== undefined) {
-        routes.build = checker.routes.build.trim();
-      }
-
-      return [
-        {
-          extensions: getCheckerExtensions(checker),
-          name,
-          preset: checker.preset,
-          routes,
-        },
-      ];
-    })
+    .map(([name, checker]) => ({
+      entry: checker.entry.trim(),
+      extensions: getCheckerExtensions(checker),
+      name,
+      preset: checker.preset,
+    }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 

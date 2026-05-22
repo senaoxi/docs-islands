@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  // Package-local IDE/typecheck solution. Build graph leaf: tsconfig.graph.json.
+  // Package-local IDE/typecheck solution. Build graph leaf: tsconfig.build.json.
   "files": [],
   "references": [
     {

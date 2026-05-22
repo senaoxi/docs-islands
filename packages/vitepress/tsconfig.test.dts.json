@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Test declaration leaf. Tests may depend on runtime/tools projects; runtime projects must not depend on tests.
+  "extends": ["./tsconfig.test.json", "../../tsconfig.dts.base.json"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./.tsbuild",
+    "tsBuildInfoFile": "./.tsbuild/test.tsbuildinfo"
+  },
+  "references": [
+    {
+      "path": "./src/types/tsconfig.dts.json"
+    },
+    {
+      "path": "./src/shared/tsconfig.dts.json"
+    },
+    {
+      "path": "./src/node/tsconfig.dts.json"
+    },
+    {
+      "path": "./src/client/tsconfig.dts.json"
+    },
+    {
+      "path": "./theme/tsconfig.dts.json"
+    },
+    {
+      "path": "./tsconfig.tools.dts.json"
+    },
+    {
+      "path": "../../packages/logger/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "../../packages/core/tsconfig.lib.dts.json"
+    }
+  ]
+}

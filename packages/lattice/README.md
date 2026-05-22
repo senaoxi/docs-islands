@@ -29,10 +29,10 @@ Lattice makes these rules reviewable, runnable, and suitable for CI.
 
 ## Features
 
-- **Project graph validation**: checks reachable TypeScript build leaves, references, graph-owned imports, package boundaries, and label-based deny rules.
-- **Typecheck coverage proof**: verifies that graph-capable checker build configs match strict local typecheck companions and that source files are covered by checker routes or allowlist entries.
-- **Compatibility path generation**: writes opt-in `tsconfig.graph.paths.generated.json` files for `workspace:*` dependencies whose package exports still point at build artifacts.
-- **Checker target runner**: runs configured TypeScript and UI-framework checker routes for `typecheck` and `build`.
+- **Project graph validation**: checks reachable TypeScript declaration leaves, references, graph-owned imports, package boundaries, and label-based deny rules.
+- **Typecheck coverage proof**: verifies that reachable declaration leaves match strict local typecheck companions and that source files are covered by checker entries or allowlist entries.
+- **Compatibility path generation**: writes opt-in `tsconfig.dts.paths.generated.json` files for `workspace:*` dependencies whose package exports still point at build artifacts.
+- **Checker target runner**: runs configured TypeScript and UI-framework checker entries in `typecheck` or `build` execution mode.
 - **Published package checks**: validates built package outputs with `publint`, Are The Types Wrong, and a runtime import boundary audit.
 - **Composable pipelines**: combines built-in checks and shell commands into named workflows such as `typecheck`, `package`, and `publish`.
 - **Typed configuration**: ships `defineConfig(...)` for editor hints and typed user configs.
@@ -62,17 +62,11 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        routes: {
-          typecheck: 'tsconfig.json',
-          build: 'tsconfig.graph.json',
-        },
+        entry: 'tsconfig.build.json',
       },
       vue: {
         preset: 'vue-tsc',
-        routes: {
-          typecheck: 'tsconfig.vue.json',
-          build: 'tsconfig.vue.graph.json',
-        },
+        entry: 'tsconfig.vue.build.json',
       },
     },
   },
@@ -83,7 +77,7 @@ export default defineConfig({
         deny: {
           refs: [
             {
-              path: 'packages/app/src/node/tsconfig.lib.build.json',
+              path: 'packages/app/src/node/tsconfig.lib.dts.json',
               reason: 'client runtime must not depend on the Node runtime',
             },
           ],
@@ -140,15 +134,15 @@ pnpm exec lattice package check --package @acme/core
 
 ## Concepts
 
-### Build graph route
+### Checker entry
 
-For the TypeScript checker, starts at `config.checkers.<name>.routes.build`, usually `tsconfig.graph.json`, and reaches `tsconfig*.build.json` leaves used by `tsc -b` and architecture checks.
+Each checker has one required `config.checkers.<name>.entry`, usually a `tsconfig*.build.json` graph aggregator. `lattice checker build` runs the checker's build execution from that entry when the preset supports it. `lattice checker typecheck` walks the same entry, finds reachable `tsconfig*.dts.json` declaration leaves, and checks their paired local companions.
 
-### Typecheck route
+### Declaration leaf and local companion
 
-For the TypeScript checker, starts at `config.checkers.<name>.routes.typecheck`, usually `tsconfig.json`, and reaches ordinary local `tsconfig*.json` configs used by editors and `tsc --noEmit`.
+Declaration leaves should have strict local companions. For example, `tsconfig.lib.dts.json` pairs with `tsconfig.lib.json`, and `tsconfig.dts.json` pairs with `tsconfig.json`.
 
-Build leaves should have strict local companions. For example, `tsconfig.lib.build.json` should pair with `tsconfig.lib.json`.
+The default `tsconfig.json` is the IDE/typecheck entry for its directory. A single-environment directory should use it as the local leaf; a multi-environment directory should make it a pure aggregator with `files: []` and `references`.
 
 ### Source dependencies and artifact dependencies
 
@@ -166,21 +160,21 @@ Source graph checks do not prove that an installed package works for consumers. 
 lattice [--config lattice.config.mjs] [--mode mode] <command>
 ```
 
-| Command                                          | Description                                                                          |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| `lattice check <pipeline>`                       | Run a named pipeline from `pipelines`.                                               |
-| `lattice graph check`                            | Validate project references and architecture import rules.                           |
-| `lattice proof check`                            | Prove build configs, local typecheck configs, and source coverage stay aligned.      |
-| `lattice paths generate`                         | Generate compatibility source `paths` configs for artifact-facing workspace exports. |
-| `lattice paths apply`                            | Compatibility alias for `paths generate`.                                            |
-| `lattice paths check`                            | Fail when generated path files are stale.                                            |
-| `lattice checker typecheck`                      | Run configured checker `typecheck` routes.                                           |
-| `lattice checker build`                          | Run configured checker `build` routes.                                               |
-| `lattice checker typecheck --concurrency <n>`    | Limit concurrent checker processes.                                                  |
-| `lattice package check`                          | Run configured package output checks.                                                |
-| `lattice package check --package <name>`         | Check one configured package target.                                                 |
-| `lattice package check --tool <tool>`            | Run only `publint`, `attw`, or `boundary`.                                           |
-| `lattice package check --attw-profile <profile>` | Override the ATTW profile: `strict`, `node16`, or `esm-only`.                        |
+| Command                                          | Description                                                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `lattice check <pipeline>`                       | Run a named pipeline from `pipelines`.                                                |
+| `lattice graph check`                            | Validate project references and architecture import rules.                            |
+| `lattice proof check`                            | Prove declaration configs, local typecheck configs, and source coverage stay aligned. |
+| `lattice paths generate`                         | Generate compatibility source `paths` configs for artifact-facing workspace exports.  |
+| `lattice paths apply`                            | Compatibility alias for `paths generate`.                                             |
+| `lattice paths check`                            | Fail when generated path files are stale.                                             |
+| `lattice checker typecheck`                      | Run typecheck targets derived from checker entries.                                   |
+| `lattice checker build`                          | Run build execution for checker entries that support it.                              |
+| `lattice checker typecheck --concurrency <n>`    | Limit concurrent checker processes.                                                   |
+| `lattice package check`                          | Run configured package output checks.                                                 |
+| `lattice package check --package <name>`         | Check one configured package target.                                                  |
+| `lattice package check --tool <tool>`            | Run only `publint`, `attw`, or `boundary`.                                            |
+| `lattice package check --attw-profile <profile>` | Override the ATTW profile: `strict`, `node16`, or `esm-only`.                         |
 
 ## Configuration reference
 
@@ -191,17 +185,11 @@ config: {
   checkers: {
     typescript: {
       preset: 'tsc',
-      routes: {
-        typecheck: 'tsconfig.json',
-        build: 'tsconfig.graph.json',
-      },
+      entry: 'tsconfig.build.json',
     },
     vue: {
       preset: 'vue-tsc',
-      routes: {
-        typecheck: 'tsconfig.vue.json',
-        build: 'tsconfig.vue.graph.json',
-      },
+      entry: 'tsconfig.vue.build.json',
     },
   },
   source: {
@@ -210,7 +198,7 @@ config: {
 }
 ```
 
-`config.checkers` defines active checker routes. Built-in presets can omit `extensions`; if `source.include` is omitted, Lattice derives the source boundary from active checker extensions, then applies `source.exclude`.
+`config.checkers` defines checker entries. Every configured checker must declare a non-empty `entry`. Built-in presets can omit `extensions`; if `source.include` is omitted, Lattice derives the source boundary from configured checker extensions, then applies `source.exclude`.
 
 ### `graph`
 
@@ -221,7 +209,7 @@ graph: {
       deny: {
         refs: [
           {
-            path: 'packages/app/src/node/tsconfig.lib.build.json',
+            path: 'packages/app/src/node/tsconfig.lib.dts.json',
             reason: 'client runtime must stay independent from Node runtime',
           },
         ],
@@ -237,12 +225,12 @@ graph: {
 }
 ```
 
-A build config opts into a rule by adding a `lattice` label:
+A declaration leaf opts into a rule by adding a `lattice` label:
 
 ```jsonc
 {
   "lattice": "runtime-client",
-  "extends": ["./tsconfig.lib.json", "../../tsconfig.graph.base.json"],
+  "extends": ["./tsconfig.json", "../../tsconfig.dts.base.json"],
   "references": [],
 }
 ```
@@ -251,7 +239,7 @@ A build config opts into a rule by adding a `lattice` label:
 
 ```js
 paths: {
-  generatedFileName: 'tsconfig.graph.paths.generated.json',
+  generatedFileName: 'tsconfig.dts.paths.generated.json',
   conditionPriority: ['source', 'development', 'types'],
   artifactDirectories: ['dist', 'build', 'lib', 'esm', 'cjs', 'out'],
 }
@@ -272,7 +260,7 @@ proof: {
 }
 ```
 
-Checker routes cover files validated by TypeScript or framework-aware tools. Allowlist entries are the final fallback after all configured checker routes fail to cover a source file; they should be rare and must include a reason.
+Checker entries cover files validated by TypeScript or framework-aware tools. Allowlist entries are the final fallback after all configured checker entries fail to cover a source file; they should be rare and must include a reason.
 
 ### `packageChecks`
 

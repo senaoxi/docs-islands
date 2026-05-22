@@ -35,10 +35,7 @@ async function createFixture(files: Record<string, string>): Promise<{
         checkers: {
           typescript: {
             preset: 'tsc',
-            routes: {
-              build: 'tsconfig.graph.json',
-              typecheck: 'tsconfig.json',
-            },
+            entry: 'tsconfig.build.json',
           },
         },
       },
@@ -54,8 +51,8 @@ function createPassingFiles(
 ): Record<string, string> {
   return {
     'packages/pkg/src/index.ts': 'export const value = 1;\n',
-    'packages/pkg/tsconfig.lib.build.json': JSON.stringify({
-      extends: './tsconfig.lib.json',
+    'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
+      extends: './tsconfig.json',
       compilerOptions: {
         composite: true,
         declaration: true,
@@ -66,7 +63,7 @@ function createPassingFiles(
         tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
       },
     }),
-    'packages/pkg/tsconfig.lib.json': JSON.stringify({
+    'packages/pkg/tsconfig.json': JSON.stringify({
       compilerOptions: {
         lib: ['ES2023'],
         module: 'ESNext',
@@ -77,14 +74,6 @@ function createPassingFiles(
       },
       include: ['src/**/*.ts'],
     }),
-    'packages/pkg/tsconfig.json': JSON.stringify({
-      files: [],
-      references: [
-        {
-          path: './tsconfig.lib.json',
-        },
-      ],
-    }),
     'tsconfig.json': JSON.stringify({
       files: [],
       references: [
@@ -93,11 +82,11 @@ function createPassingFiles(
         },
       ],
     }),
-    'tsconfig.graph.json': JSON.stringify({
+    'tsconfig.build.json': JSON.stringify({
       files: [],
       references: [
         {
-          path: './packages/pkg/tsconfig.lib.build.json',
+          path: './packages/pkg/tsconfig.lib.dts.json',
         },
       ],
     }),
@@ -105,8 +94,8 @@ function createPassingFiles(
   };
 }
 
-describe('runProofCheck build config semantics', () => {
-  it('accepts build configs without graph-base inheritance when final build semantics are valid', async () => {
+describe('runProofCheck dts config semantics', () => {
+  it('accepts a single-environment dts leaf paired with default tsconfig.json', async () => {
     const fixture = await createFixture(createPassingFiles());
 
     try {
@@ -116,9 +105,130 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports missing strict same-name local tsconfig files', async () => {
+  it('rejects build graph aggregators with source inputs or compilerOptions', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'tsconfig.build.json': JSON.stringify({
+          compilerOptions: {
+            strict: true,
+          },
+          files: [],
+          include: ['packages/pkg/src/**/*.ts'],
+          references: [
+            {
+              path: './packages/pkg/tsconfig.lib.dts.json',
+            },
+          ],
+        }),
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects dts leaves without declaration emit semantics', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
+          extends: './tsconfig.json',
+          compilerOptions: {
+            composite: true,
+            noEmit: false,
+            outDir: './.tsbuild',
+            rootDir: 'src',
+            tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+          },
+        }),
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects multi-environment directories without a default aggregator', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
+          extends: './tsconfig.lib.json',
+          compilerOptions: {
+            composite: true,
+            declaration: true,
+            emitDeclarationOnly: true,
+            noEmit: false,
+            outDir: './.tsbuild',
+            rootDir: 'src',
+            tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+          },
+        }),
+        'packages/pkg/tsconfig.lib.json': JSON.stringify({
+          compilerOptions: {
+            lib: ['ES2023'],
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*.ts'],
+        }),
+        'packages/pkg/tsconfig.test.json': JSON.stringify({
+          compilerOptions: {
+            lib: ['ES2023'],
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*.ts'],
+        }),
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects default tsconfig aggregators with source or compiler settings', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'tsconfig.json': JSON.stringify({
+          extends: './tsconfig.base.json',
+          compilerOptions: {
+            noEmit: true,
+          },
+          files: [],
+          include: ['packages/pkg/src/**/*.ts'],
+          references: [
+            {
+              path: './packages/pkg/tsconfig.json',
+            },
+          ],
+        }),
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports missing strict local tsconfig files', async () => {
     const files = createPassingFiles();
-    delete files['packages/pkg/tsconfig.lib.json'];
+    delete files['packages/pkg/tsconfig.json'];
     const fixture = await createFixture(files);
 
     try {
@@ -128,11 +238,11 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports typecheck compiler option drift from the strict same-name local tsconfig', async () => {
+  it('reports typecheck compiler option drift from the strict local tsconfig', async () => {
     const fixture = await createFixture(
       createPassingFiles({
-        'packages/pkg/tsconfig.lib.build.json': JSON.stringify({
-          extends: './tsconfig.lib.json',
+        'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
+          extends: './tsconfig.json',
           compilerOptions: {
             composite: true,
             lib: ['ES2020'],
@@ -154,11 +264,11 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('accepts build-only compiler option extensions', async () => {
+  it('accepts declaration-only compiler option extensions', async () => {
     const fixture = await createFixture(
       createPassingFiles({
-        'packages/pkg/tsconfig.lib.build.json': JSON.stringify({
-          extends: './tsconfig.lib.json',
+        'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
+          extends: './tsconfig.json',
           compilerOptions: {
             composite: true,
             declaration: true,
@@ -182,12 +292,12 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports build and local file set drift', async () => {
+  it('reports dts and local file set drift', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/src/extra.ts': 'export const extra = 2;\n',
-        'packages/pkg/tsconfig.lib.build.json': JSON.stringify({
-          extends: './tsconfig.lib.json',
+        'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
+          extends: './tsconfig.json',
           compilerOptions: {
             composite: true,
             noEmit: false,
@@ -209,11 +319,13 @@ describe('runProofCheck build config semantics', () => {
   it('ignores paths and baseUrl drift because module resolution is checked by graph validation', async () => {
     const fixture = await createFixture(
       createPassingFiles({
-        'packages/pkg/tsconfig.lib.build.json': JSON.stringify({
-          extends: './tsconfig.lib.json',
+        'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
+          extends: './tsconfig.json',
           compilerOptions: {
             baseUrl: '.',
             composite: true,
+            declaration: true,
+            emitDeclarationOnly: true,
             noEmit: false,
             outDir: './.tsbuild',
             paths: {
@@ -232,14 +344,14 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports build configs referenced from the IDE/typecheck route', async () => {
+  it('rejects declaration configs referenced from default typecheck aggregators', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/tsconfig.json': JSON.stringify({
           files: [],
           references: [
             {
-              path: './tsconfig.lib.build.json',
+              path: './tsconfig.lib.dts.json',
             },
           ],
         }),
@@ -253,12 +365,18 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports companion local configs missing from the IDE/typecheck route', async () => {
+  it('rejects single-environment directories that keep a scoped local config', async () => {
     const fixture = await createFixture(
       createPassingFiles({
-        'packages/pkg/tsconfig.json': JSON.stringify({
-          files: [],
-          references: [],
+        'packages/pkg/tsconfig.lib.json': JSON.stringify({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*.ts'],
         }),
       }),
     );
@@ -282,17 +400,11 @@ describe('runProofCheck build config semantics', () => {
             checkers: {
               primary: {
                 preset: 'tsc',
-                routes: {
-                  build: 'tsconfig.graph.json',
-                  typecheck: 'tsconfig.json',
-                },
+                entry: 'tsconfig.build.json',
               },
               secondary: {
                 preset: 'tsc',
-                routes: {
-                  build: 'tsconfig.graph.json',
-                  typecheck: 'tsconfig.json',
-                },
+                entry: 'tsconfig.build.json',
               },
             },
           },
@@ -303,13 +415,15 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('accepts configured checker routes outside the root graph route', async () => {
+  it('accepts configured checker entries outside the root graph entry', async () => {
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
-      'packages/pkg/tsconfig.test.build.json': JSON.stringify({
+      'packages/pkg/tsconfig.test.dts.json': JSON.stringify({
         extends: './tsconfig.test.json',
         compilerOptions: {
           composite: true,
+          declaration: true,
+          emitDeclarationOnly: true,
           noEmit: false,
           outDir: './.tsbuild',
           tsBuildInfoFile: './.tsbuild/test.tsbuildinfo',
@@ -325,8 +439,19 @@ describe('runProofCheck build config semantics', () => {
         },
         include: ['src/**/*.ts'],
       }),
-      'packages/pkg/tsconfig.vue.json': JSON.stringify({
+      'packages/pkg/tsconfig.sfc.json': JSON.stringify({
         extends: './tsconfig.test.json',
+      }),
+      'packages/pkg/tsconfig.sfc.dts.json': JSON.stringify({
+        extends: './tsconfig.sfc.json',
+        compilerOptions: {
+          composite: true,
+          declaration: true,
+          emitDeclarationOnly: true,
+          noEmit: false,
+          outDir: './.tsbuild',
+          tsBuildInfoFile: './.tsbuild/vue.tsbuildinfo',
+        },
       }),
       'packages/pkg/tsconfig.json': JSON.stringify({
         files: [],
@@ -344,11 +469,11 @@ describe('runProofCheck build config semantics', () => {
           },
         ],
       }),
-      'tsconfig.graph.json': JSON.stringify({
+      'tsconfig.build.json': JSON.stringify({
         files: [],
         references: [
           {
-            path: './packages/pkg/tsconfig.test.build.json',
+            path: './packages/pkg/tsconfig.test.dts.json',
           },
         ],
       }),
@@ -363,10 +488,8 @@ describe('runProofCheck build config semantics', () => {
             checkers: {
               ...fixture.config.config?.checkers,
               vue: {
+                entry: 'packages/pkg/tsconfig.sfc.dts.json',
                 preset: 'vue-tsc',
-                routes: {
-                  typecheck: 'packages/pkg/tsconfig.vue.json',
-                },
               },
             },
           },
@@ -377,7 +500,7 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports missing configured checker route configs', async () => {
+  it('reports missing configured checker entry configs', async () => {
     const fixture = await createFixture(createPassingFiles());
 
     try {
@@ -389,10 +512,8 @@ describe('runProofCheck build config semantics', () => {
             checkers: {
               ...fixture.config.config?.checkers,
               vue: {
+                entry: 'packages/pkg/tsconfig.missing.dts.json',
                 preset: 'vue-tsc',
-                routes: {
-                  typecheck: 'packages/pkg/tsconfig.missing.json',
-                },
               },
             },
           },
@@ -403,7 +524,7 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('reports source files outside checker routes and allowlist coverage', async () => {
+  it('reports source files outside checker entries and allowlist coverage', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/fixtures/uncovered.ts': 'export const uncovered = 1;\n',
@@ -482,7 +603,8 @@ describe('runProofCheck build config semantics', () => {
             allowlist: [
               {
                 file: 'packages/pkg/fixtures/allowed.ts',
-                reason: 'fixture intentionally lives outside TypeScript routes',
+                reason:
+                  'fixture intentionally lives outside TypeScript entries',
               },
             ],
           },
@@ -493,12 +615,23 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('accepts source files covered by a checker route', async () => {
+  it('accepts source files covered by a checker entry', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tools/covered.ts': 'export const covered = 1;\n',
         'tools/covered.vue':
           '<script setup lang="ts">const value = 1;</script>\n',
+        'tools/tsconfig.dts.json': JSON.stringify({
+          extends: './tsconfig.json',
+          compilerOptions: {
+            composite: true,
+            declaration: true,
+            emitDeclarationOnly: true,
+            noEmit: false,
+            outDir: './.tsbuild',
+            tsBuildInfoFile: './.tsbuild/build.tsbuildinfo',
+          },
+        }),
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
             module: 'ESNext',
@@ -521,10 +654,8 @@ describe('runProofCheck build config semantics', () => {
             checkers: {
               ...fixture.config.config?.checkers,
               vue: {
+                entry: 'tools/tsconfig.dts.json',
                 preset: 'vue-tsc',
-                routes: {
-                  typecheck: 'tools/tsconfig.json',
-                },
               },
             },
           },
@@ -562,17 +693,9 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('uses the shared typecheck root config', async () => {
+  it('does not require a shared typecheck root config', async () => {
     const fixture = await createFixture(
       createPassingFiles({
-        'tsconfig.check.json': JSON.stringify({
-          files: [],
-          references: [
-            {
-              path: './packages/pkg/tsconfig.json',
-            },
-          ],
-        }),
         'tsconfig.json': JSON.stringify({
           files: [],
           references: [],
@@ -581,23 +704,7 @@ describe('runProofCheck build config semantics', () => {
     );
 
     try {
-      await expect(
-        runProofCheck({
-          ...fixture.config,
-          config: {
-            ...fixture.config.config,
-            checkers: {
-              typescript: {
-                preset: 'tsc',
-                routes: {
-                  build: 'tsconfig.graph.json',
-                  typecheck: 'tsconfig.check.json',
-                },
-              },
-            },
-          },
-        }),
-      ).resolves.toBe(true);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -606,15 +713,15 @@ describe('runProofCheck build config semantics', () => {
   it('uses the shared graph root config', async () => {
     const fixture = await createFixture(
       createPassingFiles({
-        'tsconfig.custom.graph.json': JSON.stringify({
+        'tsconfig.custom.build.json': JSON.stringify({
           files: [],
           references: [
             {
-              path: './packages/pkg/tsconfig.lib.build.json',
+              path: './packages/pkg/tsconfig.lib.dts.json',
             },
           ],
         }),
-        'tsconfig.graph.json': JSON.stringify({
+        'tsconfig.build.json': JSON.stringify({
           files: [],
           references: [],
         }),
@@ -630,10 +737,7 @@ describe('runProofCheck build config semantics', () => {
             checkers: {
               typescript: {
                 preset: 'tsc',
-                routes: {
-                  build: 'tsconfig.custom.graph.json',
-                  typecheck: 'tsconfig.json',
-                },
+                entry: 'tsconfig.custom.build.json',
               },
             },
           },
@@ -644,7 +748,7 @@ describe('runProofCheck build config semantics', () => {
     }
   });
 
-  it('accepts a direct graph-capable build route', async () => {
+  it('accepts a direct graph-capable checker entry', async () => {
     const fixture = await createFixture(createPassingFiles());
 
     try {
@@ -656,10 +760,7 @@ describe('runProofCheck build config semantics', () => {
             checkers: {
               typescript: {
                 preset: 'tsc',
-                routes: {
-                  build: 'packages/pkg/tsconfig.lib.build.json',
-                  typecheck: 'tsconfig.json',
-                },
+                entry: 'packages/pkg/tsconfig.lib.dts.json',
               },
             },
           },

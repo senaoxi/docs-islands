@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Tools declaration leaf for VitePress build/config files; runtime source stays in src/* declaration leaves.
+  "extends": ["./tsconfig.tools.json", "../../tsconfig.dts.base.json"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./.tsbuild",
+    "tsBuildInfoFile": "./.tsbuild/tools.tsbuildinfo"
+  },
+  "references": [
+    {
+      "path": "../../packages/logger/tsconfig.lib.dts.json"
+    }
+  ]
+}

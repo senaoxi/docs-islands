@@ -7,8 +7,13 @@ import { normalizeAbsolutePath, toRelativePath } from './utils/path';
 
 export type JsonObject = Record<string, unknown>;
 
-const buildConfigFilePattern = /^tsconfig(?:\..+)?\.build\.json$/u;
-const graphConfigFilePattern = /^tsconfig(?:\..+)?\.graph\.json$/u;
+const dtsConfigFilePattern = /^tsconfig(?:\..+)?\.dts\.json$/u;
+const buildGraphConfigFilePattern = /^tsconfig(?:\..+)?\.build\.json$/u;
+const deprecatedGraphConfigFilePattern = /^tsconfig(?:\..+)?\.graph\.json$/u;
+const generatedConfigFilePattern =
+  /^tsconfig(?:\..+)?\.paths\.generated\.json$/u;
+const baseConfigFilePattern = /^tsconfig(?:\..+)?\.base\.json$/u;
+const checkConfigFilePattern = /^tsconfig(?:\..+)?\.check\.json$/u;
 const tsconfigFilePattern = /^tsconfig(?:\..+)?\.json$/u;
 
 interface ReferencePathInfo {
@@ -291,12 +296,48 @@ function hasOwnTypecheckInputs(configObject: JsonObject): boolean {
   );
 }
 
-export function isBuildConfigPath(configPath: string): boolean {
-  return buildConfigFilePattern.test(path.basename(configPath));
+export function isDtsConfigPath(configPath: string): boolean {
+  return dtsConfigFilePattern.test(path.basename(configPath));
 }
 
-export function isGraphConfigPath(configPath: string): boolean {
-  return graphConfigFilePattern.test(path.basename(configPath));
+export function getDtsCompanionConfigPath(dtsConfigPath: string): string {
+  const directory = path.dirname(dtsConfigPath);
+  const fileName = path.basename(dtsConfigPath);
+  const companionFileName =
+    fileName === 'tsconfig.dts.json'
+      ? 'tsconfig.json'
+      : fileName.replace(/\.dts\.json$/u, '.json');
+  const scopedCompanionPath = normalizeAbsolutePath(
+    path.join(directory, companionFileName),
+  );
+
+  if (
+    companionFileName === 'tsconfig.json' ||
+    existsSync(scopedCompanionPath)
+  ) {
+    return scopedCompanionPath;
+  }
+
+  return normalizeAbsolutePath(path.join(directory, 'tsconfig.json'));
+}
+
+export function isBuildGraphConfigPath(configPath: string): boolean {
+  return buildGraphConfigFilePattern.test(path.basename(configPath));
+}
+
+export function isDeprecatedGraphConfigPath(configPath: string): boolean {
+  return deprecatedGraphConfigFilePattern.test(path.basename(configPath));
+}
+
+function isReservedTypeScriptConfigFile(fileName: string): boolean {
+  return (
+    dtsConfigFilePattern.test(fileName) ||
+    buildGraphConfigFilePattern.test(fileName) ||
+    deprecatedGraphConfigFilePattern.test(fileName) ||
+    generatedConfigFilePattern.test(fileName) ||
+    baseConfigFilePattern.test(fileName) ||
+    checkConfigFilePattern.test(fileName)
+  );
 }
 
 export function isOrdinaryTypecheckConfigPath(configPath: string): boolean {
@@ -304,8 +345,7 @@ export function isOrdinaryTypecheckConfigPath(configPath: string): boolean {
 
   return (
     tsconfigFilePattern.test(fileName) &&
-    !buildConfigFilePattern.test(fileName) &&
-    !graphConfigFilePattern.test(fileName)
+    !isReservedTypeScriptConfigFile(fileName)
   );
 }
 
@@ -337,9 +377,9 @@ export function collectTypecheckTargetProjectPaths(
     reportedCycles.add(cycleKey);
     problems.push(
       [
-        'Circular reference in typecheck route:',
+        'Circular reference in ordinary tsconfig references:',
         `  cycle: ${cyclePaths.map(formatConfigPath).join(' -> ')}`,
-        '  reason: ordinary tsconfig references used by lattice checker typecheck must form an acyclic route.',
+        '  reason: ordinary tsconfig references used by lattice checker typecheck must form an acyclic graph.',
         '  fix: remove one reference from the cycle, or move shared options into extends instead of references.',
       ].join('\n'),
     );
@@ -358,7 +398,7 @@ export function collectTypecheckTargetProjectPaths(
     if (!existsSync(projectPath)) {
       problems.push(
         [
-          'Typecheck route references a missing tsconfig:',
+          'Ordinary tsconfig reference graph references a missing tsconfig:',
           `  config: ${formatConfigPath(projectPath)}`,
         ].join('\n'),
       );
@@ -368,9 +408,9 @@ export function collectTypecheckTargetProjectPaths(
     if (!isOrdinaryTypecheckConfigPath(projectPath)) {
       problems.push(
         [
-          'Invalid config in IDE/typecheck route:',
+          'Invalid config in ordinary tsconfig reference graph:',
           `  config: ${formatConfigPath(projectPath)}`,
-          '  reason: tsconfig.json may only reference ordinary tsconfig*.json files; tsconfig*.graph.json and tsconfig*.build.json belong to the build graph route.',
+          '  reason: ordinary tsconfig references must stay on ordinary tsconfig*.json files; tsconfig*.build.json graph aggregators and tsconfig*.dts.json declaration leaves belong to checker entries.',
         ].join('\n'),
       );
       return;
@@ -399,15 +439,15 @@ export function collectTypecheckTargetProjectPaths(
 
     for (const referencePath of referencePaths) {
       if (
-        isBuildConfigPath(referencePath) ||
-        isGraphConfigPath(referencePath)
+        isBuildGraphConfigPath(referencePath) ||
+        isDtsConfigPath(referencePath)
       ) {
         problems.push(
           [
-            'Invalid reference in IDE/typecheck route:',
+            'Invalid reference in ordinary tsconfig reference graph:',
             `  from: ${formatConfigPath(projectPath)}`,
             `  to: ${formatConfigPath(referencePath)}`,
-            '  reason: IDE/typecheck route references must stay on ordinary tsconfig*.json files; build graph configs are checked through tsconfig*.graph.json.',
+            '  reason: ordinary tsconfig references must stay on ordinary tsconfig*.json files; build graph configs and declaration leaves are checked through checker entries.',
           ].join('\n'),
         );
         continue;
@@ -416,7 +456,7 @@ export function collectTypecheckTargetProjectPaths(
       if (!isOrdinaryTypecheckConfigPath(referencePath)) {
         problems.push(
           [
-            'Invalid reference in IDE/typecheck route:',
+            'Invalid reference in ordinary tsconfig reference graph:',
             `  from: ${formatConfigPath(projectPath)}`,
             `  to: ${formatConfigPath(referencePath)}`,
             '  reason: referenced config must be an ordinary tsconfig*.json file.',
@@ -439,7 +479,7 @@ export function collectTypecheckTargetProjectPaths(
   if (problems.length === 0 && targetProjectPaths.length === 0) {
     problems.push(
       [
-        'Typecheck route has no tsconfig targets:',
+        'Ordinary tsconfig reference graph has no tsconfig targets:',
         `  root: ${toRelativePath(options.rootDir, rootConfigPath)}`,
         '  reason: lattice checker typecheck runs ordinary tsconfig*.json files without references, plus configs that have references and their own source inputs.',
       ].join('\n'),
@@ -475,7 +515,29 @@ export function collectGraphProjectRouteFromRoot(options: {
 
   problems.push(...rootReferences.problems);
 
-  if (isBuildConfigPath(rootGraphConfigPath)) {
+  if (isDeprecatedGraphConfigPath(rootGraphConfigPath)) {
+    problems.push(
+      [
+        'Checker entry uses a deprecated tsconfig name:',
+        `  config: ${formatConfigPath(rootGraphConfigPath)}`,
+        '  reason: tsconfig*.graph.json has been renamed to tsconfig*.build.json for declaration build graph aggregators.',
+        '  fix: rename the checker entry to tsconfig*.build.json.',
+      ].join('\n'),
+    );
+  } else if (
+    !isBuildGraphConfigPath(rootGraphConfigPath) &&
+    !isDtsConfigPath(rootGraphConfigPath)
+  ) {
+    problems.push(
+      [
+        'Invalid checker entry config:',
+        `  config: ${formatConfigPath(rootGraphConfigPath)}`,
+        '  reason: checker entries should point to a tsconfig*.build.json graph aggregator or a direct tsconfig*.dts.json declaration leaf.',
+      ].join('\n'),
+    );
+  }
+
+  if (isDtsConfigPath(rootGraphConfigPath)) {
     seen.add(rootGraphConfigPath);
     orderedProjects.push(rootGraphConfigPath);
   }
@@ -489,14 +551,41 @@ export function collectGraphProjectRouteFromRoot(options: {
       continue;
     }
 
-    if (!existsSync(projectPath)) {
+    if (isDeprecatedGraphConfigPath(projectPath)) {
       problems.push(
         [
-          'Graph route references a missing tsconfig:',
+          'Deprecated checker entry reference:',
           `  from: ${formatConfigPath(referrerPath)}`,
           `  reference: ${rawReferencePath}`,
           `  resolved: ${formatConfigPath(projectPath)}`,
-          '  reason: every project reference reachable from a checker graph route must point to an existing tsconfig file or directory with tsconfig.json.',
+          '  reason: tsconfig*.graph.json has been renamed to tsconfig*.build.json for declaration build graph aggregators.',
+          '  fix: rename the referenced config to tsconfig*.build.json and update this reference.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    if (!existsSync(projectPath)) {
+      problems.push(
+        [
+          'Checker entry references a missing tsconfig:',
+          `  from: ${formatConfigPath(referrerPath)}`,
+          `  reference: ${rawReferencePath}`,
+          `  resolved: ${formatConfigPath(projectPath)}`,
+          '  reason: every project reference reachable from a checker entry must point to an existing tsconfig file or directory with tsconfig.json.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    if (!isBuildGraphConfigPath(projectPath) && !isDtsConfigPath(projectPath)) {
+      problems.push(
+        [
+          'Invalid checker entry reference:',
+          `  from: ${formatConfigPath(referrerPath)}`,
+          `  reference: ${rawReferencePath}`,
+          `  resolved: ${formatConfigPath(projectPath)}`,
+          '  reason: checker entries may only reach tsconfig*.build.json graph aggregators and tsconfig*.dts.json declaration leaves.',
         ].join('\n'),
       );
       continue;
@@ -541,13 +630,95 @@ export function collectGraphProjectRoutes(
 
   for (const checker of getActiveCheckers(config)) {
     const adapter = getCheckerAdapter(checker.preset);
-    const route = checker.routes.build;
 
-    if (!adapter?.graph || !route) {
+    if (!adapter?.graph) {
       continue;
     }
 
-    const rootConfigPath = resolveProjectConfigPath(config.rootDir, route);
+    const rootConfigPath = resolveProjectConfigPath(
+      config.rootDir,
+      checker.entry,
+    );
+
+    if (isDeprecatedGraphConfigPath(rootConfigPath)) {
+      problems.push(
+        [
+          'Checker graph entry uses a deprecated tsconfig name:',
+          `  checker: ${checker.name}`,
+          `  config: ${toRelativePath(config.rootDir, rootConfigPath)}`,
+          '  reason: tsconfig*.graph.json has been renamed to tsconfig*.build.json for declaration build graph aggregators.',
+          '  fix: rename the checker entry to tsconfig*.build.json.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    if (!existsSync(rootConfigPath)) {
+      problems.push(
+        [
+          'Checker graph entry references a missing tsconfig:',
+          `  checker: ${checker.name}`,
+          `  config: ${toRelativePath(config.rootDir, rootConfigPath)}`,
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    const routeCollection = collectGraphProjectRouteFromRoot({
+      rootConfigPath,
+      rootDir: config.rootDir,
+    });
+
+    problems.push(...routeCollection.problems);
+    routes.push({
+      checkerName: checker.name,
+      projectPaths: routeCollection.projectPaths,
+      rootConfigPath,
+    });
+  }
+
+  return {
+    problems,
+    routes,
+  };
+}
+
+export function collectCheckerEntryProjectRoutes(
+  config: ResolvedLatticeConfig,
+): CollectCheckerGraphProjectRoutesResult {
+  const routes: CheckerGraphProjectRoute[] = [];
+  const problems: string[] = [];
+
+  for (const checker of getActiveCheckers(config)) {
+    const rootConfigPath = resolveProjectConfigPath(
+      config.rootDir,
+      checker.entry,
+    );
+
+    if (isDeprecatedGraphConfigPath(rootConfigPath)) {
+      problems.push(
+        [
+          'Checker entry uses a deprecated tsconfig name:',
+          `  checker: ${checker.name}`,
+          `  config: ${toRelativePath(config.rootDir, rootConfigPath)}`,
+          '  reason: tsconfig*.graph.json has been renamed to tsconfig*.build.json for declaration build graph aggregators.',
+          '  fix: rename the checker entry to tsconfig*.build.json.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    if (!existsSync(rootConfigPath)) {
+      problems.push(
+        [
+          'Checker entry references a missing tsconfig:',
+          `  checker: ${checker.name}`,
+          `  config: ${toRelativePath(config.rootDir, rootConfigPath)}`,
+        ].join('\n'),
+      );
+      continue;
+    }
+
     const routeCollection = collectGraphProjectRouteFromRoot({
       rootConfigPath,
       rootDir: config.rootDir,

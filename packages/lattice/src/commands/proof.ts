@@ -3,25 +3,28 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import ts from 'typescript';
-import { getCheckerAdapter } from '../checkers';
 import {
   getActiveCheckerExtensions,
   getActiveCheckers,
-  type CheckerRouteKind,
   type ResolvedCheckerConfig,
   type ResolvedLatticeConfig,
 } from '../config';
 import type { LatticeFlowReporter } from '../flow';
 import { ProofLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
+  collectCheckerEntryProjectRoutes,
   collectGraphProjectRouteFromRoot,
   collectGraphProjectRoutes,
-  collectTypecheckTargetProjectPaths,
   createExtensionPattern,
   createFormatHost,
+  getDtsCompanionConfigPath,
+  isDtsConfigPath,
+  isOrdinaryTypecheckConfigPath,
   parseProjectFileNames,
   parseProjectFileNamesForExtensions,
+  readJsonConfig,
   resolveProjectConfigPath,
+  resolveReferencePath,
 } from '../tsconfig';
 import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
@@ -30,7 +33,6 @@ interface CheckerCoverageTarget {
   configPath: string;
   coverageConfigPaths: string[];
   label: string;
-  routeKind: CheckerRouteKind;
 }
 
 interface CheckerCoverageTargetCollection {
@@ -66,7 +68,10 @@ interface ParsedConfig {
   options: ts.CompilerOptions;
 }
 
-const buildConfigPattern = '**/tsconfig*.build.json';
+const dtsConfigPattern = '**/tsconfig*.dts.json';
+const buildGraphConfigPattern = '**/tsconfig*.build.json';
+const tsconfigJsonPattern = '**/tsconfig.json';
+const tsconfigFilePattern = '**/tsconfig*.json';
 const defaultSourceExclude = [
   'node_modules',
   'dist',
@@ -112,10 +117,11 @@ const ignoredSemanticCompilerOptions = new Set([
   'tsBuildInfoFile',
 ]);
 
-async function collectBuildConfigPaths(
+async function collectTsconfigPaths(
   config: ResolvedLatticeConfig,
+  pattern: string,
 ): Promise<string[]> {
-  const paths = await glob(buildConfigPattern, {
+  const paths = await glob(pattern, {
     cwd: config.rootDir,
     absolute: true,
     ignore: [
@@ -128,6 +134,32 @@ async function collectBuildConfigPaths(
   });
 
   return paths.map(normalizeAbsolutePath).sort();
+}
+
+async function collectDtsConfigPaths(
+  config: ResolvedLatticeConfig,
+): Promise<string[]> {
+  return collectTsconfigPaths(config, dtsConfigPattern);
+}
+
+async function collectBuildGraphConfigPaths(
+  config: ResolvedLatticeConfig,
+): Promise<string[]> {
+  return collectTsconfigPaths(config, buildGraphConfigPattern);
+}
+
+async function collectDefaultTsconfigPaths(
+  config: ResolvedLatticeConfig,
+): Promise<string[]> {
+  return collectTsconfigPaths(config, tsconfigJsonPattern);
+}
+
+async function collectOrdinaryTypecheckConfigPaths(
+  config: ResolvedLatticeConfig,
+): Promise<string[]> {
+  const paths = await collectTsconfigPaths(config, tsconfigFilePattern);
+
+  return paths.filter(isOrdinaryTypecheckConfigPath);
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -219,59 +251,31 @@ function collectCheckerCoverageTargets(
   const targets: CheckerCoverageTarget[] = [];
 
   for (const checker of getActiveCheckers(config)) {
-    for (const routeKind of ['typecheck', 'build'] as const) {
-      const route = checker.routes[routeKind];
+    const configPath = resolveProjectConfigPath(config.rootDir, checker.entry);
 
-      if (!route) {
-        continue;
-      }
-
-      const configPath = resolveProjectConfigPath(config.rootDir, route);
-
-      if (!existsSync(configPath)) {
-        problems.push(
-          [
-            'Checker proof route references a missing tsconfig:',
-            `  checker: ${checker.name}`,
-            `  route: ${routeKind}`,
-            `  config: ${toRelativePath(config.rootDir, configPath)}`,
-          ].join('\n'),
-        );
-        continue;
-      }
-
-      const adapter = getCheckerAdapter(checker.preset);
-      let coverageConfigPaths = [configPath];
-
-      if (
-        routeKind === 'typecheck' &&
-        adapter?.typecheckDiscovery === 'references'
-      ) {
-        const routeCollection = collectTypecheckTargetProjectPaths({
-          rootConfigPath: configPath,
-          rootDir: config.rootDir,
-        });
-
-        problems.push(...routeCollection.problems);
-        coverageConfigPaths = routeCollection.targetProjectPaths;
-      } else if (routeKind === 'build' && adapter?.graph) {
-        const routeCollection = collectGraphProjectRouteFromRoot({
-          rootConfigPath: configPath,
-          rootDir: config.rootDir,
-        });
-
-        problems.push(...routeCollection.problems);
-        coverageConfigPaths = routeCollection.projectPaths;
-      }
-
-      targets.push({
-        checker,
-        configPath,
-        coverageConfigPaths,
-        label: `${checker.name}:${routeKind}`,
-        routeKind,
-      });
+    if (!existsSync(configPath)) {
+      problems.push(
+        [
+          'Checker proof entry references a missing tsconfig:',
+          `  checker: ${checker.name}`,
+          `  config: ${toRelativePath(config.rootDir, configPath)}`,
+        ].join('\n'),
+      );
+      continue;
     }
+
+    const routeCollection = collectGraphProjectRouteFromRoot({
+      rootConfigPath: configPath,
+      rootDir: config.rootDir,
+    });
+
+    problems.push(...routeCollection.problems);
+    targets.push({
+      checker,
+      configPath,
+      coverageConfigPaths: routeCollection.projectPaths,
+      label: `${checker.name}:entry`,
+    });
   }
 
   return {
@@ -450,15 +454,6 @@ function collectCoverage(options: {
   return coverageByFile;
 }
 
-function getStrictLocalConfigPath(buildConfigPath: string): string {
-  return normalizeAbsolutePath(
-    path.join(
-      path.dirname(buildConfigPath),
-      path.basename(buildConfigPath).replace(/\.build\.json$/u, '.json'),
-    ),
-  );
-}
-
 function parseConfig(
   config: ResolvedLatticeConfig,
   configPath: string,
@@ -519,40 +514,40 @@ function normalizeCompilerOptionValue(value: unknown): unknown {
   return value;
 }
 
-function addBuildConfigSemanticProblems(options: {
-  buildConfigPath: string;
-  buildConfig: ParsedConfig;
+function addDtsConfigSemanticProblems(options: {
+  dtsConfigPath: string;
+  dtsConfig: ParsedConfig;
   config: ResolvedLatticeConfig;
   localConfigPath: string;
   localConfig: ParsedConfig;
   problems: string[];
 }): void {
-  const buildFileNames = new Set(options.buildConfig.fileNames);
+  const dtsFileNames = new Set(options.dtsConfig.fileNames);
   const localFileNames = new Set(options.localConfig.fileNames);
-  const onlyInBuild = options.buildConfig.fileNames.filter(
+  const onlyInDts = options.dtsConfig.fileNames.filter(
     (fileName) => !localFileNames.has(fileName),
   );
   const onlyInLocal = options.localConfig.fileNames.filter(
-    (fileName) => !buildFileNames.has(fileName),
+    (fileName) => !dtsFileNames.has(fileName),
   );
 
-  if (onlyInBuild.length > 0 || onlyInLocal.length > 0) {
+  if (onlyInDts.length > 0 || onlyInLocal.length > 0) {
     options.problems.push(
       [
-        'Build config file set does not match its strict same-name local tsconfig:',
-        `  config: ${toRelativePath(options.config.rootDir, options.buildConfigPath)}`,
+        'DTS config file set does not match its strict local tsconfig:',
+        `  config: ${toRelativePath(options.config.rootDir, options.dtsConfigPath)}`,
         `  local: ${toRelativePath(options.config.rootDir, options.localConfigPath)}`,
-        ...(onlyInBuild.length > 0
+        ...(onlyInDts.length > 0
           ? [
-              '  only in build config:',
-              ...onlyInBuild
+              '  only in dts config:',
+              ...onlyInDts
                 .slice(0, 10)
                 .map(
                   (fileName) =>
                     `    - ${toRelativePath(options.config.rootDir, fileName)}`,
                 ),
-              onlyInBuild.length > 10
-                ? `    ... ${onlyInBuild.length - 10} more`
+              onlyInDts.length > 10
+                ? `    ... ${onlyInDts.length - 10} more`
                 : '',
             ]
           : []),
@@ -578,7 +573,7 @@ function addBuildConfigSemanticProblems(options: {
 
   const optionNames = new Set([
     ...Object.keys(options.localConfig.options),
-    ...Object.keys(options.buildConfig.options),
+    ...Object.keys(options.dtsConfig.options),
   ]);
 
   for (const optionName of [...optionNames].sort()) {
@@ -589,49 +584,49 @@ function addBuildConfigSemanticProblems(options: {
     const localValue = normalizeCompilerOptionValue(
       (options.localConfig.options as Record<string, unknown>)[optionName],
     );
-    const buildValue = normalizeCompilerOptionValue(
-      (options.buildConfig.options as Record<string, unknown>)[optionName],
+    const dtsValue = normalizeCompilerOptionValue(
+      (options.dtsConfig.options as Record<string, unknown>)[optionName],
     );
 
-    if (formatJsonValue(localValue) === formatJsonValue(buildValue)) {
+    if (formatJsonValue(localValue) === formatJsonValue(dtsValue)) {
       continue;
     }
 
     options.problems.push(
       [
-        'Build config overrides a typecheck compiler option from its strict same-name local tsconfig:',
-        `  config: ${toRelativePath(options.config.rootDir, options.buildConfigPath)}`,
+        'DTS config overrides a typecheck compiler option from its strict local tsconfig:',
+        `  config: ${toRelativePath(options.config.rootDir, options.dtsConfigPath)}`,
         `  local: ${toRelativePath(options.config.rootDir, options.localConfigPath)}`,
         `  option: compilerOptions.${optionName}`,
         `  local: ${formatJsonValue(localValue)}`,
-        `  build: ${formatJsonValue(buildValue)}`,
+        `  dts: ${formatJsonValue(dtsValue)}`,
       ].join('\n'),
     );
   }
 }
 
-function addBuildConfigProblems(options: {
+function addDtsConfigProblems(options: {
   config: ResolvedLatticeConfig;
   graphProjectPaths: Set<string>;
   problems: string[];
-  buildConfigPaths: string[];
+  dtsConfigPaths: string[];
 }): void {
-  for (const configPath of options.buildConfigPaths) {
+  for (const configPath of options.dtsConfigPaths) {
     if (!options.graphProjectPaths.has(configPath)) {
       options.problems.push(
         [
-          'Build config is not reachable from any graph-capable checker build route:',
+          'DTS config is not reachable from any checker entry:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
         ].join('\n'),
       );
     }
 
-    const localConfigPath = getStrictLocalConfigPath(configPath);
+    const localConfigPath = getDtsCompanionConfigPath(configPath);
 
     if (!existsSync(localConfigPath)) {
       options.problems.push(
         [
-          'Build config is missing its strict same-name local tsconfig:',
+          'DTS config is missing its strict local tsconfig:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
           `  expected: ${toRelativePath(options.config.rootDir, localConfigPath)}`,
         ].join('\n'),
@@ -639,37 +634,248 @@ function addBuildConfigProblems(options: {
       continue;
     }
 
-    const buildConfig = parseConfig(options.config, configPath);
+    const dtsConfig = parseConfig(options.config, configPath);
     const localConfig = parseConfig(options.config, localConfigPath);
 
-    if (buildConfig.options.composite !== true) {
+    if (dtsConfig.options.composite !== true) {
       options.problems.push(
         [
-          'Build config is not valid for tsc -b:',
+          'DTS config is not valid for tsc -b:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
           '  reason: final compilerOptions.composite must be true.',
         ].join('\n'),
       );
     }
 
-    if (buildConfig.options.noEmit === true) {
+    if (dtsConfig.options.noEmit === true) {
       options.problems.push(
         [
-          'Build config is not valid for tsc -b:',
+          'DTS config is not valid for tsc -b:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
           '  reason: final compilerOptions.noEmit must not be true.',
         ].join('\n'),
       );
     }
 
-    addBuildConfigSemanticProblems({
-      buildConfig,
-      buildConfigPath: configPath,
+    if (dtsConfig.options.declaration !== true) {
+      options.problems.push(
+        [
+          'DTS config is not valid for declaration emit:',
+          `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
+          '  reason: final compilerOptions.declaration must be true.',
+        ].join('\n'),
+      );
+    }
+
+    if (dtsConfig.options.emitDeclarationOnly !== true) {
+      options.problems.push(
+        [
+          'DTS config is not valid for declaration emit:',
+          `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
+          '  reason: final compilerOptions.emitDeclarationOnly must be true.',
+        ].join('\n'),
+      );
+    }
+
+    addDtsConfigSemanticProblems({
       config: options.config,
+      dtsConfig,
+      dtsConfigPath: configPath,
       localConfig,
       localConfigPath,
       problems: options.problems,
     });
+  }
+}
+
+function isEmptyArray(value: unknown): boolean {
+  return Array.isArray(value) && value.length === 0;
+}
+
+function formatConfigRole(role: 'build graph' | 'tsconfig.json'): string {
+  return role === 'build graph'
+    ? 'Build graph config'
+    : 'Default tsconfig.json';
+}
+
+function addPureAggregatorProblems(options: {
+  config: ResolvedLatticeConfig;
+  configObject: Record<string, unknown>;
+  configPath: string;
+  problems: string[];
+  role: 'build graph' | 'tsconfig.json';
+}): void {
+  const roleLabel = formatConfigRole(options.role);
+  const allowedKeys = new Set(['$schema', 'files', 'references']);
+  const extraKeys = Object.keys(options.configObject).filter(
+    (key) => !allowedKeys.has(key),
+  );
+
+  if (!Object.hasOwn(options.configObject, 'files')) {
+    options.problems.push(
+      [
+        `${roleLabel} is not a pure aggregator:`,
+        `  config: ${toRelativePath(options.config.rootDir, options.configPath)}`,
+        '  field: files',
+        '  reason: configs with project references must declare files: [].',
+      ].join('\n'),
+    );
+  } else if (!isEmptyArray(options.configObject.files)) {
+    options.problems.push(
+      [
+        `${roleLabel} is not a pure aggregator:`,
+        `  config: ${toRelativePath(options.config.rootDir, options.configPath)}`,
+        '  field: files',
+        `  value: ${formatUnknownValue(options.configObject.files)}`,
+        '  reason: configs with project references must declare files: [].',
+      ].join('\n'),
+    );
+  }
+
+  if (extraKeys.length > 0) {
+    options.problems.push(
+      [
+        `${roleLabel} is not a pure aggregator:`,
+        `  config: ${toRelativePath(options.config.rootDir, options.configPath)}`,
+        `  fields: ${extraKeys.sort().join(', ')}`,
+        '  reason: pure aggregators may only declare $schema, files, and references; move source inputs and compiler options into leaf configs.',
+      ].join('\n'),
+    );
+  }
+}
+
+function addBuildGraphConfigProblems(options: {
+  buildGraphConfigPaths: string[];
+  config: ResolvedLatticeConfig;
+  problems: string[];
+}): void {
+  for (const configPath of options.buildGraphConfigPaths) {
+    const configObject = readJsonConfig(options.config, configPath);
+
+    addPureAggregatorProblems({
+      config: options.config,
+      configObject,
+      configPath,
+      problems: options.problems,
+      role: 'build graph',
+    });
+  }
+}
+
+function addDefaultTsconfigShapeProblems(options: {
+  config: ResolvedLatticeConfig;
+  problems: string[];
+  tsconfigPaths: string[];
+}): void {
+  for (const configPath of options.tsconfigPaths) {
+    const configObject = readJsonConfig(options.config, configPath);
+
+    if (!Object.hasOwn(configObject, 'references')) {
+      continue;
+    }
+
+    addPureAggregatorProblems({
+      config: options.config,
+      configObject,
+      configPath,
+      problems: options.problems,
+      role: 'tsconfig.json',
+    });
+
+    if (!Array.isArray(configObject.references)) {
+      continue;
+    }
+
+    configObject.references.forEach((reference, index) => {
+      if (!isPlainRecord(reference) || typeof reference.path !== 'string') {
+        return;
+      }
+
+      const referencePath = resolveReferencePath(configPath, reference.path);
+
+      if (isOrdinaryTypecheckConfigPath(referencePath)) {
+        return;
+      }
+
+      options.problems.push(
+        [
+          'Default tsconfig.json references a non-typecheck config:',
+          `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
+          `  field: references[${index}].path`,
+          `  reference: ${reference.path}`,
+          `  resolved: ${toRelativePath(options.config.rootDir, referencePath)}`,
+          '  reason: tsconfig.json is the default IDE/typecheck entry and must not reference declaration build graph configs.',
+        ].join('\n'),
+      );
+    });
+  }
+}
+
+function addDefaultTsconfigEnvironmentProblems(options: {
+  config: ResolvedLatticeConfig;
+  ordinaryConfigPaths: string[];
+  problems: string[];
+}): void {
+  const configsByDirectory = new Map<string, string[]>();
+
+  for (const configPath of options.ordinaryConfigPaths) {
+    const directory = path.dirname(configPath);
+    const configs = configsByDirectory.get(directory) ?? [];
+
+    configs.push(configPath);
+    configsByDirectory.set(directory, configs);
+  }
+
+  for (const [directory, configPaths] of configsByDirectory.entries()) {
+    const scopedConfigPaths = configPaths.filter(
+      (configPath) => path.basename(configPath) !== 'tsconfig.json',
+    );
+
+    if (scopedConfigPaths.length === 0) {
+      continue;
+    }
+
+    const defaultConfigPath = normalizeAbsolutePath(
+      path.join(directory, 'tsconfig.json'),
+    );
+
+    if (!existsSync(defaultConfigPath)) {
+      options.problems.push(
+        [
+          'Directory with typecheck environments is missing default tsconfig.json:',
+          `  directory: ${toRelativePath(options.config.rootDir, directory)}`,
+          '  reason: tsconfig.json is the default IDE/typecheck entry for its directory.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    if (scopedConfigPaths.length === 1) {
+      options.problems.push(
+        [
+          'Single typecheck environment should use default tsconfig.json:',
+          `  config: ${toRelativePath(options.config.rootDir, scopedConfigPaths[0]!)}`,
+          `  default: ${toRelativePath(options.config.rootDir, defaultConfigPath)}`,
+          '  reason: directories with only one type environment should make tsconfig.json the leaf entry.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    const defaultConfigObject = readJsonConfig(
+      options.config,
+      defaultConfigPath,
+    );
+
+    if (!Object.hasOwn(defaultConfigObject, 'references')) {
+      options.problems.push(
+        [
+          'Directory with multiple typecheck environments must use tsconfig.json as an aggregator:',
+          `  config: ${toRelativePath(options.config.rootDir, defaultConfigPath)}`,
+          '  reason: multiple type environments require a default IDE/typecheck aggregator.',
+        ].join('\n'),
+      );
+    }
   }
 }
 
@@ -739,45 +945,7 @@ function addDuplicateGraphCoverageProblems(options: {
             (configPath) =>
               `    - ${toRelativePath(options.config.rootDir, configPath)}`,
           ),
-        '  reason: a checker graph file must have a single build owner; move the file to one build leaf or narrow include/exclude patterns.',
-      ].join('\n'),
-    );
-  }
-}
-
-function addDuplicateTypecheckCoverageProblems(options: {
-  config: ResolvedLatticeConfig;
-  ownersByFile: ConfigFileOwners;
-  problems: string[];
-}): void {
-  for (const [filePath, owners] of [...options.ownersByFile.entries()].sort(
-    ([left], [right]) =>
-      toRelativePath(options.config.rootDir, left).localeCompare(
-        toRelativePath(options.config.rootDir, right),
-      ),
-  )) {
-    const uniqueOwners = [...new Set(owners)];
-
-    if (uniqueOwners.length <= 1) {
-      continue;
-    }
-
-    options.problems.push(
-      [
-        'Duplicate IDE/typecheck route coverage:',
-        `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
-        '  covered by:',
-        ...uniqueOwners
-          .sort((left, right) =>
-            toRelativePath(options.config.rootDir, left).localeCompare(
-              toRelativePath(options.config.rootDir, right),
-            ),
-          )
-          .map(
-            (configPath) =>
-              `    - ${toRelativePath(options.config.rootDir, configPath)}`,
-          ),
-        '  reason: a file in the IDE/typecheck route should have a single local tsconfig owner; move the file to one layer or narrow include/exclude patterns.',
+        '  reason: a checker graph file must have a single declaration owner; move the file to one dts leaf or narrow include/exclude patterns.',
       ].join('\n'),
     );
   }
@@ -800,58 +968,13 @@ function addDuplicateGraphOwnerProblems(options: {
 
     options.problems.push(
       [
-        'Duplicate checker graph build owner:',
+        'Duplicate checker graph declaration owner:',
         `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
         '  owned by:',
         ...uniqueOwnerCheckerNames.map((checkerName) => `    - ${checkerName}`),
-        '  reason: each tsconfig*.build.json must be reached by exactly one graph-capable checker build route.',
+        '  reason: each tsconfig*.dts.json must be reached by exactly one graph-capable checker entry.',
       ].join('\n'),
     );
-  }
-}
-
-function addTypecheckRouteProblems(options: {
-  buildConfigPaths: string[];
-  config: ResolvedLatticeConfig;
-  graphOwnersByConfigPath: Map<string, string[]>;
-  problems: string[];
-  typecheckProjectPathsByChecker: Map<string, string[]>;
-  typecheckRootByChecker: Map<string, string>;
-}): void {
-  for (const buildConfigPath of options.buildConfigPaths) {
-    const localConfigPath = getStrictLocalConfigPath(buildConfigPath);
-
-    if (!existsSync(localConfigPath)) {
-      continue;
-    }
-
-    const ownerCheckerNames =
-      options.graphOwnersByConfigPath.get(buildConfigPath) ?? [];
-
-    for (const checkerName of ownerCheckerNames) {
-      const typecheckProjectPathSet = new Set(
-        options.typecheckProjectPathsByChecker.get(checkerName) ?? [],
-      );
-
-      if (typecheckProjectPathSet.has(localConfigPath)) {
-        continue;
-      }
-
-      options.problems.push(
-        [
-          'Build companion config is not reachable from checker typecheck route:',
-          `  checker: ${checkerName}`,
-          `  build config: ${toRelativePath(options.config.rootDir, buildConfigPath)}`,
-          `  expected local config: ${toRelativePath(options.config.rootDir, localConfigPath)}`,
-          `  root: ${toRelativePath(
-            options.config.rootDir,
-            options.typecheckRootByChecker.get(checkerName) ??
-              options.config.rootDir,
-          )}`,
-          '  reason: every graph-capable checker build route must pair each tsconfig*.build.json companion with the same checker typecheck route.',
-        ].join('\n'),
-      );
-    }
   }
 }
 
@@ -921,7 +1044,7 @@ function addUncoveredSourceProblems(options: {
       uncoveredFiles.length > 20
         ? `  ... ${uncoveredFiles.length - 20} more`
         : '',
-      '  reason: every file in config.source must be covered by a checker graph route, an active checker route, or an explicit allowlist entry.',
+      '  reason: every file in config.source must be covered by a checker entry or an explicit allowlist entry.',
     ]
       .filter(Boolean)
       .join('\n'),
@@ -945,70 +1068,63 @@ async function runProofCheckInternal(
 ): Promise<boolean> {
   const problems: string[] = [];
   const graphRouteCollection = collectGraphProjectRoutes(config);
+  const entryRouteCollection = collectCheckerEntryProjectRoutes(config);
   const graphProjectPaths = [
     ...new Set(
       graphRouteCollection.routes.flatMap((route) => route.projectPaths),
     ),
   ].sort();
-  const graphProjectPathSet = new Set(graphProjectPaths);
-  const buildConfigPaths = await collectBuildConfigPaths(config);
+  const entryProjectPaths = [
+    ...new Set(
+      entryRouteCollection.routes.flatMap((route) => route.projectPaths),
+    ),
+  ].sort();
+  const entryProjectPathSet = new Set(entryProjectPaths);
+  const dtsConfigPaths = await collectDtsConfigPaths(config);
+  const buildGraphConfigPaths = await collectBuildGraphConfigPaths(config);
+  const defaultTsconfigPaths = await collectDefaultTsconfigPaths(config);
+  const ordinaryTypecheckConfigPaths =
+    await collectOrdinaryTypecheckConfigPaths(config);
   const graphOwnersByConfigPath = new Map<string, string[]>();
-  const typecheckProjectPathsByChecker = new Map<string, string[]>();
-  const typecheckRootByChecker = new Map<string, string>();
-  const referenceTypecheckProjectPaths: string[] = [];
 
   problems.push(...graphRouteCollection.problems);
+  problems.push(...entryRouteCollection.problems);
 
   for (const route of graphRouteCollection.routes) {
     for (const projectPath of route.projectPaths) {
+      if (!isDtsConfigPath(projectPath)) {
+        continue;
+      }
+
       addGraphOwner(graphOwnersByConfigPath, projectPath, route.checkerName);
     }
   }
 
-  for (const checker of getActiveCheckers(config)) {
-    const adapter = getCheckerAdapter(checker.preset);
-    const typecheckRoute = checker.routes.typecheck;
-
-    if (!adapter?.graph || !checker.routes.build || !typecheckRoute) {
-      continue;
-    }
-
-    const rootConfigPath = resolveProjectConfigPath(
-      config.rootDir,
-      typecheckRoute,
-    );
-    const routeCollection = collectTypecheckTargetProjectPaths({
-      rootConfigPath,
-      rootDir: config.rootDir,
-    });
-
-    problems.push(...routeCollection.problems);
-    typecheckProjectPathsByChecker.set(
-      checker.name,
-      routeCollection.projectPaths,
-    );
-    typecheckRootByChecker.set(checker.name, rootConfigPath);
-    referenceTypecheckProjectPaths.push(...routeCollection.projectPaths);
-  }
-
-  addBuildConfigProblems({
-    buildConfigPaths,
+  addDtsConfigProblems({
     config,
-    graphProjectPaths: graphProjectPathSet,
+    dtsConfigPaths,
+    graphProjectPaths: entryProjectPathSet,
+    problems,
+  });
+  addBuildGraphConfigProblems({
+    buildGraphConfigPaths,
+    config,
+    problems,
+  });
+  addDefaultTsconfigShapeProblems({
+    config,
+    problems,
+    tsconfigPaths: defaultTsconfigPaths,
+  });
+  addDefaultTsconfigEnvironmentProblems({
+    config,
+    ordinaryConfigPaths: ordinaryTypecheckConfigPaths,
     problems,
   });
   addDuplicateGraphOwnerProblems({
     config,
     graphOwnersByConfigPath,
     problems,
-  });
-  addTypecheckRouteProblems({
-    buildConfigPaths,
-    config,
-    graphOwnersByConfigPath,
-    problems,
-    typecheckProjectPathsByChecker,
-    typecheckRootByChecker,
   });
 
   if (problems.length > 0) {
@@ -1052,20 +1168,10 @@ async function runProofCheckInternal(
     graphProjectPaths,
     sourceFiles,
   );
-  const typecheckFileOwners = collectConfigFileOwners(
-    config,
-    [...new Set(referenceTypecheckProjectPaths)].sort(),
-    sourceFiles,
-  );
 
   addDuplicateGraphCoverageProblems({
     config,
     ownersByFile: graphFileOwners,
-    problems,
-  });
-  addDuplicateTypecheckCoverageProblems({
-    config,
-    ownersByFile: typecheckFileOwners,
     problems,
   });
   addAllowlistProblems({
@@ -1097,9 +1203,8 @@ async function runProofCheckInternal(
   if (options.logSuccess ?? true) {
     ProofLogger.success(
       [
-        `Checked ${graphProjectPaths.length} graph projects and ${buildConfigPaths.length} build configs.`,
-        `Graph-capable checker typecheck routes cover ${new Set(referenceTypecheckProjectPaths).size} configs.`,
-        `Checker graph routes cover ${graphFileCount} files; active checker routes cover ${checkerFileCount} files.`,
+        `Checked ${entryProjectPaths.length} checker entry projects and ${dtsConfigPaths.length} dts configs.`,
+        `Graph-capable checker entries cover ${graphFileCount} files; checker entries cover ${checkerFileCount} files.`,
         `Configured source boundary covers ${sourceFiles.size} files.`,
       ].join('\n'),
     );

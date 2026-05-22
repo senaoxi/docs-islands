@@ -1,5 +1,5 @@
 {
-  // Local package-script test check. Build graph leaf: tsconfig.test.build.json.
+  // Local package-script test check. Build graph leaf: tsconfig.test.dts.json.
   "extends": "../../tsconfig.test.base.json",
   "compilerOptions": {
     "lib": ["ESNext", "DOM", "DOM.Iterable"],

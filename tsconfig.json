@@ -1,30 +1,10 @@
 {
-  // Root IDE/typecheck solution. The native build graph stays in tsconfig.graph.json.
-  "files": [],
-  "references": [
-    {
-      "path": "./scripts/tsconfig.json",
-    },
-    {
-      "path": "./utils/tsconfig.json",
-    },
-    {
-      "path": "./packages/logger/tsconfig.json",
-    },
-    {
-      "path": "./packages/core/tsconfig.json",
-    },
-    {
-      "path": "./packages/plugins/license/tsconfig.json",
-    },
-    {
-      "path": "./packages/eslint-config/tsconfig.json",
-    },
-    {
-      "path": "./packages/lattice/tsconfig.json",
-    },
-    {
-      "path": "./packages/vitepress/tsconfig.json",
-    },
-  ],
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "isolatedDeclarations": false,
+    "lib": ["ES2023"],
+    "types": ["node"],
+  },
+  "include": ["scripts/**/*.ts"],
 }

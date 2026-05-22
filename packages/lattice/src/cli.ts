@@ -203,7 +203,7 @@ async function main(): Promise<void> {
   cli
     .command(
       'checker <action>',
-      'Run configured checker typecheck or build routes',
+      'Run configured checker typecheck or build entries',
     )
     .option('--concurrency <n>', 'Maximum concurrent checker processes')
     .action(async (action: string, flags: CheckerFlags) => {

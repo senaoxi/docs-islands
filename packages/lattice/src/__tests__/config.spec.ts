@@ -16,10 +16,7 @@ describe('defineConfig', () => {
         checkers: {
           typescript: {
             preset: 'tsc',
-            routes: {
-              build: 'tsconfig.graph.custom.json',
-              typecheck: 'tsconfig.check.json',
-            },
+            entry: 'tsconfig.custom.build.json',
           },
         },
         source: {
@@ -51,11 +48,8 @@ describe('defineConfig', () => {
       },
     });
 
-    expect(config.config?.checkers?.typescript?.routes?.build).toBe(
-      'tsconfig.graph.custom.json',
-    );
-    expect(config.config?.checkers?.typescript?.routes?.typecheck).toBe(
-      'tsconfig.check.json',
+    expect(config.config?.checkers?.typescript?.entry).toBe(
+      'tsconfig.custom.build.json',
     );
     expect(config.config?.source?.include).toEqual(['src/**/*.ts']);
     expect(config.config?.source?.exclude).toEqual(['dist']);
@@ -67,18 +61,13 @@ describe('defineConfig', () => {
     ]);
   });
 
-  it('resolves built-in checker defaults and ignores checkers without routes', () => {
+  it('resolves built-in checker defaults', () => {
     const activeCheckers = getActiveCheckers({
       config: {
         checkers: {
-          inactive: {
-            preset: 'vue-tsc',
-          },
           typescript: {
             preset: 'tsc',
-            routes: {
-              typecheck: 'tsconfig.json',
-            },
+            entry: 'tsconfig.build.json',
           },
         },
       },
@@ -98,22 +87,17 @@ describe('defineConfig', () => {
       ],
       name: 'typescript',
       preset: 'tsc',
-      routes: {
-        typecheck: 'tsconfig.json',
-      },
+      entry: 'tsconfig.build.json',
     });
   });
 
   it('returns config factories unchanged', async () => {
-    const config = defineConfig(async ({ command, mode }) => ({
+    const config = defineConfig(async ({ mode }) => ({
       config: {
         checkers: {
           typescript: {
             preset: 'tsc',
-            routes: {
-              build: `tsconfig.${command}.${mode}.json`,
-              typecheck: `tsconfig.${command}.${mode}.check.json`,
-            },
+            entry: `tsconfig.${mode}.build.json`,
           },
         },
       },
@@ -124,10 +108,7 @@ describe('defineConfig', () => {
         checkers: {
           typescript: {
             preset: 'tsc',
-            routes: {
-              build: 'tsconfig.graph.ci.json',
-              typecheck: 'tsconfig.graph.ci.check.json',
-            },
+            entry: 'tsconfig.ci.build.json',
           },
         },
       },
@@ -177,15 +158,12 @@ export default Promise.resolve({});
         `
 import { defineConfig } from '${new URL('../config.ts', import.meta.url).href}';
 
-export default defineConfig(async ({ command, mode }) => ({
+export default defineConfig(async ({ mode }) => ({
   config: {
     checkers: {
       typescript: {
         preset: 'tsc',
-        routes: {
-          build: \`tsconfig.\${command}.\${mode}.json\`,
-          typecheck: \`tsconfig.\${command}.\${mode}.check.json\`,
-        },
+        entry: \`tsconfig.\${mode}.build.json\`,
       },
     },
   },
@@ -201,11 +179,8 @@ export default defineConfig(async ({ command, mode }) => ({
 
       expect(config.configPath).toBe(path.join(rootDir, 'lattice.config.mjs'));
       expect(config.rootDir).toBe(rootDir);
-      expect(config.config?.checkers?.typescript?.routes?.build).toBe(
-        'tsconfig.paths.ci.json',
-      );
-      expect(config.config?.checkers?.typescript?.routes?.typecheck).toBe(
-        'tsconfig.paths.ci.check.json',
+      expect(config.config?.checkers?.typescript?.entry).toBe(
+        'tsconfig.ci.build.json',
       );
     } finally {
       await rm(rootDir, {
@@ -348,7 +323,7 @@ throw new Error('external config should not be imported');
     }
   });
 
-  it('rejects empty checker routes', async () => {
+  it('rejects removed checker routes config', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
 
     try {
@@ -364,7 +339,10 @@ export default {
     checkers: {
       vue: {
         preset: 'vue-tsc',
-        routes: {},
+        routes: {
+          typecheck: 'tsconfig.sfc.json',
+          build: 'tsconfig.vue.build.json',
+        },
       },
     },
   },
@@ -373,7 +351,7 @@ export default {
       );
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /routes must include typecheck or build/u,
+        /checker routes are not supported/u,
       );
     } finally {
       await rm(rootDir, {
@@ -399,9 +377,7 @@ export default {
     checkers: {
       custom: {
         preset: 'custom-checker',
-        routes: {
-          typecheck: 'tsconfig.custom.json',
-        },
+        entry: 'tsconfig.custom.json',
       },
     },
   },
@@ -437,9 +413,7 @@ export default {
       custom: {
         preset: 'custom-checker',
         extensions: ['.custom'],
-        routes: {
-          typecheck: 'tsconfig.custom.json',
-        },
+        entry: 'tsconfig.custom.json',
       },
     },
   },
@@ -448,7 +422,7 @@ export default {
       );
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /active checker routes require a built-in checker adapter/u,
+        /configured checker entries require a built-in checker adapter/u,
       );
     } finally {
       await rm(rootDir, {
@@ -458,7 +432,7 @@ export default {
     }
   });
 
-  it('rejects unsupported checker routes', async () => {
+  it('rejects checker configs without entries', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
 
     try {
@@ -472,11 +446,8 @@ export default {
 export default {
   config: {
     checkers: {
-      svelte: {
-        preset: 'svelte-check',
-        routes: {
-          build: 'tsconfig.svelte.build.json',
-        },
+      vue: {
+        preset: 'vue-tsc',
       },
     },
   },
@@ -485,7 +456,7 @@ export default {
       );
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /does not support routes\.build/u,
+        /checker entry must be a non-empty string path/u,
       );
     } finally {
       await rm(rootDir, {
@@ -495,7 +466,42 @@ export default {
     }
   });
 
-  it('requires graph-capable checker build routes to have typecheck routes', async () => {
+  it('rejects empty checker entries', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'lattice.config.mjs'),
+        `
+export default {
+  config: {
+    checkers: {
+      vue: {
+        preset: 'vue-tsc',
+        entry: '',
+      },
+    },
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /checker entry must be a non-empty string path/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('accepts graph-capable checker entries without a separate typecheck dependency graph', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'lattice-config-'));
 
     try {
@@ -511,9 +517,7 @@ export default {
     checkers: {
       typescript: {
         preset: 'tsc',
-        routes: {
-          build: 'tsconfig.graph.json',
-        },
+        entry: 'tsconfig.build.json',
       },
     },
   },
@@ -521,9 +525,15 @@ export default {
 `,
       );
 
-      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /must configure routes\.typecheck/u,
-      );
+      await expect(loadConfig({ cwd: rootDir })).resolves.toMatchObject({
+        config: {
+          checkers: {
+            typescript: {
+              entry: 'tsconfig.build.json',
+            },
+          },
+        },
+      });
     } finally {
       await rm(rootDir, {
         force: true,

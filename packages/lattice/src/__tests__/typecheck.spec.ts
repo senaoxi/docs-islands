@@ -8,7 +8,7 @@ import {
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from '../commands/typecheck';
-import type { CheckerRoutesConfig, ResolvedLatticeConfig } from '../config';
+import type { ResolvedLatticeConfig } from '../config';
 import { LatticeFlowReporter } from '../flow';
 import { collectTypecheckTargetProjectPaths } from '../tsconfig';
 
@@ -64,16 +64,14 @@ function passingRunner(calls: TypecheckTarget[] = []) {
 
 function createLatticeConfig(
   rootDir: string,
-  routes: CheckerRoutesConfig = {
-    typecheck: 'tsconfig.json',
-  },
+  entry = 'tsconfig.build.json',
 ): ResolvedLatticeConfig {
   return {
     config: {
       checkers: {
         typescript: {
+          entry,
           preset: 'tsc',
-          routes,
         },
       },
     },
@@ -111,20 +109,22 @@ describe('runCheckerTypecheck', () => {
   it('reports discovered targets and per-target status to the flow reporter', async () => {
     const fixture = await createFixture({
       'package.json': packageJson(),
-      'tsconfig.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './tsconfig.lib.json',
+            path: './tsconfig.lib.dts.json',
           },
           {
-            path: './tsconfig.tools.json',
+            path: './tsconfig.tools.dts.json',
           },
         ],
       }),
+      'tsconfig.lib.dts.json': tsconfig({}),
       'tsconfig.lib.json': tsconfig({
         include: ['src/**/*.ts'],
       }),
+      'tsconfig.tools.dts.json': tsconfig({}),
       'tsconfig.tools.json': tsconfig({
         include: ['scripts/**/*.ts'],
       }),
@@ -159,9 +159,10 @@ describe('runCheckerTypecheck', () => {
     }
   });
 
-  it('runs a root tsconfig.json leaf directly', async () => {
+  it('runs a root tsconfig.dts.json leaf companion directly', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
+      'tsconfig.dts.json': tsconfig({}),
       'tsconfig.json': tsconfig({
         include: ['src/**/*.ts'],
       }),
@@ -169,7 +170,7 @@ describe('runCheckerTypecheck', () => {
 
     try {
       const result = await runCheckerTypecheck({
-        config: createLatticeConfig(fixture.rootDir),
+        config: createLatticeConfig(fixture.rootDir, 'tsconfig.dts.json'),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
@@ -185,13 +186,31 @@ describe('runCheckerTypecheck', () => {
     }
   });
 
-  it('runs configured checker typecheck routes and ignores inactive checkers', async () => {
+  it('runs configured checker entries', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
-      'tsconfig.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.dts.json',
+          },
+        ],
+      }),
+      'tsconfig.lib.dts.json': tsconfig({}),
+      'tsconfig.lib.json': tsconfig({
         include: ['src/**/*.ts'],
       }),
-      'tsconfig.vue.json': tsconfig({
+      'tsconfig.vue.build.json': tsconfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.sfc.dts.json',
+          },
+        ],
+      }),
+      'tsconfig.sfc.dts.json': tsconfig({}),
+      'tsconfig.sfc.json': tsconfig({
         include: ['docs/**/*.vue'],
       }),
     });
@@ -201,20 +220,13 @@ describe('runCheckerTypecheck', () => {
         config: {
           config: {
             checkers: {
-              inactive: {
-                preset: 'svelte-check',
-              },
               typescript: {
+                entry: 'tsconfig.build.json',
                 preset: 'tsc',
-                routes: {
-                  typecheck: 'tsconfig.json',
-                },
               },
               vue: {
+                entry: 'tsconfig.vue.build.json',
                 preset: 'vue-tsc',
-                routes: {
-                  typecheck: 'tsconfig.vue.json',
-                },
               },
             },
           },
@@ -228,21 +240,21 @@ describe('runCheckerTypecheck', () => {
       expect(result.passed).toBe(true);
       expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
       expect(calls.map((target) => target.args)).toEqual([
-        ['-p', 'tsconfig.json', '--noEmit'],
-        ['-p', 'tsconfig.vue.json', '--noEmit'],
+        ['-p', 'tsconfig.lib.json', '--noEmit'],
+        ['-p', 'tsconfig.sfc.json', '--noEmit'],
       ]);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('runs configured checker build routes', async () => {
+  it('runs configured checker build entries', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
-      'tsconfig.graph.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
         files: [],
       }),
-      'tsconfig.vue.graph.json': tsconfig({
+      'tsconfig.vue.build.json': tsconfig({
         files: [],
       }),
     });
@@ -253,17 +265,12 @@ describe('runCheckerTypecheck', () => {
           config: {
             checkers: {
               typescript: {
+                entry: 'tsconfig.build.json',
                 preset: 'tsc',
-                routes: {
-                  build: 'tsconfig.graph.json',
-                  typecheck: 'tsconfig.json',
-                },
               },
               vue: {
+                entry: 'tsconfig.vue.build.json',
                 preset: 'vue-tsc',
-                routes: {
-                  build: 'tsconfig.vue.graph.json',
-                },
               },
             },
           },
@@ -277,17 +284,18 @@ describe('runCheckerTypecheck', () => {
       expect(result.passed).toBe(true);
       expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
       expect(calls.map((target) => target.args)).toEqual([
-        ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
-        ['-b', 'tsconfig.vue.graph.json', '--pretty', 'false'],
+        ['-b', 'tsconfig.build.json', '--pretty', 'false'],
+        ['-b', 'tsconfig.vue.build.json', '--pretty', 'false'],
       ]);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('resolves configured relative checker route values from the command cwd', async () => {
+  it('resolves configured relative checker entry values from the command cwd', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
+      'configs/tsconfig.dts.json': tsconfig({}),
       'configs/tsconfig.json': tsconfig({
         include: ['../src/**/*.ts'],
       }),
@@ -295,16 +303,17 @@ describe('runCheckerTypecheck', () => {
 
     try {
       const result = await runCheckerTypecheck({
-        config: createLatticeConfig(fixture.rootDir, {
-          typecheck: 'configs',
-        }),
+        config: createLatticeConfig(
+          fixture.rootDir,
+          'configs/tsconfig.dts.json',
+        ),
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
 
       expect(result.passed).toBe(true);
       expect(result.rootConfigPaths).toEqual([
-        path.join(fixture.rootDir, 'configs/tsconfig.json'),
+        path.join(fixture.rootDir, 'configs/tsconfig.dts.json'),
       ]);
       expect(calls[0].args).toEqual([
         '-p',
@@ -316,22 +325,21 @@ describe('runCheckerTypecheck', () => {
     }
   });
 
-  it('accepts absolute configured checker route values', async () => {
+  it('accepts absolute configured checker entry values', async () => {
     const fixture = await createFixture({
+      'nested/tsconfig.custom.dts.json': tsconfig({}),
       'nested/tsconfig.custom.json': tsconfig({
         include: ['src/**/*.ts'],
       }),
     });
     const projectPath = path.join(
       fixture.rootDir,
-      'nested/tsconfig.custom.json',
+      'nested/tsconfig.custom.dts.json',
     );
 
     try {
       const result = await runCheckerTypecheck({
-        config: createLatticeConfig(fixture.rootDir, {
-          typecheck: projectPath,
-        }),
+        config: createLatticeConfig(fixture.rootDir, projectPath),
         cwd: fixture.rootDir,
         runner: passingRunner(),
       });
@@ -347,20 +355,22 @@ describe('runCheckerTypecheck', () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
       'package.json': packageJson(),
-      'tsconfig.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './tsconfig.lib.json',
+            path: './tsconfig.lib.dts.json',
           },
           {
-            path: './tsconfig.tools.json',
+            path: './tsconfig.tools.dts.json',
           },
         ],
       }),
+      'tsconfig.lib.dts.json': tsconfig({}),
       'tsconfig.lib.json': tsconfig({
         include: ['src/**/*.ts'],
       }),
+      'tsconfig.tools.dts.json': tsconfig({}),
       'tsconfig.tools.json': tsconfig({
         include: ['scripts/**/*.ts'],
       }),
@@ -383,123 +393,26 @@ describe('runCheckerTypecheck', () => {
     }
   });
 
-  it('runs configs that have references and their own include entries', async () => {
-    const calls: TypecheckTarget[] = [];
-    const fixture = await createFixture({
-      'tsconfig.json': tsconfig({
-        include: ['src/**/*.ts'],
-        references: [
-          {
-            path: './tsconfig.lib.json',
-          },
-        ],
-      }),
-      'tsconfig.lib.json': tsconfig({
-        include: ['lib/**/*.ts'],
-      }),
-    });
-
-    try {
-      const result = await runCheckerTypecheck({
-        config: createLatticeConfig(fixture.rootDir),
-        cwd: fixture.rootDir,
-        runner: passingRunner(calls),
-      });
-
-      expect(result.passed).toBe(true);
-      expect(calls.map((target) => path.basename(target.configPath))).toEqual([
-        'tsconfig.json',
-        'tsconfig.lib.json',
-      ]);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('runs configs that have references and their own files entries', async () => {
-    const calls: TypecheckTarget[] = [];
-    const fixture = await createFixture({
-      'tsconfig.json': tsconfig({
-        files: ['src/index.ts'],
-        references: [
-          {
-            path: './tsconfig.lib.json',
-          },
-        ],
-      }),
-      'tsconfig.lib.json': tsconfig({
-        include: ['lib/**/*.ts'],
-      }),
-    });
-
-    try {
-      const result = await runCheckerTypecheck({
-        config: createLatticeConfig(fixture.rootDir),
-        cwd: fixture.rootDir,
-        runner: passingRunner(calls),
-      });
-
-      expect(result.passed).toBe(true);
-      expect(calls.map((target) => path.basename(target.configPath))).toEqual([
-        'tsconfig.json',
-        'tsconfig.lib.json',
-      ]);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('runs configs that have references and implicit TypeScript includes', async () => {
-    const calls: TypecheckTarget[] = [];
-    const fixture = await createFixture({
-      'tsconfig.json': tsconfig({
-        references: [
-          {
-            path: './tsconfig.lib.json',
-          },
-        ],
-      }),
-      'tsconfig.lib.json': tsconfig({
-        include: ['lib/**/*.ts'],
-      }),
-    });
-
-    try {
-      const result = await runCheckerTypecheck({
-        config: createLatticeConfig(fixture.rootDir),
-        cwd: fixture.rootDir,
-        runner: passingRunner(calls),
-      });
-
-      expect(result.passed).toBe(true);
-      expect(calls.map((target) => path.basename(target.configPath))).toEqual([
-        'tsconfig.json',
-        'tsconfig.lib.json',
-      ]);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('recurses through nested ordinary tsconfig aggregators', async () => {
+  it('recurses through nested graph aggregators', async () => {
     const fixture = await createFixture({
       'package.json': packageJson(),
-      'tsconfig.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './tsconfig.runtime.json',
+            path: './tsconfig.runtime.build.json',
           },
         ],
       }),
-      'tsconfig.runtime.json': tsconfig({
+      'tsconfig.runtime.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './src/tsconfig.json',
+            path: './src/tsconfig.dts.json',
           },
         ],
       }),
+      'src/tsconfig.dts.json': tsconfig({}),
       'src/tsconfig.json': tsconfig({
         include: ['**/*.ts'],
       }),
@@ -524,25 +437,26 @@ describe('runCheckerTypecheck', () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
       'package.json': packageJson(),
-      'tsconfig.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './tsconfig.lib.json',
+            path: './tsconfig.lib.dts.json',
           },
           {
-            path: './tsconfig.group.json',
+            path: './tsconfig.group.build.json',
           },
         ],
       }),
-      'tsconfig.group.json': tsconfig({
+      'tsconfig.group.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './tsconfig.lib.json',
+            path: './tsconfig.lib.dts.json',
           },
         ],
       }),
+      'tsconfig.lib.dts.json': tsconfig({}),
       'tsconfig.lib.json': tsconfig({
         include: ['src/**/*.ts'],
       }),
@@ -564,8 +478,18 @@ describe('runCheckerTypecheck', () => {
     }
   });
 
-  it('fails when the sibling tsconfig.json is missing', async () => {
-    const fixture = await createFixture({});
+  it('fails when a declaration leaf companion is missing', async () => {
+    const fixture = await createFixture({
+      'tsconfig.build.json': tsconfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.dts.json',
+          },
+        ],
+      }),
+      'tsconfig.lib.dts.json': tsconfig({}),
+    });
 
     try {
       const result = await runCheckerTypecheck({
@@ -584,11 +508,11 @@ describe('runCheckerTypecheck', () => {
   it('fails when a referenced tsconfig is missing', async () => {
     const fixture = await createFixture({
       'package.json': packageJson(),
-      'tsconfig.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './tsconfig.missing.json',
+            path: './tsconfig.missing.dts.json',
           },
         ],
       }),
@@ -612,20 +536,21 @@ describe('runCheckerTypecheck', () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
       'package.json': packageJson(),
-      'tsconfig.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './tsconfig.lib.json',
+            path: './tsconfig.lib.dts.json',
           },
           {
-            pat: './tsconfig.tools.json',
+            pat: './tsconfig.tools.dts.json',
           },
           {
             path: '',
           },
         ],
       }),
+      'tsconfig.lib.dts.json': tsconfig({}),
       'tsconfig.lib.json': tsconfig({
         include: ['src/**/*.ts'],
       }),
@@ -646,60 +571,26 @@ describe('runCheckerTypecheck', () => {
     }
   });
 
-  it('rejects build and graph configs in the typecheck route', async () => {
-    const fixture = await createFixture({
-      'package.json': packageJson(),
-      'tsconfig.json': tsconfig({
-        files: [],
-        references: [
-          {
-            path: './tsconfig.lib.build.json',
-          },
-          {
-            path: './tsconfig.graph.json',
-          },
-        ],
-      }),
-      'tsconfig.graph.json': tsconfig({
-        files: [],
-      }),
-      'tsconfig.lib.build.json': tsconfig({
-        include: ['src/**/*.ts'],
-      }),
-    });
-
-    try {
-      const result = await runCheckerTypecheck({
-        config: createLatticeConfig(fixture.rootDir),
-        cwd: fixture.rootDir,
-        runner: passingRunner(),
-      });
-
-      expect(result.passed).toBe(false);
-      expect(result.results).toEqual([]);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
   it('collects all concurrent runner results before failing', async () => {
     const calls: string[] = [];
     const fixture = await createFixture({
       'package.json': packageJson(),
-      'tsconfig.json': tsconfig({
+      'tsconfig.build.json': tsconfig({
         files: [],
         references: [
           {
-            path: './tsconfig.a.json',
+            path: './tsconfig.a.dts.json',
           },
           {
-            path: './tsconfig.b.json',
+            path: './tsconfig.b.dts.json',
           },
         ],
       }),
+      'tsconfig.a.dts.json': tsconfig({}),
       'tsconfig.a.json': tsconfig({
         include: ['a/**/*.ts'],
       }),
+      'tsconfig.b.dts.json': tsconfig({}),
       'tsconfig.b.json': tsconfig({
         include: ['b/**/*.ts'],
       }),
@@ -758,7 +649,7 @@ describe('collectTypecheckTargetProjectPaths', () => {
 
       expect(result.targetProjectPaths).toEqual([]);
       expect(result.problems.join('\n')).toContain(
-        'Circular reference in typecheck route',
+        'Circular reference in ordinary tsconfig references',
       );
       expect(result.problems.join('\n')).toContain(
         'tsconfig.json -> tsconfig.loop.json -> tsconfig.json',

@@ -8,7 +8,9 @@ import { GraphLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
   collectGraphProjectRoute,
   formatReferences,
+  getDtsCompanionConfigPath,
   getRawReferencePaths,
+  isDtsConfigPath,
   readJsonConfig,
 } from '../tsconfig';
 import {
@@ -60,9 +62,7 @@ interface NormalizedGraphRules {
   refsByLabel: Map<string, Map<string, GraphRuleRefDeny>>;
 }
 
-const buildConfigFilePattern = /^tsconfig(?:\..+)?\.build\.json$/u;
-
-const requiredBuildCompilerOptions: [keyof ts.CompilerOptions, unknown][] = [
+const requiredDtsCompilerOptions: [keyof ts.CompilerOptions, unknown][] = [
   ['composite', true],
   ['incremental', true],
   ['noEmit', false],
@@ -70,7 +70,7 @@ const requiredBuildCompilerOptions: [keyof ts.CompilerOptions, unknown][] = [
   ['emitDeclarationOnly', true],
 ];
 
-const requiredBuildPathOptions: (keyof ts.CompilerOptions)[] = [
+const requiredDtsPathOptions: (keyof ts.CompilerOptions)[] = [
   'rootDir',
   'outDir',
   'tsBuildInfoFile',
@@ -124,19 +124,12 @@ function isRelativeSpecifier(specifier: string): boolean {
   );
 }
 
-function isBuildProjectConfig(configPath: string): boolean {
-  return buildConfigFilePattern.test(path.basename(configPath));
+function isDtsProjectConfig(configPath: string): boolean {
+  return isDtsConfigPath(configPath);
 }
 
-function getTypecheckConfigPath(buildConfigPath: string): string {
-  const directory = path.dirname(buildConfigPath);
-  const fileName = path.basename(buildConfigPath);
-  const typecheckFileName =
-    fileName === 'tsconfig.build.json'
-      ? 'tsconfig.json'
-      : fileName.replace(/\.build\.json$/u, '.json');
-
-  return path.join(directory, typecheckFileName);
+function getTypecheckConfigPath(dtsConfigPath: string): string {
+  return getDtsCompanionConfigPath(dtsConfigPath);
 }
 
 function formatUnknownValue(value: unknown): string {
@@ -151,7 +144,7 @@ function readProjectLabel(
   config: ResolvedLatticeConfig,
   configPath: string,
 ): Pick<ProjectInfo, 'label' | 'labelProblem'> {
-  if (!isBuildProjectConfig(configPath)) {
+  if (!isDtsProjectConfig(configPath)) {
     return {
       label: null,
       labelProblem: null,
@@ -183,7 +176,7 @@ function readProjectLabel(
       `  project: ${toRelativePath(config.rootDir, configPath)}`,
       `  field: lattice`,
       `  value: ${formatUnknownValue(value)}`,
-      '  reason: tsconfig*.build.json may declare one non-empty string label with "lattice".',
+      '  reason: tsconfig*.dts.json may declare one non-empty string label with "lattice".',
     ].join('\n'),
   };
 }
@@ -339,16 +332,16 @@ function addNormalizedRuleRef(options: {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.path`,
       `  path: ${pathValue}`,
-      '  reason: deny.refs path must point to a project reachable from a checker graph route.',
+      '  reason: deny.refs path must point to a project reachable from a checker entry.',
     ]);
     return;
   }
 
-  if (!isBuildProjectConfig(refPath)) {
+  if (!isDtsProjectConfig(refPath)) {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.path`,
       `  path: ${pathValue}`,
-      '  reason: deny.refs path must point to a tsconfig*.build.json project.',
+      '  reason: deny.refs path must point to a tsconfig*.dts.json declaration leaf.',
     ]);
     return;
   }
@@ -524,16 +517,16 @@ function normalizeGraphRules(options: {
   };
 }
 
-function addBuildOptionProblems(
+function addDtsOptionProblems(
   config: ResolvedLatticeConfig,
   project: ProjectInfo,
   problems: string[],
 ): void {
-  if (!isBuildProjectConfig(project.configPath)) {
+  if (!isDtsProjectConfig(project.configPath)) {
     return;
   }
 
-  for (const [optionName, expected] of requiredBuildCompilerOptions) {
+  for (const [optionName, expected] of requiredDtsCompilerOptions) {
     const actual = project.options[optionName];
 
     if (actual === expected) {
@@ -542,27 +535,27 @@ function addBuildOptionProblems(
 
     problems.push(
       [
-        'Invalid build project compiler option:',
+        'Invalid declaration leaf compiler option:',
         `  project: ${toRelativePath(config.rootDir, project.configPath)}`,
         `  option: compilerOptions.${optionName}`,
         `  expected: ${formatCompilerOptionValue(expected)}`,
         `  actual: ${formatCompilerOptionValue(actual)}`,
-        '  reason: tsconfig*.build.json projects are consumed by tsc -b and must emit declarations through composite incremental builds.',
+        '  reason: tsconfig*.dts.json projects are consumed by tsc -b and must emit declarations through composite incremental builds.',
       ].join('\n'),
     );
   }
 
-  for (const optionName of requiredBuildPathOptions) {
+  for (const optionName of requiredDtsPathOptions) {
     if (project.options[optionName]) {
       continue;
     }
 
     problems.push(
       [
-        'Missing build project output option:',
+        'Missing declaration leaf output option:',
         `  project: ${toRelativePath(config.rootDir, project.configPath)}`,
         `  option: compilerOptions.${optionName}`,
-        '  reason: build graph leaves need explicit root/output state so declaration output and tsbuildinfo files do not collide.',
+        '  reason: declaration leaves need explicit root/output state so declaration output and tsbuildinfo files do not collide.',
       ].join('\n'),
     );
   }
@@ -570,22 +563,22 @@ function addBuildOptionProblems(
 
 function addTypecheckParityProblems(
   config: ResolvedLatticeConfig,
-  buildProject: ProjectInfo,
+  dtsProject: ProjectInfo,
   problems: string[],
 ): void {
-  if (!isBuildProjectConfig(buildProject.configPath)) {
+  if (!isDtsProjectConfig(dtsProject.configPath)) {
     return;
   }
 
-  const typecheckConfigPath = getTypecheckConfigPath(buildProject.configPath);
+  const typecheckConfigPath = getTypecheckConfigPath(dtsProject.configPath);
 
   if (!existsSync(typecheckConfigPath)) {
     problems.push(
       [
         'Missing typecheck companion config:',
-        `  build project: ${toRelativePath(config.rootDir, buildProject.configPath)}`,
+        `  declaration leaf: ${toRelativePath(config.rootDir, dtsProject.configPath)}`,
         `  expected typecheck config: ${toRelativePath(config.rootDir, typecheckConfigPath)}`,
-        '  reason: every tsconfig*.build.json project should have a matching tsconfig*.json file with the same typechecking semantics.',
+        '  reason: every tsconfig*.dts.json project should have a matching tsconfig*.json file with the same typechecking semantics.',
       ].join('\n'),
     );
     return;
@@ -594,7 +587,7 @@ function addTypecheckParityProblems(
   const typecheckProject = parseProject(config, typecheckConfigPath);
 
   for (const optionName of comparableTypecheckOptions) {
-    const buildValue = buildProject.options[optionName];
+    const buildValue = dtsProject.options[optionName];
     const typecheckValue = typecheckProject.options[optionName];
 
     if (compilerOptionEquals(buildValue, typecheckValue)) {
@@ -603,19 +596,19 @@ function addTypecheckParityProblems(
 
     problems.push(
       [
-        'Typecheck option mismatch between build and companion config:',
-        `  build project: ${toRelativePath(config.rootDir, buildProject.configPath)}`,
+        'Typecheck option mismatch between declaration leaf and companion config:',
+        `  declaration leaf: ${toRelativePath(config.rootDir, dtsProject.configPath)}`,
         `  typecheck config: ${toRelativePath(config.rootDir, typecheckConfigPath)}`,
         `  option: compilerOptions.${optionName}`,
-        `  build value: ${formatCompilerOptionValue(buildValue)}`,
+        `  declaration value: ${formatCompilerOptionValue(buildValue)}`,
         `  typecheck value: ${formatCompilerOptionValue(typecheckValue)}`,
-        '  reason: tsconfig*.build.json should emit with the same typechecking semantics as its matching tsconfig*.json companion.',
+        '  reason: tsconfig*.dts.json should emit with the same typechecking semantics as its matching tsconfig*.json companion.',
       ].join('\n'),
     );
   }
 
   const typecheckFiles = new Set(typecheckProject.fileNames);
-  const missingFiles = buildProject.fileNames.filter(
+  const missingFiles = dtsProject.fileNames.filter(
     (fileName) => !typecheckFiles.has(fileName),
   );
 
@@ -625,8 +618,8 @@ function addTypecheckParityProblems(
 
   problems.push(
     [
-      'Build project includes files missing from its companion typecheck config:',
-      `  build project: ${toRelativePath(config.rootDir, buildProject.configPath)}`,
+      'Declaration leaf includes files missing from its companion typecheck config:',
+      `  declaration leaf: ${toRelativePath(config.rootDir, dtsProject.configPath)}`,
       `  typecheck config: ${toRelativePath(config.rootDir, typecheckConfigPath)}`,
       '  files:',
       ...missingFiles
@@ -635,7 +628,7 @@ function addTypecheckParityProblems(
       ...(missingFiles.length > 10
         ? [`    ...and ${missingFiles.length - 10} more`]
         : []),
-      '  reason: a build leaf must not emit declarations for files that are not covered by the matching typecheck target.',
+      '  reason: a declaration leaf must not emit declarations for files that are not covered by the matching typecheck target.',
     ].join('\n'),
   );
 }
@@ -831,7 +824,7 @@ function inferPackageProject(
     projectPaths.find((projectPath) => {
       return (
         projectPath.startsWith(`${workspacePackage.directory}/`) &&
-        projectPath.endsWith('/tsconfig.lib.build.json')
+        projectPath.endsWith('/tsconfig.lib.dts.json')
       );
     }) ?? null
   );
@@ -989,7 +982,7 @@ function addWorkspaceReferenceDependencyProblems(
   importers: ImporterInfo[],
   problems: string[],
 ): void {
-  if (!isBuildProjectConfig(project.configPath)) {
+  if (!isDtsProjectConfig(project.configPath)) {
     return;
   }
 
@@ -1025,7 +1018,7 @@ function addWorkspaceReferenceDependencyProblems(
         `  referencing package: ${sourcePackage.name}`,
         `  referenced package: ${targetPackage.name}`,
         `  package manifest: ${toRelativePath(config.rootDir, path.join(sourcePackage.directory, 'package.json'))}`,
-        `  reason: a cross-package tsconfig*.build.json reference is a source dependency edge, so ${sourcePackage.name} must declare ${targetPackage.name} with the workspace: protocol.`,
+        `  reason: a cross-package tsconfig*.dts.json reference is a source dependency edge, so ${sourcePackage.name} must declare ${targetPackage.name} with the workspace: protocol.`,
         `  fix: add "${targetPackage.name}": "workspace:*" to dependencies, devDependencies, peerDependencies, or optionalDependencies in the referencing package manifest. If this package intentionally consumes built artifacts, remove the project reference; ${formatArtifactDependencyPolicy(targetPackage)}`,
       ].join('\n'),
     );
@@ -1060,7 +1053,7 @@ async function runGraphCheckInternal(
       problems.push(project.labelProblem);
     }
 
-    addBuildOptionProblems(config, project, problems);
+    addDtsOptionProblems(config, project, problems);
     addTypecheckParityProblems(config, project, problems);
     addDeniedReferenceProblems({
       config,
@@ -1217,8 +1210,8 @@ async function runGraphCheckInternal(
               `  imported specifier: ${importRecord.specifier}`,
               `  resolved file: ${toRelativePath(config.rootDir, resolvedFilePath)}`,
               '  reason: workspace:* dependencies are source dependencies, but TypeScript resolved this package export to a file not owned by the source graph. tsc -b does not rewrite package exports through project references.',
-              `  fix: expose source files from the dependency package exports, add a source paths config to this build config extends, or stop using workspace:* plus project references for artifact consumption; ${formatArtifactDependencyPolicy(targetPackage)}`,
-              '  hint: run `lattice paths generate` to create a compatibility paths file, then manually add it to the first position of the listed tsconfig*.build.json extends array.',
+              `  fix: expose source files from the dependency package exports, add a source paths config to this declaration leaf extends, or stop using workspace:* plus project references for artifact consumption; ${formatArtifactDependencyPolicy(targetPackage)}`,
+              '  hint: run `lattice paths generate` to create a compatibility paths file, then manually add it to the first position of the listed tsconfig*.dts.json extends array.',
             ].join('\n'),
           );
           continue;
@@ -1294,7 +1287,7 @@ async function runGraphCheckInternal(
         if (!projectsByPath.has(targetProjectPath)) {
           problems.push(
             [
-              'Expected graph target is not reachable from any checker graph route:',
+              'Expected graph target is not reachable from any checker entry:',
               `  importing project: ${toRelativePath(config.rootDir, project.configPath)}`,
               `  file: ${toRelativePath(config.rootDir, importRecord.filePath)}:${importRecord.line}`,
               `  imported specifier: ${importRecord.specifier}`,

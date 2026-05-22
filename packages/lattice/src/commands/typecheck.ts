@@ -1,18 +1,21 @@
 import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import { getCheckerAdapter } from '../checkers';
 import {
   getActiveCheckers,
-  type CheckerRouteKind,
+  type CheckerExecutionKind,
   type ResolvedCheckerConfig,
   type ResolvedLatticeConfig,
 } from '../config';
 import type { LatticeFlowReporter, LatticeFlowTask } from '../flow';
 import { TypecheckLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import {
-  collectTypecheckTargetProjectPaths,
+  collectGraphProjectRouteFromRoot,
+  getDtsCompanionConfigPath,
+  isDtsConfigPath,
   resolveProjectConfigPath,
 } from '../tsconfig';
 import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
@@ -23,8 +26,8 @@ export interface TypecheckTarget {
   configPath: string;
   cwd: string;
   command: string;
+  executionKind?: CheckerExecutionKind;
   label?: string;
-  routeKind?: CheckerRouteKind;
 }
 
 export interface TypecheckTargetResult {
@@ -68,25 +71,23 @@ function normalizeConcurrency(value: number | undefined): number {
   return value;
 }
 
-function getRouteCheckers(options: {
+function getExecutionCheckers(options: {
   config: ResolvedLatticeConfig;
-  routeKind: CheckerRouteKind;
+  executionKind: CheckerExecutionKind;
 }): ResolvedCheckerConfig[] {
-  return getActiveCheckers(options.config).filter(
-    (checker) => checker.routes[options.routeKind] !== undefined,
-  );
-}
+  return getActiveCheckers(options.config).filter((checker) => {
+    const adapter = getCheckerAdapter(checker.preset);
 
-function resolveRouteConfigPath(rootDir: string, route: string): string {
-  return resolveProjectConfigPath(rootDir, route);
+    return adapter?.supportedExecutions.includes(options.executionKind);
+  });
 }
 
 function createCheckerTarget(options: {
   checker: ResolvedCheckerConfig;
   commandOverride?: string;
   configPath: string;
+  executionKind: CheckerExecutionKind;
   projectRootDir: string;
-  routeKind: CheckerRouteKind;
 }): TypecheckTarget {
   const adapter = getCheckerAdapter(options.checker.preset);
 
@@ -103,7 +104,77 @@ function createCheckerTarget(options: {
     checkerName: options.checker.name,
     configPath: options.configPath,
     cwd: options.projectRootDir,
-    routeKind: options.routeKind,
+    executionKind: options.executionKind,
+  };
+}
+
+function collectCompanionTypecheckTargets(options: {
+  checker: ResolvedCheckerConfig;
+  projectRootDir: string;
+}): {
+  entryConfigPath: string;
+  problems: string[];
+  targetProjectPaths: string[];
+} {
+  const entryConfigPath = resolveProjectConfigPath(
+    options.projectRootDir,
+    options.checker.entry,
+  );
+
+  if (!existsSync(entryConfigPath)) {
+    return {
+      entryConfigPath,
+      problems: [
+        [
+          'Checker entry references a missing tsconfig:',
+          `  checker: ${options.checker.name}`,
+          `  config: ${toRelativePath(options.projectRootDir, entryConfigPath)}`,
+        ].join('\n'),
+      ],
+      targetProjectPaths: [],
+    };
+  }
+
+  const routeCollection = collectGraphProjectRouteFromRoot({
+    rootConfigPath: entryConfigPath,
+    rootDir: options.projectRootDir,
+  });
+  const dtsConfigPaths = routeCollection.projectPaths.filter(isDtsConfigPath);
+  const targetProjectPaths = [
+    ...new Set(dtsConfigPaths.map(getDtsCompanionConfigPath)),
+  ].sort();
+  const problems = [...routeCollection.problems];
+
+  if (dtsConfigPaths.length === 0) {
+    problems.push(
+      [
+        'Checker entry has no declaration leaf targets:',
+        `  checker: ${options.checker.name}`,
+        `  entry: ${toRelativePath(options.projectRootDir, entryConfigPath)}`,
+        '  reason: checker:typecheck derives targets from tsconfig*.dts.json leaves reachable from the checker entry.',
+      ].join('\n'),
+    );
+  }
+
+  for (const configPath of targetProjectPaths) {
+    if (existsSync(configPath)) {
+      continue;
+    }
+
+    problems.push(
+      [
+        'DTS leaf companion config is missing:',
+        `  checker: ${options.checker.name}`,
+        `  expected: ${toRelativePath(options.projectRootDir, configPath)}`,
+        '  reason: checker:typecheck runs the strict local tsconfig companion for each reachable declaration leaf.',
+      ].join('\n'),
+    );
+  }
+
+  return {
+    entryConfigPath,
+    problems,
+    targetProjectPaths,
   };
 }
 
@@ -188,9 +259,9 @@ async function runCheckerTypecheckInternal(
 ): Promise<RunCheckerTypecheckResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
-  const checkers = getRouteCheckers({
+  const checkers = getExecutionCheckers({
     config: options.config,
-    routeKind: 'typecheck',
+    executionKind: 'typecheck',
   });
   const flowDepth = options.flowDepth ?? 0;
 
@@ -203,54 +274,31 @@ async function runCheckerTypecheckInternal(
   if (checkers.length === 0) {
     problems.push(
       [
-        'No checker typecheck routes configured:',
-        '  reason: configure config.checkers.<name>.routes.typecheck before running checker:typecheck.',
+        'No checker typecheck entries configured:',
+        '  reason: configure config.checkers.<name>.entry with a preset that supports checker:typecheck.',
       ].join('\n'),
     );
   }
 
   for (const checker of checkers) {
-    const route = checker.routes.typecheck;
+    const targetCollection = collectCompanionTypecheckTargets({
+      checker,
+      projectRootDir,
+    });
 
-    if (!route) {
-      continue;
-    }
-
-    const checkerRootConfigPath = resolveRouteConfigPath(projectRootDir, route);
-    const adapter = getCheckerAdapter(checker.preset);
-
-    rootConfigPaths.push(checkerRootConfigPath);
-
-    if (adapter?.typecheckDiscovery === 'references') {
-      const routeCollection = collectTypecheckTargetProjectPaths({
-        rootConfigPath: checkerRootConfigPath,
-        rootDir: projectRootDir,
-      });
-
-      problems.push(...routeCollection.problems);
-      targetProjectPaths.push(...routeCollection.targetProjectPaths);
-      targets.push(
-        ...routeCollection.targetProjectPaths.map((configPath) =>
-          createCheckerTarget({
-            checker,
-            commandOverride: options.tscCommand,
-            configPath,
-            projectRootDir,
-            routeKind: 'typecheck',
-          }),
-        ),
-      );
-      continue;
-    }
-
-    targetProjectPaths.push(checkerRootConfigPath);
+    problems.push(...targetCollection.problems);
+    rootConfigPaths.push(targetCollection.entryConfigPath);
+    targetProjectPaths.push(...targetCollection.targetProjectPaths);
     targets.push(
-      createCheckerTarget({
-        checker,
-        configPath: checkerRootConfigPath,
-        projectRootDir,
-        routeKind: 'typecheck',
-      }),
+      ...targetCollection.targetProjectPaths.map((configPath) =>
+        createCheckerTarget({
+          checker,
+          commandOverride: options.tscCommand,
+          configPath,
+          executionKind: 'typecheck',
+          projectRootDir,
+        }),
+      ),
     );
   }
 
@@ -280,7 +328,7 @@ async function runCheckerTypecheckInternal(
     [
       `Running checker typechecks for ${targets.length} target config(s).`,
       `CWD: ${toRelativePath(cwd, projectRootDir)}`,
-      `Routes: ${rootConfigPaths
+      `Entries: ${rootConfigPaths
         .map((configPath) => toRelativePath(projectRootDir, configPath))
         .join(', ')}`,
     ].join('\n'),
@@ -350,7 +398,7 @@ async function runCheckerTypecheckInternal(
   } else {
     if (!options.flow?.interactive) {
       TypecheckLogger.success(
-        `Checked ${targets.length} typecheck target config(s) from ${rootConfigPaths.length} checker route(s).`,
+        `Checked ${targets.length} typecheck target config(s) from ${rootConfigPaths.length} checker entry(s).`,
       );
     }
   }
@@ -427,20 +475,14 @@ async function runCheckerBuildInternal(
 ): Promise<RunCheckerBuildResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
-  const checkers = getRouteCheckers({
+  const checkers = getExecutionCheckers({
     config: options.config,
-    routeKind: 'build',
+    executionKind: 'build',
   });
   const flowDepth = options.flowDepth ?? 0;
   const rootConfigPaths: string[] = [];
   const targets = checkers.flatMap((checker) => {
-    const route = checker.routes.build;
-
-    if (!route) {
-      return [];
-    }
-
-    const configPath = resolveRouteConfigPath(projectRootDir, route);
+    const configPath = resolveProjectConfigPath(projectRootDir, checker.entry);
 
     rootConfigPaths.push(configPath);
 
@@ -449,21 +491,21 @@ async function runCheckerBuildInternal(
         checker,
         commandOverride: options.tscCommand,
         configPath,
+        executionKind: 'build',
         projectRootDir,
-        routeKind: 'build',
       }),
     ];
   });
 
-  options.flow?.info(`found ${targets.length} build graph root(s)`, {
+  options.flow?.info(`found ${targets.length} checker build entry(s)`, {
     depth: flowDepth + 1,
   });
 
   TypecheckLogger.info(
     [
-      `Running build checks for ${targets.length} graph root(s).`,
+      `Running build checks for ${targets.length} checker entry(s).`,
       `CWD: ${toRelativePath(cwd, projectRootDir)}`,
-      `Routes: ${rootConfigPaths
+      `Entries: ${rootConfigPaths
         .map((configPath) => toRelativePath(projectRootDir, configPath))
         .join(', ')}`,
     ].join('\n'),
@@ -528,7 +570,9 @@ async function runCheckerBuildInternal(
       ].join('\n'),
     );
   } else if (!options.flow?.interactive) {
-    TypecheckLogger.success(`Checked ${targets.length} build graph root(s).`);
+    TypecheckLogger.success(
+      `Checked ${targets.length} checker build entry(s).`,
+    );
   }
 
   return {

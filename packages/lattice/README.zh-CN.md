@@ -29,10 +29,10 @@ Lattice 让这些规则变得可审查、可执行，并适合放进 CI。
 
 ## 特性
 
-- **Project graph validation**：检查可达的 TypeScript build leaf、references、graph-owned imports、包边界和基于 label 的 deny rules。
-- **Typecheck coverage proof**：验证具备 graph 能力的 checker build config 与严格的本地 typecheck companion 保持一致，并确认源码文件被 checker routes 或 allowlist 覆盖。
-- **Compatibility path generation**：当 `workspace:*` 依赖的 package exports 仍指向 build artifacts 时，生成可选的 `tsconfig.graph.paths.generated.json` 源码 paths 配置。
-- **Checker target runner**：运行已配置的 TypeScript 与 UI 框架 checker routes，覆盖 `typecheck` 与 `build` 两类能力。
+- **Project graph validation**：检查可达的 TypeScript 声明叶子、references、graph-owned imports、包边界和基于 label 的 deny rules。
+- **Typecheck coverage proof**：验证可达声明叶子与严格的本地 typecheck companion 保持一致，并确认源码文件被 checker entry 或 allowlist 覆盖。
+- **Compatibility path generation**：当 `workspace:*` 依赖的 package exports 仍指向 build artifacts 时，生成可选的 `tsconfig.dts.paths.generated.json` 源码 paths 配置。
+- **Checker target runner**：按 `typecheck` 或 `build` 执行模式运行已配置的 TypeScript 与 UI 框架 checker entry。
 - **Published package checks**：使用 `publint`、Are The Types Wrong 和 runtime import boundary audit 校验构建后的 package output。
 - **Composable pipelines**：把内置检查和 shell 命令组合成 `typecheck`、`package`、`publish` 等命名 workflow。
 - **Typed configuration**：提供 `defineConfig(...)`，让用户配置拥有编辑器提示和类型约束。
@@ -72,17 +72,11 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        routes: {
-          typecheck: 'tsconfig.json',
-          build: 'tsconfig.graph.json',
-        },
+        entry: 'tsconfig.build.json',
       },
       vue: {
         preset: 'vue-tsc',
-        routes: {
-          typecheck: 'tsconfig.vue.json',
-          build: 'tsconfig.vue.graph.json',
-        },
+        entry: 'tsconfig.vue.build.json',
       },
     },
   },
@@ -93,7 +87,7 @@ export default defineConfig({
         deny: {
           refs: [
             {
-              path: 'packages/app/src/node/tsconfig.lib.build.json',
+              path: 'packages/app/src/node/tsconfig.lib.dts.json',
               reason: 'client runtime must not depend on the Node runtime',
             },
           ],
@@ -150,15 +144,15 @@ pnpm exec lattice package check --package @acme/core
 
 ## 核心概念
 
-### Build graph route
+### Checker entry
 
-对于 TypeScript checker，从 `config.checkers.<name>.routes.build` 开始，通常是 `tsconfig.graph.json`，最终到达 `tsconfig*.build.json` 叶子配置。该路线用于 `tsc -b` 和架构检查。
+每个 checker 都必须有一个 `config.checkers.<name>.entry`，通常是一个 `tsconfig*.build.json` graph 聚合配置。`lattice checker build` 会在 preset 支持时从这个 entry 执行 build 模式；`lattice checker typecheck` 会遍历同一个 entry，找到可达的 `tsconfig*.dts.json` 声明叶子，并检查它们配对的本地 companion。
 
-### Typecheck route
+### 声明叶子与 local companion
 
-对于 TypeScript checker，从 `config.checkers.<name>.routes.typecheck` 开始，通常是 `tsconfig.json`，最终到达编辑器和 `tsc --noEmit` 使用的普通本地 `tsconfig*.json` 配置。
+声明叶子应该拥有严格的本地 companion。例如，`tsconfig.lib.dts.json` 配对 `tsconfig.lib.json`，`tsconfig.dts.json` 配对 `tsconfig.json`。
 
-Build leaf 应该拥有严格的本地 companion。例如，`tsconfig.lib.build.json` 应与 `tsconfig.lib.json` 配对。
+默认 `tsconfig.json` 是当前目录的 IDE/typecheck 入口。单环境目录应直接用它作为 local leaf；多环境目录应让它成为只包含 `files: []` 和 `references` 的纯聚合器。
 
 ### Source dependencies 与 artifact dependencies
 
@@ -180,12 +174,12 @@ lattice [--config lattice.config.mjs] [--mode mode] <command>
 | ------------------------------------------------ | ---------------------------------------------------------------- |
 | `lattice check <pipeline>`                       | 运行 `pipelines` 中的命名 pipeline。                             |
 | `lattice graph check`                            | 校验 project references 和架构 import 规则。                     |
-| `lattice proof check`                            | 证明 build configs、本地 typecheck configs 和源码覆盖保持一致。  |
+| `lattice proof check`                            | 证明声明 configs、本地 typecheck configs 和源码覆盖保持一致。    |
 | `lattice paths generate`                         | 为 artifact-facing workspace exports 生成源码 `paths` 兼容配置。 |
 | `lattice paths apply`                            | `paths generate` 的兼容别名。                                    |
 | `lattice paths check`                            | 当 generated path files 过期时失败。                             |
-| `lattice checker typecheck`                      | 运行配置的 checker `typecheck` routes。                          |
-| `lattice checker build`                          | 运行配置的 checker `build` routes。                              |
+| `lattice checker typecheck`                      | 运行从 checker entry 推导出的 typecheck targets。                |
+| `lattice checker build`                          | 对支持 build 模式的 checker entry 执行 build。                   |
 | `lattice checker typecheck --concurrency <n>`    | 限制并发 checker 进程数。                                        |
 | `lattice package check`                          | 运行已配置的 package output checks。                             |
 | `lattice package check --package <name>`         | 检查单个已配置 package target。                                  |
@@ -201,17 +195,11 @@ config: {
   checkers: {
     typescript: {
       preset: 'tsc',
-      routes: {
-        typecheck: 'tsconfig.json',
-        build: 'tsconfig.graph.json',
-      },
+      entry: 'tsconfig.build.json',
     },
     vue: {
       preset: 'vue-tsc',
-      routes: {
-        typecheck: 'tsconfig.vue.json',
-        build: 'tsconfig.vue.graph.json',
-      },
+      entry: 'tsconfig.vue.build.json',
     },
   },
   source: {
@@ -220,7 +208,7 @@ config: {
 }
 ```
 
-`config.checkers` 定义 active checker routes。内置 preset 可以省略 `extensions`；如果省略 `source.include`，Lattice 会从 active checker 的 extensions 推导源码边界，然后再应用 `source.exclude`。
+`config.checkers` 定义 checker entry。每个已配置的 checker 都必须声明非空 `entry`。内置 preset 可以省略 `extensions`；如果省略 `source.include`，Lattice 会从已配置 checker 的 extensions 推导源码边界，然后再应用 `source.exclude`。
 
 ### `graph`
 
@@ -231,7 +219,7 @@ graph: {
       deny: {
         refs: [
           {
-            path: 'packages/app/src/node/tsconfig.lib.build.json',
+            path: 'packages/app/src/node/tsconfig.lib.dts.json',
             reason: 'client runtime must stay independent from Node runtime',
           },
         ],
@@ -247,12 +235,12 @@ graph: {
 }
 ```
 
-Build config 可以通过添加 `lattice` label 启用某条规则：
+声明叶子可以通过添加 `lattice` label 启用某条规则：
 
 ```jsonc
 {
   "lattice": "runtime-client",
-  "extends": ["./tsconfig.lib.json", "../../tsconfig.graph.base.json"],
+  "extends": ["./tsconfig.json", "../../tsconfig.dts.base.json"],
   "references": [],
 }
 ```
@@ -261,7 +249,7 @@ Build config 可以通过添加 `lattice` label 启用某条规则：
 
 ```js
 paths: {
-  generatedFileName: 'tsconfig.graph.paths.generated.json',
+  generatedFileName: 'tsconfig.dts.paths.generated.json',
   conditionPriority: ['source', 'development', 'types'],
   artifactDirectories: ['dist', 'build', 'lib', 'esm', 'cjs', 'out'],
 }
@@ -282,7 +270,7 @@ proof: {
 }
 ```
 
-Checker routes 覆盖由 TypeScript 或框架感知工具验证的文件。allowlist 是所有 checker routes 都无法覆盖某个源码文件后的最后兜底；条目应该少而明确，并且必须包含 reason。
+Checker entry 覆盖由 TypeScript 或框架感知工具验证的文件。allowlist 是所有 checker entry 都无法覆盖某个源码文件后的最后兜底；条目应该少而明确，并且必须包含 reason。
 
 ### `packageChecks`
 

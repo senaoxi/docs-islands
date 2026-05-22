@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Tools declaration leaf for root scripts; not a production library project.
+  "extends": ["./tsconfig.json", "./tsconfig.dts.base.json"],
+  "compilerOptions": {
+    "outDir": "./.tsbuild",
+    "tsBuildInfoFile": "./.tsbuild/build.tsbuildinfo"
+  },
+  "references": [
+    {
+      "path": "./packages/logger/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "./utils/tsconfig.lib.dts.json"
+    }
+  ]
+}

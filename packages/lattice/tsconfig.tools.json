@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  // Package-local tooling check. Build leaf: tsconfig.tools.build.json.
+  // Package-local tooling check. Declaration leaf: tsconfig.tools.dts.json.
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "declaration": true,

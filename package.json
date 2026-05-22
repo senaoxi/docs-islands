@@ -54,7 +54,7 @@
     "release": "tsx scripts/release.ts",
     "changelog": "tsx scripts/changelog.ts",
     "changelog:preview": "tsx scripts/changelog.ts --dry-run",
-    "clean": "pnpm run _run clean && del-cli scripts/.tsbuild .eslintcache node_modules",
+    "clean": "pnpm run _run clean && del-cli .tsbuild .eslintcache coverage node_modules",
     "_run": "tsx scripts/run-workspace-script.ts",
     "preinstall": "npx only-allow pnpm",
     "postinstall": "node --import tsx scripts/postinstall.ts",

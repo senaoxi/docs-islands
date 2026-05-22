@@ -44,10 +44,7 @@ async function createFixture(files: Record<string, string>): Promise<{
         checkers: {
           typescript: {
             preset: 'tsc',
-            routes: {
-              build: 'tsconfig.graph.json',
-              typecheck: 'tsconfig.json',
-            },
+            entry: 'tsconfig.build.json',
           },
         },
       },
@@ -94,7 +91,7 @@ function createWorkspaceExportFixture(): Record<string, string> {
       },
       include: ['src/**/*.ts'],
     }),
-    'packages/a/tsconfig.lib.build.json': stringifyConfig({
+    'packages/a/tsconfig.lib.dts.json': stringifyConfig({
       compilerOptions: {
         ...buildCompilerOptions,
         rootDir: 'src',
@@ -103,7 +100,7 @@ function createWorkspaceExportFixture(): Record<string, string> {
       include: ['src/**/*.ts'],
       references: [
         {
-          path: '../b/tsconfig.lib.build.json',
+          path: '../b/tsconfig.lib.dts.json',
         },
       ],
     }),
@@ -129,7 +126,7 @@ function createWorkspaceExportFixture(): Record<string, string> {
       },
       include: ['src/**/*.ts'],
     }),
-    'packages/b/tsconfig.lib.build.json': stringifyConfig({
+    'packages/b/tsconfig.lib.dts.json': stringifyConfig({
       compilerOptions: {
         ...buildCompilerOptions,
         rootDir: 'src',
@@ -141,14 +138,14 @@ function createWorkspaceExportFixture(): Record<string, string> {
 packages:
   - packages/*
 `,
-    'tsconfig.graph.json': stringifyConfig({
+    'tsconfig.build.json': stringifyConfig({
       files: [],
       references: [
         {
-          path: './packages/b/tsconfig.lib.build.json',
+          path: './packages/b/tsconfig.lib.dts.json',
         },
         {
-          path: './packages/a/tsconfig.lib.build.json',
+          path: './packages/a/tsconfig.lib.dts.json',
         },
       ],
     }),
@@ -156,7 +153,7 @@ packages:
 }
 
 describe('runPaths', () => {
-  it('fails when the shared graph route has config problems', async () => {
+  it('fails when the shared checker entry has config problems', async () => {
     const fixture = await createFixture({
       'packages/a/package.json': stringifyConfig({
         name: '@example/a',
@@ -170,7 +167,7 @@ describe('runPaths', () => {
         },
         include: ['src/**/*.ts'],
       }),
-      'packages/a/tsconfig.lib.build.json': stringifyConfig({
+      'packages/a/tsconfig.lib.dts.json': stringifyConfig({
         compilerOptions: {
           ...buildCompilerOptions,
           rootDir: 'src',
@@ -178,14 +175,14 @@ describe('runPaths', () => {
         },
         include: ['src/**/*.ts'],
       }),
-      'tsconfig.graph.json': stringifyConfig({
+      'tsconfig.build.json': stringifyConfig({
         files: [],
         references: [
           {
-            path: './packages/a/tsconfig.lib.build.json',
+            path: './packages/a/tsconfig.lib.dts.json',
           },
           {
-            path: './packages/missing/tsconfig.graph.jsonx',
+            path: './packages/missing/tsconfig.build.jsonx',
           },
         ],
       }),
@@ -193,7 +190,7 @@ describe('runPaths', () => {
 
     try {
       await expect(runPaths(fixture.config)).rejects.toThrow(
-        /Graph route references a missing tsconfig/u,
+        /Checker entry references a missing tsconfig/u,
       );
     } finally {
       await fixture.cleanup();
@@ -203,18 +200,18 @@ describe('runPaths', () => {
   it('uses the shared graph root config', async () => {
     const fixture = await createFixture({
       ...createWorkspaceExportFixture(),
-      'tsconfig.custom.graph.json': stringifyConfig({
+      'tsconfig.custom.build.json': stringifyConfig({
         files: [],
         references: [
           {
-            path: './packages/b/tsconfig.lib.build.json',
+            path: './packages/b/tsconfig.lib.dts.json',
           },
           {
-            path: './packages/a/tsconfig.lib.build.json',
+            path: './packages/a/tsconfig.lib.dts.json',
           },
         ],
       }),
-      'tsconfig.graph.json': stringifyConfig({
+      'tsconfig.build.json': stringifyConfig({
         files: [],
         references: [],
       }),
@@ -229,10 +226,7 @@ describe('runPaths', () => {
             checkers: {
               typescript: {
                 preset: 'tsc',
-                routes: {
-                  build: 'tsconfig.custom.graph.json',
-                  typecheck: 'tsconfig.json',
-                },
+                entry: 'tsconfig.custom.build.json',
               },
             },
           },
@@ -247,11 +241,11 @@ describe('runPaths', () => {
     const fixture = await createFixture(createWorkspaceExportFixture());
     const generatedPath = path.join(
       fixture.rootDir,
-      'packages/a/tsconfig.graph.paths.generated.json',
+      'packages/a/tsconfig.dts.paths.generated.json',
     );
     const aBuildConfigPath = path.join(
       fixture.rootDir,
-      'packages/a/tsconfig.lib.build.json',
+      'packages/a/tsconfig.lib.dts.json',
     );
 
     try {
@@ -281,14 +275,14 @@ describe('runPaths', () => {
         '"@example/b/features/*": ["../b/src/features/*.ts"]',
       );
       await expect(readFile(aBuildConfigPath, 'utf8')).resolves.not.toContain(
-        'tsconfig.graph.paths.generated.json',
+        'tsconfig.dts.paths.generated.json',
       );
       await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
 
       await writeText(
         aBuildConfigPath,
         stringifyConfig({
-          extends: ['./tsconfig.graph.paths.generated.json'],
+          extends: ['./tsconfig.dts.paths.generated.json'],
           compilerOptions: {
             ...buildCompilerOptions,
             rootDir: 'src',
@@ -297,7 +291,7 @@ describe('runPaths', () => {
           include: ['src/**/*.ts'],
           references: [
             {
-              path: '../b/tsconfig.lib.build.json',
+              path: '../b/tsconfig.lib.dts.json',
             },
           ],
         }),
@@ -329,7 +323,7 @@ describe('runGraphCheck workspace references', () => {
         },
         include: ['src/**/*.ts'],
       }),
-      'packages/a/tsconfig.lib.build.json': stringifyConfig({
+      'packages/a/tsconfig.lib.dts.json': stringifyConfig({
         compilerOptions: {
           ...buildCompilerOptions,
           rootDir: 'src',
@@ -338,7 +332,7 @@ describe('runGraphCheck workspace references', () => {
         include: ['src/**/*.ts'],
         references: [
           {
-            path: '../b/tsconfig.lib.build.json',
+            path: '../b/tsconfig.lib.dts.json',
           },
         ],
       }),
@@ -357,7 +351,7 @@ describe('runGraphCheck workspace references', () => {
         },
         include: ['src/**/*.ts'],
       }),
-      'packages/b/tsconfig.lib.build.json': stringifyConfig({
+      'packages/b/tsconfig.lib.dts.json': stringifyConfig({
         compilerOptions: {
           ...buildCompilerOptions,
           rootDir: 'src',
@@ -369,14 +363,14 @@ describe('runGraphCheck workspace references', () => {
 packages:
   - packages/*
 `,
-      'tsconfig.graph.json': stringifyConfig({
+      'tsconfig.build.json': stringifyConfig({
         files: [],
         references: [
           {
-            path: './packages/b/tsconfig.lib.build.json',
+            path: './packages/b/tsconfig.lib.dts.json',
           },
           {
-            path: './packages/a/tsconfig.lib.build.json',
+            path: './packages/a/tsconfig.lib.dts.json',
           },
         ],
       }),

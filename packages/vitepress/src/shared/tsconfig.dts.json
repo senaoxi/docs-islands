@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "lattice": "runtime-shared",
+  // Shared runtime declaration leaf; node/client runtime projects depend on this leaf.
+  "extends": ["./tsconfig.json", "../../../../tsconfig.dts.base.json"],
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "./.tsbuild",
+    "tsBuildInfoFile": "./.tsbuild/build.tsbuildinfo"
+  },
+  "references": [
+    {
+      "path": "../types/tsconfig.dts.json"
+    },
+    {
+      "path": "../../../logger/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "../../../core/tsconfig.lib.dts.json"
+    }
+  ]
+}

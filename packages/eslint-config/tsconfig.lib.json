@@ -1,5 +1,5 @@
 {
-  // Package-local library check. Build leaf: tsconfig.lib.build.json.
+  // Package-local library check. Declaration leaf: tsconfig.lib.dts.json.
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"]

@@ -11,6 +11,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runGraphCheck } from '../commands/graph';
 import type { GraphConfig, ResolvedLatticeConfig } from '../config';
+import { collectGraphProjectRouteFromRoot } from '../tsconfig';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -45,10 +46,7 @@ async function createFixture(
         checkers: {
           typescript: {
             preset: 'tsc',
-            routes: {
-              build: 'tsconfig.graph.json',
-              typecheck: 'tsconfig.json',
-            },
+            entry: 'tsconfig.build.json',
           },
         },
       },
@@ -143,26 +141,26 @@ function createLocalBoundaryFiles(options: {
     'app/runtime.ts':
       options.runtimeSource ??
       "import { nodeValue } from './node';\nexport const runtimeValue = nodeValue;\n",
-    'app/tsconfig.node.build.json': buildConfig({
+    'app/tsconfig.node.dts.json': buildConfig({
       include: ['node.ts'],
       tsBuildInfoFile: './.tsbuild/node.tsbuildinfo',
     }),
     'app/tsconfig.node.json': typecheckConfig(['node.ts']),
-    'app/tsconfig.runtime.build.json': buildConfig({
+    'app/tsconfig.runtime.dts.json': buildConfig({
       include: ['runtime.ts'],
       lattice: options.lattice,
       references: options.runtimeReferences,
       tsBuildInfoFile: './.tsbuild/runtime.tsbuildinfo',
     }),
     'app/tsconfig.runtime.json': typecheckConfig(['runtime.ts']),
-    'tsconfig.graph.json': stringifyConfig({
+    'tsconfig.build.json': stringifyConfig({
       files: [],
       references: [
         {
-          path: './app/tsconfig.node.build.json',
+          path: './app/tsconfig.node.dts.json',
         },
         {
-          path: './app/tsconfig.runtime.build.json',
+          path: './app/tsconfig.runtime.dts.json',
         },
       ],
     }),
@@ -182,7 +180,7 @@ function createWorkspacePackageFiles(options: {
       type: 'module',
     }),
     'packages/app/src/index.ts': options.appSource,
-    'packages/app/tsconfig.lib.build.json': buildConfig({
+    'packages/app/tsconfig.lib.dts.json': buildConfig({
       include: ['src/**/*.ts'],
       lattice: 'runtime',
       references: options.appReferences,
@@ -197,7 +195,7 @@ function createWorkspacePackageFiles(options: {
       type: 'module',
     }),
     'packages/internal/src/index.ts': 'export const internalValue = 1;\n',
-    'packages/internal/tsconfig.lib.build.json': buildConfig({
+    'packages/internal/tsconfig.lib.dts.json': buildConfig({
       include: ['src/**/*.ts'],
       tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
     }),
@@ -206,14 +204,14 @@ function createWorkspacePackageFiles(options: {
 packages:
   - packages/*
 `,
-    'tsconfig.graph.json': stringifyConfig({
+    'tsconfig.build.json': stringifyConfig({
       files: [],
       references: [
         {
-          path: './packages/internal/tsconfig.lib.build.json',
+          path: './packages/internal/tsconfig.lib.dts.json',
         },
         {
-          path: './packages/app/tsconfig.lib.build.json',
+          path: './packages/app/tsconfig.lib.dts.json',
         },
       ],
     }),
@@ -226,7 +224,7 @@ const denyNodeRef: GraphConfig = {
       deny: {
         refs: [
           {
-            path: 'app/tsconfig.node.build.json',
+            path: 'app/tsconfig.node.dts.json',
             reason: 'runtime code must not depend on node internals',
           },
         ],
@@ -250,11 +248,11 @@ const denyInternalDep: GraphConfig = {
   },
 };
 
-describe('runGraphCheck graph route', () => {
-  it('reports missing graph references from nested aggregators', async () => {
+describe('runGraphCheck checker entry', () => {
+  it('rejects deprecated .graph.json checker entries with a migration hint', async () => {
     const fixture = await createFixture({
       'app/src/index.ts': 'export const value = 1;\n',
-      'app/tsconfig.lib.build.json': buildConfig({
+      'app/tsconfig.lib.dts.json': buildConfig({
         include: ['src/**/*.ts'],
         tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
       }),
@@ -263,18 +261,50 @@ describe('runGraphCheck graph route', () => {
         files: [],
         references: [
           {
-            path: './tsconfig.lib.graph.json',
+            path: './app/tsconfig.lib.dts.json',
           },
         ],
       }),
-      'tsconfig.lib.graph.json': stringifyConfig({
+    });
+
+    try {
+      const result = collectGraphProjectRouteFromRoot({
+        rootConfigPath: path.join(fixture.rootDir, 'tsconfig.graph.json'),
+        rootDir: fixture.rootDir,
+      });
+
+      expect(result.problems.join('\n')).toContain(
+        'renamed to tsconfig*.build.json',
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports missing graph references from nested aggregators', async () => {
+    const fixture = await createFixture({
+      'app/src/index.ts': 'export const value = 1;\n',
+      'app/tsconfig.lib.dts.json': buildConfig({
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+      }),
+      'app/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+      'tsconfig.build.json': stringifyConfig({
         files: [],
         references: [
           {
-            path: './app/tsconfig.lib.build.json',
+            path: './tsconfig.lib.build.json',
+          },
+        ],
+      }),
+      'tsconfig.lib.build.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './app/tsconfig.lib.dts.json',
           },
           {
-            path: './app/tsconfig.missing.graph.jsonx',
+            path: './app/tsconfig.missing.build.jsonx',
           },
         ],
       }),
@@ -290,19 +320,19 @@ describe('runGraphCheck graph route', () => {
   it('reports malformed graph reference entries', async () => {
     const fixture = await createFixture({
       'app/src/index.ts': 'export const value = 1;\n',
-      'app/tsconfig.lib.build.json': buildConfig({
+      'app/tsconfig.lib.dts.json': buildConfig({
         include: ['src/**/*.ts'],
         tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
       }),
       'app/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
-      'tsconfig.graph.json': stringifyConfig({
+      'tsconfig.build.json': stringifyConfig({
         files: [],
         references: [
           {
-            path: './app/tsconfig.lib.build.json',
+            path: './app/tsconfig.lib.dts.json',
           },
           {
-            pat: './app/tsconfig.other.build.json',
+            pat: './app/tsconfig.other.dts.json',
           },
           {
             path: '',
@@ -320,7 +350,7 @@ describe('runGraphCheck graph route', () => {
 });
 
 describe('runGraphCheck graph rules', () => {
-  it('denies imports to configured build refs for labeled projects', async () => {
+  it('denies imports to configured declaration refs for labeled projects', async () => {
     const fixture = await createFixture(
       createLocalBoundaryFiles({
         lattice: 'runtime',
@@ -335,10 +365,10 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
-  it('does not apply graph rules to unlabeled build projects', async () => {
+  it('does not apply graph rules to unlabeled declaration projects', async () => {
     const fixture = await createFixture(
       createLocalBoundaryFiles({
-        runtimeReferences: ['./tsconfig.node.build.json'],
+        runtimeReferences: ['./tsconfig.node.dts.json'],
       }),
       denyNodeRef,
     );
@@ -350,7 +380,7 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
-  it('reports invalid build project lattice labels', async () => {
+  it('reports invalid declaration project lattice labels', async () => {
     const fixture = await createFixture(
       createLocalBoundaryFiles({
         lattice: '',
@@ -377,7 +407,7 @@ describe('runGraphCheck graph rules', () => {
             deny: {
               refs: [
                 {
-                  path: 'app/tsconfig.node.build.json',
+                  path: 'app/tsconfig.node.dts.json',
                   reason: '',
                 },
               ],
@@ -411,7 +441,7 @@ describe('runGraphCheck graph rules', () => {
               ],
               refs: [
                 {
-                  path: 'packages/app/tsconfig.missing.build.json',
+                  path: 'packages/app/tsconfig.missing.dts.json',
                   reason: 'missing ref should be rejected',
                 },
               ],
@@ -428,11 +458,11 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
-  it('denies project references to configured build refs', async () => {
+  it('denies project references to configured declaration refs', async () => {
     const fixture = await createFixture(
       createLocalBoundaryFiles({
         lattice: 'runtime',
-        runtimeReferences: ['./tsconfig.node.build.json'],
+        runtimeReferences: ['./tsconfig.node.dts.json'],
         runtimeSource: 'export const runtimeValue = 1;\n',
       }),
       denyNodeRef,
@@ -487,7 +517,7 @@ describe('runGraphCheck graph rules', () => {
   it('denies project references to configured workspace deps', async () => {
     const fixture = await createFixture(
       createWorkspacePackageFiles({
-        appReferences: ['../internal/tsconfig.lib.build.json'],
+        appReferences: ['../internal/tsconfig.lib.dts.json'],
         appSource: 'export const value = 1;\n',
       }),
       denyInternalDep,

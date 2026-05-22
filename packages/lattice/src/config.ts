@@ -81,21 +81,7 @@ export type BuiltinCheckerPreset = 'svelte-check' | 'tsc' | 'vue-tsc';
 
 export type CheckerPreset = BuiltinCheckerPreset | (string & {});
 
-export type CheckerRouteKind = 'build' | 'typecheck';
-
-/**
- * Project routes used by one checker.
- */
-export interface CheckerRoutesConfig {
-  /**
-   * Route used by `lattice checker typecheck` / `checker:typecheck`.
-   */
-  typecheck?: string;
-  /**
-   * Route used by `lattice checker build` / `checker:build`.
-   */
-  build?: string;
-}
+export type CheckerExecutionKind = 'build' | 'typecheck';
 
 /**
  * Checker capability for one source module family.
@@ -106,32 +92,32 @@ export interface CheckerConfig {
    */
   preset: CheckerPreset;
   /**
+   * Checker entry project used by both build and typecheck execution modes.
+   */
+  entry: string;
+  /**
    * Source file suffixes covered by this checker.
    *
    * Built-in presets may omit this and use their default suffixes.
    */
   extensions?: string[];
-  /**
-   * Typecheck/build routes. Omit routes to keep the checker inactive.
-   */
-  routes?: CheckerRoutesConfig;
 }
 
 export interface ResolvedCheckerConfig {
+  entry: string;
   extensions: string[];
   name: string;
   preset: CheckerPreset;
-  routes: Required<Pick<CheckerConfig, 'routes'>>['routes'];
 }
 
 /**
- * Source boundary that must be covered by checker routes or allowlist proof.
+ * Source boundary that must be covered by checker entries or allowlist proof.
  */
 export interface SourceBoundaryConfig {
   /**
    * Glob patterns for source files that need proof coverage.
    *
-   * When omitted, Lattice derives the source boundary from active checker
+   * When omitted, Lattice derives the source boundary from configured checker
    * extensions and then applies `exclude`.
    */
   include?: string[];
@@ -187,7 +173,7 @@ export interface PathsConfig {
   /**
    * File name used for generated path mapping configs.
    *
-   * @default "tsconfig.graph.paths.generated.json"
+   * @default "tsconfig.dts.paths.generated.json"
    */
   generatedFileName?: string;
   /**
@@ -203,11 +189,11 @@ export interface PathsConfig {
 }
 
 /**
- * Build graph boundary denied to projects with a matching Lattice label.
+ * Declaration leaf boundary denied to projects with a matching Lattice label.
  */
 export interface GraphRuleRefDenyEntry {
   /**
-   * Target `tsconfig*.build.json` path, relative to the inferred workspace root.
+   * Target `tsconfig*.dts.json` path, relative to the inferred workspace root.
    */
   path: string;
   /**
@@ -235,7 +221,7 @@ export interface GraphRuleDepDenyEntry {
  */
 export interface GraphRuleDenyConfig {
   /**
-   * Build graph boundaries that matching projects must not reference or import.
+   * Declaration leaf boundaries that matching projects must not reference or import.
    */
   refs?: GraphRuleRefDenyEntry[];
   /**
@@ -246,7 +232,7 @@ export interface GraphRuleDenyConfig {
 
 /**
  * Package-level graph governance rule keyed by a label declared in
- * `tsconfig*.build.json`.
+ * `tsconfig*.dts.json`.
  */
 export interface GraphRule {
   /**
@@ -262,7 +248,7 @@ export interface GraphConfig {
   /**
    * Label-based package and build-boundary access rules.
    *
-   * A `tsconfig*.build.json` can opt into one rule by declaring
+   * A `tsconfig*.dts.json` can opt into one rule by declaring
    * `"lattice": "<label>"`.
    */
   rules?: Record<string, GraphRule>;
@@ -403,7 +389,7 @@ export interface PackageChecksConfig {
  */
 export interface LatticeConfig {
   /**
-   * Shared project facts, such as checker routes and source boundary.
+   * Shared project facts, such as checker entries and source boundary.
    */
   config?: SharedLatticeConfig;
   /**
@@ -423,7 +409,7 @@ export interface LatticeConfig {
    */
   pipelines?: Record<string, PipelineStep[]>;
   /**
-   * Rules that prove source files are covered by graph or checker routes.
+   * Rules that prove source files are covered by graph or checker entries.
    */
   proof?: ProofConfig;
 }
@@ -514,7 +500,7 @@ function formatUnknownValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function validateRouteValue(options: {
+function validateEntryValue(options: {
   field: string;
   problems: string[];
   value: unknown;
@@ -525,10 +511,10 @@ function validateRouteValue(options: {
 
   options.problems.push(
     [
-      'Invalid Lattice checker route config:',
+      'Invalid Lattice checker entry config:',
       `  field: ${options.field}`,
       `  value: ${formatUnknownValue(options.value)}`,
-      '  reason: checker routes must be non-empty string paths.',
+      '  reason: checker entry must be a non-empty string path.',
     ].join('\n'),
   );
 }
@@ -616,43 +602,30 @@ function collectCheckerConfigProblems(config: LatticeConfig): string[] {
       );
     }
 
-    const routes = checker.routes;
-
-    if (routes === undefined) {
-      continue;
-    }
-
-    if (!isRecord(routes)) {
+    if (Object.hasOwn(checker, 'routes')) {
       problems.push(
         [
-          'Invalid Lattice checker route config:',
+          'Invalid Lattice checker config:',
           `  field: ${field}.routes`,
-          `  value: ${formatUnknownValue(routes)}`,
-          '  reason: checker routes must be an object with typecheck and/or build.',
+          `  value: ${formatUnknownValue(checker.routes)}`,
+          '  reason: checker routes are not supported; move routes.build to entry and migrate routes.typecheck targets to tsconfig*.dts.json leaves reachable from that entry with local companions.',
         ].join('\n'),
       );
+    }
+
+    const entry = checker.entry;
+
+    validateEntryValue({
+      field: `${field}.entry`,
+      problems,
+      value: entry,
+    });
+
+    if (typeof preset !== 'string' || preset.trim().length === 0) {
       continue;
     }
 
-    const hasTypecheckRoute =
-      Object.hasOwn(routes, 'typecheck') && routes.typecheck !== undefined;
-    const hasBuildRoute =
-      Object.hasOwn(routes, 'build') && routes.build !== undefined;
-
-    if (!hasTypecheckRoute && !hasBuildRoute) {
-      problems.push(
-        [
-          'Invalid Lattice checker route config:',
-          `  field: ${field}.routes`,
-          `  value: ${formatUnknownValue(routes)}`,
-          '  reason: routes must include typecheck or build; remove routes entirely to keep this checker inactive.',
-        ].join('\n'),
-      );
-      continue;
-    }
-
-    const adapter =
-      typeof preset === 'string' ? getCheckerAdapter(preset) : null;
+    const adapter = getCheckerAdapter(preset);
 
     if (!adapter) {
       problems.push(
@@ -660,59 +633,10 @@ function collectCheckerConfigProblems(config: LatticeConfig): string[] {
           'Unsupported Lattice checker preset:',
           `  field: ${field}.preset`,
           `  value: ${formatUnknownValue(preset)}`,
-          '  reason: active checker routes require a built-in checker adapter.',
+          '  reason: configured checker entries require a built-in checker adapter.',
         ].join('\n'),
       );
       continue;
-    }
-
-    if (hasTypecheckRoute && !adapter.supportedRoutes.includes('typecheck')) {
-      problems.push(
-        [
-          'Unsupported Lattice checker route config:',
-          `  field: ${field}.routes.typecheck`,
-          `  value: ${formatUnknownValue(routes.typecheck)}`,
-          `  reason: checker preset "${adapter.preset}" does not support routes.typecheck.`,
-        ].join('\n'),
-      );
-    }
-
-    if (hasBuildRoute && !adapter.supportedRoutes.includes('build')) {
-      problems.push(
-        [
-          'Unsupported Lattice checker route config:',
-          `  field: ${field}.routes.build`,
-          `  value: ${formatUnknownValue(routes.build)}`,
-          `  reason: checker preset "${adapter.preset}" does not support routes.build.`,
-        ].join('\n'),
-      );
-    }
-
-    if (adapter.graph && hasBuildRoute && !hasTypecheckRoute) {
-      problems.push(
-        [
-          'Invalid Lattice checker route config:',
-          `  field: ${field}.routes`,
-          `  value: ${formatUnknownValue(routes)}`,
-          `  reason: graph-capable checker preset "${adapter.preset}" must configure routes.typecheck when routes.build is configured.`,
-        ].join('\n'),
-      );
-    }
-
-    if (hasTypecheckRoute) {
-      validateRouteValue({
-        field: `${field}.routes.typecheck`,
-        problems,
-        value: routes.typecheck,
-      });
-    }
-
-    if (hasBuildRoute) {
-      validateRouteValue({
-        field: `${field}.routes.build`,
-        problems,
-        value: routes.build,
-      });
     }
   }
 

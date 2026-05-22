@@ -23,23 +23,23 @@ check. It runs the full graph check, then runs the Vue SFC checks.
   that intentionally use `link:` dist dependencies.
 - `pnpm typecheck:graph`: default graph check. It validates graph references
   and architecture rules, then runs the default graph build through
-  `tsc -b tsconfig.graph.json --pretty false`.
+  `tsc -b tsconfig.build.json --pretty false`.
 - `pnpm typecheck:lib`: production library/runtime declaration graph
-  check through `tsconfig.lib.graph.json`.
+  check through `tsconfig.lib.build.json`.
 - `pnpm typecheck:vue`: Vue SFC/template checks for source-owned Vue configs
-  through the root `tsconfig.vue.json` checker route.
+  through the root `tsconfig.vue.build.json` checker entry.
 - `pnpm tsconfig:graph:paths`: compatibility helper that generates source
   `paths` configs only for `workspace:*` dependencies whose package exports
   still resolve to build artifacts.
 
 For one-off build-mode flags, run the raw TypeScript build command directly,
-for example `pnpm exec tsc -b tsconfig.graph.json --pretty false --force`.
+for example `pnpm exec tsc -b tsconfig.build.json --pretty false --force`.
 
 Run `vue-tsc` through `pnpm typecheck:vue` or the package-local Vue scripts
 whenever changing `.vue` files, VitePress theme files, or docs theme code.
 Native `tsc -b` intentionally does not parse Vue SFC templates.
 
-Graph build leaves emit declarations and `.tsbuildinfo` artifacts into their
+Declaration leaves emit declarations and `.tsbuildinfo` artifacts into their
 own owner directory's `.tsbuild/` cache. Root tools use the root `.tsbuild/`;
 workspace/package leaves use package-local `.tsbuild/` directories. These
 files are not package build output and must not be published or committed.
@@ -51,8 +51,8 @@ VitePress package build creates that output.
 Generated graph paths are not part of the default source graph. They are an
 opt-in compatibility bridge for packages that intentionally keep artifact
 exports in the workspace manifest while still being consumed as `workspace:*`
-source dependencies. The generator never edits `tsconfig*.build.json`; affected
-build leaves must manually extend the generated file first.
+source dependencies. The generator never edits `tsconfig*.dts.json`; affected
+declaration leaves must manually extend the generated file first.
 
 ## Retired Legacy TypeScript Check Topology
 
@@ -112,7 +112,7 @@ references. Dist-facing package export checks stay as post-build or consumer
 pipeline checks. If a package keeps dist-facing exports but is referenced as a
 `workspace:*` source dependency, `lattice graph check` reports the mismatch and
 `lattice paths generate` can produce an explicit source-path shim for the
-importing build configs.
+importing declaration configs.
 
 ## Internal Import Edges
 
@@ -134,11 +134,14 @@ Some `@docs-islands/test`, `@docs-islands/test_b`,
 `@docs-islands/logger-fixture`, and `@docs-islands/missing` strings are test
 fixture package names, not real workspace graph nodes.
 
-## Current Layered TypeScript Routes
+## Current Checker Entries And IDE Configs
 
-The repository now keeps two TypeScript reference routes separate. The
-IDE/typecheck route uses ordinary `tsconfig*.json` files, while the build graph
-route uses `tsconfig*.graph.json` aggregators and `tsconfig*.build.json` leaves.
+The repository keeps IDE-friendly ordinary `tsconfig*.json` files separate from
+Lattice checker entries. The root `tsconfig.json` can reference ordinary local
+configs for editor experience, but it is not the source of truth for Lattice
+coverage proof. Lattice checker entries use `tsconfig*.build.json` graph
+aggregators and `tsconfig*.dts.json` declaration leaves.
+
 Package scripts are convenience entrypoints, not the source of truth for graph
 ownership or coverage proof.
 
@@ -155,28 +158,31 @@ packages/*/tsconfig.json
   -> runtime/type subproject tsconfig.json files where needed
 ```
 
-The build graph uses `tsconfig.graph.json` as the default full `tsc -b` check
+The TypeScript checker uses `tsconfig.build.json` as the default full `tsc -b`
 entry. The full check graph and production library graph are separate entries:
 
 ```text
 
-tsconfig.graph.json
-  -> tsconfig.lib.graph.json
-  -> scripts/tsconfig.build.json
-  -> utils/tsconfig.graph.json
-  -> packages/*/tsconfig.graph.json
+tsconfig.build.json
+  -> tsconfig.lib.build.json
+  -> scripts/tsconfig.dts.json
+  -> utils/tsconfig.build.json
+  -> packages/*/tsconfig.build.json
 
-tsconfig.lib.graph.json
-  -> utils/tsconfig.lib.build.json
-  -> packages/*/tsconfig.lib.build.json
-  -> packages/vitepress/tsconfig.lib.graph.json
+tsconfig.lib.build.json
+  -> utils/tsconfig.lib.dts.json
+  -> packages/*/tsconfig.lib.dts.json
+  -> packages/vitepress/tsconfig.build.json
 
-packages/vitepress/tsconfig.lib.graph.json
-  -> types/tsconfig.build.json
-  -> src/types/tsconfig.build.json
-  -> src/shared/tsconfig.build.json
-  -> src/node/tsconfig.build.json
-  -> src/client/tsconfig.build.json
+packages/vitepress/tsconfig.build.json
+  -> src/tsconfig.build.json
+  -> types/tsconfig.dts.json
+
+packages/vitepress/src/tsconfig.build.json
+  -> src/types/tsconfig.lib.dts.json
+  -> src/shared/tsconfig.lib.dts.json
+  -> src/node/tsconfig.lib.dts.json
+  -> src/client/tsconfig.lib.dts.json
 ```
 
 The source graph remains layered as follows:
@@ -208,21 +214,21 @@ runtime projects
 
 More precise project edges:
 
-| Project                                             | References should include                                             | Notes                                                                                                         |
-| --------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `packages/logger/tsconfig.lib.build.json`           | none, or only external types                                          | Runtime logger source only.                                                                                   |
-| `utils/tsconfig.lib.build.json`                     | none                                                                  | Utils consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                                |
-| `packages/plugins/license/tsconfig.lib.build.json`  | `utils`                                                               | Plugin-license consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                       |
-| `packages/logger/tsconfig.tools.build.json`         | `logger:lib`, `utils`                                                 | Plugin-license is consumed through `link:` dist output; the typecheck pipeline prebuilds it.                  |
-| `packages/core/tsconfig.lib.build.json`             | `utils`                                                               | Core consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                                 |
-| `packages/eslint-config/tsconfig.lib.build.json`    | none                                                                  | ESLint config runtime source stays separate from its rolldown config.                                         |
-| `scripts/tsconfig.build.json` as `root:tools`       | `logger:lib`, `utils`                                                 | Root scripts import `@docs-islands/logger/helper` and `@docs-islands/utils/*`.                                |
-| `packages/vitepress/src/shared/tsconfig.build.json` | `core:lib`, `logger:lib`, `utils`                                     | Universal shared runtime; owns `src/shared` plus `src/types`, with no Node ambient types or `node:*` imports. |
-| `packages/vitepress/src/client/tsconfig.build.json` | `vitepress:runtime-shared`, `core:lib`, `logger:lib`, `utils`         | Client runtime keeps Node ambient types out.                                                                  |
-| `packages/vitepress/src/node/tsconfig.build.json`   | `vitepress:runtime-shared`, `core:lib`, `logger:lib`, `utils`         | Node runtime owns Node-specific config resolution.                                                            |
-| `packages/vitepress/tsconfig.tools.build.json`      | `vitepress:runtime-*`, `utils`, `logger:lib`                          | Plugin-license is consumed through `link:` dist output; the typecheck pipeline prebuilds it.                  |
-| package test projects                               | corresponding source/runtime projects plus imported internal packages | Tests should depend on source projects, not be referenced by production libs.                                 |
-| playground/smoke projects                           | none in source graph                                                  | They are dist consumer checks in the `consumer` pipeline, not project-reference build leaves.                 |
+| Project                                               | References should include                                             | Notes                                                                                                         |
+| ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `packages/logger/tsconfig.lib.dts.json`               | none, or only external types                                          | Runtime logger source only.                                                                                   |
+| `utils/tsconfig.lib.dts.json`                         | none                                                                  | Utils consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                                |
+| `packages/plugins/license/tsconfig.lib.dts.json`      | `utils`                                                               | Plugin-license consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                       |
+| `packages/logger/tsconfig.tools.dts.json`             | `logger:lib`, `utils`                                                 | Plugin-license is consumed through `link:` dist output; the typecheck pipeline prebuilds it.                  |
+| `packages/core/tsconfig.lib.dts.json`                 | `utils`                                                               | Core consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                                 |
+| `packages/eslint-config/tsconfig.lib.dts.json`        | none                                                                  | ESLint config runtime source stays separate from its rolldown config.                                         |
+| `scripts/tsconfig.dts.json` as `root:tools`           | `logger:lib`, `utils`                                                 | Root scripts import `@docs-islands/logger/helper` and `@docs-islands/utils/*`.                                |
+| `packages/vitepress/src/shared/tsconfig.lib.dts.json` | `core:lib`, `logger:lib`, `utils`                                     | Universal shared runtime; owns `src/shared` plus `src/types`, with no Node ambient types or `node:*` imports. |
+| `packages/vitepress/src/client/tsconfig.lib.dts.json` | `vitepress:runtime-shared`, `core:lib`, `logger:lib`, `utils`         | Client runtime keeps Node ambient types out.                                                                  |
+| `packages/vitepress/src/node/tsconfig.lib.dts.json`   | `vitepress:runtime-shared`, `core:lib`, `logger:lib`, `utils`         | Node runtime owns Node-specific config resolution.                                                            |
+| `packages/vitepress/tsconfig.tools.dts.json`          | `vitepress:runtime-*`, `utils`, `logger:lib`                          | Plugin-license is consumed through `link:` dist output; the typecheck pipeline prebuilds it.                  |
+| package test projects                                 | corresponding source/runtime projects plus imported internal packages | Tests should depend on source projects, not be referenced by production libs.                                 |
+| playground/smoke projects                             | none in source graph                                                  | They are dist consumer checks in the `consumer` pipeline, not project-reference declaration leaves.           |
 
 The graph should keep production source projects and tool/test projects
 separate. That separation is the main way to make the dependency graph acyclic
@@ -240,17 +246,17 @@ The checker also enforces forbidden edges:
 
 Current graph/local classification:
 
-| Class            | Projects/configs                                                                                                                                                                                                                                                                                                      |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib`            | `packages/logger/tsconfig.lib.build.json`, `utils/tsconfig.lib.build.json`, `packages/plugins/license/tsconfig.lib.build.json`, `packages/core/tsconfig.lib.build.json`, `packages/eslint-config/tsconfig.lib.build.json`, `packages/lattice/tsconfig.lib.build.json`                                                 |
-| `tools`          | `scripts/tsconfig.build.json`, `packages/logger/tsconfig.tools.build.json`, `utils/tsconfig.tools.build.json`, `packages/plugins/license/tsconfig.tools.build.json`, `packages/eslint-config/tsconfig.tools.build.json`, `packages/lattice/tsconfig.tools.build.json`, `packages/vitepress/tsconfig.tools.build.json` |
-| `test`           | `packages/logger/tsconfig.test.build.json`, `packages/core/tsconfig.test.build.json`, `packages/eslint-config/tsconfig.test.build.json`, `packages/vitepress/tsconfig.test.build.json`                                                                                                                                |
-| `runtime-node`   | `packages/vitepress/src/node/tsconfig.build.json` for graph, `packages/vitepress/src/node/tsconfig.json` for package scripts and dts                                                                                                                                                                                  |
-| `runtime-client` | `packages/vitepress/src/client/tsconfig.build.json` for graph, `packages/vitepress/src/client/tsconfig.json` for package scripts and dts                                                                                                                                                                              |
-| `runtime-shared` | `packages/vitepress/src/shared/tsconfig.build.json` for graph, `packages/vitepress/src/shared/tsconfig.json` for package scripts                                                                                                                                                                                      |
-| `docs`           | `docs/tsconfig.json` in source typecheck; `packages/vitepress/docs/tsconfig.json` in the dist consumer pipeline                                                                                                                                                                                                       |
-| `playground`     | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                               |
-| `smoke`          | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                               |
+| Class            | Projects/configs                                                                                                                                                                                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib`            | `packages/logger/tsconfig.lib.dts.json`, `utils/tsconfig.lib.dts.json`, `packages/plugins/license/tsconfig.lib.dts.json`, `packages/core/tsconfig.lib.dts.json`, `packages/eslint-config/tsconfig.lib.dts.json`, `packages/lattice/tsconfig.lib.dts.json`                                               |
+| `tools`          | `scripts/tsconfig.dts.json`, `packages/logger/tsconfig.tools.dts.json`, `utils/tsconfig.tools.dts.json`, `packages/plugins/license/tsconfig.tools.dts.json`, `packages/eslint-config/tsconfig.tools.dts.json`, `packages/lattice/tsconfig.tools.dts.json`, `packages/vitepress/tsconfig.tools.dts.json` |
+| `test`           | `packages/logger/tsconfig.test.dts.json`, `packages/core/tsconfig.test.dts.json`, `packages/eslint-config/tsconfig.test.dts.json`, `packages/vitepress/tsconfig.test.dts.json`                                                                                                                          |
+| `runtime-node`   | `packages/vitepress/src/node/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/node/tsconfig.json` for package scripts and dts                                                                                                                                                                  |
+| `runtime-client` | `packages/vitepress/src/client/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/client/tsconfig.json` for package scripts and dts                                                                                                                                                              |
+| `runtime-shared` | `packages/vitepress/src/shared/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/shared/tsconfig.json` for package scripts                                                                                                                                                                      |
+| `docs`           | `docs/tsconfig.json` in source typecheck; `packages/vitepress/docs/tsconfig.json` in the dist consumer pipeline                                                                                                                                                                                         |
+| `playground`     | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                 |
+| `smoke`          | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                 |
 
 ## Likely Graph Cycles And Breaks
 
@@ -318,8 +324,8 @@ Current risk:
 
 Break:
 
-- Keep root docs and package theme checks as source-owned `vue-tsc` checker
-  routes after runtime source checks.
+- Keep root docs and package theme checks behind source-owned `vue-tsc` checker
+  entries after runtime source checks.
 - Keep package docs, playground, and smoke checks as consumer checks after
   package builds.
 - Do not make runtime source projects depend on docs, theme, playground, or
@@ -337,7 +343,7 @@ Current risk:
 
 Break:
 
-- Keep graph-owned tests in `tsconfig.test.build.json` projects.
+- Keep graph-owned tests in `tsconfig.test.dts.json` projects.
 - Add references from test projects to their corresponding source/runtime
   projects and imported internal packages.
 - Do not reference test projects from lib/runtime projects.
@@ -347,19 +353,19 @@ Break:
 These should not be converted to plain `tsc` checks because they include Vue SFC
 files or VitePress site SFC typing:
 
-- `tsconfig.vue.json`
+- `tsconfig.vue.build.json`
 - `docs/tsconfig.json`
 - `packages/vitepress/docs/tsconfig.json`
-- `packages/vitepress/theme/tsconfig.lib.json`
+- `packages/vitepress/theme/tsconfig.json`
 
 The current scripts are correct in principle:
 
 - root `package.json`: `lattice check vue`
 - `docs/package.json`: `vue-tsc --noEmit`
 - `packages/vitepress/docs/package.json`: `vue-tsc --noEmit`
-- `packages/vitepress/package.json`: `vue-tsc -p theme/tsconfig.lib.json --noEmit`
+- `packages/vitepress/package.json`: `vue-tsc -p theme/tsconfig.json --noEmit`
 
-The source pipeline runs the root Vue checker route after the `tsc -b` graph
+The source pipeline runs the root Vue checker entry after the `tsc -b` graph
 check. Consumer-style docs still run in the consumer pipeline after dist output
 exists. All of them should remain separate from plain TypeScript build mode
 unless a later task proves `vue-tsc` build-mode references are safe for these
@@ -385,7 +391,7 @@ surface: the package that consumers actually install.
 
 ## First Safe Migration Order
 
-1. Add a separate graph entry such as `tsconfig.graph.json`.
+1. Add a separate graph entry such as `tsconfig.build.json`.
 2. Split `@docs-islands/logger` into a runtime lib project and a tools project
    in TypeScript config only. Keep rolldown and `rolldown-plugin-dts` unchanged.
 3. Add `utils` to the graph without a logger reference when it consumes logger
@@ -404,10 +410,10 @@ surface: the package that consumers actually install.
    checks that run after package artifacts are built.
 10. Continue to run source-owned `vue-tsc` checks and dist artifact checks
     after the graph check.
-11. After parity is proven, make root `tsconfig.json` the IDE/typecheck
-    solution over ordinary `tsconfig*.json` configs. Keep `tsconfig.graph.json`
-    as the build graph entry for `tsc -b`, and keep `vue-tsc` checker routes
-    explicit.
+11. After parity is proven, keep root `tsconfig.json` as the IDE solution over
+    ordinary `tsconfig*.json` configs. Configure `tsconfig.build.json` as the
+    TypeScript checker `entry`, and configure the `vue-tsc` checker `entry`
+    explicitly.
 
 ## Uncertainties For Later Code-Change Tasks
 

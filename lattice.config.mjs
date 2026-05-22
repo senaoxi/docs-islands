@@ -1,22 +1,16 @@
 import { defineConfig } from '@docs-islands/lattice/config';
 
 export default defineConfig({
-  // Shared checker routes used by graph, proof, paths, and typecheck checks.
+  // Shared checker entries used by graph, proof, paths, and typecheck checks.
   config: {
     checkers: {
       typescript: {
         preset: 'tsc',
-        routes: {
-          typecheck: 'tsconfig.json',
-          build: 'tsconfig.graph.json',
-        },
+        entry: 'tsconfig.build.json',
       },
       vue: {
         preset: 'vue-tsc',
-        routes: {
-          typecheck: 'tsconfig.vue.json',
-          build: 'tsconfig.vue.graph.json',
-        },
+        entry: 'tsconfig.vue.build.json',
       },
     },
     source: {
@@ -37,14 +31,14 @@ export default defineConfig({
   // TypeScript project graph policy. This checks project references,
   // cross-project imports, package exports, and label-based package boundaries.
   graph: {
-    // Label-based package and build boundary rules. Labels are declared inside
-    // tsconfig*.build.json with "lattice": "<label>".
+    // Label-based package and declaration boundary rules. Labels are declared
+    // inside tsconfig*.dts.json with "lattice": "<label>".
     rules: {
       'runtime-client': {
         deny: {
           refs: [
             {
-              path: 'packages/vitepress/src/node/tsconfig.lib.build.json',
+              path: 'packages/vitepress/src/node/tsconfig.dts.json',
               reason: 'client runtime must not depend on node runtime',
             },
           ],
@@ -54,11 +48,11 @@ export default defineConfig({
         deny: {
           refs: [
             {
-              path: 'packages/vitepress/src/node/tsconfig.lib.build.json',
+              path: 'packages/vitepress/src/node/tsconfig.dts.json',
               reason: 'shared runtime must stay independent of node runtime',
             },
             {
-              path: 'packages/vitepress/src/client/tsconfig.lib.build.json',
+              path: 'packages/vitepress/src/client/tsconfig.dts.json',
               reason: 'shared runtime must stay independent of client runtime',
             },
           ],
@@ -66,15 +60,15 @@ export default defineConfig({
       },
     },
   },
-  // Typecheck coverage proof. Source files must be covered by checker graph
-  // routes, active checker routes, or an explicit allowlist entry.
+  // Typecheck coverage proof. Source files must be covered by checker entries
+  // or an explicit allowlist entry.
   proof: {
     // Intentional exceptions. Each entry must explain why it is safe.
     allowlist: [
       {
         file: 'packages/vitepress/src/shared/internal/client-runtime.d.ts',
         reason:
-          'Declaration-only stub copied into dist for the injected client runtime; the matching runtime source is covered by the shared runtime graph leaf.',
+          'Declaration-only stub copied into dist for the injected client runtime; the matching runtime source is covered by the shared runtime declaration leaf.',
       },
       {
         file: 'packages/vitepress/docs/en/guide/rendering-strategy-comps/react/local-data.json',
@@ -113,13 +107,8 @@ export default defineConfig({
   // Reusable command pipelines. Run them with `lattice check <name>`.
   pipelines: {
     // Main typecheck pipeline: build required plugins, then run graph checks,
-    // proof checks, and the configured checker routes.
+    // proof checks, and the configured checker entries.
     typecheck: [
-      {
-        type: 'command',
-        command: 'pnpm',
-        args: ['--filter', '@docs-islands/plugin-license', 'build'],
-      },
       'graph:check',
       'proof:check',
       'checker:typecheck',
@@ -127,16 +116,11 @@ export default defineConfig({
     ],
     // Default TypeScript project-reference graph check.
     graph: [
-      {
-        type: 'command',
-        command: 'pnpm',
-        args: ['--filter', '@docs-islands/plugin-license', 'build'],
-      },
       'graph:check',
       {
         type: 'command',
         command: 'tsc',
-        args: ['-b', 'tsconfig.graph.json', '--pretty', 'false'],
+        args: ['-b', 'tsconfig.build.json', '--pretty', 'false'],
       },
     ],
     // Production library/runtime declaration graph.
@@ -144,7 +128,7 @@ export default defineConfig({
       {
         type: 'command',
         command: 'tsc',
-        args: ['-b', 'tsconfig.lib.graph.json', '--pretty', 'false'],
+        args: ['-b', 'tsconfig.lib.build.json', '--pretty', 'false'],
       },
     ],
     // Source-owned Vue SFC checks that are intentionally outside native tsc -b.
@@ -152,7 +136,7 @@ export default defineConfig({
       {
         type: 'command',
         command: 'vue-tsc',
-        args: ['-p', 'tsconfig.vue.json', '--noEmit'],
+        args: ['-b', 'tsconfig.vue.build.json', '--pretty', 'false'],
       },
     ],
     // Validation pipeline for consumer docs, playground, and smoke projects.

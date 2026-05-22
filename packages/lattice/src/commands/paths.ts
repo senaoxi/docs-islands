@@ -93,9 +93,7 @@ const defaultArtifactDirectories = [
 ];
 
 function generatedFileName(config: ResolvedLatticeConfig): string {
-  return (
-    config.paths?.generatedFileName ?? 'tsconfig.graph.paths.generated.json'
-  );
+  return config.paths?.generatedFileName ?? 'tsconfig.dts.paths.generated.json';
 }
 
 function generatedFileMarker(config: ResolvedLatticeConfig): string {
@@ -333,7 +331,7 @@ function inferPackageProject(
     projectPaths.find((projectPath) => {
       return (
         projectPath.startsWith(`${workspacePackage.directory}/`) &&
-        projectPath.endsWith('/tsconfig.lib.build.json')
+        projectPath.endsWith('/tsconfig.lib.dts.json')
       );
     }) ?? null
   );
@@ -791,7 +789,7 @@ function formatGeneratedConfig(
    * Compatibility paths for workspace:* source dependencies whose package
    * exports resolve to build artifacts. Run \`lattice paths generate\` to
    * refresh this file, then manually extend it from the relevant
-   * tsconfig*.build.json files.
+   * tsconfig*.dts.json files.
    */
   "compilerOptions": {
     "paths": {
@@ -1132,7 +1130,7 @@ async function runPathsInternal(
 
   if (options.check && didChange) {
     PathsLogger.error(
-      'TypeScript graph path state is stale; run `lattice paths generate`, then manually extend the listed tsconfig*.build.json files.',
+      'TypeScript graph path state is stale; run `lattice paths generate`, then manually extend the listed tsconfig*.dts.json files.',
     );
   }
 

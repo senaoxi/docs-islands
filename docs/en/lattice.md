@@ -12,7 +12,7 @@ Lattice is a good fit when your project:
 - uses TypeScript project references or plans to migrate to a `tsc -b` build graph;
 - wants to enforce dependency direction between production code, tools, and tests;
 - maintains both browser/client runtime and Node/server runtime code;
-- wants CI to prove that every source file is covered by checker routes or allowlist;
+- wants CI to prove that every source file is covered by checker entries or allowlist;
 - wants to check package exports, type resolution, and runtime import boundaries before publishing dist packages;
 - has docs, playground, smoke, Vue SFC, or similar projects that do not fit cleanly inside native `tsc -b`.
 
@@ -25,13 +25,14 @@ Lattice is not intended to:
 
 ## Core concepts
 
-### 1. Build graph route
+### 1. Checker entry
 
-The build graph route is the route used by native TypeScript build mode. It usually starts from a root `tsconfig.graph.json` and reaches multiple `tsconfig*.build.json` leaf projects.
+The checker entry is the single root configured at `config.checkers.<name>.entry`. It usually points at a `tsconfig*.build.json` graph aggregator and reaches multiple `tsconfig*.dts.json` declaration leaf projects.
 
 This layer is used to:
 
-- build or check the declaration graph with `tsc -b`;
+- build or check the declaration graph with `tsc -b` when the checker supports build execution;
+- derive `checker:typecheck` targets from the same reachable declaration leaves;
 - verify that project references match real imports;
 - enforce boundaries such as production, tools, tests, runtime-client, and runtime-node;
 - detect incorrect combinations of workspace source dependencies and package exports.
@@ -39,30 +40,27 @@ This layer is used to:
 Recommended naming:
 
 ```text
-tsconfig.graph.json               # root or package-level graph aggregator
-tsconfig.lib.build.json           # production source build leaf
-tsconfig.tools.build.json         # tooling/build script build leaf
-tsconfig.test.build.json          # test build leaf
+tsconfig.build.json               # root or package-level graph aggregator
+tsconfig.lib.dts.json           # production declaration leaf
+tsconfig.tools.dts.json         # tooling/build script declaration leaf
+tsconfig.test.dts.json          # test declaration leaf
 ```
 
-### 2. Typecheck route
+### 2. Declaration leaf and local companion
 
-The typecheck route is the route used by editors and ordinary `tsc --noEmit`. It usually starts from a root `tsconfig.json` and reaches ordinary local configs such as `tsconfig.lib.json`, `tsconfig.tools.json`, and `tsconfig.test.json`.
-
-This layer is used for:
-
-- IDE experience;
-- ordinary source typechecking;
-- same-name companion comparison with build leaves;
-- making sure every build leaf has a strict local typecheck config.
+Every reachable `tsconfig*.dts.json` leaf should have a strict ordinary typecheck companion. `checker:typecheck` runs no-emit checks against those companions.
 
 Recommended pairs:
 
 ```text
-tsconfig.lib.build.json    <->    tsconfig.lib.json
-tsconfig.tools.build.json  <->    tsconfig.tools.json
-tsconfig.test.build.json   <->    tsconfig.test.json
+tsconfig.lib.dts.json    <->    tsconfig.lib.json
+tsconfig.tools.dts.json  <->    tsconfig.tools.json
+tsconfig.test.dts.json   <->    tsconfig.test.json
 ```
+
+The root `tsconfig.json` can still serve IDE and local development needs. A directory with one ordinary type environment should use `tsconfig.json` as the local leaf; a directory with multiple ordinary type environments should make `tsconfig.json` a pure aggregator with `files: []` and `references`.
+
+If `tsconfig.json` contains `references`, it must be a pure aggregator: no `include`, no `compilerOptions`, no `extends`, and no emit or `noEmit` settings. If `tsconfig.json` contains source entries such as `include` or `files`, it is a leaf and must not contain `references`.
 
 ### 3. Source dependency and artifact dependency
 
@@ -72,7 +70,7 @@ Lattice uses dependency protocols in package manifests to infer dependency seman
 
 - it should be represented by TypeScript project references;
 - package exports should preferably point to source entries;
-- the importing project should reference the build leaf that owns the imported source.
+- the importing project should reference the declaration leaf that owns the imported source.
 
 `link:`, `file:`, `catalog:`, or normal semver means an artifact dependency:
 
@@ -124,10 +122,7 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        routes: {
-          typecheck: 'tsconfig.json',
-          build: 'tsconfig.graph.json',
-        },
+        entry: 'tsconfig.build.json',
       },
     },
   },
@@ -160,23 +155,23 @@ A typical workspace can be organized like this:
 ```text
 .
 ├─ tsconfig.json
-├─ tsconfig.graph.json
-├─ tsconfig.lib.graph.json
-├─ tsconfig.graph.base.json
+├─ tsconfig.build.json
+├─ tsconfig.lib.build.json
+├─ tsconfig.dts.base.json
 ├─ lattice.config.mjs
 └─ packages/
    └─ core/
       ├─ tsconfig.json
-      ├─ tsconfig.graph.json
+      ├─ tsconfig.build.json
       ├─ tsconfig.lib.json
-      ├─ tsconfig.lib.build.json
+      ├─ tsconfig.lib.dts.json
       ├─ tsconfig.tools.json
-      ├─ tsconfig.tools.build.json
+      ├─ tsconfig.tools.dts.json
       ├─ tsconfig.test.json
-      └─ tsconfig.test.build.json
+      └─ tsconfig.test.dts.json
 ```
 
-The root `tsconfig.graph.base.json` can contain only build-mode options needed by build leaves:
+The root `tsconfig.dts.base.json` can contain only build-mode options needed by declaration leaves:
 
 ```jsonc
 {
@@ -204,11 +199,11 @@ The local typecheck config owns strict type semantics:
 }
 ```
 
-The build leaf extends the local config and graph base, and only adds build output paths and references:
+The declaration leaf extends the local config and dts base, and only adds declaration output paths and references:
 
 ```jsonc
 {
-  "extends": ["./tsconfig.lib.json", "../../tsconfig.graph.base.json"],
+  "extends": ["./tsconfig.json", "../../tsconfig.dts.base.json"],
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "./.tsbuild",
@@ -216,7 +211,7 @@ The build leaf extends the local config and graph base, and only adds build outp
   },
   "references": [
     {
-      "path": "../utils/tsconfig.lib.build.json",
+      "path": "../utils/tsconfig.lib.dts.json",
     },
   ],
 }
@@ -232,30 +227,24 @@ const latticeConfig = {
     checkers: {
       typescript: {
         preset: 'tsc',
-        routes: {
-          typecheck: 'tsconfig.json',
-          build: 'tsconfig.graph.json',
-        },
+        entry: 'tsconfig.build.json',
       },
       vue: {
         preset: 'vue-tsc',
-        routes: {
-          typecheck: 'tsconfig.vue.json',
-          build: 'tsconfig.vue.graph.json',
-        },
+        entry: 'tsconfig.vue.build.json',
       },
       svelte: {
         preset: 'svelte-check',
-        routes: {
-          typecheck: 'tsconfig.svelte.json',
-        },
+        entry: 'tsconfig.svelte.build.json',
       },
     },
   },
 };
 ```
 
-`config.checkers` is the single entrypoint for TypeScript and UI framework checking. A checker without `routes` is ignored. A checker with `routes: {}` is invalid. `routes.typecheck` participates in `lattice checker typecheck` / `checker:typecheck`; `routes.build` participates in `lattice checker build` / `checker:build`.
+`config.checkers` is the single entrypoint for TypeScript and UI framework checking. Every configured checker must declare `entry`. `entry` must be a non-empty string resolved from the workspace root. `routes`, `routes.typecheck`, and `routes.build` are invalid configuration.
+
+`checker:build` starts from each configured checker entry that supports build execution. `checker:typecheck` starts from the same entry, discovers reachable `tsconfig*.dts.json` leaves, and runs the checker's no-emit execution against the paired local companion.
 
 Built-in presets can omit `extensions`. Defaults are `.ts`, `.tsx`, `.cts`, `.mts`, `.d.ts`, `.d.cts`, `.d.mts`, `.json` for `tsc`; `.vue` for `vue-tsc`; and `.svelte` for `svelte-check`. Explicit `extensions` replace the preset default.
 
@@ -280,7 +269,7 @@ const latticeConfig = {
 };
 ```
 
-If `source.include` is omitted, `proof:check` derives the effective source boundary from all active checker extensions. If `source.include` is present, that list is the complete source boundary and checker extensions are not merged in. `source.exclude` always filters from the effective source boundary; it never decides which modules are valid by itself.
+If `source.include` is omitted, `proof:check` derives the effective source boundary from all configured checker extensions. If `source.include` is present, that list is the complete source boundary and checker extensions are not merged in. `source.exclude` always filters from the effective source boundary; it never decides which modules are valid by itself.
 
 ### `graph.rules`
 
@@ -292,7 +281,7 @@ const latticeConfig = {
         deny: {
           refs: [
             {
-              path: 'packages/app/src/node/tsconfig.lib.build.json',
+              path: 'packages/app/src/node/tsconfig.lib.dts.json',
               reason: 'client runtime must not depend on node runtime',
             },
           ],
@@ -309,12 +298,12 @@ const latticeConfig = {
 };
 ```
 
-Declare the label in a build leaf:
+Declare the label in a declaration leaf:
 
 ```jsonc
 {
   "lattice": "runtime-client",
-  "extends": ["./tsconfig.lib.json", "../../tsconfig.graph.base.json"],
+  "extends": ["./tsconfig.json", "../../tsconfig.dts.base.json"],
   "references": [],
 }
 ```
@@ -326,7 +315,7 @@ When that project references or imports a denied target, `lattice graph check` f
 ```js
 const latticeConfig = {
   paths: {
-    generatedFileName: 'tsconfig.graph.paths.generated.json',
+    generatedFileName: 'tsconfig.dts.paths.generated.json',
     conditionPriority: ['source', 'development', 'types'],
     artifactDirectories: ['dist', 'build', 'lib', 'esm', 'cjs', 'out'],
   },
@@ -339,14 +328,14 @@ Use case: a `workspace:*` dependency still points to `dist` in package exports, 
 pnpm exec lattice paths generate
 ```
 
-Lattice generates `tsconfig.graph.paths.generated.json` and tells you to add it as the first entry in the related build config's `extends` array:
+Lattice generates `tsconfig.dts.paths.generated.json` and tells you to add it as the first entry in the related declaration leaf's `extends` array:
 
 ```jsonc
 {
   "extends": [
-    "./tsconfig.graph.paths.generated.json",
-    "./tsconfig.lib.json",
-    "../../tsconfig.graph.base.json",
+    "./tsconfig.dts.paths.generated.json",
+    "./tsconfig.json",
+    "../../tsconfig.dts.base.json",
   ],
 }
 ```
@@ -361,16 +350,14 @@ const latticeConfig = {
     checkers: {
       vue: {
         preset: 'vue-tsc',
-        routes: {
-          typecheck: 'docs/tsconfig.json',
-        },
+        entry: 'tsconfig.vue.build.json',
       },
     },
   },
 };
 ```
 
-Checker routes cover files that do not enter the TypeScript build graph but are still validated by a framework-aware tool. Common examples include Vue SFCs, Svelte components, VitePress docs, themes, and special fixture projects.
+Checker entries cover files validated by TypeScript or framework-aware tools. Common examples include Vue SFCs, Svelte components, VitePress docs, themes, and special fixture projects. Check-only projects still need `tsconfig*.dts.json` leaves so Lattice can prove coverage and derive their local companions, but those leaves do not have to represent publishable artifacts.
 
 ### `proof.allowlist`
 
@@ -387,7 +374,7 @@ const latticeConfig = {
 };
 ```
 
-Allowlist is the last resort after all configured checker routes fail to cover a source file. Every entry must explain why it is safe. New allowlist entries should be reviewed strictly during code review.
+Allowlist is the last resort after all configured checker entries fail to cover a source file. Every entry must explain why it is safe. New allowlist entries should be reviewed strictly during code review.
 
 ### `packageChecks.targets`
 
@@ -491,14 +478,14 @@ pnpm exec lattice graph check
 Common failure reasons:
 
 - a source import does not have a matching project reference;
-- a production build leaf references a test/tools leaf;
+- a production declaration leaf references a test/tools leaf;
 - a project with a `lattice` label violates `graph.rules`;
 - a `workspace:*` dependency resolves to a build artifact through exports;
 - client/shared runtime imports a disallowed runtime boundary.
 
 ### `lattice proof check`
 
-Proves that the build graph route, typecheck route, and source boundary are consistent.
+Proves that checker entries, reachable declaration leaves, local companions, default `tsconfig.json` governance, and the source boundary are consistent.
 
 ```sh
 pnpm exec lattice proof check
@@ -506,10 +493,12 @@ pnpm exec lattice proof check
 
 Common failure reasons:
 
-- a build leaf has no same-name local config;
-- a local config is not reachable from the root typecheck route;
-- the build leaf and local config do not cover the same file set;
-- a source file is not covered by checker routes or allowlist.
+- a declaration leaf has no paired local config;
+- a declaration leaf is not reachable from any checker entry;
+- the declaration leaf and local config do not cover the same file set;
+- compiler options that affect type semantics drift between the declaration leaf and local companion;
+- `tsconfig.json` is neither the single local leaf nor a pure aggregator for multiple local environments;
+- a source file is not covered by checker entries or allowlist.
 
 ### `lattice paths generate`
 
@@ -527,14 +516,14 @@ pnpm exec lattice paths check
 
 ### `lattice checker typecheck`
 
-Runs every configured checker `typecheck` route. The route registry in `config.checkers` is the only target source.
+Runs typecheck targets derived from every configured checker entry.
 
 ```sh
 pnpm exec lattice checker typecheck
 pnpm exec lattice checker typecheck --concurrency 4
 ```
 
-`lattice checker build` runs configured checker `build` routes.
+`lattice checker build` runs build execution for configured checker entries whose preset supports it.
 
 ```sh
 pnpm exec lattice checker build
@@ -642,9 +631,9 @@ In a large project, a package often contains production source, build tools, tes
 - `runtime-node`: Node runtime code;
 - `runtime-shared`: code shared between both runtimes.
 
-### 2. Build leaves should only contain build-mode differences
+### 2. Declaration leaves should only contain build-mode differences
 
-`tsconfig*.build.json` should extend the same-name local config and only add:
+`tsconfig*.dts.json` should extend the paired local config and only add:
 
 - `composite`;
 - `incremental`;
@@ -654,7 +643,7 @@ In a large project, a package often contains production source, build tools, tes
 - `tsBuildInfoFile`;
 - direct `references`.
 
-Do not secretly change type semantics such as `strict`, `types`, or `lib` inside build leaves.
+Do not secretly change type semantics such as `strict`, `types`, or `lib` inside declaration leaves.
 
 ### 3. Prefer fixing package exports over relying on generated paths forever
 
@@ -669,14 +658,14 @@ Generated paths are a compatibility bridge. The long-term design should make pac
 Every allowlist entry should answer:
 
 - Why is this file not part of the graph?
-- Which checker route, build step, or runtime mechanism covers it?
+- Which checker entry, build step, or runtime mechanism covers it?
 - Where will CI fail if it breaks?
 
 ## FAQ
 
 ### How does `lattice checker typecheck` choose targets?
 
-`lattice checker typecheck` loads `lattice.config.mjs` and runs every active checker that declares `routes.typecheck`. One-off TypeScript projects should be added to `config.checkers.<name>.routes` instead of passed through a CLI override.
+`lattice checker typecheck` loads `lattice.config.mjs`, walks every configured checker `entry`, discovers reachable `tsconfig*.dts.json` leaves, maps each leaf to its paired local companion, and runs the checker in no-emit/typecheck mode for those companions.
 
 ### Why do package checks require a build first?
 
@@ -688,7 +677,7 @@ Package checks inspect published outputs under `outDir`, not the source director
 
 ### Should Vue SFCs be placed in the graph?
 
-Usually no. Put Vue/VitePress/SFC projects in `config.checkers.<name>.routes` with the `vue-tsc` preset, then let `checker:typecheck` and `checker:build` dispatch the matching routes.
+Usually no. Put Vue/VitePress/SFC projects behind a checker `entry` with the `vue-tsc` preset, typically a dedicated `tsconfig.vue.build.json` graph aggregator. Docs and other check-only projects should add `tsconfig*.dts.json` declaration leaves that point to their local companions, even when those leaves only serve checking and proof coverage.
 
 ### When should I use `--mode`?
 
@@ -727,10 +716,10 @@ Before publishing `@docs-islands/lattice` itself, check that:
 
 ## Glossary
 
-- **build leaf**: a `tsconfig*.build.json` actually built or checked by `tsc -b`.
-- **graph aggregator**: a graph config that only contains `files: []` and `references`.
-- **local companion config**: the ordinary typecheck config paired with a build leaf, such as `tsconfig.lib.json`.
-- **checker route**: a `typecheck` or `build` route covered by a tool such as `tsc`, `vue-tsc`, or `svelte-check`.
+- **declaration leaf**: a `tsconfig*.dts.json` project that owns declaration emit semantics and direct references.
+- **graph aggregator**: a `tsconfig*.build.json` graph config that only contains `files: []` and `references`.
+- **local companion config**: the ordinary typecheck config paired with a declaration leaf, such as `tsconfig.lib.json` or `tsconfig.json`.
+- **checker entry**: the single configured root for a checker, used by both build execution and typecheck target discovery.
 - **artifact dependency**: a built or published artifact dependency consumed through `link:`, `file:`, `catalog:`, or semver.
 - **source dependency**: a source dependency consumed through `workspace:*` and expected to be represented in TypeScript project references.
 
