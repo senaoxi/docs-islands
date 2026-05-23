@@ -19,12 +19,6 @@ function isOptionLike(argument: string): boolean {
   return argument.startsWith('-');
 }
 
-function normalizePackageSelector(packageName: string): string {
-  return packageName.includes('/')
-    ? packageName
-    : `@docs-islands/${packageName}`;
-}
-
 function parseArguments(argv = process.argv.slice(2)): RunTarget {
   const [script, ...rest] = argv;
 
@@ -39,7 +33,7 @@ function parseArguments(argv = process.argv.slice(2)): RunTarget {
 
   // The first non-option argument is treated as a workspace selector.
   if (rest[0] && rest[0] !== '--' && !isOptionLike(rest[0])) {
-    packageSelector = normalizePackageSelector(rest[0]);
+    packageSelector = rest[0];
     forwardedArgs = rest.slice(1);
   }
 

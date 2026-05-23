@@ -110,8 +110,8 @@ should not accidentally change whether TypeScript resolves source or dist.
 The build graph models `workspace:*` source dependencies directly with
 references. Dist-facing package export checks stay as post-build or consumer
 pipeline checks. If a package keeps dist-facing exports but is referenced as a
-`workspace:*` source dependency, `lattice graph check` reports the mismatch and
-`lattice paths generate` can produce an explicit source-path shim for the
+`workspace:*` source dependency, `limina graph check` reports the mismatch and
+`limina paths generate` can produce an explicit source-path shim for the
 importing declaration configs.
 
 ## Internal Import Edges
@@ -137,9 +137,9 @@ fixture package names, not real workspace graph nodes.
 ## Current Checker Entries And IDE Configs
 
 The repository keeps IDE-friendly ordinary `tsconfig*.json` files separate from
-Lattice checker entries. The root `tsconfig.json` can reference ordinary local
-configs for editor experience, but it is not the source of truth for Lattice
-coverage proof. Lattice checker entries use `tsconfig*.build.json` graph
+Limina checker entries. The root `tsconfig.json` can reference ordinary local
+configs for editor experience, but it is not the source of truth for Limina
+coverage proof. Limina checker entries use `tsconfig*.build.json` graph
 aggregators and `tsconfig*.dts.json` declaration leaves.
 
 Package scripts are convenience entrypoints, not the source of truth for graph
@@ -246,17 +246,17 @@ The checker also enforces forbidden edges:
 
 Current graph/local classification:
 
-| Class            | Projects/configs                                                                                                                                                                                                                                                                                        |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib`            | `packages/logger/tsconfig.lib.dts.json`, `utils/tsconfig.lib.dts.json`, `packages/plugins/license/tsconfig.lib.dts.json`, `packages/core/tsconfig.lib.dts.json`, `packages/eslint-config/tsconfig.lib.dts.json`, `packages/lattice/tsconfig.lib.dts.json`                                               |
-| `tools`          | `scripts/tsconfig.dts.json`, `packages/logger/tsconfig.tools.dts.json`, `utils/tsconfig.tools.dts.json`, `packages/plugins/license/tsconfig.tools.dts.json`, `packages/eslint-config/tsconfig.tools.dts.json`, `packages/lattice/tsconfig.tools.dts.json`, `packages/vitepress/tsconfig.tools.dts.json` |
-| `test`           | `packages/logger/tsconfig.test.dts.json`, `packages/core/tsconfig.test.dts.json`, `packages/eslint-config/tsconfig.test.dts.json`, `packages/vitepress/tsconfig.test.dts.json`                                                                                                                          |
-| `runtime-node`   | `packages/vitepress/src/node/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/node/tsconfig.json` for package scripts and dts                                                                                                                                                                  |
-| `runtime-client` | `packages/vitepress/src/client/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/client/tsconfig.json` for package scripts and dts                                                                                                                                                              |
-| `runtime-shared` | `packages/vitepress/src/shared/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/shared/tsconfig.json` for package scripts                                                                                                                                                                      |
-| `docs`           | `docs/tsconfig.json` in source typecheck; `packages/vitepress/docs/tsconfig.json` in the dist consumer pipeline                                                                                                                                                                                         |
-| `playground`     | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                 |
-| `smoke`          | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                 |
+| Class            | Projects/configs                                                                                                                                                                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib`            | `packages/logger/tsconfig.lib.dts.json`, `utils/tsconfig.lib.dts.json`, `packages/plugins/license/tsconfig.lib.dts.json`, `packages/core/tsconfig.lib.dts.json`, `packages/eslint-config/tsconfig.lib.dts.json`, `packages/limina/tsconfig.lib.dts.json`                                               |
+| `tools`          | `scripts/tsconfig.dts.json`, `packages/logger/tsconfig.tools.dts.json`, `utils/tsconfig.tools.dts.json`, `packages/plugins/license/tsconfig.tools.dts.json`, `packages/eslint-config/tsconfig.tools.dts.json`, `packages/limina/tsconfig.tools.dts.json`, `packages/vitepress/tsconfig.tools.dts.json` |
+| `test`           | `packages/logger/tsconfig.test.dts.json`, `packages/core/tsconfig.test.dts.json`, `packages/eslint-config/tsconfig.test.dts.json`, `packages/vitepress/tsconfig.test.dts.json`                                                                                                                         |
+| `runtime-node`   | `packages/vitepress/src/node/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/node/tsconfig.json` for package scripts and dts                                                                                                                                                                 |
+| `runtime-client` | `packages/vitepress/src/client/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/client/tsconfig.json` for package scripts and dts                                                                                                                                                             |
+| `runtime-shared` | `packages/vitepress/src/shared/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/shared/tsconfig.json` for package scripts                                                                                                                                                                     |
+| `docs`           | `docs/tsconfig.json` in source typecheck; `packages/vitepress/docs/tsconfig.json` in the dist consumer pipeline                                                                                                                                                                                        |
+| `playground`     | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                |
+| `smoke`          | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                |
 
 ## Likely Graph Cycles And Breaks
 
@@ -360,7 +360,7 @@ files or VitePress site SFC typing:
 
 The current scripts are correct in principle:
 
-- root `package.json`: `lattice check vue`
+- root `package.json`: `limina check vue`
 - `docs/package.json`: `vue-tsc --noEmit`
 - `packages/vitepress/docs/package.json`: `vue-tsc --noEmit`
 - `packages/vitepress/package.json`: `vue-tsc -p theme/tsconfig.json --noEmit`
@@ -380,7 +380,7 @@ builds:
   `tsconfig.check.json` and includes `dist/**/*`.
 - `packages/vitepress/package.json` `build-types-check`, currently
   `tsc -p tsconfig.check.json`.
-- `lattice package check`, including its `publint`, `attw`, and `boundary`
+- `limina package check`, including its `publint`, `attw`, and `boundary`
   package artifact checks.
 - Release checks that verify `dist/package.json` version and run
   `npm pack --dry-run`.

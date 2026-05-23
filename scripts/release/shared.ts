@@ -96,7 +96,7 @@ export interface ReleasePackageManifest {
 }
 
 export interface ReleasePackageConfig {
-  key: 'logger' | 'lattice' | 'vitepress';
+  key: 'logger' | 'limina' | 'vitepress';
   packageName: string;
   relativeDir: string;
   publishRelativeDir: string;
@@ -199,27 +199,27 @@ const RELEASE_PACKAGE_CONFIGS: readonly ReleasePackageConfig[] = [
       'test',
       'build package',
       'verify dist/package.json version',
-      'lattice package check',
+      'limina package check',
       'npm pack --dry-run',
     ],
   },
   {
-    key: 'lattice',
-    packageName: '@docs-islands/lattice',
-    relativeDir: 'packages/lattice',
-    publishRelativeDir: 'packages/lattice/dist',
-    changelogRelativePath: 'packages/lattice/CHANGELOG.md',
+    key: 'limina',
+    packageName: 'limina',
+    relativeDir: 'packages/limina',
+    publishRelativeDir: 'packages/limina/dist',
+    changelogRelativePath: 'packages/limina/CHANGELOG.md',
     changelogPaths: [
-      'packages/lattice',
-      'docs/en/lattice.md',
-      'docs/zh/lattice.md',
+      'packages/limina',
+      'docs/en/limina.md',
+      'docs/zh/limina.md',
     ],
-    tagPrefix: 'lattice',
+    tagPrefix: 'limina',
     previewChecks: [
       'test',
       'build package',
       'verify dist/package.json version',
-      'lattice package check',
+      'limina package check',
       'npm pack --dry-run',
     ],
   },
@@ -238,7 +238,7 @@ const RELEASE_PACKAGE_CONFIGS: readonly ReleasePackageConfig[] = [
       'build workspace dependencies',
       'build package',
       'verify dist/package.json version',
-      'lattice package check',
+      'limina package check',
       'npm pack --dry-run',
     ],
   },

@@ -53,7 +53,7 @@ function runPackageArtifactChecks(config: ResolvedReleasePackageConfig): void {
   ReleaseLogger.info(`Running package checks for ${config.packageName}`);
   runCommand(
     getPnpmCommand(),
-    ['exec', 'lattice', 'package', 'check', '--package', config.packageName],
+    ['exec', 'limina', 'package', 'check', '--package', config.packageName],
     {
       cwd: REPO_ROOT,
       stdio: 'inherit',

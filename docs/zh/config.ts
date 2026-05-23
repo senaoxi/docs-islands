@@ -15,8 +15,8 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
         link: '/zh/logger',
       },
       {
-        text: 'Lattice',
-        link: '/zh/lattice',
+        text: 'Limina',
+        link: '/zh/limina',
       },
       {
         text: 'Skills',

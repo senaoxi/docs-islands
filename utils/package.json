@@ -16,7 +16,7 @@
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "test": "vitest run",
-    "typecheck": "lattice checker typecheck",
+    "typecheck": "limina checker typecheck",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },

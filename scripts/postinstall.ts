@@ -62,7 +62,7 @@ function runPnpm(
 }
 
 async function main(): Promise<void> {
-  for (const packageDir of ['utils', 'packages/lattice']) {
+  for (const packageDir of ['utils', 'packages/limina']) {
     // These packages are consumed through link:*/dist during local installs.
     // Build them before refreshing pnpm's generated bin shims below.
     await runPnpm([
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
 
   // The first install can run before link:*/dist package manifests exist, so
   // pnpm cannot create their .bin shims. Re-run install without lifecycle
-  // scripts after the dist builds so commands like `lattice` are linked.
+  // scripts after the dist builds so commands like `limina` are linked.
   await runPnpm([
     'install',
     '--offline',

@@ -5,7 +5,7 @@
   "scripts": {
     "test": "pnpm smoke",
     "smoke": "playwright test",
-    "typecheck": "lattice checker typecheck",
+    "typecheck": "limina checker typecheck",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .tsbuild .eslintcache node_modules"
   },
@@ -17,7 +17,7 @@
   "devDependencies": {
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "link:../../../utils/dist",
-    "@docs-islands/lattice": "link:../../lattice/dist",
+    "limina": "link:../../limina/dist",
     "@typescript-eslint/parser": "catalog:lint",
     "@vitejs/plugin-react-swc": "catalog:dev",
     "@playwright/test": "catalog:test",

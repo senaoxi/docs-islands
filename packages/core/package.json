@@ -34,7 +34,7 @@
   },
   "scripts": {
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache --cache-location ./node_modules/.cache/eslint/",
-    "typecheck": "lattice checker typecheck",
+    "typecheck": "limina checker typecheck",
     "test": "pnpm test:unit",
     "test:unit": "vitest run",
     "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"

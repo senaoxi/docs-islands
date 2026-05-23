@@ -1,0 +1,90 @@
+{
+  "name": "limina",
+  "version": "0.0.1",
+  "type": "module",
+  "license": "MIT",
+  "author": "Senao Xi",
+  "description": "Configurable monorepo architecture and TypeScript graph governance CLI",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "monorepo",
+    "typescript",
+    "project-references",
+    "workspace",
+    "architecture"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XiSenao/docs-islands.git",
+    "directory": "packages/limina"
+  },
+  "bugs": {
+    "url": "https://github.com/XiSenao/docs-islands/issues"
+  },
+  "homepage": "https://docs.senao.me/docs-islands",
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "limina": "./bin/limina.js"
+  },
+  "scripts": {
+    "build": "rolldown --config rolldown.config.ts",
+    "build:watch": "rolldown --config rolldown.config.ts --watch",
+    "typecheck": "limina checker typecheck",
+    "test": "vitest run",
+    "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"
+  },
+  "dependencies": {
+    "@arethetypeswrong/core": "catalog:lint",
+    "@clack/prompts": "catalog:dev",
+    "@docs-islands/logger": "catalog:prod",
+    "@publint/pack": "catalog:lint",
+    "cac": "catalog:dev",
+    "es-module-lexer": "catalog:dev",
+    "publint": "catalog:lint",
+    "tinyglobby": "catalog:prod",
+    "yaml": "catalog:dev",
+    "zod": "catalog:dev"
+  },
+  "devDependencies": {
+    "@docs-islands/eslint-config": "workspace:*",
+    "limina": "link:./dist",
+    "@types/node": "catalog:dev",
+    "del-cli": "catalog:dev",
+    "eslint": "catalog:lint",
+    "rolldown": "catalog:dev",
+    "rolldown-plugin-dts": "catalog:dev",
+    "tsx": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:test"
+  },
+  "peerDependencies": {
+    "svelte-check": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vue-tsc": "catalog:dev"
+  },
+  "peerDependenciesMeta": {
+    "svelte-check": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    },
+    "vue-tsc": {
+      "optional": true
+    }
+  },
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false
+}

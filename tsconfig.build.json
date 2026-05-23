@@ -21,7 +21,7 @@
       "path": "./packages/eslint-config/tsconfig.build.json"
     },
     {
-      "path": "./packages/lattice/tsconfig.build.json"
+      "path": "./packages/limina/tsconfig.build.json"
     },
     {
       "path": "./packages/vitepress/tsconfig.build.json"

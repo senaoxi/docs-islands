@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "lattice": "runtime-client",
+  "limina": "runtime-client",
   // Client runtime declaration leaf; keep Node ambient types out.
   "extends": ["./tsconfig.json", "../../../../tsconfig.dts.base.json"],
   "compilerOptions": {

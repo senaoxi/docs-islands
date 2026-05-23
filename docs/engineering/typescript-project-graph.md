@@ -72,7 +72,7 @@ direct references.
   `exports` must resolve to files owned by the source graph, and importing
   projects must reference the owning declaration leaf.
 - If a `workspace:*` dependency must keep artifact-facing package exports for
-  compatibility, run `lattice paths generate` and manually place the generated
+  compatibility, run `limina paths generate` and manually place the generated
   config first in the affected `tsconfig*.dts.json` `extends` array. Generated
   paths are a compatibility bridge, not an implicit graph rule.
 - `link:`, `catalog:`, and normal semver internal dependencies are artifact
@@ -101,7 +101,7 @@ direct references.
   and `references`. It must not contain `include`, `compilerOptions`,
   `extends`, `noEmit`, or declaration emit settings.
 
-The `lattice graph check` task enforces missing references, forbidden project
+The `limina graph check` task enforces missing references, forbidden project
 references, forbidden graph imports, source-export ownership for `workspace:*`
 dependencies, and forbidden Node builtin imports for client/shared runtime
 graph leaves.
@@ -115,15 +115,15 @@ B through `workspace:*`, references B, and imports B through its package name,
 B's exports must still resolve to source graph files.
 
 If B's workspace manifest exports `dist`, `build`, `lib`, or another artifact
-directory, `lattice graph check` fails because A is trying to model B as both a
+directory, `limina graph check` fails because A is trying to model B as both a
 source dependency and an artifact dependency. The preferred fix is to expose
 source entries from B while it is consumed through `workspace:*`. The
 compatibility fallback is:
 
-1. Run `pnpm tsconfig:graph:paths` or `lattice paths generate`.
+1. Run `pnpm tsconfig:graph:paths` or `limina paths generate`.
 2. Read the command output and add the generated config to the first position
    of each listed `tsconfig*.dts.json` `extends` array.
-3. Re-run `lattice graph check` and `tsc -b`.
+3. Re-run `limina graph check` and `tsc -b`.
 
 The generator writes package-local `tsconfig.dts.paths.generated.json` files
 only when it sees the noncompliant shape: `workspace:*` dependency, project

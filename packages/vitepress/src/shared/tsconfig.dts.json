@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "lattice": "runtime-shared",
+  "limina": "runtime-shared",
   // Shared runtime declaration leaf; node/client runtime projects depend on this leaf.
   "extends": ["./tsconfig.json", "../../../../tsconfig.dts.base.json"],
   "compilerOptions": {
