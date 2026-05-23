@@ -53,6 +53,11 @@ export {
   type LiminaFlowTask,
 } from './flow';
 
+export {
+  runInit,
+  type RunInitOptions,
+  type RunInitResult,
+} from './commands/init';
 export { runSourceCheck, type RunSourceCheckOptions } from './commands/source';
 export {
   runCheckerBuild,

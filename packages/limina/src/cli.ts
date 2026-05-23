@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { cac } from 'cac';
 import { runGraphCheck } from './commands/graph';
+import { runInit } from './commands/init';
 import { runPackageCheck } from './commands/package';
 import { runPaths } from './commands/paths';
 import { runProofCheck } from './commands/proof';
@@ -30,6 +31,10 @@ interface PackageFlags extends GlobalFlags {
 
 interface CheckerFlags extends GlobalFlags {
   concurrency?: string;
+}
+
+interface InitFlags {
+  yes?: boolean;
 }
 
 async function load(
@@ -109,6 +114,21 @@ async function main(): Promise<void> {
   cli.option('--config <path>', 'Path to limina.config.mjs');
   cli.option('--mode <mode>', 'Mode passed to limina config functions');
   cli.help();
+
+  cli
+    .command('init', 'Initialize Limina files for a pnpm workspace')
+    .option('--yes', 'Accept all init prompts')
+    .action(async (flags: InitFlags) => {
+      const flow = createCliFlow();
+      flow.intro('limina init');
+      await runInit({
+        clearScreen: false,
+        cwd: process.cwd(),
+        flow,
+        yes: flags.yes,
+      });
+      flow.outro('limina init finished');
+    });
 
   cli
     .command('check <pipeline>', 'Run a configured governance pipeline')

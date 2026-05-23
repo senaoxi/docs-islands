@@ -1,5 +1,12 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -129,4 +136,77 @@ describe('limina CLI', () => {
       });
     }
   }, 15000);
+
+  it('runs init from the public command', async () => {
+    const rootDir = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-init-')),
+    );
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages:\n  - packages/*\n',
+      );
+      await writeText(
+        path.join(rootDir, 'package.json'),
+        stringifyConfig({
+          name: 'root',
+          private: true,
+          type: 'module',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/app/package.json'),
+        stringifyConfig({
+          name: 'app',
+          type: 'module',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/app/src/index.ts'),
+        'export const value = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'packages/app/tsconfig.json'),
+        stringifyConfig({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*.ts'],
+        }),
+      );
+
+      const result = await execFileAsync(
+        process.execPath,
+        [cliPath, 'init', '--yes'],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+
+      expect(result.stdout).toContain('limina init');
+      expect(result.stdout).toContain('limina init finished');
+      expect(
+        await readFile(
+          path.join(rootDir, 'packages/app/tsconfig.dts.json'),
+          'utf8',
+        ),
+      ).toContain('./.limina/tsconfig.tsbuildinfo');
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  }, 30000);
 });
