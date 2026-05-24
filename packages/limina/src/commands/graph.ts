@@ -26,8 +26,8 @@ import {
   getDeniedRefRule,
   getDeniedWorkspaceDepRule,
   normalizeGraphRules,
-  type GraphRuleDepDeny,
   type GraphRuleRefDeny,
+  type GraphRuleWorkspaceDepDeny,
   type NormalizedGraphRules,
 } from '../graph-rules';
 import { GraphLogger, clearCliScreen, formatErrorMessage } from '../logger';
@@ -291,7 +291,7 @@ function addDeniedPackageImportProblem(options: {
   importRecord: ImportRecord;
   project: ProjectInfo;
   problems: string[];
-  rule: GraphRuleDepDeny;
+  rule: GraphRuleWorkspaceDepDeny;
 }): void {
   options.problems.push(
     [

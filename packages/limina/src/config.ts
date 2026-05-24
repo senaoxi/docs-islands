@@ -207,22 +207,6 @@ export interface GraphRuleRefDenyEntry {
 /**
  * Workspace package dependency denied to projects with a matching Limina label.
  */
-export interface GraphRuleDepDenyEntry {
-  /**
-   * Target workspace package name.
-   *
-   * @deprecated Use `workspaceDeps` for new configs.
-   */
-  name: string;
-  /**
-   * Human-readable explanation shown when the rule fails.
-   */
-  reason: string;
-}
-
-/**
- * Workspace package dependency denied to projects with a matching Limina label.
- */
 export interface GraphRuleWorkspaceDepDenyEntry {
   /**
    * Target workspace package name.
@@ -256,12 +240,6 @@ export interface GraphRuleDenyConfig {
    * Declaration leaf boundaries that matching projects must not reference or import.
    */
   refs?: GraphRuleRefDenyEntry[];
-  /**
-   * Workspace packages that matching projects must not reference or import.
-   *
-   * @deprecated Use `workspaceDeps` for new configs.
-   */
-  deps?: GraphRuleDepDenyEntry[];
   /**
    * Node builtins that matching projects must not import.
    */

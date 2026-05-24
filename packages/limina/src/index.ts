@@ -12,7 +12,6 @@ export {
   type GraphConfig,
   type GraphRule,
   type GraphRuleDenyConfig,
-  type GraphRuleDepDenyEntry,
   type GraphRuleNodeBuiltinDenyEntry,
   type GraphRuleRefDenyEntry,
   type GraphRuleWorkspaceDepDenyEntry,

@@ -110,6 +110,49 @@ If a workspace package needs to call `limina` from its own `package.json#scripts
 }
 ```
 
+## Quick initialization
+
+For a pnpm monorepo that has not yet adopted Limina declaration graph semantics, run this from any directory inside the workspace:
+
+```sh
+pnpm exec limina init
+```
+
+`limina init` searches upward from the current directory for the nearest `pnpm-workspace.yaml`, displays the workspace root path and root package name, and asks for confirmation. For automation or non-interactive environments, use:
+
+```sh
+pnpm exec limina init --yes
+```
+
+`--yes` accepts root selection, creation of a missing root `package.json`, and overwriting an existing `limina.config.mjs` or conflicting `limina:check` script. Without `--yes`, the command fails in a non-TTY environment as soon as confirmation is required.
+
+Initialization:
+
+- discovers pnpm workspace packages and scans ordinary `tsconfig*.json` typecheck configs;
+- generates a paired `tsconfig[.<scope>].dts.json` for each valid leaf, emitting declarations into a colocated `.limina/` directory;
+- resolves real source imports with each leaf's TypeScript `compilerOptions`, including workspace package imports, relative cross-leaf imports, and `#imports`;
+- adds a project reference when the resolved target is owned by another leaf, deduplicating repeated targets and never producing self-references;
+- generates a `tsconfig.build.json` for each workspace that has declaration leaves, and a root `tsconfig.build.json` that references those aggregators and any root-owned leaves;
+- generates `limina.config.mjs`, and adds a `limina:check` script plus a missing `limina` dev dependency to the root `package.json`.
+
+Empty aggregators are not written: if a workspace or the root has no actual `references`, its `tsconfig.build.json` is omitted.
+
+Initialization conservatively refuses these inputs instead of overwriting or migrating them:
+
+- an existing `tsconfig*.build.json` or `tsconfig*.dts.json`, because these are reserved init output names;
+- a `tsconfig.json` that has both `references` and actual source files;
+- a `tsconfig.<scope>.json` that contains `references`;
+- a `workspace:*` import that TypeScript cannot map to an ordinary `tsconfig*.json` leaf, such as an entry resolving to an unmanaged declaration file in `dist`.
+
+After initialization, run:
+
+```sh
+pnpm i
+pnpm limina:check
+```
+
+You only need `pnpm i` first when init added a dependency or created the root `package.json`.
+
 ## Minimal configuration
 
 Create `limina.config.mjs` at the workspace root:
@@ -285,7 +328,7 @@ const liminaConfig = {
               reason: 'client runtime must not depend on node runtime',
             },
           ],
-          deps: [
+          workspaceDeps: [
             {
               name: '@acme/node-only',
               reason: 'client runtime must not consume node-only packages',
@@ -456,6 +499,17 @@ A pipeline can contain two types of steps:
 Command steps run from the workspace root by default and inherit `process.env`.
 
 ## CLI reference
+
+### `limina init [--yes]`
+
+Generates declaration leaves, graph aggregators, root configuration, and a `limina:check` script for an uninitialized pnpm monorepo.
+
+```sh
+pnpm exec limina init
+pnpm exec limina init --yes
+```
+
+The command derives leaf-to-leaf `references` from TypeScript's resolution of real imports, deduplicates references, and excludes self-references. It fails when `tsconfig*.build.json` or `tsconfig*.dts.json` already exist so existing graph semantics are not overwritten.
 
 ### `limina check <pipeline>`
 

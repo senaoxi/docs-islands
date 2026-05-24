@@ -110,6 +110,49 @@ pnpm add -D limina typescript
 }
 ```
 
+## 快速初始化
+
+对于尚未采用 Limina 声明图语义的 pnpm monorepo，可以从 workspace 内任意目录运行：
+
+```sh
+pnpm exec limina init
+```
+
+`limina init` 会从当前目录向上找到最近的 `pnpm-workspace.yaml`，展示 workspace 根路径和根 package 名称并要求确认。自动化或非交互环境中使用：
+
+```sh
+pnpm exec limina init --yes
+```
+
+`--yes` 等同于确认根目录、创建缺失根 `package.json`，以及覆盖已有的 `limina.config.mjs` 或冲突的 `limina:check` 脚本。非 TTY 环境没有 `--yes` 时，命令会在需要确认处失败。
+
+初始化过程会：
+
+- 发现 pnpm workspace packages，并扫描普通 `tsconfig*.json` 类型检查配置；
+- 为每个合法 leaf 生成配对的 `tsconfig[.<scope>].dts.json`，将声明输出放入同目录的 `.limina/`；
+- 用每个 leaf 的 TypeScript `compilerOptions` 解析真实源码 import，包括 workspace package import、跨 leaf 相对 import 和 `#imports`；
+- 当解析目标由另一个 leaf 管辖时，为导入 leaf 添加 project reference；同一目标会去重，并且不会生成 self-reference；
+- 为存在声明 leaf 的 workspace 生成 `tsconfig.build.json`，并在根目录生成引用这些聚合器和根自有 leaves 的 `tsconfig.build.json`；
+- 生成 `limina.config.mjs`，并向根 `package.json` 添加 `limina:check` 脚本和缺少的 `limina` 开发依赖。
+
+空的聚合器不会写入磁盘：如果某个 workspace 或根目录最终没有任何实际 `references`，对应的 `tsconfig.build.json` 不会生成。
+
+初始化会保守地拒绝以下输入，而不是覆盖或迁移它们：
+
+- 仓库中已经存在 `tsconfig*.build.json` 或 `tsconfig*.dts.json`，因为这些是 init 管理的保留输出名；
+- `tsconfig.json` 同时拥有 `references` 和实际源码文件；
+- `tsconfig.<scope>.json` 带有 `references`；
+- `workspace:*` import 经 TypeScript 解析后无法落入任何普通 `tsconfig*.json` leaf，例如入口解析到了未被源码图管辖的 `dist` 声明文件。
+
+完成后执行：
+
+```sh
+pnpm i
+pnpm limina:check
+```
+
+只有 init 新增了依赖或创建了根 `package.json` 时才需要先运行 `pnpm i`。
+
 ## 最小配置
 
 在 workspace 根目录创建 `limina.config.mjs`：
@@ -293,7 +336,7 @@ const liminaConfig = {
               reason: 'client runtime must not depend on node runtime',
             },
           ],
-          deps: [
+          workspaceDeps: [
             {
               name: '@acme/node-only',
               reason: 'client runtime must not consume node-only packages',
@@ -464,6 +507,17 @@ pipeline 可以包含两类步骤：
 命令步骤默认在 workspace root 执行，并继承 `process.env`。
 
 ## CLI 参考
+
+### `limina init [--yes]`
+
+为尚未初始化的 pnpm monorepo 生成 declaration leaves、graph 聚合器、根配置与 `limina:check` 脚本。
+
+```sh
+pnpm exec limina init
+pnpm exec limina init --yes
+```
+
+该命令根据 TypeScript 对真实 import 的解析结果推导 leaf 间 `references`，并去重、排除自身引用。已有 `tsconfig*.build.json` 或 `tsconfig*.dts.json` 时会失败，避免覆盖已有 graph 语义。
 
 ### `limina check <pipeline>`
 

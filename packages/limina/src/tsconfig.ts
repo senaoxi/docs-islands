@@ -9,7 +9,6 @@ export type JsonObject = Record<string, unknown>;
 
 const dtsConfigFilePattern = /^tsconfig(?:\..+)?\.dts\.json$/u;
 const buildGraphConfigFilePattern = /^tsconfig(?:\..+)?\.build\.json$/u;
-const deprecatedGraphConfigFilePattern = /^tsconfig(?:\..+)?\.graph\.json$/u;
 const generatedConfigFilePattern =
   /^tsconfig(?:\..+)?\.paths\.generated\.json$/u;
 const baseConfigFilePattern = /^tsconfig(?:\..+)?\.base\.json$/u;
@@ -325,15 +324,10 @@ export function isBuildGraphConfigPath(configPath: string): boolean {
   return buildGraphConfigFilePattern.test(path.basename(configPath));
 }
 
-export function isDeprecatedGraphConfigPath(configPath: string): boolean {
-  return deprecatedGraphConfigFilePattern.test(path.basename(configPath));
-}
-
 function isReservedTypeScriptConfigFile(fileName: string): boolean {
   return (
     dtsConfigFilePattern.test(fileName) ||
     buildGraphConfigFilePattern.test(fileName) ||
-    deprecatedGraphConfigFilePattern.test(fileName) ||
     generatedConfigFilePattern.test(fileName) ||
     baseConfigFilePattern.test(fileName) ||
     checkConfigFilePattern.test(fileName)
@@ -515,16 +509,7 @@ export function collectGraphProjectRouteFromRoot(options: {
 
   problems.push(...rootReferences.problems);
 
-  if (isDeprecatedGraphConfigPath(rootGraphConfigPath)) {
-    problems.push(
-      [
-        'Checker entry uses a deprecated tsconfig name:',
-        `  config: ${formatConfigPath(rootGraphConfigPath)}`,
-        '  reason: tsconfig*.graph.json has been renamed to tsconfig*.build.json for declaration build graph aggregators.',
-        '  fix: rename the checker entry to tsconfig*.build.json.',
-      ].join('\n'),
-    );
-  } else if (
+  if (
     !isBuildGraphConfigPath(rootGraphConfigPath) &&
     !isDtsConfigPath(rootGraphConfigPath)
   ) {
@@ -548,20 +533,6 @@ export function collectGraphProjectRouteFromRoot(options: {
 
   for (const { projectPath, rawReferencePath, referrerPath } of queue) {
     if (!projectPath) {
-      continue;
-    }
-
-    if (isDeprecatedGraphConfigPath(projectPath)) {
-      problems.push(
-        [
-          'Deprecated checker entry reference:',
-          `  from: ${formatConfigPath(referrerPath)}`,
-          `  reference: ${rawReferencePath}`,
-          `  resolved: ${formatConfigPath(projectPath)}`,
-          '  reason: tsconfig*.graph.json has been renamed to tsconfig*.build.json for declaration build graph aggregators.',
-          '  fix: rename the referenced config to tsconfig*.build.json and update this reference.',
-        ].join('\n'),
-      );
       continue;
     }
 
@@ -640,19 +611,6 @@ export function collectGraphProjectRoutes(
       checker.entry,
     );
 
-    if (isDeprecatedGraphConfigPath(rootConfigPath)) {
-      problems.push(
-        [
-          'Checker graph entry uses a deprecated tsconfig name:',
-          `  checker: ${checker.name}`,
-          `  config: ${toRelativePath(config.rootDir, rootConfigPath)}`,
-          '  reason: tsconfig*.graph.json has been renamed to tsconfig*.build.json for declaration build graph aggregators.',
-          '  fix: rename the checker entry to tsconfig*.build.json.',
-        ].join('\n'),
-      );
-      continue;
-    }
-
     if (!existsSync(rootConfigPath)) {
       problems.push(
         [
@@ -694,19 +652,6 @@ export function collectCheckerEntryProjectRoutes(
       config.rootDir,
       checker.entry,
     );
-
-    if (isDeprecatedGraphConfigPath(rootConfigPath)) {
-      problems.push(
-        [
-          'Checker entry uses a deprecated tsconfig name:',
-          `  checker: ${checker.name}`,
-          `  config: ${toRelativePath(config.rootDir, rootConfigPath)}`,
-          '  reason: tsconfig*.graph.json has been renamed to tsconfig*.build.json for declaration build graph aggregators.',
-          '  fix: rename the checker entry to tsconfig*.build.json.',
-        ].join('\n'),
-      );
-      continue;
-    }
 
     if (!existsSync(rootConfigPath)) {
       problems.push(

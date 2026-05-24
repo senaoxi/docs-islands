@@ -11,7 +11,6 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runGraphCheck } from '../commands/graph';
 import type { GraphConfig, ResolvedLiminaConfig } from '../config';
-import { collectGraphProjectRouteFromRoot } from '../tsconfig';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -249,38 +248,6 @@ const denyInternalDep: GraphConfig = {
 };
 
 describe('runGraphCheck checker entry', () => {
-  it('rejects deprecated .graph.json checker entries with a migration hint', async () => {
-    const fixture = await createFixture({
-      'app/src/index.ts': 'export const value = 1;\n',
-      'app/tsconfig.lib.dts.json': buildConfig({
-        include: ['src/**/*.ts'],
-        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
-      }),
-      'app/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
-      'tsconfig.graph.json': stringifyConfig({
-        files: [],
-        references: [
-          {
-            path: './app/tsconfig.lib.dts.json',
-          },
-        ],
-      }),
-    });
-
-    try {
-      const result = collectGraphProjectRouteFromRoot({
-        rootConfigPath: path.join(fixture.rootDir, 'tsconfig.graph.json'),
-        rootDir: fixture.rootDir,
-      });
-
-      expect(result.problems.join('\n')).toContain(
-        'renamed to tsconfig*.build.json',
-      );
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
   it('reports missing graph references from nested aggregators', async () => {
     const fixture = await createFixture({
       'app/src/index.ts': 'export const value = 1;\n',
@@ -424,6 +391,34 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
+  it('rejects removed deny.deps graph rule config', async () => {
+    const fixture = await createFixture(
+      createWorkspacePackageFiles({
+        appSource: 'export const value = 1;\n',
+      }),
+      {
+        rules: {
+          runtime: {
+            deny: {
+              deps: [
+                {
+                  name: '@example/internal',
+                  reason: 'runtime package must not consume internal directly',
+                },
+              ],
+            },
+          },
+        },
+      } as unknown as GraphConfig,
+    );
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('does not validate source-only Node builtin deny entries', async () => {
     const fixture = await createFixture(
       createLocalBoundaryFiles({
@@ -462,7 +457,7 @@ describe('runGraphCheck graph rules', () => {
         rules: {
           runtime: {
             deny: {
-              deps: [
+              workspaceDeps: [
                 {
                   name: '@example/missing',
                   reason: 'missing dependency should be rejected',
@@ -559,7 +554,7 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
-  it('keeps cross-package relative import checks active without legacy production kinds', async () => {
+  it('keeps cross-package relative import checks active without package dependency rules', async () => {
     const fixture = await createFixture(
       createWorkspacePackageFiles({
         appSource:

@@ -10,7 +10,7 @@ export interface GraphRuleRefDeny {
   reason: string;
 }
 
-export interface GraphRuleDepDeny {
+export interface GraphRuleWorkspaceDepDeny {
   name: string;
   reason: string;
 }
@@ -24,7 +24,7 @@ export interface GraphRuleNodeBuiltinDeny {
 export interface NormalizedGraphRules {
   nodeBuiltinsByLabel: Map<string, GraphRuleNodeBuiltinDeny[]>;
   refsByLabel: Map<string, Map<string, GraphRuleRefDeny>>;
-  workspaceDepsByLabel: Map<string, Map<string, GraphRuleDepDeny>>;
+  workspaceDepsByLabel: Map<string, Map<string, GraphRuleWorkspaceDepDeny>>;
 }
 
 interface GraphRuleKindSelection {
@@ -170,7 +170,7 @@ function addNormalizedWorkspaceDep(options: {
   label: string;
   packageNames: Set<string>;
   problems: string[];
-  workspaceDepsByLabel: Map<string, Map<string, GraphRuleDepDeny>>;
+  workspaceDepsByLabel: Map<string, Map<string, GraphRuleWorkspaceDepDeny>>;
 }): void {
   const field = `${options.fieldPrefix}[${options.index}]`;
 
@@ -210,7 +210,7 @@ function addNormalizedWorkspaceDep(options: {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.name`,
       `  name: ${packageName}`,
-      '  reason: deny.workspaceDeps and legacy deny.deps only accept discovered workspace package names. Use deny.nodeBuiltins for Node builtins.',
+      '  reason: deny.workspaceDeps only accepts discovered workspace package names. Use deny.nodeBuiltins for Node builtins.',
     ]);
     return;
   }
@@ -301,7 +301,10 @@ export function normalizeGraphRules(options: {
   projectPaths: string[];
 }): NormalizedGraphRules {
   const refsByLabel = new Map<string, Map<string, GraphRuleRefDeny>>();
-  const workspaceDepsByLabel = new Map<string, Map<string, GraphRuleDepDeny>>();
+  const workspaceDepsByLabel = new Map<
+    string,
+    Map<string, GraphRuleWorkspaceDepDeny>
+  >();
   const nodeBuiltinsByLabel = new Map<string, GraphRuleNodeBuiltinDeny[]>();
   const projectPathSet = new Set(options.projectPaths);
   const packageNames = new Set(
@@ -370,31 +373,15 @@ export function normalizeGraphRules(options: {
       }
     }
 
-    const legacyDeps = rawRule.deny.deps;
-
     if (
       shouldNormalizeRuleKind(options.include, 'workspaceDeps') &&
-      legacyDeps !== undefined
+      rawRule.deny.deps !== undefined
     ) {
-      if (!Array.isArray(legacyDeps)) {
-        addRuleEntryConfigProblem(options.problems, [
-          `  field: graph.rules.${label}.deny.deps`,
-          `  value: ${formatUnknownValue(legacyDeps)}`,
-          '  reason: deny.deps must be an array.',
-        ]);
-      } else {
-        legacyDeps.forEach((entry, index) => {
-          addNormalizedWorkspaceDep({
-            entry,
-            fieldPrefix: `graph.rules.${label}.deny.deps`,
-            index,
-            label,
-            packageNames,
-            problems: options.problems,
-            workspaceDepsByLabel,
-          });
-        });
-      }
+      addRuleEntryConfigProblem(options.problems, [
+        `  field: graph.rules.${label}.deny.deps`,
+        `  value: ${formatUnknownValue(rawRule.deny.deps)}`,
+        '  reason: deny.deps has been removed; use deny.workspaceDeps.',
+      ]);
     }
 
     const workspaceDeps = rawRule.deny.workspaceDeps;
@@ -477,7 +464,7 @@ export function getDeniedWorkspaceDepRule(
   rules: NormalizedGraphRules,
   label: string | null,
   targetPackageName: string,
-): GraphRuleDepDeny | null {
+): GraphRuleWorkspaceDepDeny | null {
   if (!label) {
     return null;
   }

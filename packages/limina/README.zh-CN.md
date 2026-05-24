@@ -223,7 +223,7 @@ graph: {
             reason: 'client runtime must stay independent from Node runtime',
           },
         ],
-        deps: [
+        workspaceDeps: [
           {
             name: '@acme/internal-node',
             reason: 'client runtime must not consume Node-only packages',
