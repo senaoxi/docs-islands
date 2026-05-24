@@ -9,7 +9,7 @@
       "path": "./utils/tsconfig.build.json"
     },
     {
-      "path": "./packages/logger/tsconfig.build.json"
+      "path": "./packages/logaria/tsconfig.build.json"
     },
     {
       "path": "./packages/core/tsconfig.build.json"

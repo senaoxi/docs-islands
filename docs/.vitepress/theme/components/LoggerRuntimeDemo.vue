@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import {
-  createLogger,
-  resetLoggerConfig,
-  setLoggerConfig,
-} from '@docs-islands/logger';
+import { createLogger, resetLoggerConfig, setLoggerConfig } from 'logaria';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import './logger-pruning-fixture';
 

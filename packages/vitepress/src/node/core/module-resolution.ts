@@ -12,8 +12,8 @@ import {
   type DocsStaticRouteResolver,
   isInlinePageRequest as isDocsInlinePageRequest,
 } from '@docs-islands/core/node/module-resolution';
-import { formatDebugMessage } from '@docs-islands/logger/helper';
 import { getProjectRoot } from '@docs-islands/utils/path';
+import { formatDebugMessage } from 'logaria/helper';
 import { dirname, extname, isAbsolute, relative, resolve } from 'pathe';
 import type { Plugin } from 'vite';
 import { normalizePath } from 'vite';

@@ -115,7 +115,6 @@ export default defineConfig({
   },
 
   pipelines: {
-    typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
     package: ['package:check'],
     publish: ['graph:check', 'proof:check', 'package:check'],
   },
@@ -127,7 +126,7 @@ export default defineConfig({
 ```json
 {
   "scripts": {
-    "typecheck": "limina check typecheck",
+    "typecheck": "limina check",
     "lint:package": "limina package check",
     "prepublishOnly": "limina check publish"
   }
@@ -172,7 +171,8 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 
 | 命令                                            | 说明                                                             |
 | ----------------------------------------------- | ---------------------------------------------------------------- |
-| `limina check <pipeline>`                       | 运行 `pipelines` 中的命名 pipeline。                             |
+| `limina check`                                  | 运行内置默认检查 pipeline。                                      |
+| `limina check <pipeline>`                       | 运行 `pipelines` 中的用户命名 pipeline。                         |
 | `limina graph check`                            | 校验 project references 和架构 import 规则。                     |
 | `limina proof check`                            | 证明声明 configs、本地 typecheck configs 和源码覆盖保持一致。    |
 | `limina paths generate`                         | 为 artifact-facing workspace exports 生成源码 `paths` 兼容配置。 |
@@ -306,13 +306,14 @@ packageChecks: {
 
 ```js
 pipelines: {
-  typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
   package: [
     { type: 'command', command: 'pnpm', args: ['build'] },
     'package:check',
   ],
 }
 ```
+
+`limina check` 会运行内置默认 pipeline：`graph:check`、`source:check`、`proof:check` 和 `checker:typecheck`。`limina check <pipeline>` 只运行 `limina.config.mjs#pipelines` 中的用户 pipeline；如果名称不存在，Limina 会报出缺失的 pipeline，并提示到这里完成配置。
 
 字符串步骤可以是内置任务名，也可以是简单命令。当参数、`cwd` 或 `env` 需要明确表达时，请使用对象形式的 command step。
 
@@ -337,7 +338,7 @@ jobs:
           node-version: 20.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec limina check typecheck
+      - run: pnpm exec limina check
 ```
 
 ## Programmatic API

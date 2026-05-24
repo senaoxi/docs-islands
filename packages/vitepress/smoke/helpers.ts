@@ -1,8 +1,8 @@
-import type { createElapsedTimer } from '@docs-islands/logger/helper';
-import { formatErrorMessage } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/utils/logger';
 import type { ConsoleMessage, Page, Request, Response } from '@playwright/test';
 import { load } from 'cheerio';
+import type { createElapsedTimer } from 'logaria/helper';
+import { formatErrorMessage } from 'logaria/helper';
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, mkdtemp, rm as nodeRm, writeFile } from 'node:fs/promises';

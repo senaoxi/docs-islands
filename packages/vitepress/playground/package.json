@@ -17,7 +17,7 @@
   "dependencies": {
     "vue": "catalog:prod",
     "tinyglobby": "catalog:prod",
-    "@docs-islands/logger": "workspace:*"
+    "logaria": "workspace:*"
   },
   "devDependencies": {
     "eslint": "catalog:lint",

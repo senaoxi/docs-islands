@@ -2,8 +2,8 @@ import type {
   PageMetafile,
   SiteDevToolsAiBuildReportReference,
 } from '#dep-types/page';
-import { createElapsedTimer } from '@docs-islands/logger/helper';
-import type { LoggerElapsedLogOptions } from '@docs-islands/logger/types';
+import { createElapsedTimer } from 'logaria/helper';
+import type { LoggerElapsedLogOptions } from 'logaria/types';
 import {
   getSiteDevToolsAiModuleReportKey,
   type SiteDevToolsAiAnalysisTarget,

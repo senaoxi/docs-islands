@@ -9,7 +9,7 @@
   },
   "references": [
     {
-      "path": "../../logger/tsconfig.lib.dts.json"
+      "path": "../../logaria/tsconfig.lib.dts.json"
     }
   ]
 }

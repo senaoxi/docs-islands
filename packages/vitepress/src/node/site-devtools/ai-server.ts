@@ -2,7 +2,7 @@ import type {
   SiteDevToolsAnalysisResolvedBuildReportModelConfig,
   SiteDevToolsAnalysisResolvedUserConfig,
 } from '#dep-types/utils';
-import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from 'logaria/helper';
 import {
   buildSiteDevToolsAiAnalysisPrompt,
   getSiteDevToolsAiProviderLabel,

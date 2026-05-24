@@ -21,7 +21,7 @@
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },
   "dependencies": {
-    "@docs-islands/logger": "catalog:prod",
+    "logaria": "npm:@docs-islands/logger@latest",
     "tinyglobby": "catalog:prod"
   },
   "devDependencies": {

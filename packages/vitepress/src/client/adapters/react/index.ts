@@ -19,13 +19,13 @@ import {
   RENDER_STRATEGY_ATTRS,
   RENDER_STRATEGY_CONSTANTS,
 } from '@docs-islands/core/shared/constants/render-strategy';
+import { querySelectorAllToArray } from '@docs-islands/utils/dom-iterable';
+import { createLogger } from '@docs-islands/vitepress/logger';
 import {
   createElapsedTimer,
   formatDebugMessage,
   formatErrorMessage,
-} from '@docs-islands/logger/helper';
-import { querySelectorAllToArray } from '@docs-islands/utils/dom-iterable';
-import { createLogger } from '@docs-islands/vitepress/logger';
+} from 'logaria/helper';
 import type React from 'react';
 import type ReactDOM from 'react-dom/client';
 import { createVitePressDevBridge } from '../../vitepress-dev-bridge';

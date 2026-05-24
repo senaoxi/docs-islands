@@ -5,10 +5,7 @@ import {
   createEmptyCompilationContainer,
   type RenderController,
 } from '@docs-islands/core/node/render-controller';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import MagicString, { type SourceMap } from 'magic-string';
 import MarkdownIt from 'markdown-it';
 import type { Plugin } from 'vite';

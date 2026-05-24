@@ -43,7 +43,7 @@
   "dependencies": {
     "@arethetypeswrong/core": "catalog:lint",
     "@clack/prompts": "catalog:dev",
-    "@docs-islands/logger": "catalog:prod",
+    "logaria": "npm:@docs-islands/logger@latest",
     "@publint/pack": "catalog:lint",
     "cac": "catalog:dev",
     "es-module-lexer": "catalog:dev",

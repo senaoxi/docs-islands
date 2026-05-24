@@ -28,7 +28,7 @@
     "react": "catalog:dev",
     "react-dom": "catalog:dev",
     "vue": "catalog:prod",
-    "@docs-islands/logger": "catalog:prod"
+    "logaria": "npm:@docs-islands/logger@latest"
   },
   "devDependencies": {
     "eslint": "catalog:lint",

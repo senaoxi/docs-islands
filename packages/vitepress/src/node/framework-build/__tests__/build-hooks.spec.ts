@@ -8,10 +8,7 @@ import {
   RenderController,
 } from '@docs-islands/core/node/render-controller';
 import { RENDER_STRATEGY_CONSTANTS } from '@docs-islands/core/shared/constants/render-strategy';
-import {
-  resetScopedLoggerConfig,
-  setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+import { resetScopedLoggerConfig, setScopedLoggerConfig } from 'logaria/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UIFrameworkBuildAdapter } from '../adapter';
 import { registerUIFrameworkBuildHooks } from '../build-hooks';

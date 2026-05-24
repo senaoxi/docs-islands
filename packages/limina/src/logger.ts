@@ -1,6 +1,6 @@
-import { createLogger } from '@docs-islands/logger';
-import { formatErrorMessage } from '@docs-islands/logger/helper';
-import type { ScopedLogger } from '@docs-islands/logger/types';
+import { createLogger } from 'logaria';
+import { formatErrorMessage } from 'logaria/helper';
+import type { ScopedLogger } from 'logaria/types';
 import readline from 'node:readline';
 
 const logger = createLogger({

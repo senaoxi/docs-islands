@@ -48,7 +48,7 @@
     "magic-string": "catalog:dev",
     "markdown-it": "catalog:dev",
     "pathe": "catalog:dev",
-    "@docs-islands/logger": "catalog:prod"
+    "logaria": "npm:@docs-islands/logger@latest"
   },
   "devDependencies": {
     "@types/babel__generator": "catalog:dev",

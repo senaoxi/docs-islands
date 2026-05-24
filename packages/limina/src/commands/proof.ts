@@ -1,4 +1,4 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { glob } from 'tinyglobby';

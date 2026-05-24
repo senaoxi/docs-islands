@@ -32,7 +32,7 @@ describe('ReactRenderController', () => {
     const code = await controller.generateClientRuntimeInDEV('/guide/react.md');
 
     expect(code).toContain('@docs-islands/vitepress/logger');
-    expect(code).toContain('@docs-islands/logger/helper');
+    expect(code).toContain('logaria/helper');
     expect(code).toContain(
       'formatDebugMessage as __docs_islands_format_debug__,\n  formatErrorMessage as __docs_islands_format_error__',
     );

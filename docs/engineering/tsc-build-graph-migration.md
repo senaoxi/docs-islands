@@ -67,10 +67,10 @@ Former legacy workspace checks:
 
 | Workspace                            | Former source check                                                                                                                 | Former test check                    | Notes                                                                                    |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------- |
-| root                                 | root source/script check                                                                                                            | workspace test TypeScript checks     | Root scripts import `@docs-islands/logger` and `@docs-islands/utils`.                    |
+| root                                 | root source/script check                                                                                                            | workspace test TypeScript checks     | Root scripts import `logaria` and `@docs-islands/utils`.                                 |
 | `@docs-islands/utils`                | `tsc --noEmit`                                                                                                                      | none                                 | `utils/tsconfig.json` included the whole package; workspace exports now point to source. |
 | `@docs-islands/core`                 | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Package exports point to source files in the workspace manifest.                         |
-| `@docs-islands/logger`               | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Source check includes `rolldown.config.ts`, `packagePlugin.ts`, and `scripts/**/*.ts`.   |
+| `logaria`                            | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Source check includes `rolldown.config.ts`, `packagePlugin.ts`, and `scripts/**/*.ts`.   |
 | `@docs-islands/plugin-license`       | `tsc --noEmit`                                                                                                                      | none                                 | Private build plugin; source imports logger and utils.                                   |
 | `@docs-islands/eslint-config`        | `tsc -p tsconfig.json --noEmit`                                                                                                     | `tsc -p tsconfig.test.json --noEmit` | Workspace exports now point to source.                                                   |
 | `@docs-islands/vitepress`            | `tsc -p tsconfig.json --noEmit`, then `tsc -p src/node`, `src/client`, `src/shared`, then `vue-tsc -p theme/tsconfig.json --noEmit` | `tsc -p tsconfig.test.json --noEmit` | The old package-level solution config did not use `tsc -b` and was removed later.        |
@@ -101,7 +101,7 @@ should not accidentally change whether TypeScript resolves source or dist.
 | Package                        | Workspace export shape                                                                                                                             | Published/build export shape                                                                                                                      |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@docs-islands/core`           | Exports source files such as `./src/index.ts`, `./src/client/index.ts`, and `./src/node/index.ts`.                                                 | No package build script currently emits public dist.                                                                                              |
-| `@docs-islands/logger`         | Exports source files such as `./src/index.ts`, `./src/helper/index.ts`, and `./src/plugin/index.ts`.                                               | `packagePlugin.ts` rewrites source exports to dist JS and d.ts paths during rolldown build.                                                       |
+| `logaria`                      | Exports source files such as `./src/index.ts`, `./src/helper/index.ts`, and `./src/plugin/index.ts`.                                               | `packagePlugin.ts` rewrites source exports to dist JS and d.ts paths during rolldown build.                                                       |
 | `@docs-islands/utils`          | Export `types` conditions point to source files such as `./env.ts`, `./logger.ts`, and `./path.ts`; runtime `default` conditions point to dist.    | Rolldown preserves modules and dts into `dist`.                                                                                                   |
 | `@docs-islands/plugin-license` | Exports `./dist/index.mjs` and `./dist/index.d.ts`.                                                                                                | Build-only private package, consumed by rolldown configs.                                                                                         |
 | `@docs-islands/eslint-config`  | Export `types` conditions point to source files under `src/`; runtime `default` conditions point to dist.                                          | Rolldown preserves modules and dts into `dist`.                                                                                                   |
@@ -118,20 +118,20 @@ importing declaration configs.
 
 Important observed internal edges:
 
-| From                              | To                                                                         | Representative reason                                                                              |
-| --------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| root scripts                      | `@docs-islands/logger`, `@docs-islands/utils`                              | `scripts/build.ts`, `scripts/merge-docs.ts`, `scripts/run-workspace-script.ts`, release scripts.   |
-| `utils`                           | `@docs-islands/logger` as `catalog:prod`                                   | `utils/env.ts`, `utils/logger.ts`, `utils/bin/link-guard.ts` consume the released/logger artifact. |
-| `plugin-license`                  | `@docs-islands/logger` as `catalog:prod`, `@docs-islands/utils` as source  | `src/index.ts` uses logger helper and utils logger; rolldown config uses `loadEnv`.                |
-| `logger` build tooling            | `@docs-islands/plugin-license` as `link:`, `@docs-islands/utils` as source | `packages/logger/rolldown.config.ts`.                                                              |
-| `core`                            | `@docs-islands/logger` as `catalog:prod`, `@docs-islands/utils` as source  | Runtime and test helpers import logger helper/facade utilities.                                    |
-| `eslint-config` tooling/tests     | `@docs-islands/utils`, `@docs-islands/logger`                              | Rolldown config uses `loadEnv`; tests cover logger import rules.                                   |
-| `vitepress` runtime               | `@docs-islands/core`, `@docs-islands/logger`, `@docs-islands/utils`        | Node, client, shared, scripts, and tests import all three.                                         |
-| `vitepress` build tooling         | `@docs-islands/plugin-license` as `link:`, `@docs-islands/utils` as source | Rolldown configs and package scripts.                                                              |
-| `vitepress` docs/playground/smoke | `@docs-islands/vitepress`, `@docs-islands/logger`, `@docs-islands/utils`   | Consumer examples, fixtures, VitePress configs, and test utilities.                                |
+| From                              | To                                                                          | Representative reason                                                                               |
+| --------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| root scripts                      | `logaria`, `@docs-islands/utils`                                            | `scripts/build.ts`, `scripts/merge-docs.ts`, `scripts/run-workspace-script.ts`, release scripts.    |
+| `utils`                           | `logaria` as a direct npm alias dependency                                  | `utils/env.ts`, `utils/logger.ts`, `utils/bin/link-guard.ts` consume the released logaria artifact. |
+| `plugin-license`                  | `logaria` as a direct npm alias dependency, `@docs-islands/utils` as source | `src/index.ts` uses logger helper and utils logger; rolldown config uses `loadEnv`.                 |
+| `logaria` build tooling           | `@docs-islands/plugin-license` as `link:`, `@docs-islands/utils` as source  | `packages/logaria/rolldown.config.ts`.                                                              |
+| `core`                            | `logaria` as a direct npm alias dependency, `@docs-islands/utils` as source | Runtime and test helpers import logger helper/facade utilities.                                     |
+| `eslint-config` tooling/tests     | `@docs-islands/utils`, `logaria`                                            | Rolldown config uses `loadEnv`; tests cover logger import rules.                                    |
+| `vitepress` runtime               | `@docs-islands/core`, `logaria`, `@docs-islands/utils`                      | Node, client, shared, scripts, and tests import all three.                                          |
+| `vitepress` build tooling         | `@docs-islands/plugin-license` as `link:`, `@docs-islands/utils` as source  | Rolldown configs and package scripts.                                                               |
+| `vitepress` docs/playground/smoke | `@docs-islands/vitepress`, `logaria`, `@docs-islands/utils`                 | Consumer examples, fixtures, VitePress configs, and test utilities.                                 |
 
 Some `@docs-islands/test`, `@docs-islands/test_b`,
-`@docs-islands/logger-fixture`, and `@docs-islands/missing` strings are test
+`logaria-fixture`, and `@docs-islands/missing` strings are test
 fixture package names, not real workspace graph nodes.
 
 ## Current Checker Entries And IDE Configs
@@ -188,19 +188,19 @@ packages/vitepress/src/tsconfig.build.json
 The source graph remains layered as follows:
 
 ```text
-logger artifact
+logaria artifact
   -> utils
   -> plugin-license artifact
-  -> logger:tools
+  -> logaria:tools
 
-logger:lib
+logaria:lib
   -> core:lib
   -> eslint-config:lib
   -> vitepress:runtime-shared
   -> vitepress:runtime-client
   -> vitepress:runtime-node
 
-logger:lib + utils
+logaria:lib + utils
   -> root:tools
   -> package tool projects
 
@@ -216,17 +216,17 @@ More precise project edges:
 
 | Project                                               | References should include                                             | Notes                                                                                                         |
 | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `packages/logger/tsconfig.lib.dts.json`               | none, or only external types                                          | Runtime logger source only.                                                                                   |
-| `utils/tsconfig.lib.dts.json`                         | none                                                                  | Utils consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                                |
-| `packages/plugins/license/tsconfig.lib.dts.json`      | `utils`                                                               | Plugin-license consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                       |
-| `packages/logger/tsconfig.tools.dts.json`             | `logger:lib`, `utils`                                                 | Plugin-license is consumed through `link:` dist output; the typecheck pipeline prebuilds it.                  |
-| `packages/core/tsconfig.lib.dts.json`                 | `utils`                                                               | Core consumes `@docs-islands/logger` as a `catalog:prod` artifact dependency.                                 |
+| `packages/logaria/tsconfig.lib.dts.json`              | none, or only external types                                          | Runtime logger source only.                                                                                   |
+| `utils/tsconfig.lib.dts.json`                         | none                                                                  | Utils consumes `logaria` as a direct npm alias artifact dependency.                                           |
+| `packages/plugins/license/tsconfig.lib.dts.json`      | `utils`                                                               | Plugin-license consumes `logaria` as a direct npm alias artifact dependency.                                  |
+| `packages/logaria/tsconfig.tools.dts.json`            | `logaria:lib`, `utils`                                                | Plugin-license is consumed through `link:` dist output; the typecheck pipeline prebuilds it.                  |
+| `packages/core/tsconfig.lib.dts.json`                 | `utils`                                                               | Core consumes `logaria` as a direct npm alias artifact dependency.                                            |
 | `packages/eslint-config/tsconfig.lib.dts.json`        | none                                                                  | ESLint config runtime source stays separate from its rolldown config.                                         |
-| `scripts/tsconfig.dts.json` as `root:tools`           | `logger:lib`, `utils`                                                 | Root scripts import `@docs-islands/logger/helper` and `@docs-islands/utils/*`.                                |
-| `packages/vitepress/src/shared/tsconfig.lib.dts.json` | `core:lib`, `logger:lib`, `utils`                                     | Universal shared runtime; owns `src/shared` plus `src/types`, with no Node ambient types or `node:*` imports. |
-| `packages/vitepress/src/client/tsconfig.lib.dts.json` | `vitepress:runtime-shared`, `core:lib`, `logger:lib`, `utils`         | Client runtime keeps Node ambient types out.                                                                  |
-| `packages/vitepress/src/node/tsconfig.lib.dts.json`   | `vitepress:runtime-shared`, `core:lib`, `logger:lib`, `utils`         | Node runtime owns Node-specific config resolution.                                                            |
-| `packages/vitepress/tsconfig.tools.dts.json`          | `vitepress:runtime-*`, `utils`, `logger:lib`                          | Plugin-license is consumed through `link:` dist output; the typecheck pipeline prebuilds it.                  |
+| `scripts/tsconfig.dts.json` as `root:tools`           | `logaria:lib`, `utils`                                                | Root scripts import `logaria/helper` and `@docs-islands/utils/*`.                                             |
+| `packages/vitepress/src/shared/tsconfig.lib.dts.json` | `core:lib`, `logaria:lib`, `utils`                                    | Universal shared runtime; owns `src/shared` plus `src/types`, with no Node ambient types or `node:*` imports. |
+| `packages/vitepress/src/client/tsconfig.lib.dts.json` | `vitepress:runtime-shared`, `core:lib`, `logaria:lib`, `utils`        | Client runtime keeps Node ambient types out.                                                                  |
+| `packages/vitepress/src/node/tsconfig.lib.dts.json`   | `vitepress:runtime-shared`, `core:lib`, `logaria:lib`, `utils`        | Node runtime owns Node-specific config resolution.                                                            |
+| `packages/vitepress/tsconfig.tools.dts.json`          | `vitepress:runtime-*`, `utils`, `logaria:lib`                         | Plugin-license is consumed through `link:` dist output; the typecheck pipeline prebuilds it.                  |
 | package test projects                                 | corresponding source/runtime projects plus imported internal packages | Tests should depend on source projects, not be referenced by production libs.                                 |
 | playground/smoke projects                             | none in source graph                                                  | They are dist consumer checks in the `consumer` pipeline, not project-reference declaration leaves.           |
 
@@ -246,52 +246,52 @@ The checker also enforces forbidden edges:
 
 Current graph/local classification:
 
-| Class            | Projects/configs                                                                                                                                                                                                                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `lib`            | `packages/logger/tsconfig.lib.dts.json`, `utils/tsconfig.lib.dts.json`, `packages/plugins/license/tsconfig.lib.dts.json`, `packages/core/tsconfig.lib.dts.json`, `packages/eslint-config/tsconfig.lib.dts.json`, `packages/limina/tsconfig.lib.dts.json`                                               |
-| `tools`          | `scripts/tsconfig.dts.json`, `packages/logger/tsconfig.tools.dts.json`, `utils/tsconfig.tools.dts.json`, `packages/plugins/license/tsconfig.tools.dts.json`, `packages/eslint-config/tsconfig.tools.dts.json`, `packages/limina/tsconfig.tools.dts.json`, `packages/vitepress/tsconfig.tools.dts.json` |
-| `test`           | `packages/logger/tsconfig.test.dts.json`, `packages/core/tsconfig.test.dts.json`, `packages/eslint-config/tsconfig.test.dts.json`, `packages/vitepress/tsconfig.test.dts.json`                                                                                                                         |
-| `runtime-node`   | `packages/vitepress/src/node/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/node/tsconfig.json` for package scripts and dts                                                                                                                                                                 |
-| `runtime-client` | `packages/vitepress/src/client/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/client/tsconfig.json` for package scripts and dts                                                                                                                                                             |
-| `runtime-shared` | `packages/vitepress/src/shared/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/shared/tsconfig.json` for package scripts                                                                                                                                                                     |
-| `docs`           | `docs/tsconfig.json` in source typecheck; `packages/vitepress/docs/tsconfig.json` in the dist consumer pipeline                                                                                                                                                                                        |
-| `playground`     | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                |
-| `smoke`          | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                |
+| Class            | Projects/configs                                                                                                                                                                                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib`            | `packages/logaria/tsconfig.lib.dts.json`, `utils/tsconfig.lib.dts.json`, `packages/plugins/license/tsconfig.lib.dts.json`, `packages/core/tsconfig.lib.dts.json`, `packages/eslint-config/tsconfig.lib.dts.json`, `packages/limina/tsconfig.lib.dts.json`                                               |
+| `tools`          | `scripts/tsconfig.dts.json`, `packages/logaria/tsconfig.tools.dts.json`, `utils/tsconfig.tools.dts.json`, `packages/plugins/license/tsconfig.tools.dts.json`, `packages/eslint-config/tsconfig.tools.dts.json`, `packages/limina/tsconfig.tools.dts.json`, `packages/vitepress/tsconfig.tools.dts.json` |
+| `test`           | `packages/logaria/tsconfig.test.dts.json`, `packages/core/tsconfig.test.dts.json`, `packages/eslint-config/tsconfig.test.dts.json`, `packages/vitepress/tsconfig.test.dts.json`                                                                                                                         |
+| `runtime-node`   | `packages/vitepress/src/node/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/node/tsconfig.json` for package scripts and dts                                                                                                                                                                  |
+| `runtime-client` | `packages/vitepress/src/client/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/client/tsconfig.json` for package scripts and dts                                                                                                                                                              |
+| `runtime-shared` | `packages/vitepress/src/shared/tsconfig.lib.dts.json` for graph, `packages/vitepress/src/shared/tsconfig.json` for package scripts                                                                                                                                                                      |
+| `docs`           | `docs/tsconfig.json` in source typecheck; `packages/vitepress/docs/tsconfig.json` in the dist consumer pipeline                                                                                                                                                                                         |
+| `playground`     | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                 |
+| `smoke`          | Local source/test configs in the dist consumer pipeline                                                                                                                                                                                                                                                 |
 
 ## Likely Graph Cycles And Breaks
 
-### `logger` -> `plugin-license` -> `utils` -> `logger`
+### `logaria` -> `plugin-license` -> `utils` -> `logaria`
 
 Former source-level cycle risk:
 
-- `packages/logger/tsconfig.json` includes `rolldown.config.ts`.
-- `packages/logger/rolldown.config.ts` imports `@docs-islands/plugin-license`
+- `packages/logaria/tsconfig.json` includes `rolldown.config.ts`.
+- `packages/logaria/rolldown.config.ts` imports `@docs-islands/plugin-license`
   and `@docs-islands/utils/builtin`.
-- `@docs-islands/plugin-license` imports `@docs-islands/logger/helper` and
+- `@docs-islands/plugin-license` imports `logaria/helper` and
   `@docs-islands/utils/logger`.
-- `@docs-islands/utils` imports `@docs-islands/logger`.
+- `@docs-islands/utils` imports `logaria`.
 
 Break:
 
-- Treat logger runtime source as `logger:lib`.
-- Move logger rolldown config, package plugin, and package scripts into
-  `logger:tools`.
-- Keep `utils` and `plugin-license` consuming logger as a built artifact, then
-  place `logger:tools` after `utils`; `plugin-license` is prebuilt and consumed
+- Treat logaria runtime source as `logaria:lib`.
+- Move logaria rolldown config, package plugin, and package scripts into
+  `logaria:tools`.
+- Keep `utils` and `plugin-license` consuming logaria as a built artifact, then
+  place `logaria:tools` after `utils`; `plugin-license` is prebuilt and consumed
   through `link:` by package tooling.
 
-### `utils` -> `logger` and logger build tooling -> `utils`
+### `utils` -> `logaria` and logaria build tooling -> `utils`
 
 Current risk:
 
 - `utils/env.ts`, `utils/logger.ts`, and `utils/bin/link-guard.ts` depend on
-  logger.
-- Logger build tooling depends on utils.
+  logaria.
+- Logaria build tooling depends on utils.
 
 Break:
 
-- Same split as above. `utils` may reference `logger:lib`; only
-  `logger:tools` may reference `utils`.
+- Same split as above. `utils` may reference `logaria:lib`; only
+  `logaria:tools` may reference `utils`.
 
 ### VitePress node/client/shared self-imports
 
@@ -392,7 +392,7 @@ surface: the package that consumers actually install.
 ## First Safe Migration Order
 
 1. Add a separate graph entry such as `tsconfig.build.json`.
-2. Split `@docs-islands/logger` into a runtime lib project and a tools project
+2. Split `logaria` into a runtime lib project and a tools project
    in TypeScript config only. Keep rolldown and `rolldown-plugin-dts` unchanged.
 3. Add `utils` to the graph without a logger reference when it consumes logger
    as `catalog:prod`.

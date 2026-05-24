@@ -1,5 +1,5 @@
 {
-  // Vue docs check used by vue-tsc via pnpm typecheck:vue; not native tsc -b.
+  "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "preserve",

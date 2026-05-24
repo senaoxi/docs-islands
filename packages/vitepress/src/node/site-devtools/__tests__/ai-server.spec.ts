@@ -1,10 +1,7 @@
 /**
  * @vitest-environment node
  */
-import {
-  resetScopedLoggerConfig,
-  setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+import { resetScopedLoggerConfig, setScopedLoggerConfig } from 'logaria/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SiteDevToolsAiAnalysisTarget } from '../../../shared/site-devtools-ai';
 import {

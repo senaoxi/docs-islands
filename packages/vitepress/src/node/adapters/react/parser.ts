@@ -10,11 +10,8 @@ import coreTransformComponentTags, {
   travelImports,
 } from '@docs-islands/core/node/transform';
 import { RENDER_STRATEGY_CONSTANTS } from '@docs-islands/core/shared/constants/render-strategy';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
 import { type ImportSpecifier, init, parse } from 'es-module-lexer';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import type { SourceMap } from 'magic-string';
 import { join } from 'pathe';
 import { GET_CLEAN_PATHNAME_RUNTIME } from '../../../shared/runtime';

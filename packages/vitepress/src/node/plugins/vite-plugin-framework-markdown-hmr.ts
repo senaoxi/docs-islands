@@ -1,7 +1,7 @@
 import type { ConfigType } from '#dep-types/utils';
 import { VITEPRESS_HMR_LOG_GROUPS } from '#shared/constants/log-groups/hmr';
 import type { RenderController } from '@docs-islands/core/node/render-controller';
-import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from 'logaria/helper';
 import { join } from 'pathe';
 import type { Plugin } from 'vite';
 import { normalizePath } from 'vite';

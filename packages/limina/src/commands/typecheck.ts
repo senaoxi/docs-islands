@@ -1,4 +1,4 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from 'logaria/helper';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { availableParallelism } from 'node:os';

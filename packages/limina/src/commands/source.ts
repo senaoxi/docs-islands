@@ -1,4 +1,4 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { ResolvedLiminaConfig } from '../config';
@@ -13,9 +13,7 @@ import {
   type ImportRecord,
   type ProjectInfo,
 } from '../graph-context';
-import {
-  isNodeBuiltinSpecifier,
-} from '../graph-rules';
+import { isNodeBuiltinSpecifier } from '../graph-rules';
 import { SourceLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import { collectGraphProjectRoute } from '../tsconfig';
 import { isPathInsideDirectory, toRelativePath } from '../utils/path';

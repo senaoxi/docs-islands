@@ -1,5 +1,5 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { test as base } from '@playwright/test';
+import { createElapsedTimer } from 'logaria/helper';
 import { type ChildProcess, execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -69,7 +69,7 @@ async function writeConsumerSmokeFixtureFiles(
     path.join(fixtureDir, '.vitepress', 'config.ts'),
     `import { createDocsIslands } from '@docs-islands/vitepress';
 import { react } from '@docs-islands/vitepress/adapters/react';
-import { createLogger } from '@docs-islands/logger';
+import { createLogger } from 'logaria';
 import { defineConfig } from 'vitepress';
 
 const Logger = createLogger({
@@ -190,7 +190,7 @@ export const test = base.extend<
           installLogMessage: 'installing consumer fixture dependencies',
           logger,
           localDependencyTarballPaths: {
-            '@docs-islands/logger': packedLogger.tarballPath,
+            logaria: packedLogger.tarballPath,
           },
           manifest,
           tarballPath: packedDist.tarballPath,

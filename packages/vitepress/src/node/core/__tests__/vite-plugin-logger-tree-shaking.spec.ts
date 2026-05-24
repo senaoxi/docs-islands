@@ -4,8 +4,8 @@
 import {
   resetScopedLoggerConfig,
   setScopedLoggerConfig as setLoggerConfigForScope,
-} from '@docs-islands/logger/core';
-import type { LoggerConfig } from '@docs-islands/logger/types';
+} from 'logaria/core';
+import type { LoggerConfig } from 'logaria/types';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createLoggerTreeShakingPlugin,
@@ -89,7 +89,7 @@ logger.warn('visible static warning');
     expect(code).toContain("logger.warn('visible static warning')");
   });
 
-  it.each(['@docs-islands/logger'])(
+  it.each(['logaria'])(
     'leaves generic logger imports for the generic logger plugin: %s',
     async (loggerModuleId) => {
       resetScopedLoggerConfig(TEST_LOGGER_SCOPE_ID);
@@ -115,7 +115,7 @@ logger.warn('generic visible warning stays for generic plugin ownership');
   it('does not prune generic logger imports through the VitePress wrapper', async () => {
     const code = await transformCode(
       `
-import { createLogger } from '@docs-islands/logger';
+import { createLogger } from 'logaria';
 
 const logger = createLogger({ main: '@docs-islands/core' }).getLoggerByGroup('runtime.render.strategy');
 

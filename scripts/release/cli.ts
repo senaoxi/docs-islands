@@ -1,8 +1,5 @@
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
 import { cac } from 'cac';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import process from 'node:process';
 import { runChangelogCommand } from './changelog';
 import { runReleaseCommand } from './release';

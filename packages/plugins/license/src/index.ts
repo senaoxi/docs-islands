@@ -1,4 +1,4 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from 'logaria/helper';
 import { createLogger } from '@docs-islands/utils/logger';
 import fs from 'node:fs';
 import path from 'node:path';

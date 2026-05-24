@@ -1,0 +1,18 @@
+{
+  "name": "logaria-plugin-test",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "logaria": "link:../../../dist"
+  },
+  "devDependencies": {
+    "@farmfe/core": "catalog:dev",
+    "@rspack/core": "catalog:dev",
+    "esbuild": "catalog:dev",
+    "rolldown": "catalog:dev",
+    "rollup": "catalog:dev",
+    "vite": "catalog:prod",
+    "vitest": "catalog:test",
+    "webpack": "catalog:dev"
+  }
+}

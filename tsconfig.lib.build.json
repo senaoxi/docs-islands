@@ -4,7 +4,7 @@
   "files": [],
   "references": [
     {
-      "path": "./packages/logger/tsconfig.lib.dts.json"
+      "path": "./packages/logaria/tsconfig.lib.dts.json"
     },
     {
       "path": "./utils/tsconfig.lib.dts.json"

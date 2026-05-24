@@ -1,5 +1,5 @@
 import { VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS } from '#shared/constants/log-groups/site-devtools';
-import { formatErrorMessage } from '@docs-islands/logger/helper';
+import { formatErrorMessage } from 'logaria/helper';
 import { createHash } from 'node:crypto';
 import {
   getSiteDevToolsAiProviderLabel,

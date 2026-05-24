@@ -1,17 +1,13 @@
 /**
  * @vitest-environment jsdom
  */
-import {
-  createLogger,
-  resetLoggerConfig,
-  setLoggerConfig,
-} from '@docs-islands/logger';
+import { createLogger, resetLoggerConfig, setLoggerConfig } from 'logaria';
 import {
   createScopedLogger as createLoggerWithScopeId,
   getScopedLoggerConfig as getLoggerConfigForScope,
   resetScopedLoggerConfig,
   setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+} from 'logaria/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VITEPRESS_RUNTIME_LOG_GROUPS } from '../constants/log-groups/runtime';
 import {

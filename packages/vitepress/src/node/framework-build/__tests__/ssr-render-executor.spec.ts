@@ -5,10 +5,7 @@ import type {
   ComponentBundleInfo,
   UsedSnippetContainerType,
 } from '#dep-types/component';
-import {
-  resetScopedLoggerConfig,
-  setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+import { resetScopedLoggerConfig, setScopedLoggerConfig } from 'logaria/core';
 import fs, { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'pathe';

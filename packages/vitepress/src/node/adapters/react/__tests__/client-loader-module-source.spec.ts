@@ -16,9 +16,9 @@ describe('createReactClientLoaderModuleSource', () => {
     });
 
     expect(code).toContain('@docs-islands/vitepress/logger');
-    expect(code).toContain('@docs-islands/logger/helper');
+    expect(code).toContain('logaria/helper');
     expect(code).toContain(
-      "import {\n  formatDebugMessage as __docs_islands_format_debug__,\n  formatErrorMessage as __docs_islands_format_error__\n} from '@docs-islands/logger/helper';",
+      "import {\n  formatDebugMessage as __docs_islands_format_debug__,\n  formatErrorMessage as __docs_islands_format_error__\n} from 'logaria/helper';",
     );
     expect(code).toContain(
       "import { createLogger } from '@docs-islands/vitepress/logger';",

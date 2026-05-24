@@ -1,6 +1,6 @@
-import { setLoggerConfig } from '@docs-islands/logger';
-import { createElapsedTimer } from '@docs-islands/logger/helper';
 import isInCi from 'is-in-ci';
+import { setLoggerConfig } from 'logaria';
+import { createElapsedTimer } from 'logaria/helper';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import inspector from 'node:inspector';
 import path from 'node:path';

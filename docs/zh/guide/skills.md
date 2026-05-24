@@ -1,6 +1,6 @@
 # Agent Skills
 
-Docs Islands 提供了可选的 agent skills，用来帮助 AI coding agent 正确使用项目里的包。这些 skills 会把 `@docs-islands/logger` 和 `@docs-islands/vitepress` 的实践规则打包起来，让 agent 在修改 logger 调用、VitePress 配置、Markdown islands、渲染策略、诊断和集成代码时加载更聚焦的上下文。
+Docs Islands 提供了可选的 agent skills，用来帮助 AI coding agent 正确使用项目里的包。这些 skills 会把 `logaria` 和 `@docs-islands/vitepress` 的实践规则打包起来，让 agent 在修改 logger 调用、VitePress 配置、Markdown islands、渲染策略、诊断和集成代码时加载更聚焦的上下文。
 
 ## 安装
 
@@ -13,7 +13,7 @@ npx skills add XiSenao/docs-islands --list
 安装 logger skill：
 
 ```bash
-npx skills add XiSenao/docs-islands --skill docs-islands-logger
+npx skills add XiSenao/docs-islands --skill logaria
 ```
 
 安装 VitePress skill：
@@ -28,7 +28,7 @@ npx skills add XiSenao/docs-islands --skill docs-islands-vitepress
 npx skills add XiSenao/docs-islands \
   --global \
   --agent codex \
-  --skill docs-islands-logger \
+  --skill logaria \
   --skill docs-islands-vitepress
 ```
 
@@ -42,7 +42,7 @@ Docs Islands 使用带命名空间的 skill 名称：
 
 | Skill                    | 对应辅助的包              |
 | ------------------------ | ------------------------- |
-| `docs-islands-logger`    | `@docs-islands/logger`    |
+| `logaria`                | `logaria`                 |
 | `docs-islands-vitepress` | `@docs-islands/vitepress` |
 
 这里保留命名空间是有意的。像 `logger`、`vitepress` 这样的短名称容易和其他全局 skills 冲突，也会让 agent 误以为这是更通用的 Logger 或 VitePress 指南。
@@ -56,6 +56,6 @@ Docs Islands 使用带命名空间的 skill 名称：
 - Docs Islands 文档或包行为变更后，可以更新 skills：
 
 ```bash
-npx skills update docs-islands-logger
+npx skills update logaria
 npx skills update docs-islands-vitepress
 ```

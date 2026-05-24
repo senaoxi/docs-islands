@@ -7,7 +7,7 @@ import type {
   LoggerRulesUserConfig,
   LoggerRuleUserConfig,
   LoggerVisibilityLevel,
-} from '@docs-islands/logger/types';
+} from 'logaria/types';
 
 export type SiteDevToolsAnalysisProvider = 'claude' | 'doubao';
 export type SiteDevToolsAnalysisDoubaoThinkingType = boolean;

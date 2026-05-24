@@ -1,7 +1,7 @@
-import { createLogger } from '@docs-islands/logger';
-import { createElapsedTimer } from '@docs-islands/logger/helper';
-import type { ScopedLogger } from '@docs-islands/logger/types';
 import httpProxy from 'http-proxy';
+import { createLogger } from 'logaria';
+import { createElapsedTimer } from 'logaria/helper';
+import type { ScopedLogger } from 'logaria/types';
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -23,7 +23,7 @@ interface ProxyConfig {
 }
 
 const DEFAULT_CONFIG: ProxyConfig = {
-  validProjects: ['vitepress'],
+  validProjects: ['vitepress', 'limina', 'logaria'],
   basePath: '/docs-islands',
   packageScope: '@docs-islands',
   devCommand: 'docs:dev',

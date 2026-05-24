@@ -1,7 +1,7 @@
-import { createLogger } from '@docs-islands/logger';
+import { createLogger } from 'logaria';
 
 const pruningLogger = createLogger({
   main: 'docs.logger.pruning',
 }).getLoggerByGroup('fixture');
 
-pruningLogger.debug('__docs_islands_logger_docs_pruned_debug__');
+pruningLogger.debug('__docs_islands_logaria_docs_pruned_debug__');

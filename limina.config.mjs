@@ -102,8 +102,8 @@ export default defineConfig({
     // Each target is one built package output to check.
     targets: [
       {
-        name: '@docs-islands/logger',
-        outDir: 'packages/logger/dist',
+        name: 'logaria',
+        outDir: 'packages/logaria/dist',
       },
       {
         name: 'limina',

@@ -2,7 +2,7 @@ import type {
   CreateLoggerOptions,
   LoggerLogOptions,
   ScopedLogger,
-} from '@docs-islands/logger/types';
+} from 'logaria/types';
 
 export interface LightGeneralLoggerReturn {
   log: () => void;

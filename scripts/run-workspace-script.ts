@@ -1,8 +1,5 @@
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/utils/logger';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import { spawnSync } from 'node:child_process';
 
 const WorkspaceLogger = createLogger({

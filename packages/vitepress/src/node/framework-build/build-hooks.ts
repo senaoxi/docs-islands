@@ -27,12 +27,9 @@ import {
   RENDER_STRATEGY_ATTRS,
   RENDER_STRATEGY_CONSTANTS,
 } from '@docs-islands/core/shared/constants/render-strategy';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
 import type { CheerioAPI } from 'cheerio';
 import { load } from 'cheerio';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import fs from 'node:fs';
 import { dirname, join, relative } from 'pathe';
 import { normalizePath } from 'vite';

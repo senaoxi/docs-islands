@@ -1,9 +1,6 @@
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
-import type { LoggerLogOptions } from '@docs-islands/logger/types';
 import { createLogger } from '@docs-islands/utils/logger';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
+import type { LoggerLogOptions } from 'logaria/types';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -96,7 +93,7 @@ export interface ReleasePackageManifest {
 }
 
 export interface ReleasePackageConfig {
-  key: 'logger' | 'limina' | 'vitepress';
+  key: 'logaria' | 'limina' | 'vitepress';
   packageName: string;
   relativeDir: string;
   publishRelativeDir: string;
@@ -184,17 +181,17 @@ export interface CommandOptions {
 
 const RELEASE_PACKAGE_CONFIGS: readonly ReleasePackageConfig[] = [
   {
-    key: 'logger',
-    packageName: '@docs-islands/logger',
-    relativeDir: 'packages/logger',
-    publishRelativeDir: 'packages/logger/dist',
-    changelogRelativePath: 'packages/logger/CHANGELOG.md',
+    key: 'logaria',
+    packageName: 'logaria',
+    relativeDir: 'packages/logaria',
+    publishRelativeDir: 'packages/logaria/dist',
+    changelogRelativePath: 'packages/logaria/CHANGELOG.md',
     changelogPaths: [
-      'packages/logger',
-      'docs/en/logger.md',
-      'docs/zh/logger.md',
+      'packages/logaria',
+      'docs/en/logaria.md',
+      'docs/zh/logaria.md',
     ],
-    tagPrefix: 'logger',
+    tagPrefix: 'logaria',
     previewChecks: [
       'test',
       'build package',

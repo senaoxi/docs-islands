@@ -1,5 +1,5 @@
 import * as prompts from '@clack/prompts';
-import { formatErrorMessage } from '@docs-islands/logger/helper';
+import { formatErrorMessage } from 'logaria/helper';
 
 type FlowStatus = 'fail' | 'info' | 'pass' | 'skip' | 'start' | 'warn';
 

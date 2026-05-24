@@ -57,7 +57,7 @@
     "#shared/*": "./src/shared/*.ts"
   },
   "dependencies": {
-    "@docs-islands/logger": "workspace:*",
+    "logaria": "workspace:*",
     "cheerio": "catalog:prod",
     "vite": "catalog:prod"
   },

@@ -11,7 +11,7 @@ import type {
   LoggerRulesUserConfig,
   LoggerRuleUserConfig,
   LoggerVisibilityLevel,
-} from '@docs-islands/logger/types';
+} from 'logaria/types';
 
 export type ConsoleThemeValue =
   | 'red'

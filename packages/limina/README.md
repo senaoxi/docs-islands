@@ -105,7 +105,6 @@ export default defineConfig({
   },
 
   pipelines: {
-    typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
     package: ['package:check'],
     publish: ['graph:check', 'proof:check', 'package:check'],
   },
@@ -117,7 +116,7 @@ Add scripts:
 ```json
 {
   "scripts": {
-    "typecheck": "limina check typecheck",
+    "typecheck": "limina check",
     "lint:package": "limina package check",
     "prepublishOnly": "limina check publish"
   }
@@ -162,7 +161,8 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 
 | Command                                         | Description                                                                           |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `limina check <pipeline>`                       | Run a named pipeline from `pipelines`.                                                |
+| `limina check`                                  | Run the built-in default check pipeline.                                              |
+| `limina check <pipeline>`                       | Run a named user pipeline from `pipelines`.                                           |
 | `limina graph check`                            | Validate project references and architecture import rules.                            |
 | `limina proof check`                            | Prove declaration configs, local typecheck configs, and source coverage stay aligned. |
 | `limina paths generate`                         | Generate compatibility source `paths` configs for artifact-facing workspace exports.  |
@@ -296,13 +296,14 @@ packageChecks: {
 
 ```js
 pipelines: {
-  typecheck: ['graph:check', 'proof:check', 'checker:typecheck', 'checker:build'],
   package: [
     { type: 'command', command: 'pnpm', args: ['build'] },
     'package:check',
   ],
 }
 ```
+
+`limina check` runs the built-in default pipeline: `graph:check`, `source:check`, `proof:check`, and `checker:typecheck`. `limina check <pipeline>` only runs user pipelines from `limina.config.mjs#pipelines`; if the name is missing, Limina reports the missing pipeline and asks you to define it there.
 
 String steps can be built-in task names or simple commands. Use object command steps when arguments, `cwd`, or `env` need to be explicit.
 
@@ -327,7 +328,7 @@ jobs:
           node-version: 20.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec limina check typecheck
+      - run: pnpm exec limina check
 ```
 
 ## Programmatic API

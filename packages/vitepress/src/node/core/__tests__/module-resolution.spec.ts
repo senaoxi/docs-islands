@@ -1,7 +1,4 @@
-import {
-  resetScopedLoggerConfig,
-  setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+import { resetScopedLoggerConfig, setScopedLoggerConfig } from 'logaria/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createRenderingModuleResolution,

@@ -11,21 +11,25 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
   themeConfig: {
     nav: [
       {
-        text: 'Logger',
-        link: '/zh/logger',
-      },
-      {
-        text: 'Limina',
-        link: '/zh/limina',
+        text: '产品',
+        items: [
+          {
+            text: '@docs-islands/vitepress',
+            link: '/vitepress/zh/',
+          },
+          {
+            text: 'logaria',
+            link: '/zh/logaria',
+          },
+          {
+            text: 'limina',
+            link: '/limina/zh/',
+          },
+        ],
       },
       {
         text: 'Skills',
         link: '/zh/guide/skills',
-      },
-      {
-        text: 'VitePress',
-        target: '_blank',
-        link: '/vitepress/zh/',
       },
       {
         text: '参与贡献',

@@ -18,7 +18,7 @@
     "@babel/parser": "catalog:dev",
     "@babel/traverse": "catalog:dev",
     "@babel/types": "catalog:dev",
-    "@docs-islands/logger": "workspace:*",
+    "logaria": "workspace:*",
     "@types/http-proxy": "catalog:docs-dev",
     "eslint": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",

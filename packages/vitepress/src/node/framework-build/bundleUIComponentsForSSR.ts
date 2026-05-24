@@ -4,10 +4,7 @@ import type {
 } from '#dep-types/component';
 import type { ConfigType } from '#dep-types/utils';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import fs from 'node:fs';
 import { join } from 'pathe';
 import { getVitePressGroupLogger } from '../logger';

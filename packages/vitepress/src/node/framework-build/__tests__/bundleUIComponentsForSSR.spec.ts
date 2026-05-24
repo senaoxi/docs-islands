@@ -6,7 +6,7 @@ import type { ConfigType } from '#dep-types/utils';
 import {
   resetScopedLoggerConfig,
   setScopedLoggerConfig as setLoggerConfigForScope,
-} from '@docs-islands/logger/core';
+} from 'logaria/core';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'pathe';

@@ -27,7 +27,7 @@
       "path": "./tsconfig.tools.dts.json"
     },
     {
-      "path": "../../packages/logger/tsconfig.lib.dts.json"
+      "path": "../../packages/logaria/tsconfig.lib.dts.json"
     },
     {
       "path": "../../packages/core/tsconfig.lib.dts.json"

@@ -4,10 +4,7 @@ import type {
 } from '#dep-types/component';
 import type { OutputChunk } from '#dep-types/rollup';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'pathe';
 import { getVitePressGroupLogger } from '../../logger';

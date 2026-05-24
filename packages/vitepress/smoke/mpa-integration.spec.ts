@@ -1,5 +1,5 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { expect, test } from '@playwright/test';
+import { createElapsedTimer } from 'logaria/helper';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -134,7 +134,7 @@ test('MPA dist integration bundle resolves and imports cleanly', async () => {
       installLogMessage: 'installing MPA integration smoke dependencies',
       logger,
       localDependencyTarballPaths: {
-        '@docs-islands/logger': packedLogger.tarballPath,
+        logaria: packedLogger.tarballPath,
       },
       manifest,
       tarballPath: packedDist.tarballPath,

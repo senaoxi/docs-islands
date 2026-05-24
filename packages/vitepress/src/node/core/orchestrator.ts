@@ -1,5 +1,5 @@
-import { createLoggerScopeId } from '@docs-islands/logger/core/helper';
-import type { LoggerPluginMap } from '@docs-islands/logger/types';
+import { createLoggerScopeId } from 'logaria/core/helper';
+import type { LoggerPluginMap } from 'logaria/types';
 import type { PluginOption } from 'vite';
 import type { DefaultTheme, UserConfig } from 'vitepress';
 import {
