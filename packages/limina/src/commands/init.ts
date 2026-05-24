@@ -76,7 +76,7 @@ interface LiminaPackageMetadata {
 const pnpmWorkspaceFileName = 'pnpm-workspace.yaml';
 const liminaConfigFileName = 'limina.config.mjs';
 const liminaCheckScriptName = 'limina:check';
-const liminaCheckScriptValue = 'limina check typecheck';
+const liminaCheckScriptValue = 'limina check';
 const ignoredGlobPatterns = [
   '**/.git/**',
   '**/.limina/**',
@@ -433,18 +433,6 @@ export default defineConfig({
         entry: 'tsconfig.build.json',
       },
     },
-  },
-  // Reusable command pipelines. Run them with \`limina check <name>\`.
-  pipelines: {
-    // Main typecheck pipeline: run graph checks, source authority checks,
-    // proof checks, and the configured checker entries.
-    typecheck: [
-      'graph:check',
-      'source:check',
-      'proof:check',
-      'checker:typecheck',
-      'checker:build',
-    ],
   },
 });
 `;

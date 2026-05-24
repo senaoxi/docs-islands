@@ -4,7 +4,11 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ResolvedLiminaConfig } from '../config';
 import { LiminaFlowReporter } from '../flow';
-import { normalizePipelineStep, runPipeline } from '../pipeline';
+import {
+  normalizePipelineStep,
+  runDefaultCheck,
+  runPipeline,
+} from '../pipeline';
 
 const green = (message: string): string => `\u001B[32m${message}\u001B[0m`;
 
@@ -90,6 +94,55 @@ describe('runPipeline', () => {
       name: 'source:check',
       type: 'task',
     });
+  });
+
+  it('reports missing user pipeline config with a config hint', async () => {
+    const fixture = await createConfig();
+
+    try {
+      await expect(runPipeline(fixture.config, 'missing')).rejects.toThrow(
+        /Pipeline instruction "missing" was not found\.\nDefine it in limina\.config\.mjs under the "pipelines" field/u,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('runs the built-in default check pipeline without configured pipelines', async () => {
+    const fixture = await createConfig();
+    const { chunks, flow } = createFlow();
+
+    fixture.config.config = {
+      checkers: {
+        typescript: {
+          entry: 'tsconfig.build.json',
+          preset: 'tsc',
+        },
+      },
+    };
+
+    try {
+      await expect(runDefaultCheck(fixture.config, { flow })).resolves.toBe(
+        false,
+      );
+
+      expect(
+        chunks.some((chunk) => chunk.includes('[start] default check')),
+      ).toBe(true);
+      expect(
+        chunks.some((chunk) => chunk.includes('[start] graph check')),
+      ).toBe(true);
+      expect(
+        chunks.some((chunk) =>
+          chunk.includes('[fail] default check blocked at graph:check'),
+        ),
+      ).toBe(true);
+      expect(
+        chunks.some((chunk) => chunk.includes('[skip] skipped: source:check')),
+      ).toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
   it('passes all command steps in order', async () => {

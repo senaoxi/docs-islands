@@ -297,7 +297,7 @@ describe('runInit', () => {
       expect(rootManifest).toMatchObject({
         private: true,
         scripts: {
-          'limina:check': 'limina check typecheck',
+          'limina:check': 'limina check',
         },
         type: 'module',
       });
@@ -436,9 +436,7 @@ describe('runInit', () => {
         scripts?: Record<string, string>;
       }>(path.join(fixture.rootDir, 'package.json'));
 
-      expect(rootManifest.scripts?.['limina:check']).toBe(
-        'limina check typecheck',
-      );
+      expect(rootManifest.scripts?.['limina:check']).toBe('limina check');
       expect(rootManifest.devDependencies?.limina).toMatch(/^\^/u);
     } finally {
       await fixture.cleanup();

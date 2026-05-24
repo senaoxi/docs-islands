@@ -16,7 +16,7 @@ import {
 } from './config';
 import { createLiminaFlowReporter } from './flow';
 import { CliLogger, clearCliScreen, formatErrorMessage } from './logger';
-import { runPipeline } from './pipeline';
+import { runDefaultCheck, runPipeline } from './pipeline';
 
 interface GlobalFlags {
   config?: string;
@@ -131,15 +131,23 @@ async function main(): Promise<void> {
     });
 
   cli
-    .command('check <pipeline>', 'Run a configured governance pipeline')
-    .action(async (pipeline: string, flags: GlobalFlags) => {
+    .command(
+      'check [pipeline]',
+      'Run the default check or a configured pipeline',
+    )
+    .action(async (pipeline: string | undefined, flags: GlobalFlags) => {
       const flow = createCliFlow();
       flow.intro('limina check');
       const config = await load(flags, 'check');
-      const passed = await runPipeline(config, pipeline, {
-        cwd: process.cwd(),
-        flow,
-      });
+      const passed = pipeline
+        ? await runPipeline(config, pipeline, {
+            cwd: process.cwd(),
+            flow,
+          })
+        : await runDefaultCheck(config, {
+            cwd: process.cwd(),
+            flow,
+          });
 
       if (!passed) {
         process.exitCode = 1;

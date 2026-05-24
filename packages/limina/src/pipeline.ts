@@ -28,6 +28,13 @@ const builtInTaskNames = new Set<string>([
   'source:check',
 ]);
 
+const defaultCheckPipeline: PipelineStep[] = [
+  'graph:check',
+  'source:check',
+  'proof:check',
+  'checker:typecheck',
+];
+
 function isBuiltinTaskName(value: string): value is BuiltinTaskName {
   return builtInTaskNames.has(value);
 }
@@ -207,7 +214,12 @@ export async function runPipeline(
   const steps = config.pipelines?.[pipelineName];
 
   if (!steps) {
-    throw new Error(`Unknown limina pipeline "${pipelineName}".`);
+    throw new Error(
+      [
+        `Pipeline instruction "${pipelineName}" was not found.`,
+        `Define it in ${path.relative(config.rootDir, config.configPath)} under the "pipelines" field, then run "limina check ${pipelineName}" again.`,
+      ].join('\n'),
+    );
   }
 
   const normalizedSteps = steps.map(normalizePipelineStep);
@@ -225,6 +237,41 @@ export async function runPipeline(
       const label = getPipelineStepLabel(step);
 
       pipelineTask?.fail(`pipeline blocked: ${pipelineName} at ${label}`);
+
+      for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
+        options.flow?.skip(`skipped: ${getPipelineStepLabel(remainingStep)}`, {
+          depth: 1,
+        });
+      }
+
+      return false;
+    }
+  }
+
+  pipelineTask?.pass();
+
+  return true;
+}
+
+export async function runDefaultCheck(
+  config: ResolvedLiminaConfig,
+  options: RunPipelineOptions = {},
+): Promise<boolean> {
+  const normalizedSteps = defaultCheckPipeline.map(normalizePipelineStep);
+  const pipelineTask = options.flow?.start('default check', {
+    collapseOnSuccess: false,
+  });
+
+  for (const [stepIndex, step] of normalizedSteps.entries()) {
+    const passed =
+      step.type === 'task'
+        ? await runBuiltinTask(config, step.name, options)
+        : await runCommandStep(config, step, options);
+
+    if (!passed) {
+      const label = getPipelineStepLabel(step);
+
+      pipelineTask?.fail(`default check blocked at ${label}`);
 
       for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
         options.flow?.skip(`skipped: ${getPipelineStepLabel(remainingStep)}`, {
