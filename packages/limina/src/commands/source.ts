@@ -14,9 +14,7 @@ import {
   type ProjectInfo,
 } from '../graph-context';
 import {
-  getDeniedNodeBuiltinRule,
   isNodeBuiltinSpecifier,
-  normalizeGraphRules,
 } from '../graph-rules';
 import { SourceLogger, clearCliScreen, formatErrorMessage } from '../logger';
 import { collectGraphProjectRoute } from '../tsconfig';
@@ -244,27 +242,6 @@ function addPackageImportAuthorizationProblem(options: {
   );
 }
 
-function addNodeBuiltinDenyProblem(options: {
-  config: ResolvedLiminaConfig;
-  importRecord: ImportRecord;
-  project: ProjectInfo;
-  problems: string[];
-  reason: string;
-  ruleName: string;
-}): void {
-  options.problems.push(
-    [
-      'Denied Node builtin import:',
-      `  rule: ${options.project.label}`,
-      `  importing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
-      `  file: ${toRelativePath(options.config.rootDir, options.importRecord.filePath)}:${options.importRecord.line}`,
-      `  imported specifier: ${options.importRecord.specifier}`,
-      `  denied builtin: ${options.ruleName}`,
-      `  reason: ${options.reason}`,
-    ].join('\n'),
-  );
-}
-
 function addPackageImportProblem(options: {
   config: ResolvedLiminaConfig;
   importRecord: ImportRecord;
@@ -356,17 +333,6 @@ async function runSourceCheckInternal(
   const packages = await collectWorkspacePackages(config);
   const packageOwners = await collectPackageOwners(config);
   const problems: string[] = [...graphRoute.problems];
-  const graphRules = normalizeGraphRules({
-    config,
-    include: {
-      nodeBuiltins: true,
-      refs: false,
-      workspaceDeps: false,
-    },
-    packages,
-    problems,
-    projectPaths,
-  });
 
   for (const project of projects) {
     if (project.labelProblem) {
@@ -456,25 +422,6 @@ async function runSourceCheckInternal(
         }
 
         if (isNodeBuiltinSpecifier(importRecord.specifier)) {
-          const deniedBuiltinRule = getDeniedNodeBuiltinRule(
-            graphRules,
-            project.label,
-            importRecord.specifier,
-          );
-
-          if (deniedBuiltinRule) {
-            addNodeBuiltinDenyProblem({
-              config,
-              importRecord,
-              problems,
-              project,
-              reason: deniedBuiltinRule.reason,
-              ruleName: deniedBuiltinRule.matchAll
-                ? 'node:*'
-                : deniedBuiltinRule.name,
-            });
-          }
-
           continue;
         }
 

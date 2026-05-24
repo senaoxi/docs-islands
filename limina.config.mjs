@@ -37,7 +37,7 @@ export default defineConfig({
     rules: {
       'runtime-client': {
         deny: {
-          nodeBuiltins: [
+          deps: [
             {
               name: 'node:*',
               reason: 'client runtime must stay free of Node builtin imports',
@@ -53,7 +53,7 @@ export default defineConfig({
       },
       'runtime-shared': {
         deny: {
-          nodeBuiltins: [
+          deps: [
             {
               name: 'node:*',
               reason:

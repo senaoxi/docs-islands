@@ -205,25 +205,14 @@ export interface GraphRuleRefDenyEntry {
 }
 
 /**
- * Workspace package dependency denied to projects with a matching Limina label.
+ * Dependency denied to projects with a matching Limina label.
  */
-export interface GraphRuleWorkspaceDepDenyEntry {
+export interface GraphRuleDepDenyEntry {
   /**
-   * Target workspace package name.
-   */
-  name: string;
-  /**
-   * Human-readable explanation shown when the rule fails.
-   */
-  reason: string;
-}
-
-/**
- * Node builtin denied to source files with a matching Limina label.
- */
-export interface GraphRuleNodeBuiltinDenyEntry {
-  /**
-   * Target Node builtin name, such as `fs`, `node:fs`, or `node:*`.
+   * Target package root, package.json imports specifier, or Node builtin name.
+   *
+   * Examples: `@acme/internal`, `zod`, `#internal/*`, `fs`, `node:fs`,
+   * or `node:*`.
    */
   name: string;
   /**
@@ -241,13 +230,10 @@ export interface GraphRuleDenyConfig {
    */
   refs?: GraphRuleRefDenyEntry[];
   /**
-   * Node builtins that matching projects must not import.
+   * Packages, package imports, and Node builtins that matching projects must
+   * not reference or import.
    */
-  nodeBuiltins?: GraphRuleNodeBuiltinDenyEntry[];
-  /**
-   * Workspace packages that matching projects must not reference or import.
-   */
-  workspaceDeps?: GraphRuleWorkspaceDepDenyEntry[];
+  deps?: GraphRuleDepDenyEntry[];
 }
 
 /**

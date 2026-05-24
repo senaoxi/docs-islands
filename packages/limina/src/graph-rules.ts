@@ -3,34 +3,29 @@ import path from 'node:path';
 import type { ResolvedLiminaConfig } from './config';
 import { isDtsProjectConfig } from './graph-context';
 import { normalizeAbsolutePath } from './utils/path';
-import type { WorkspacePackage } from './workspace';
+import { getPackageRootSpecifier, type WorkspacePackage } from './workspace';
 
 export interface GraphRuleRefDeny {
   path: string;
   reason: string;
 }
 
-export interface GraphRuleWorkspaceDepDeny {
+export interface GraphRuleDepDeny {
+  kind: 'node-builtin' | 'package' | 'package-import';
+  matchAllNodeBuiltins: boolean;
   name: string;
-  reason: string;
-}
-
-export interface GraphRuleNodeBuiltinDeny {
-  matchAll: boolean;
-  name: string;
+  normalizedName: string;
   reason: string;
 }
 
 export interface NormalizedGraphRules {
-  nodeBuiltinsByLabel: Map<string, GraphRuleNodeBuiltinDeny[]>;
+  depsByLabel: Map<string, GraphRuleDepDeny[]>;
   refsByLabel: Map<string, Map<string, GraphRuleRefDeny>>;
-  workspaceDepsByLabel: Map<string, Map<string, GraphRuleWorkspaceDepDeny>>;
 }
 
 interface GraphRuleKindSelection {
-  nodeBuiltins?: boolean;
+  deps?: boolean;
   refs?: boolean;
-  workspaceDeps?: boolean;
 }
 
 const nodeBuiltinNames = new Set(
@@ -64,6 +59,111 @@ function addRuleEntryConfigProblem(
   details: string[],
 ): void {
   problems.push(['Invalid graph rule config:', ...details].join('\n'));
+}
+
+function isUrlOrDataOrFileSpecifier(specifier: string): boolean {
+  return (
+    specifier.startsWith('data:') ||
+    specifier.startsWith('file:') ||
+    specifier.startsWith('http:') ||
+    specifier.startsWith('https:')
+  );
+}
+
+function isRelativeSpecifier(specifier: string): boolean {
+  return (
+    specifier === '.' ||
+    specifier === '..' ||
+    specifier.startsWith('./') ||
+    specifier.startsWith('../')
+  );
+}
+
+function isPackageImportPattern(name: string): boolean {
+  return name.startsWith('#');
+}
+
+function matchWildcardPattern(pattern: string, value: string): boolean {
+  if (pattern === value) {
+    return true;
+  }
+
+  const wildcardIndex = pattern.indexOf('*');
+
+  if (wildcardIndex === -1) {
+    return false;
+  }
+
+  const prefix = pattern.slice(0, wildcardIndex);
+  const suffix = pattern.slice(wildcardIndex + 1);
+
+  return value.startsWith(prefix) && value.endsWith(suffix);
+}
+
+function getNodeBuiltinRuleName(
+  name: string,
+): Pick<GraphRuleDepDeny, 'matchAllNodeBuiltins' | 'normalizedName'> | null {
+  if (name === 'node:*') {
+    return {
+      matchAllNodeBuiltins: true,
+      normalizedName: '*',
+    };
+  }
+
+  const normalizedName = name.startsWith('node:') ? name.slice(5) : name;
+
+  if (!nodeBuiltinNames.has(normalizedName)) {
+    return null;
+  }
+
+  return {
+    matchAllNodeBuiltins: false,
+    normalizedName,
+  };
+}
+
+function createNormalizedDep(
+  name: string,
+  reason: string,
+): GraphRuleDepDeny | null {
+  const nodeBuiltin = getNodeBuiltinRuleName(name);
+
+  if (nodeBuiltin) {
+    return {
+      kind: 'node-builtin',
+      matchAllNodeBuiltins: nodeBuiltin.matchAllNodeBuiltins,
+      name,
+      normalizedName: nodeBuiltin.normalizedName,
+      reason,
+    };
+  }
+
+  if (isPackageImportPattern(name)) {
+    return {
+      kind: 'package-import',
+      matchAllNodeBuiltins: false,
+      name,
+      normalizedName: name,
+      reason,
+    };
+  }
+
+  if (
+    isRelativeSpecifier(name) ||
+    isUrlOrDataOrFileSpecifier(name) ||
+    path.isAbsolute(name) ||
+    getPackageRootSpecifier(name) !== name
+  ) {
+    return null;
+  }
+
+  return {
+    kind: 'package',
+    matchAllNodeBuiltins: false,
+    name,
+    normalizedName: name,
+    reason,
+  };
 }
 
 function getRulesRecord(
@@ -163,22 +263,20 @@ function addNormalizedRuleRef(options: {
   options.refsByLabel.set(options.label, refs);
 }
 
-function addNormalizedWorkspaceDep(options: {
+function addNormalizedDep(options: {
+  depsByLabel: Map<string, GraphRuleDepDeny[]>;
   entry: unknown;
-  fieldPrefix: string;
   index: number;
   label: string;
-  packageNames: Set<string>;
   problems: string[];
-  workspaceDepsByLabel: Map<string, Map<string, GraphRuleWorkspaceDepDeny>>;
 }): void {
-  const field = `${options.fieldPrefix}[${options.index}]`;
+  const field = `graph.rules.${options.label}.deny.deps[${options.index}]`;
 
   if (!isPlainRecord(options.entry)) {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}`,
       `  value: ${formatUnknownValue(options.entry)}`,
-      '  reason: deny workspace dependency entries must be objects with non-empty name and reason fields.',
+      '  reason: deny.deps entries must be objects with non-empty name and reason fields.',
     ]);
     return;
   }
@@ -190,7 +288,7 @@ function addNormalizedWorkspaceDep(options: {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.name`,
       `  value: ${formatUnknownValue(nameValue)}`,
-      '  reason: workspace dependency name is required and must be a non-empty string.',
+      '  reason: deny.deps name is required and must be a non-empty string.',
     ]);
     return;
   }
@@ -199,91 +297,28 @@ function addNormalizedWorkspaceDep(options: {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.reason`,
       `  value: ${formatUnknownValue(reasonValue)}`,
-      '  reason: workspace dependency reason is required and must be a non-empty string.',
-    ]);
-    return;
-  }
-
-  const packageName = nameValue.trim();
-
-  if (!options.packageNames.has(packageName)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.name`,
-      `  name: ${packageName}`,
-      '  reason: deny.workspaceDeps only accepts discovered workspace package names. Use deny.nodeBuiltins for Node builtins.',
-    ]);
-    return;
-  }
-
-  const deps = options.workspaceDepsByLabel.get(options.label) ?? new Map();
-
-  deps.set(packageName, {
-    name: packageName,
-    reason: reasonValue.trim(),
-  });
-  options.workspaceDepsByLabel.set(options.label, deps);
-}
-
-function addNormalizedNodeBuiltin(options: {
-  entry: unknown;
-  index: number;
-  label: string;
-  nodeBuiltinsByLabel: Map<string, GraphRuleNodeBuiltinDeny[]>;
-  problems: string[];
-}): void {
-  const field = `graph.rules.${options.label}.deny.nodeBuiltins[${options.index}]`;
-
-  if (!isPlainRecord(options.entry)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}`,
-      `  value: ${formatUnknownValue(options.entry)}`,
-      '  reason: deny.nodeBuiltins entries must be objects with non-empty name and reason fields.',
-    ]);
-    return;
-  }
-
-  const nameValue = options.entry.name;
-  const reasonValue = options.entry.reason;
-
-  if (!isNonEmptyString(nameValue)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.name`,
-      `  value: ${formatUnknownValue(nameValue)}`,
-      '  reason: deny.nodeBuiltins name is required and must be a non-empty string.',
-    ]);
-    return;
-  }
-
-  if (!isNonEmptyString(reasonValue)) {
-    addRuleEntryConfigProblem(options.problems, [
-      `  field: ${field}.reason`,
-      `  value: ${formatUnknownValue(reasonValue)}`,
-      '  reason: deny.nodeBuiltins reason is required and must be a non-empty string.',
+      '  reason: deny.deps reason is required and must be a non-empty string.',
     ]);
     return;
   }
 
   const name = nameValue.trim();
-  const normalizedName = name.startsWith('node:') ? name.slice(5) : name;
-  const matchAll = name === 'node:*';
+  const reason = reasonValue.trim();
+  const normalizedDep = createNormalizedDep(name, reason);
 
-  if (!matchAll && !nodeBuiltinNames.has(normalizedName)) {
+  if (!normalizedDep) {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.name`,
       `  name: ${name}`,
-      '  reason: deny.nodeBuiltins name must be "node:*" or a Node builtin specifier such as "fs" or "node:fs".',
+      '  reason: deny.deps name must be a package root, a package.json imports specifier such as "#internal/*", or a Node builtin such as "fs", "node:fs", or "node:*".',
     ]);
     return;
   }
 
-  const entries = options.nodeBuiltinsByLabel.get(options.label) ?? [];
+  const deps = options.depsByLabel.get(options.label) ?? [];
 
-  entries.push({
-    matchAll,
-    name: normalizedName,
-    reason: reasonValue.trim(),
-  });
-  options.nodeBuiltinsByLabel.set(options.label, entries);
+  deps.push(normalizedDep);
+  options.depsByLabel.set(options.label, deps);
 }
 
 function shouldNormalizeRuleKind(
@@ -300,16 +335,9 @@ export function normalizeGraphRules(options: {
   problems: string[];
   projectPaths: string[];
 }): NormalizedGraphRules {
+  const depsByLabel = new Map<string, GraphRuleDepDeny[]>();
   const refsByLabel = new Map<string, Map<string, GraphRuleRefDeny>>();
-  const workspaceDepsByLabel = new Map<
-    string,
-    Map<string, GraphRuleWorkspaceDepDeny>
-  >();
-  const nodeBuiltinsByLabel = new Map<string, GraphRuleNodeBuiltinDeny[]>();
   const projectPathSet = new Set(options.projectPaths);
-  const packageNames = new Set(
-    options.packages.map((workspacePackage) => workspacePackage.name),
-  );
 
   for (const [rawLabel, rawRule] of Object.entries(
     getRulesRecord(options.config, options.problems),
@@ -374,62 +402,46 @@ export function normalizeGraphRules(options: {
     }
 
     if (
-      shouldNormalizeRuleKind(options.include, 'workspaceDeps') &&
-      rawRule.deny.deps !== undefined
+      shouldNormalizeRuleKind(options.include, 'deps') &&
+      rawRule.deny.workspaceDeps !== undefined
     ) {
       addRuleEntryConfigProblem(options.problems, [
-        `  field: graph.rules.${label}.deny.deps`,
-        `  value: ${formatUnknownValue(rawRule.deny.deps)}`,
-        '  reason: deny.deps has been removed; use deny.workspaceDeps.',
+        `  field: graph.rules.${label}.deny.workspaceDeps`,
+        `  value: ${formatUnknownValue(rawRule.deny.workspaceDeps)}`,
+        '  reason: deny.workspaceDeps has been removed; use deny.deps.',
       ]);
     }
 
-    const workspaceDeps = rawRule.deny.workspaceDeps;
-
     if (
-      shouldNormalizeRuleKind(options.include, 'workspaceDeps') &&
-      workspaceDeps !== undefined
+      shouldNormalizeRuleKind(options.include, 'deps') &&
+      rawRule.deny.nodeBuiltins !== undefined
     ) {
-      if (!Array.isArray(workspaceDeps)) {
-        addRuleEntryConfigProblem(options.problems, [
-          `  field: graph.rules.${label}.deny.workspaceDeps`,
-          `  value: ${formatUnknownValue(workspaceDeps)}`,
-          '  reason: deny.workspaceDeps must be an array.',
-        ]);
-      } else {
-        workspaceDeps.forEach((entry, index) => {
-          addNormalizedWorkspaceDep({
-            entry,
-            fieldPrefix: `graph.rules.${label}.deny.workspaceDeps`,
-            index,
-            label,
-            packageNames,
-            problems: options.problems,
-            workspaceDepsByLabel,
-          });
-        });
-      }
+      addRuleEntryConfigProblem(options.problems, [
+        `  field: graph.rules.${label}.deny.nodeBuiltins`,
+        `  value: ${formatUnknownValue(rawRule.deny.nodeBuiltins)}`,
+        '  reason: deny.nodeBuiltins has been removed; use deny.deps.',
+      ]);
     }
 
-    const nodeBuiltins = rawRule.deny.nodeBuiltins;
+    const deps = rawRule.deny.deps;
 
     if (
-      shouldNormalizeRuleKind(options.include, 'nodeBuiltins') &&
-      nodeBuiltins !== undefined
+      shouldNormalizeRuleKind(options.include, 'deps') &&
+      deps !== undefined
     ) {
-      if (!Array.isArray(nodeBuiltins)) {
+      if (!Array.isArray(deps)) {
         addRuleEntryConfigProblem(options.problems, [
-          `  field: graph.rules.${label}.deny.nodeBuiltins`,
-          `  value: ${formatUnknownValue(nodeBuiltins)}`,
-          '  reason: deny.nodeBuiltins must be an array.',
+          `  field: graph.rules.${label}.deny.deps`,
+          `  value: ${formatUnknownValue(deps)}`,
+          '  reason: deny.deps must be an array.',
         ]);
       } else {
-        nodeBuiltins.forEach((entry, index) => {
-          addNormalizedNodeBuiltin({
+        deps.forEach((entry, index) => {
+          addNormalizedDep({
+            depsByLabel,
             entry,
             index,
             label,
-            nodeBuiltinsByLabel,
             problems: options.problems,
           });
         });
@@ -438,9 +450,8 @@ export function normalizeGraphRules(options: {
   }
 
   return {
-    nodeBuiltinsByLabel,
+    depsByLabel,
     refsByLabel,
-    workspaceDepsByLabel,
   };
 }
 
@@ -460,35 +471,73 @@ export function getDeniedRefRule(
   return rules.refsByLabel.get(label)?.get(targetProjectPath) ?? null;
 }
 
-export function getDeniedWorkspaceDepRule(
+function getRuleDeps(
   rules: NormalizedGraphRules,
   label: string | null,
-  targetPackageName: string,
-): GraphRuleWorkspaceDepDeny | null {
+): GraphRuleDepDeny[] {
   if (!label) {
-    return null;
+    return [];
   }
 
-  return rules.workspaceDepsByLabel.get(label)?.get(targetPackageName) ?? null;
+  return rules.depsByLabel.get(label) ?? [];
 }
 
-export function getDeniedNodeBuiltinRule(
+export function getDeniedDepRuleForPackage(
+  rules: NormalizedGraphRules,
+  label: string | null,
+  packageName: string,
+): GraphRuleDepDeny | null {
+  return (
+    getRuleDeps(rules, label).find(
+      (rule) => rule.kind === 'package' && rule.normalizedName === packageName,
+    ) ?? null
+  );
+}
+
+export function getDeniedDepRuleForSpecifier(
   rules: NormalizedGraphRules,
   label: string | null,
   specifier: string,
-): GraphRuleNodeBuiltinDeny | null {
-  if (!label || !isNodeBuiltinSpecifier(specifier)) {
+): GraphRuleDepDeny | null {
+  const deps = getRuleDeps(rules, label);
+  const packageImportRule = deps.find(
+    (rule) =>
+      rule.kind === 'package-import' &&
+      matchWildcardPattern(rule.normalizedName, specifier),
+  );
+
+  if (packageImportRule) {
+    return packageImportRule;
+  }
+
+  if (isNodeBuiltinSpecifier(specifier)) {
+    const normalizedSpecifier = specifier.startsWith('node:')
+      ? specifier.slice(5)
+      : specifier;
+    const nodeRule = deps.find(
+      (rule) =>
+        rule.kind === 'node-builtin' &&
+        (rule.matchAllNodeBuiltins ||
+          rule.normalizedName === normalizedSpecifier),
+    );
+
+    if (nodeRule) {
+      return nodeRule;
+    }
+  }
+
+  if (
+    isRelativeSpecifier(specifier) ||
+    isPackageImportPattern(specifier) ||
+    isUrlOrDataOrFileSpecifier(specifier) ||
+    path.isAbsolute(specifier)
+  ) {
     return null;
   }
 
-  const normalizedSpecifier = specifier.startsWith('node:')
-    ? specifier.slice(5)
-    : specifier;
-
-  return (
-    rules.nodeBuiltinsByLabel
-      .get(label)
-      ?.find((rule) => rule.matchAll || rule.name === normalizedSpecifier) ??
-    null
+  return getDeniedDepRuleForPackage(
+    rules,
+    label,
+    getPackageRootSpecifier(specifier),
   );
 }

@@ -343,7 +343,7 @@ packages:
     }
   });
 
-  it('applies label-based Node builtin deny rules', async () => {
+  it('leaves label-based dependency deny rules to graph check', async () => {
     const fixture = await createFixture(
       createPackageFixture({
         graph: {
@@ -356,7 +356,7 @@ packages:
         rules: {
           'runtime-client': {
             deny: {
-              nodeBuiltins: [
+              deps: [
                 {
                   name: 'node:*',
                   reason: 'client code must not import Node builtins',
@@ -369,13 +369,13 @@ packages:
     );
 
     try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('does not validate graph-only ref or workspace dependency deny entries', async () => {
+  it('does not validate graph-only ref or dependency deny entries', async () => {
     const fixture = await createFixture(
       createPackageFixture({
         graph: {
@@ -393,10 +393,10 @@ packages:
                   reason: 'graph check owns ref deny rules',
                 },
               ],
-              workspaceDeps: [
+              deps: [
                 {
                   name: '@example/missing',
-                  reason: 'graph check owns workspace dependency deny rules',
+                  reason: 'graph check owns dependency deny rules',
                 },
               ],
             },

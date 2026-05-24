@@ -15,7 +15,6 @@ import {
   inferPackageProject,
   isDtsProjectConfig,
   isRelativeSpecifier,
-  isWorkspacePackageFile,
   parseProject,
   resolveInternalImport,
   shouldResolveThroughGraph,
@@ -23,11 +22,12 @@ import {
   type ProjectInfo,
 } from '../graph-context';
 import {
+  getDeniedDepRuleForPackage,
+  getDeniedDepRuleForSpecifier,
   getDeniedRefRule,
-  getDeniedWorkspaceDepRule,
   normalizeGraphRules,
+  type GraphRuleDepDeny,
   type GraphRuleRefDeny,
-  type GraphRuleWorkspaceDepDeny,
   type NormalizedGraphRules,
 } from '../graph-rules';
 import { GraphLogger, clearCliScreen, formatErrorMessage } from '../logger';
@@ -252,7 +252,7 @@ function addDeniedReferenceProblems(options: {
     );
     const targetPackage = findPackageForFile(referencePath, options.packages);
     const deniedDepRule = targetPackage
-      ? getDeniedWorkspaceDepRule(
+      ? getDeniedDepRuleForPackage(
           options.rules,
           options.project.label,
           targetPackage.name,
@@ -270,15 +270,15 @@ function addDeniedReferenceProblems(options: {
       `  referenced project: ${toRelativePath(options.config.rootDir, referencePath)}`,
     ];
 
-    if (deniedRefRule) {
-      lines.push(
-        `  denied ref: ${toRelativePath(options.config.rootDir, deniedRefRule.path)}`,
-        `  reason: ${deniedRefRule.reason}`,
-      );
-    } else if (deniedDepRule) {
+    if (deniedDepRule) {
       lines.push(
         `  denied dependency: ${deniedDepRule.name}`,
         `  reason: ${deniedDepRule.reason}`,
+      );
+    } else if (deniedRefRule) {
+      lines.push(
+        `  denied ref: ${toRelativePath(options.config.rootDir, deniedRefRule.path)}`,
+        `  reason: ${deniedRefRule.reason}`,
       );
     }
 
@@ -286,12 +286,12 @@ function addDeniedReferenceProblems(options: {
   }
 }
 
-function addDeniedPackageImportProblem(options: {
+function addDeniedDepImportProblem(options: {
   config: ResolvedLiminaConfig;
   importRecord: ImportRecord;
   project: ProjectInfo;
   problems: string[];
-  rule: GraphRuleWorkspaceDepDeny;
+  rule: GraphRuleDepDeny;
 }): void {
   options.problems.push(
     [
@@ -326,6 +326,51 @@ function addDeniedRefImportProblem(options: {
       `  reason: ${options.rule.reason}`,
     ].join('\n'),
   );
+}
+
+function getNodeModulesPackageName(filePath: string): string | null {
+  const parts = filePath.split('/');
+  const nodeModulesIndex = parts.lastIndexOf('node_modules');
+
+  if (nodeModulesIndex === -1) {
+    return null;
+  }
+
+  const packageName = parts[nodeModulesIndex + 1];
+
+  if (!packageName) {
+    return null;
+  }
+
+  if (packageName.startsWith('@')) {
+    const scopedName = parts[nodeModulesIndex + 2];
+
+    return scopedName ? `${packageName}/${scopedName}` : null;
+  }
+
+  return packageName;
+}
+
+function getResolvedPackageName(
+  filePath: string,
+  packages: WorkspacePackage[],
+): string | null {
+  return (
+    getNodeModulesPackageName(filePath) ??
+    findPackageForFile(filePath, packages)?.name ??
+    null
+  );
+}
+
+function getResolvedWorkspacePackage(
+  filePath: string,
+  packages: WorkspacePackage[],
+): WorkspacePackage | null {
+  if (getNodeModulesPackageName(filePath)) {
+    return null;
+  }
+
+  return findPackageForFile(filePath, packages);
 }
 
 function addWorkspaceReferenceDependencyProblems(
@@ -398,9 +443,8 @@ async function runGraphCheckInternal(
   const graphRules = normalizeGraphRules({
     config,
     include: {
-      nodeBuiltins: false,
+      deps: true,
       refs: true,
-      workspaceDeps: true,
     },
     packages,
     problems,
@@ -433,6 +477,23 @@ async function runGraphCheckInternal(
 
     for (const filePath of project.fileNames) {
       for (const importRecord of collectImportsFromFile(filePath)) {
+        const rawDeniedDepRule = getDeniedDepRuleForSpecifier(
+          graphRules,
+          project.label,
+          importRecord.specifier,
+        );
+
+        if (rawDeniedDepRule) {
+          addDeniedDepImportProblem({
+            config,
+            importRecord,
+            problems,
+            project,
+            rule: rawDeniedDepRule,
+          });
+          continue;
+        }
+
         const resolvedFilePath = resolveInternalImport(
           importRecord.specifier,
           filePath,
@@ -442,29 +503,9 @@ async function runGraphCheckInternal(
           importRecord.specifier,
           packages,
         );
-        const importer = targetPackage
-          ? findImporterForFile(importRecord.filePath, importers)
-          : null;
-        const unresolvedDeniedDepRule = targetPackage
-          ? getDeniedWorkspaceDepRule(
-              graphRules,
-              project.label,
-              targetPackage.name,
-            )
-          : null;
+        const importer = findImporterForFile(importRecord.filePath, importers);
 
         if (!resolvedFilePath) {
-          if (unresolvedDeniedDepRule) {
-            addDeniedPackageImportProblem({
-              config,
-              importRecord,
-              problems,
-              project,
-              rule: unresolvedDeniedDepRule,
-            });
-            continue;
-          }
-
           if (!targetPackage) {
             continue;
           }
@@ -482,28 +523,25 @@ async function runGraphCheckInternal(
           continue;
         }
 
-        const targetWorkspacePackageForResolved = findPackageForFile(
+        const targetWorkspacePackageForResolved = getResolvedWorkspacePackage(
           resolvedFilePath,
           packages,
         );
-        const deniedDepRule =
-          (targetPackage
-            ? getDeniedWorkspaceDepRule(
-                graphRules,
-                project.label,
-                targetPackage.name,
-              )
-            : null) ??
-          (targetWorkspacePackageForResolved
-            ? getDeniedWorkspaceDepRule(
-                graphRules,
-                project.label,
-                targetWorkspacePackageForResolved.name,
-              )
-            : null);
+        const targetPackageForGraph = targetPackage;
+        const resolvedPackageName = getResolvedPackageName(
+          resolvedFilePath,
+          packages,
+        );
+        const deniedDepRule = resolvedPackageName
+          ? getDeniedDepRuleForPackage(
+              graphRules,
+              project.label,
+              resolvedPackageName,
+            )
+          : null;
 
         if (deniedDepRule) {
-          addDeniedPackageImportProblem({
+          addDeniedDepImportProblem({
             config,
             importRecord,
             problems,
@@ -541,20 +579,13 @@ async function runGraphCheckInternal(
         }
 
         if (
-          targetPackage &&
-          !shouldResolveThroughGraph(importer, targetPackage)
-        ) {
-          continue;
-        }
-
-        if (
-          targetPackage &&
-          shouldResolveThroughGraph(importer, targetPackage) &&
+          targetPackageForGraph &&
+          shouldResolveThroughGraph(importer, targetPackageForGraph) &&
           !fileOwnerLookup.has(resolvedFilePath)
         ) {
           const referencedProjectPath = inferPackageProject(
             resolvedFilePath,
-            targetPackage,
+            targetPackageForGraph,
             projectPaths,
           );
           const hasProjectReference =
@@ -577,7 +608,7 @@ async function runGraphCheckInternal(
               `  imported specifier: ${importRecord.specifier}`,
               `  resolved file: ${toRelativePath(config.rootDir, resolvedFilePath)}`,
               '  reason: workspace:* dependencies are source dependencies, but TypeScript resolved this package export to a file not owned by the source graph. tsc -b does not rewrite package exports through project references.',
-              `  fix: expose source files from the dependency package exports, add a source paths config to this declaration leaf extends, or stop using workspace:* plus project references for artifact consumption; ${formatArtifactDependencyPolicy(targetPackage)}`,
+              `  fix: expose source files from the dependency package exports, add a source paths config to this declaration leaf extends, or stop using workspace:* plus project references for artifact consumption; ${formatArtifactDependencyPolicy(targetPackageForGraph)}`,
               '  hint: run `limina paths generate` to create a compatibility paths file, then manually add it to the first position of the listed tsconfig*.dts.json extends array.',
             ].join('\n'),
           );
@@ -593,14 +624,14 @@ async function runGraphCheckInternal(
         });
 
         if (!targetProjectPath) {
-          if (!targetPackage) {
+          if (!targetPackageForGraph) {
             continue;
           }
 
-          if (!isWorkspacePackageFile(resolvedFilePath, packages)) {
+          if (!targetWorkspacePackageForResolved) {
             if (
-              targetPackage &&
-              shouldResolveThroughGraph(importer, targetPackage)
+              targetPackageForGraph &&
+              shouldResolveThroughGraph(importer, targetPackageForGraph)
             ) {
               problems.push(
                 [
@@ -609,7 +640,7 @@ async function runGraphCheckInternal(
                   `  file: ${toRelativePath(config.rootDir, importRecord.filePath)}:${importRecord.line}`,
                   `  imported specifier: ${importRecord.specifier}`,
                   `  resolved file: ${toRelativePath(config.rootDir, resolvedFilePath)}`,
-                  `  reason: workspace:* dependencies are source dependency edges and must resolve to files owned by the source graph; ${formatArtifactDependencyPolicy(targetPackage)}`,
+                  `  reason: workspace:* dependencies are source dependency edges and must resolve to files owned by the source graph; ${formatArtifactDependencyPolicy(targetPackageForGraph)}`,
                 ].join('\n'),
               );
             }
@@ -648,6 +679,13 @@ async function runGraphCheckInternal(
             rule: deniedRefRule,
             targetProjectPath,
           });
+          continue;
+        }
+
+        if (
+          targetPackageForGraph &&
+          !shouldResolveThroughGraph(importer, targetPackageForGraph)
+        ) {
           continue;
         }
 

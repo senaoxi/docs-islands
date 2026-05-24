@@ -236,7 +236,7 @@ const denyInternalDep: GraphConfig = {
   rules: {
     runtime: {
       deny: {
-        workspaceDeps: [
+        deps: [
           {
             name: '@example/internal',
             reason: 'runtime package must not consume internal directly',
@@ -391,7 +391,7 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
-  it('rejects removed deny.deps graph rule config', async () => {
+  it('rejects removed deny.workspaceDeps graph rule config', async () => {
     const fixture = await createFixture(
       createWorkspacePackageFiles({
         appSource: 'export const value = 1;\n',
@@ -400,7 +400,7 @@ describe('runGraphCheck graph rules', () => {
         rules: {
           runtime: {
             deny: {
-              deps: [
+              workspaceDeps: [
                 {
                   name: '@example/internal',
                   reason: 'runtime package must not consume internal directly',
@@ -419,7 +419,7 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
-  it('does not validate source-only Node builtin deny entries', async () => {
+  it('rejects removed deny.nodeBuiltins graph rule config', async () => {
     const fixture = await createFixture(
       createLocalBoundaryFiles({
         limina: 'runtime',
@@ -438,17 +438,142 @@ describe('runGraphCheck graph rules', () => {
             },
           },
         },
-      },
+      } as unknown as GraphConfig,
     );
 
     try {
-      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('reports graph rule targets outside the graph and workspace', async () => {
+  it('denies raw third-party package subpath imports configured in deps', async () => {
+    const fixture = await createFixture(
+      createLocalBoundaryFiles({
+        limina: 'runtime',
+        runtimeSource:
+          "import { z } from 'zod/v4';\nexport const runtimeValue = z;\n",
+      }),
+      {
+        rules: {
+          runtime: {
+            deny: {
+              deps: [
+                {
+                  name: 'zod',
+                  reason: 'runtime code must not import validation packages',
+                },
+              ],
+            },
+          },
+        },
+      },
+    );
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('denies raw package.json imports configured in deps', async () => {
+    const fixture = await createFixture(
+      {
+        ...createLocalBoundaryFiles({
+          limina: 'runtime',
+          runtimeSource:
+            "import { internalValue } from '#internal/value';\nexport const runtimeValue = internalValue;\n",
+        }),
+        'app/package.json': stringifyConfig({
+          imports: {
+            '#internal/*': './internal/*.ts',
+          },
+          name: '@example/app',
+          type: 'module',
+        }),
+      },
+      {
+        rules: {
+          runtime: {
+            deny: {
+              deps: [
+                {
+                  name: '#internal/*',
+                  reason: 'runtime code must not import internal aliases',
+                },
+              ],
+            },
+          },
+        },
+      },
+    );
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('denies Node builtin imports configured in deps', async () => {
+    const fixture = await createFixture(
+      createLocalBoundaryFiles({
+        limina: 'runtime',
+        runtimeSource:
+          "import { readFileSync } from 'node:fs';\nexport const runtimeValue = readFileSync;\n",
+      }),
+      {
+        rules: {
+          runtime: {
+            deny: {
+              deps: [
+                {
+                  name: 'node:*',
+                  reason: 'runtime code must not import Node builtins',
+                },
+              ],
+            },
+          },
+        },
+      },
+    );
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('denies package.json imports that resolve to configured declaration refs', async () => {
+    const fixture = await createFixture(
+      {
+        ...createLocalBoundaryFiles({
+          limina: 'runtime',
+          runtimeSource:
+            "import { nodeValue } from '#node';\nexport const runtimeValue = nodeValue;\n",
+        }),
+        'app/package.json': stringifyConfig({
+          imports: {
+            '#node': './node.ts',
+          },
+          name: '@example/app',
+          type: 'module',
+        }),
+      },
+      denyNodeRef,
+    );
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports graph ref rule targets outside the graph', async () => {
     const fixture = await createFixture(
       createWorkspacePackageFiles({
         appSource: 'export const value = 1;\n',
@@ -457,12 +582,6 @@ describe('runGraphCheck graph rules', () => {
         rules: {
           runtime: {
             deny: {
-              workspaceDeps: [
-                {
-                  name: '@example/missing',
-                  reason: 'missing dependency should be rejected',
-                },
-              ],
               refs: [
                 {
                   path: 'packages/app/tsconfig.missing.dts.json',

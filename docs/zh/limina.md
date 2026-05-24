@@ -336,10 +336,18 @@ const liminaConfig = {
               reason: 'client runtime must not depend on node runtime',
             },
           ],
-          workspaceDeps: [
+          deps: [
             {
               name: '@acme/node-only',
               reason: 'client runtime must not consume node-only packages',
+            },
+            {
+              name: 'node:*',
+              reason: 'client runtime must not import Node builtins',
+            },
+            {
+              name: '#server/*',
+              reason: 'client runtime must not use server-only package imports',
             },
           ],
         },
