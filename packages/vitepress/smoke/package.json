@@ -10,7 +10,7 @@
     "clean": "del-cli .tsbuild .eslintcache node_modules"
   },
   "dependencies": {
-    "logaria": "npm:@docs-islands/logger@latest",
+    "logaria": "catalog:prod",
     "cheerio": "catalog:prod",
     "vue": "catalog:prod"
   },

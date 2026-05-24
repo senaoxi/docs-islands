@@ -19,7 +19,8 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
           },
           {
             text: 'logaria',
-            link: '/zh/logaria',
+            link: '/logaria/zh/',
+            target: '_self',
           },
           {
             text: 'limina',

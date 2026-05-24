@@ -10,7 +10,7 @@
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },
   "dependencies": {
-    "logaria": "npm:@docs-islands/logger@latest"
+    "logaria": "catalog:prod"
   },
   "devDependencies": {
     "eslint": "catalog:lint",

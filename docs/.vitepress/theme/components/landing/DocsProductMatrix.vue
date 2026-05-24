@@ -162,6 +162,7 @@ const links = computed(() =>
         <a
           class="product-card product-card-control"
           :href="withBase(links.logger)"
+          target="_self"
         >
           <div class="product-card-topline">
             <span class="product-badge">{{ copy.controlsLabel }}</span>
