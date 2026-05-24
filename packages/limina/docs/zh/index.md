@@ -4,23 +4,25 @@ layout: home
 hero:
   name: Limina
   text: TypeScript monorepo 架构治理
-  tagline: 将 project references、源码检查、包边界和发布前校验收敛到一条显式流水线。
+  tagline: 在 CI 和发布前，确认 project references、package 边界、checker 覆盖和发布产物没有各说各话。
   image:
     src: /logo.svg
     alt: Limina
   actions:
     - theme: brand
-      text: 阅读指南
-      link: /zh/limina
+      text: 快速开始
+      link: /zh/getting-started
     - theme: alt
       text: 查看 npm
       link: https://www.npmjs.com/package/limina
 
 features:
-  - title: 理解构建图
-    details: 用同一份配置校验 TypeScript project references、源码覆盖、generated paths 兼容和依赖方向。
-  - title: 发布更可靠
-    details: 发布前检查 package exports、类型解析、运行时 import 和依赖声明，提前发现 dist 产物问题。
-  - title: 显式治理
-    details: 将自定义 checker、package target、runtime 边界和 allowlist 写进 limina.config.mjs，而不是依赖隐藏 preset。
+  - title: 看清真实依赖图
+    details: 用 TypeScript 解析源码 imports，再和 project references、workspace 协议、架构规则逐一对照。
+  - title: 让 package 边界清楚
+    details: 发现跨 package 相对导入、漏写的依赖声明，以及逃出当前 package 的 #imports。
+  - title: 知道每个文件被检查
+    details: 把 declaration leaf、local typecheck companion 和框架 checker 对起来，生成代码也用显式 allowlist 说明。
+  - title: 发布真正可用的产物
+    details: 用 publint、Are The Types Wrong、README/license 检查和 runtime import 边界验证构建后的 package。
 ---

@@ -16,15 +16,17 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
           {
             text: '@docs-islands/vitepress',
             link: '/vitepress/zh/',
-          },
-          {
-            text: 'logaria',
-            link: '/logaria/zh/',
-            target: '_self',
+            target: '_blank',
           },
           {
             text: 'limina',
             link: '/limina/zh/',
+            target: '_blank',
+          },
+          {
+            text: 'logaria',
+            link: '/logaria/zh/',
+            target: '_blank',
           },
         ],
       },

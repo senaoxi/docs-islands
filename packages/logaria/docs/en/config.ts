@@ -2,16 +2,29 @@ import type { DefaultTheme, LocaleSpecificConfig } from 'vitepress';
 
 const sidebar: DefaultTheme.SidebarItem[] = [
   {
-    text: 'Logaria',
+    text: 'Introduction',
     items: [
       {
         text: 'Overview',
         link: '/',
       },
       {
+        text: 'Why Logaria',
+        link: '/why',
+      },
+      {
+        text: 'Project Philosophy',
+        link: '/philosophy',
+      },
+      {
         text: 'Getting Started',
         link: '/getting-started',
       },
+    ],
+  },
+  {
+    text: 'Guide',
+    items: [
       {
         text: 'Runtime Config',
         link: '/runtime-config',
@@ -29,6 +42,15 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/scoped-integrations',
       },
       {
+        text: 'Troubleshooting',
+        link: '/troubleshooting',
+      },
+    ],
+  },
+  {
+    text: 'Reference',
+    items: [
+      {
         text: 'API Reference',
         link: '/api-reference',
       },
@@ -43,16 +65,19 @@ const config: LocaleSpecificConfig<DefaultTheme.Config> & {
   lang: 'en-US',
   title: 'Logaria',
   description:
-    'Framework-agnostic runtime logging and build-time pruning for TypeScript packages',
+    'A framework-agnostic TypeScript logger with rule-based runtime filtering and build-time pruning — debug-rich code, clean production bundles.',
   themeConfig: {
     nav: [
       {
         text: 'Guide',
         link: '/getting-started',
+        activeMatch:
+          '^/(getting-started|why|philosophy|runtime-config|rules-and-presets|bundler-plugin|scoped-integrations|troubleshooting)',
       },
       {
         text: 'API',
         link: '/api-reference',
+        activeMatch: '^/api-reference',
       },
       {
         text: 'npm',

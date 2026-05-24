@@ -1,10 +1,10 @@
 # Rules & Presets
 
-Rules switch Logaria from a broad level filter to an allowlist. Once at least one rule resolves, a log must match a rule and that rule must allow the log level. Unmatched logs do not fall back to root `levels`.
+`levels` is a useful first knob — but real projects often need finer control. You want to see API timeouts in production but not regular info chatter. You want HMR logs from the build subsystem but not the rest of `dev.*`. Rules and presets are how Logaria expresses that.
 
-## Rule Mode
+Rules switch Logaria from a broad level filter to a **focused allowlist**: once at least one rule resolves, a log must match a rule, and that rule must allow the log level. Unmatched logs do **not** fall back to the root `levels`.
 
-Use the `rules` map when you need focused visibility:
+## Quick Example
 
 ```ts
 import { setLoggerConfig } from 'logaria';
@@ -23,7 +23,12 @@ setLoggerConfig({
 });
 ```
 
-The map key is the rule label. In debug mode, visible rule-based logs include the matching label.
+The map key (`custom:metrics`) is the rule label. In debug mode, visible rule-based logs include the matching label so you can see which rule let them through.
+
+::: info Rule mode vs. level mode
+A config with no resolved rules is **level mode** — `levels` is the only filter.
+A config with at least one resolved rule is **rule mode** — `levels` becomes the default for rules that say `'inherit'`, and unmatched logs are dropped.
+:::
 
 ## Rule Fields
 
@@ -33,13 +38,17 @@ The map key is the rule label. In debug mode, visible rule-based logs include th
 | `main`    | Exact package or subsystem match.                                       |
 | `group`   | Exact match by default, or glob match when glob characters are present. |
 | `message` | Exact match by default, or glob match when glob characters are present. |
-| `levels`  | Required. Use explicit levels or `'inherit'` to inherit root levels.    |
+| `levels`  | Required. Use explicit levels or `'inherit'` to inherit root `levels`.  |
 
-`group` and `message` use exact matching unless the string contains glob syntax such as `*`, `?`, `[a-z]`, or braces.
+`group` and `message` upgrade to glob matching automatically when the string contains glob syntax — `*`, `?`, `[a-z]`, or `{a,b}`.
+
+::: tip Pick exact when you can
+Exact matches are faster and easier to reason about. Use globs when you genuinely need to span multiple groups (`api.*`) or messages (`*timeout*`).
+:::
 
 ## Preset Plugins
 
-Preset plugins register named rule templates and optional configs. Registration alone does not enable rules. Enable preset behavior through `extends` or through `rules` references.
+Preset plugins are how packages and frameworks ship **reusable rule templates** with optional named configs. Registering a preset does not enable anything by itself — you enable preset behavior through `extends` or `rules` references.
 
 ```ts
 import type { LoggerPresetPlugin } from 'logaria/types';
@@ -85,13 +94,20 @@ setLoggerConfig({
 });
 ```
 
+What this config does, end to end:
+
+1. Registers the `vite` preset's `build` and `hmr` rule templates.
+2. Enables them via `extends: ['vite/recommended']`.
+3. Overrides `vite/hmr` to surface only `warn`/`error` messages that look slow.
+4. Adds a project-owned `custom:api-timeout` rule for API timeouts.
+
 ## Precedence
 
 Config resolves in this order:
 
-1. `plugins` registers preset rule templates.
-2. `extends` imports plugin-provided configs.
-3. `rules` applies the final override layer.
+1. **`plugins`** registers preset rule templates.
+2. **`extends`** imports plugin-provided configs.
+3. **`rules`** applies the final override layer.
 
 Preset rule settings support:
 
@@ -100,4 +116,18 @@ Preset rule settings support:
 | `'off'` | Delete the preset rule after expansion.                                                               |
 | object  | Enable or override the rule; provided `main`, `group`, `message`, and `levels` override the template. |
 
-Use custom labels such as `custom:api-timeout` for project-owned rules that are not tied to a preset plugin.
+Use custom labels such as `custom:api-timeout` for project-owned rules that aren't tied to a preset plugin. The `namespace/name` form (e.g. `vite/hmr`) is reserved for references to a registered preset plugin.
+
+## Naming Patterns
+
+A few conventions that have worked well in practice:
+
+- **Preset namespace**: lowercase, short, one word (`vite`, `nuxt`, `acme`).
+- **Preset rule names**: lowercase, short, dot-free (`build`, `hmr`, `metrics`).
+- **Custom labels**: prefix with `custom:` or your team's namespace so they don't collide with future presets.
+
+## What to Read Next
+
+- [Runtime Config](./runtime-config.md) — how `levels` and `debug` interact with rules.
+- [Bundler Plugin](./bundler-plugin.md) — how rules are honoured by static pruning.
+- [API Reference](./api-reference.md#logaria-types) — the `LoggerPresetPlugin` type used to author presets.

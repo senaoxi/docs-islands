@@ -11,30 +11,36 @@ const isZh = computed(
 const text = computed(() => {
   if (isZh.value) {
     return {
-      url: 'docs-islands.dev/products',
-      mapTitle: 'Product Map',
-      nodes: ['核心包', '运行时日志', '架构治理'],
-      panelLabel: 'Docs Contract',
-      title: 'Markdown -> Islands -> Stable Pages',
+      url: 'docs-islands.dev/principles',
+      mapTitle: '设计原则',
+      nodes: ['静态优先', '按需交互', '边界可见'],
+      panelLabel: '设计理念',
+      title: '静态为底，交互成岛',
       insight:
-        '把页面渲染、诊断输出和工程边界拆成可检查的层次，让文档站点保持静态优先，也能接入真实交互。',
-      codeLabel: 'runtime policy',
-      code: 'ssr:only | client:visible | graph:check',
-      status: '核心包与控件已对齐',
+        'Docs Islands 在不同文档框架之上提供一层兼容抽象，把稳定内容与可独立激活的交互单元组合成用户最终看到的页面。',
+      diagramLabel: '兼容模型',
+      userLayer: '用户看到的内容',
+      islandsLayer: 'Docs Islands 兼容层',
+      islandsNote: '统一 islands 能力与渲染边界',
+      frameworks: ['VitePress', 'Docusaurus', 'Nextra', 'Rslib'],
+      status: '静态优先 · 交互按需 · 边界清晰',
     };
   }
 
   return {
-    url: 'docs-islands.dev/products',
-    mapTitle: 'Product Map',
-    nodes: ['Core Package', 'Runtime Logs', 'Graph Rules'],
-    panelLabel: 'Docs Contract',
-    title: 'Markdown -> Islands -> Stable Pages',
+    url: 'docs-islands.dev/principles',
+    mapTitle: 'Design principles',
+    nodes: ['Static-first', 'Island-level', 'Observable'],
+    panelLabel: 'Design philosophy',
+    title: 'Content First, Interaction as Islands',
     insight:
-      'Flatten rendering, diagnostics, and architecture boundaries into inspectable layers so documentation stays static-first without losing real interaction.',
-    codeLabel: 'runtime policy',
-    code: 'ssr:only | client:visible | graph:check',
-    status: 'Core package and controls aligned',
+      'Docs Islands adds a compatibility layer above documentation frameworks, combining stable content with independently activated interactive islands into the page users actually see.',
+    diagramLabel: 'compatibility model',
+    userLayer: 'User-facing content',
+    islandsLayer: 'Docs Islands compatibility layer',
+    islandsNote: 'Unified islands behavior and render boundaries',
+    frameworks: ['VitePress', 'Docusaurus', 'Nextra', 'Rslib'],
+    status: 'Static-first · interactive by intent · clear boundaries',
   };
 });
 </script>
@@ -57,7 +63,7 @@ const text = computed(() => {
           v-for="(node, index) in text.nodes"
           :key="node"
           class="mockup-node"
-          :class="{ 'is-active': index === 0, 'is-muted': index === 2 }"
+          :class="{ 'is-active': index === 0 }"
         >
           <span>{{ index + 1 }}</span>
           <strong>{{ node }}</strong>
@@ -69,9 +75,37 @@ const text = computed(() => {
         <h2>{{ text.title }}</h2>
         <p>{{ text.insight }}</p>
 
-        <div class="mockup-code">
-          <span>{{ text.codeLabel }}</span>
-          <code>{{ text.code }}</code>
+        <div class="mockup-code" :aria-label="text.diagramLabel">
+          <span class="flow-kicker">{{ text.diagramLabel }}</span>
+
+          <div class="flow-diagram" aria-hidden="true">
+            <div class="flow-row flow-user">
+              <strong>{{ text.userLayer }}</strong>
+            </div>
+
+            <div class="flow-stream flow-stream-up">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+
+            <div class="flow-row flow-islands">
+              <strong>{{ text.islandsLayer }}</strong>
+              <span>{{ text.islandsNote }}</span>
+            </div>
+
+            <div class="flow-stream">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+
+            <div class="flow-frameworks">
+              <span v-for="framework in text.frameworks" :key="framework">
+                {{ framework }}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div class="mockup-status">
@@ -186,7 +220,7 @@ const text = computed(() => {
 
 .mockup-code {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   margin-top: 26px;
   border: 1px solid var(--docs-home-border);
   border-radius: 8px;
@@ -196,16 +230,221 @@ const text = computed(() => {
   box-shadow: var(--docs-home-shadow-sm);
 }
 
-.mockup-code span {
+.flow-kicker {
   color: #a8a29e;
   font-family: var(--docs-home-font-mono);
   font-size: 11px;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
-.mockup-code code {
+.flow-diagram {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.flow-row {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+}
+
+.flow-row::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  opacity: 0;
+  transform: translateX(-40%);
+  animation: flow-sheen 4.8s ease-in-out infinite;
+}
+
+.flow-row strong,
+.flow-row span {
+  position: relative;
+  z-index: 1;
+}
+
+.flow-user {
+  place-items: center;
+  min-height: 40px;
+  background:
+    linear-gradient(135deg, rgb(66 184 131 / 16%), transparent 44%),
+    rgb(255 255 255 / 6%);
+}
+
+.flow-user::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(97 218 251 / 18%),
+    transparent
+  );
+}
+
+.flow-user strong {
   color: #f5f5f4;
-  font-family: var(--docs-home-font-mono);
   font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.flow-islands {
+  gap: 4px;
+  min-height: 54px;
+  padding: 10px 14px;
+  background:
+    linear-gradient(135deg, rgb(109 91 208 / 38%), transparent 56%),
+    rgb(66 184 131 / 15%);
+  animation: layer-breathe 4.8s ease-in-out infinite;
+}
+
+.flow-islands::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(245 245 244 / 16%),
+    transparent
+  );
+}
+
+.flow-islands strong {
+  color: #f5f5f4;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.flow-islands span {
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.flow-stream {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  height: 16px;
+  padding: 0 42px;
+}
+
+.flow-stream span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(97 218 251 / 72%),
+    transparent
+  );
+  opacity: 0.35;
+  transform: scaleY(0.45);
+  animation: flow-rise 2.4s ease-in-out infinite;
+}
+
+.flow-stream span:nth-child(2) {
+  animation-delay: 0.28s;
+}
+
+.flow-stream span:nth-child(3) {
+  animation-delay: 0.56s;
+}
+
+.flow-frameworks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.flow-frameworks span {
+  display: grid;
+  min-width: 0;
+  min-height: 34px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 6%);
+  color: #d8dee9;
+  font-family: var(--docs-home-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  animation: framework-signal 4.8s ease-in-out infinite;
+}
+
+.flow-frameworks span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.flow-frameworks span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.flow-frameworks span:nth-child(4) {
+  animation-delay: 0.6s;
+}
+
+@keyframes flow-sheen {
+  0%,
+  58% {
+    opacity: 0;
+    transform: translateX(-40%);
+  }
+
+  72% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(40%);
+  }
+}
+
+@keyframes layer-breathe {
+  0%,
+  100% {
+    border-color: rgb(255 255 255 / 12%);
+    box-shadow: 0 0 0 rgb(109 91 208 / 0%);
+  }
+
+  50% {
+    border-color: rgb(97 218 251 / 32%);
+    box-shadow: 0 0 22px rgb(109 91 208 / 20%);
+  }
+}
+
+@keyframes flow-rise {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(5px) scaleY(0.42);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: translateY(-5px) scaleY(1);
+  }
+}
+
+@keyframes framework-signal {
+  0%,
+  100% {
+    border-color: rgb(255 255 255 / 10%);
+    transform: translateY(0);
+  }
+
+  45%,
+  55% {
+    border-color: rgb(66 184 131 / 38%);
+    transform: translateY(-2px);
+  }
 }
 
 .mockup-status {
@@ -311,6 +550,19 @@ const text = computed(() => {
 
   .mockup-panel h2 {
     font-size: 28px;
+  }
+
+  .flow-frameworks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-row::before,
+  .flow-islands,
+  .flow-stream span,
+  .flow-frameworks span {
+    animation: none;
   }
 }
 </style>

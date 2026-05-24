@@ -409,7 +409,9 @@ class ProxyHandler {
   private findMatchingProject(url: string): string | undefined {
     return this.config.validProjects.find((packageName) => {
       const base = `${this.config.basePath}/${packageName}`;
-      return url.startsWith(base);
+      return (
+        url === base || url.startsWith(`${base}/`) || url.startsWith(`${base}?`)
+      );
     });
   }
 

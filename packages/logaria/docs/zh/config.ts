@@ -2,16 +2,29 @@ import type { DefaultTheme, LocaleSpecificConfig } from 'vitepress';
 
 const sidebar: DefaultTheme.SidebarItem[] = [
   {
-    text: 'Logaria',
+    text: '介绍',
     items: [
       {
         text: '概览',
         link: '/zh/',
       },
       {
+        text: '为什么是 Logaria',
+        link: '/zh/why',
+      },
+      {
+        text: '项目理念',
+        link: '/zh/philosophy',
+      },
+      {
         text: '快速开始',
         link: '/zh/getting-started',
       },
+    ],
+  },
+  {
+    text: '指南',
+    items: [
       {
         text: 'Runtime 配置',
         link: '/zh/runtime-config',
@@ -29,6 +42,15 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/zh/scoped-integrations',
       },
       {
+        text: '常见问题',
+        link: '/zh/troubleshooting',
+      },
+    ],
+  },
+  {
+    text: '参考',
+    items: [
+      {
         text: 'API 参考',
         link: '/zh/api-reference',
       },
@@ -44,16 +66,20 @@ const config: LocaleSpecificConfig<DefaultTheme.Config> & {
   lang: 'zh-CN',
   link: '/zh/',
   title: 'Logaria',
-  description: '面向 TypeScript 包的框架无关 runtime logging 与构建期裁剪',
+  description:
+    '框架无关的 TypeScript Logger，结合规则化 runtime 过滤与构建期裁剪——开发时尽情记录，生产构建保持干净。',
   themeConfig: {
     nav: [
       {
         text: '指南',
         link: '/zh/getting-started',
+        activeMatch:
+          '^/zh/(getting-started|why|philosophy|runtime-config|rules-and-presets|bundler-plugin|scoped-integrations|troubleshooting)',
       },
       {
         text: 'API',
         link: '/zh/api-reference',
+        activeMatch: '^/zh/api-reference',
       },
       {
         text: 'npm',

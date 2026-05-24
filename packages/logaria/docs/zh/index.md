@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Logaria
-  text: 可以在构建期消失的 runtime logging
-  tagline: 面向 TypeScript 包、脚本和工具链的小型框架无关 logger，支持 runtime 过滤、scope 归属和保守的生产构建裁剪。
+  text: 发布时悄然消失的 Logger
+  tagline: 框架无关的 TypeScript Logger，结合规则化的 runtime 过滤与保守的构建期裁剪——开发时尽情记录，生产构建保持干净。
   image:
     src: /logo.svg
     alt: Logaria
@@ -15,12 +15,21 @@ hero:
     - theme: alt
       text: API 参考
       link: /zh/api-reference
+    - theme: alt
+      text: GitHub
+      link: https://github.com/SenaoXi/docs-islands
 
 features:
-  - title: 精简 runtime API
-    details: 创建 main logger，再派生 group logger，用少量 API 管理可见性，不绑定具体框架。
+  - title: 精简的框架无关 API
+    details: 几个函数即可创建 logger 与配置可见性——不绑定框架、不耦合打包工具，也没有全局状态需要对抗。
   - title: 基于规则的可见性
-    details: 用 levels、debug、preset rules、glob 匹配和 allowlist 语义，让日志输出更可控。
-  - title: 构建期裁剪
-    details: 可选 unplugin adapter 会在生产构建中移除静态可证明被隐藏的调用，同时仍以 runtime 过滤为最终依据。
+    details: 通过 levels、debug、glob 匹配与 preset 驱动的 allowlist，让开发、CI 与生产中的每一行日志都目标明确。
+  - title: 构建期自动消失
+    details: 可选的 unplugin 适配器会静态证明并移除被关闭的日志调用，生产 bundle 不留任何痕迹。
+  - title: 覆盖主流打包工具
+    details: 一份插件，七个适配器——Vite、Rollup、Rolldown、esbuild、webpack、Rspack、Farm——共享同一份 runtime 语义。
+  - title: 可组合的 Preset 体系
+    details: 把可复用的规则模板封装为 preset 插件，通过 `extends` 启用，必要时按项目逐条覆盖。
+  - title: 面向集成的 Scope
+    details: 框架与工具链可注册独立的 logger scope，永远不会污染应用层的 runtime 配置——库依赖也能安心引入。
 ---

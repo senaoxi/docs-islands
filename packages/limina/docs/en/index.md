@@ -4,23 +4,25 @@ layout: home
 hero:
   name: Limina
   text: Architecture governance for TypeScript monorepos
-  tagline: Keep project references, source checks, package boundaries, and publish-time validation in one explicit pipeline.
+  tagline: Keep project references, package boundaries, checker coverage, and publish output aligned before drift reaches CI.
   image:
     src: /logo.svg
     alt: Limina
   actions:
     - theme: brand
-      text: Read the guide
-      link: /limina
+      text: Get Started
+      link: /getting-started
     - theme: alt
       text: View on npm
       link: https://www.npmjs.com/package/limina
 
 features:
-  - title: Graph-aware checks
-    details: Validate TypeScript project references, source coverage, generated path compatibility, and dependency direction from the same configuration.
-  - title: Publish confidence
-    details: Run package artifact checks for exports, type resolution, runtime imports, and dependency declarations before publishing.
-  - title: Explicit governance
-    details: Keep custom checkers, package targets, runtime boundaries, and allowlists in limina.config.mjs instead of hidden presets.
+  - title: See the real dependency graph
+    details: Resolve source imports with TypeScript, then compare them with project references, workspace protocols, and architecture rules.
+  - title: Keep packages in their lanes
+    details: Catch cross-package relative imports, undeclared dependencies, and #imports that escape the package that owns them.
+  - title: Know every file is checked
+    details: Connect declaration leaves to local typecheck companions and framework checkers, with explicit allowlists for generated code.
+  - title: Ship what consumers install
+    details: Validate built packages with publint, Are The Types Wrong, README and license checks, and runtime import boundaries.
 ---

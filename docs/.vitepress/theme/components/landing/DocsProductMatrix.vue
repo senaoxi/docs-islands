@@ -11,66 +11,82 @@ const isZh = computed(() => props.locale === 'zh');
 const copy = computed(() =>
   isZh.value
     ? {
-        eyebrow: '产品矩阵',
-        title: '面向产品化文档站点的能力地图。',
+        eyebrow: '核心产品',
+        title: '为文档站点补上交互、诊断和工程边界。',
         intro:
-          'Docs Islands 将站点渲染、运行诊断和架构治理拆成可组合的产品能力。核心包面向页面体验与框架集成，核心控件面向团队协作中的可观测性、规则和边界。',
-        packagesEyebrow: 'Core Packages',
-        packagesTitle: '文档站点能力',
-        packagesIntro: '面向页面体验、框架集成和站点运行时的主能力。',
+          'Docs Islands 面向已经在写文档的团队：页面继续静态优先，交互按组件接入，日志和架构规则也能在同一套工程节奏里被看见。',
+        packagesEyebrow: 'Core Package',
+        packagesTitle: '核心能力包',
+        packagesIntro:
+          '先解决页面体验：在 VitePress Markdown 中使用跨框架 islands，把真实组件带进文档。',
         controlsEyebrow: 'Core Controls',
-        controlsTitle: '工程控制面板',
-        controlsIntro: '面向日志、边界、CI 信心与仓库治理的轻量控制层。',
-        packageLabel: '核心包',
-        controlsLabel: '核心控件',
+        controlsTitle: '核心控件',
+        controlsIntro:
+          '再补上团队协作需要的控制层：日志可见性、构建裁剪、依赖边界和发布前架构检查。',
+        packageLabel: '主能力',
+        controlsLabel: '控制层',
         vitepressTitle: '@docs-islands/vitepress',
         vitepressBody:
-          '在 VitePress Markdown 中接入 React islands，并按组件选择 SSR、client load、visible 或 client-only 策略。',
-        vitepressMeta: '跨框架渲染 / SPA 稳定性 / Site DevTools',
+          '把 React islands 放进 VitePress Markdown，并按组件选择 SSR、client load、visible hydration 或 client-only。',
+        vitepressCommand: 'npm i @docs-islands/vitepress',
+        vitepressMeta: '跨框架渲染 / SPA 切页稳定 / Site DevTools',
+        vitepressOutcome: '静态文档体验',
+        vitepressOutcomeDetail: '保留 VitePress 的生成模型',
         strategySsr: 'SSR islands',
         strategyVisible: 'Visible hydration',
         strategyClient: 'Client-only escape',
         loggerTitle: 'logaria',
         loggerBody:
-          '框架无关的日志 runtime，支持 scope 隔离、规则过滤和构建期裁剪。',
-        loggerMeta: 'runtime diagnostics',
+          '用 scope、level、规则和 preset 管理日志可见性，生产构建可裁剪被关闭的调用。',
+        loggerCommand: 'npm i logaria',
+        loggerMeta: '日志可见性',
+        loggerFit: '适合 runtime diagnostics',
         liminaTitle: 'limina',
         liminaBody:
-          'TypeScript monorepo 架构治理 CLI，检查 project graph、source proof、paths 和发布产物。',
-        liminaMeta: 'architecture governance',
+          '在 CI 和发布前检查 TypeScript monorepo 的 project graph、source proof、paths 和产物边界。',
+        liminaCommand: 'npm i -D limina',
+        liminaMeta: '架构边界',
+        liminaFit: '适合 architecture governance',
         open: '打开文档',
       }
     : {
-        eyebrow: 'Product Portfolio',
-        title: 'A product map for documentation systems.',
+        eyebrow: 'Core Products',
+        title: 'Add interaction, diagnostics, and boundaries to docs sites.',
         intro:
-          'Docs Islands turns rendering, diagnostics, and repository governance into composable product capabilities. Core packages shape site-facing experiences; core controls give teams precise operational and architectural feedback.',
-        packagesEyebrow: 'Core Packages',
-        packagesTitle: 'Site-facing capabilities',
+          'Docs Islands is for teams already writing documentation: keep pages static-first, bring interaction in per component, and make logs and architecture rules visible in the same engineering loop.',
+        packagesEyebrow: 'Core Package',
+        packagesTitle: 'Core capability package',
         packagesIntro:
-          'Primary packages for page experience, framework integration, and documentation runtime behavior.',
+          'Start with page experience: use cross-framework islands inside VitePress Markdown and bring real components into docs.',
         controlsEyebrow: 'Core Controls',
-        controlsTitle: 'Engineering control plane',
+        controlsTitle: 'Core controls',
         controlsIntro:
-          'Focused controls for logs, boundaries, CI confidence, and repository governance.',
-        packageLabel: 'Core Package',
-        controlsLabel: 'Core Controls',
+          'Then add the control layer teams need: log visibility, build-time pruning, dependency boundaries, and pre-release architecture checks.',
+        packageLabel: 'Primary capability',
+        controlsLabel: 'Control layer',
         vitepressTitle: '@docs-islands/vitepress',
         vitepressBody:
-          'Bring React islands into VitePress Markdown and choose SSR, client load, visible, or client-only rendering per component.',
+          'Put React islands inside VitePress Markdown, then choose SSR, client load, visible hydration, or client-only per component.',
+        vitepressCommand: 'npm i @docs-islands/vitepress',
         vitepressMeta:
-          'cross-framework rendering / SPA stability / Site DevTools',
+          'cross-framework rendering / SPA route stability / Site DevTools',
+        vitepressOutcome: 'Static docs feel',
+        vitepressOutcomeDetail: 'Keep the VitePress generation model',
         strategySsr: 'SSR islands',
         strategyVisible: 'Visible hydration',
         strategyClient: 'Client-only escape',
         loggerTitle: 'logaria',
         loggerBody:
-          'Framework-agnostic logging runtime with scoped isolation, rule-based filtering, and build-time pruning.',
-        loggerMeta: 'runtime diagnostics',
+          'Control log visibility with scopes, levels, rules, and presets, then prune silenced calls from production builds.',
+        loggerCommand: 'npm i logaria',
+        loggerMeta: 'Log visibility',
+        loggerFit: 'Built for runtime diagnostics',
         liminaTitle: 'limina',
         liminaBody:
-          'Architecture governance CLI for TypeScript monorepos, covering project graphs, source proof, paths, and package output checks.',
-        liminaMeta: 'architecture governance',
+          'Check TypeScript monorepo project graphs, source proof, paths, and package output boundaries before CI or release.',
+        liminaCommand: 'npm i -D limina',
+        liminaMeta: 'Architecture boundaries',
+        liminaFit: 'Built for architecture governance',
         open: 'Open docs',
       },
 );
@@ -116,9 +132,10 @@ const links = computed(() =>
             <span class="product-badge">{{ copy.packageLabel }}</span>
             <span class="product-link-label">{{ copy.open }}</span>
           </div>
-          <div class="product-card-body product-card-body-package">
+
+          <div class="package-showcase">
             <div class="product-main-copy">
-              <div class="product-icon islands-icon" aria-hidden="true">
+              <div class="islands-icon product-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 96 96"
                   fill="none"
@@ -132,18 +149,31 @@ const links = computed(() =>
                   />
                 </svg>
               </div>
+
               <div>
                 <h4>{{ copy.vitepressTitle }}</h4>
                 <p>{{ copy.vitepressBody }}</p>
+
+                <div class="product-command" aria-label="Install command">
+                  <span>$</span>
+                  <code>{{ copy.vitepressCommand }}</code>
+                </div>
               </div>
             </div>
 
-            <div class="package-strategy" aria-hidden="true">
-              <span>{{ copy.strategySsr }}</span>
-              <span>{{ copy.strategyVisible }}</span>
-              <span>{{ copy.strategyClient }}</span>
+            <div class="package-proof" aria-hidden="true">
+              <div class="package-proof-panel">
+                <span>{{ copy.vitepressOutcome }}</span>
+                <strong>{{ copy.vitepressOutcomeDetail }}</strong>
+              </div>
+              <div class="package-strategy">
+                <span>{{ copy.strategySsr }}</span>
+                <span>{{ copy.strategyVisible }}</span>
+                <span>{{ copy.strategyClient }}</span>
+              </div>
             </div>
           </div>
+
           <span class="product-meta">{{ copy.vitepressMeta }}</span>
         </a>
       </div>
@@ -162,53 +192,31 @@ const links = computed(() =>
         <a
           class="product-card product-card-control"
           :href="withBase(links.logger)"
-          target="_self"
         >
           <div class="product-card-topline">
             <span class="product-badge">{{ copy.controlsLabel }}</span>
             <span class="product-link-label">{{ copy.open }}</span>
           </div>
-          <div class="product-card-body">
-            <div class="product-icon logger-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 96 96"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <rect
-                  x="18"
-                  y="20"
-                  width="60"
-                  height="56"
-                  rx="8"
-                  fill="#101828"
-                />
-                <path
-                  d="M31 36H63"
-                  stroke="#38BDF8"
-                  stroke-width="6"
-                  stroke-linecap="round"
-                />
-                <path
-                  d="M31 50H56"
-                  stroke="#A3E635"
-                  stroke-width="6"
-                  stroke-linecap="round"
-                />
-                <path
-                  d="M31 64H67"
-                  stroke="#F59E0B"
-                  stroke-width="6"
-                  stroke-linecap="round"
-                />
-              </svg>
+
+          <div class="control-body">
+            <div class="control-logo-frame">
+              <img :src="withBase('/logaria.svg')" :alt="copy.loggerTitle" />
             </div>
+
             <div>
               <h4>{{ copy.loggerTitle }}</h4>
               <p>{{ copy.loggerBody }}</p>
             </div>
           </div>
-          <span class="product-meta">{{ copy.loggerMeta }}</span>
+
+          <div class="control-footer">
+            <div class="product-command product-command-small">
+              <span>$</span>
+              <code>{{ copy.loggerCommand }}</code>
+            </div>
+            <span class="product-meta">{{ copy.loggerMeta }}</span>
+            <span class="control-fit">{{ copy.loggerFit }}</span>
+          </div>
         </a>
 
         <a
@@ -219,49 +227,26 @@ const links = computed(() =>
             <span class="product-badge">{{ copy.controlsLabel }}</span>
             <span class="product-link-label">{{ copy.open }}</span>
           </div>
-          <div class="product-card-body">
-            <div class="product-icon limina-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 96 96"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <rect
-                  x="12"
-                  y="12"
-                  width="72"
-                  height="72"
-                  rx="18"
-                  fill="#111827"
-                />
-                <path
-                  d="M25 35L52 48L25 61"
-                  stroke="#91A4B7"
-                  stroke-width="5"
-                  stroke-linecap="round"
-                />
-                <path
-                  d="M39 25V71M56 25V71"
-                  stroke="#E5E7EB"
-                  stroke-width="7"
-                  stroke-linecap="round"
-                />
-                <circle cx="68" cy="48" r="11" fill="#22D3EE" />
-                <path
-                  d="M63 48.5L67 52L74 44"
-                  stroke="#111827"
-                  stroke-width="3.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
+
+          <div class="control-body">
+            <div class="control-logo-frame">
+              <img :src="withBase('/limina.svg')" :alt="copy.liminaTitle" />
             </div>
+
             <div>
               <h4>{{ copy.liminaTitle }}</h4>
               <p>{{ copy.liminaBody }}</p>
             </div>
           </div>
-          <span class="product-meta">{{ copy.liminaMeta }}</span>
+
+          <div class="control-footer">
+            <div class="product-command product-command-small">
+              <span>$</span>
+              <code>{{ copy.liminaCommand }}</code>
+            </div>
+            <span class="product-meta">{{ copy.liminaMeta }}</span>
+            <span class="control-fit">{{ copy.liminaFit }}</span>
+          </div>
         </a>
       </div>
     </section>
@@ -275,8 +260,8 @@ const links = computed(() =>
 }
 
 .matrix-heading {
-  max-width: 780px;
-  margin: 0 auto 52px;
+  max-width: 820px;
+  margin: 0 auto 56px;
   text-align: center;
 }
 
@@ -308,7 +293,7 @@ const links = computed(() =>
 
 .matrix-heading span {
   display: block;
-  max-width: 720px;
+  max-width: 760px;
   margin: 20px auto 0;
   color: var(--vp-c-text-2);
   font-size: 17px;
@@ -320,7 +305,7 @@ const links = computed(() =>
 }
 
 .product-section + .product-section {
-  margin-top: 40px;
+  margin-top: 44px;
 }
 
 .product-section-heading {
@@ -356,7 +341,7 @@ const links = computed(() =>
 
 .product-section-heading span {
   display: block;
-  max-width: 640px;
+  max-width: 660px;
   margin-top: 8px;
   color: var(--vp-c-text-2);
   font-size: 15px;
@@ -390,6 +375,16 @@ const links = computed(() =>
     transform 0.18s ease;
 }
 
+.product-card::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: var(--docs-home-accent);
+  content: '';
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
 .product-card:hover {
   border-color: color-mix(
     in srgb,
@@ -400,41 +395,32 @@ const links = computed(() =>
   transform: translateY(-2px);
 }
 
+.product-card:hover::before {
+  opacity: 1;
+}
+
 .product-card-package {
   padding: 30px;
 }
 
 .product-card-control {
-  min-height: 236px;
-  padding: 22px;
-}
-
-.product-card-topline,
-.product-card-body {
-  display: flex;
-  align-items: flex-start;
-  gap: 18px;
+  min-height: 316px;
+  padding: 24px;
 }
 
 .product-card-topline {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.product-card-body {
-  margin-top: 28px;
-}
-
-.product-card-body-package {
+.package-showcase {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
-  gap: 32px;
-  align-items: center;
-}
-
-.product-card-control .product-card-body {
-  margin-top: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 36px;
+  align-items: stretch;
+  margin-top: 30px;
 }
 
 .product-badge {
@@ -469,16 +455,11 @@ const links = computed(() =>
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 72px;
-  height: 72px;
+  width: 76px;
+  height: 76px;
   border: 1px solid var(--docs-home-border);
   border-radius: 8px;
   background: var(--docs-home-primary-soft);
-}
-
-.product-card-control .product-icon {
-  width: 56px;
-  height: 56px;
 }
 
 .product-icon svg {
@@ -489,14 +470,14 @@ const links = computed(() =>
 .product-main-copy {
   display: flex;
   align-items: flex-start;
-  gap: 20px;
+  gap: 22px;
 }
 
 .product-card h4 {
   margin: 0;
   color: var(--vp-c-text-1);
   font-family: var(--docs-home-font-serif);
-  font-size: 28px;
+  font-size: 30px;
   font-style: italic;
   font-weight: 400;
   line-height: 1.18;
@@ -504,7 +485,7 @@ const links = computed(() =>
 }
 
 .product-card-control h4 {
-  font-size: 22px;
+  font-size: 24px;
 }
 
 .product-card p {
@@ -517,17 +498,94 @@ const links = computed(() =>
 .product-card-control p {
   margin-top: 8px;
   font-size: 14px;
-  line-height: 1.62;
+  line-height: 1.66;
+}
+
+.product-command {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 10px;
+  width: fit-content;
+  margin-top: 24px;
+  border: 1px solid color-mix(in srgb, var(--docs-home-border) 72%, #000);
+  border-radius: 8px;
+  background: var(--docs-home-code-bg);
+  color: #f5f5f4;
+  padding: 11px 14px;
+  box-shadow: var(--docs-home-shadow-sm);
+}
+
+.product-command span {
+  color: #a8a29e;
+  font-family: var(--docs-home-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.product-command code {
+  overflow-wrap: anywhere;
+  color: #f5f5f4;
+  font-family: var(--docs-home-font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.product-command-small {
+  width: 100%;
+  margin-top: 0;
+  padding: 10px 12px;
+}
+
+.product-command-small code {
+  font-size: 12px;
 }
 
 .product-meta {
   display: block;
-  margin-top: 28px;
+  margin-top: 24px;
   color: var(--docs-home-accent-strong);
   font-family: var(--docs-home-font-mono);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.5;
+}
+
+.package-proof {
+  display: grid;
+  gap: 12px;
+  align-content: stretch;
+}
+
+.package-proof-panel {
+  display: grid;
+  min-height: 122px;
+  align-content: center;
+  gap: 10px;
+  border: 1px solid var(--docs-home-border);
+  border-radius: 8px;
+  background: color-mix(
+    in srgb,
+    var(--docs-home-accent-soft) 56%,
+    var(--docs-home-surface)
+  );
+  padding: 18px;
+}
+
+.package-proof-panel span {
+  color: var(--docs-home-accent-strong);
+  font-family: var(--docs-home-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.package-proof-panel strong {
+  color: var(--vp-c-text-1);
+  font-size: 17px;
+  line-height: 1.45;
 }
 
 .package-strategy {
@@ -561,6 +619,48 @@ const links = computed(() =>
   transform: translateY(-50%);
 }
 
+.control-body {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  margin-top: 26px;
+}
+
+.control-logo-frame {
+  display: grid;
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 1px solid var(--docs-home-border);
+  border-radius: 8px;
+  background: var(--docs-home-primary-soft);
+}
+
+.control-logo-frame img {
+  display: block;
+  max-width: 54px;
+  max-height: 54px;
+}
+
+.control-footer {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.control-footer .product-meta {
+  margin-top: 0;
+}
+
+.control-fit {
+  color: var(--vp-c-text-3);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 @media (max-width: 860px) {
   .docs-product-matrix {
     width: min(100% - 32px, 680px);
@@ -569,7 +669,7 @@ const links = computed(() =>
 
   .product-section-heading,
   .controls-grid,
-  .product-card-body-package {
+  .package-showcase {
     grid-template-columns: 1fr;
   }
 
@@ -583,8 +683,16 @@ const links = computed(() =>
 }
 
 @media (max-width: 560px) {
+  .docs-product-matrix {
+    width: min(100% - 28px, 680px);
+  }
+
   .matrix-heading h2 {
     font-size: 32px;
+  }
+
+  .matrix-heading span {
+    font-size: 15px;
   }
 
   .product-card-package,
@@ -592,13 +700,20 @@ const links = computed(() =>
     padding: 20px;
   }
 
-  .product-card-body {
-    flex-direction: column;
-    gap: 14px;
+  .product-card h4 {
+    font-size: 22px;
   }
 
-  .product-card h4 {
-    font-size: 20px;
+  .product-card-control h4 {
+    font-size: 21px;
+  }
+
+  .control-body {
+    grid-template-columns: 1fr;
+  }
+
+  .package-proof-panel {
+    min-height: 0;
   }
 }
 </style>

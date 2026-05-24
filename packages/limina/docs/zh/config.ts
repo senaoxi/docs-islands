@@ -1,5 +1,37 @@
 import type { DefaultTheme, LocaleSpecificConfig } from 'vitepress';
 
+const sidebar: DefaultTheme.SidebarItem[] = [
+  {
+    text: 'Limina',
+    items: [
+      {
+        text: '概览',
+        link: '/zh/limina',
+      },
+      {
+        text: '为什么需要 Limina',
+        link: '/zh/why',
+      },
+      {
+        text: '快速开始',
+        link: '/zh/getting-started',
+      },
+      {
+        text: '核心概念',
+        link: '/zh/concepts',
+      },
+      {
+        text: '检查与工作流',
+        link: '/zh/checks-and-workflows',
+      },
+      {
+        text: '参考',
+        link: '/zh/reference',
+      },
+    ],
+  },
+];
+
 const config: LocaleSpecificConfig<DefaultTheme.Config> & {
   label: string;
   link: string;
@@ -8,33 +40,23 @@ const config: LocaleSpecificConfig<DefaultTheme.Config> & {
   lang: 'zh-CN',
   link: '/zh/',
   title: 'Limina',
-  description: '面向 TypeScript monorepo 的架构治理 CLI',
+  description: '让 TypeScript monorepo 从源码依赖到发布产物都保持一致。',
   themeConfig: {
     nav: [
       {
         text: '指南',
-        link: '/zh/limina',
+        link: '/zh/getting-started',
+      },
+      {
+        text: '参考',
+        link: '/zh/reference',
       },
       {
         text: 'npm',
         link: 'https://www.npmjs.com/package/limina',
       },
     ],
-    sidebar: [
-      {
-        text: 'Limina',
-        items: [
-          {
-            text: '概览',
-            link: '/zh/',
-          },
-          {
-            text: '指南',
-            link: '/zh/limina',
-          },
-        ],
-      },
-    ],
+    sidebar,
     footer: {
       message: '根据 MIT 许可证发布。',
       copyright: '版权所有 © 2026-present Limina contributors',

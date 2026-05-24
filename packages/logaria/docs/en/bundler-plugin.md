@@ -1,6 +1,15 @@
 # Bundler Plugin
 
-Use `logaria/plugin` when a bundler should inject runtime logger config and optionally remove statically suppressed log calls during production builds.
+Use `logaria/plugin` when a bundler should:
+
+1. **Inject runtime logger config** as compile-time constants, taking ownership of the default scope.
+2. **Optionally prune statically suppressed log calls** during production builds.
+
+The plugin is built on [unplugin](https://github.com/unjs/unplugin), so a single import gives you adapters for every major bundler in the ecosystem.
+
+::: warning Ownership change
+Installing the plugin makes the default runtime scope **controlled**. Application code must update the plugin `config` option instead of calling `setLoggerConfig()` or `resetLoggerConfig()`; both throw under plugin control. See [Runtime Config — Controlled Runtime](./runtime-config.md#controlled-runtime).
+:::
 
 ## Vite Example
 
@@ -20,48 +29,90 @@ export default defineConfig({
 });
 ```
 
-Installing the plugin makes the default runtime scope controlled. Application code should update the plugin `config` instead of calling `setLoggerConfig()` or `resetLoggerConfig()`.
-
 ## Adapters
 
-`loggerPlugin` is built on unplugin and exposes these adapters:
+`loggerPlugin` exposes one adapter per bundler:
 
-```ts
-loggerPlugin.vite(options);
-loggerPlugin.rollup(options);
-loggerPlugin.rolldown(options);
-loggerPlugin.esbuild(options);
-loggerPlugin.webpack(options);
-loggerPlugin.rspack(options);
-loggerPlugin.farm(options);
+::: code-group
+
+```ts [Vite]
+import { loggerPlugin } from 'logaria/plugin';
+
+loggerPlugin.vite({ config, treeshake });
 ```
+
+```ts [Rollup]
+import { loggerPlugin } from 'logaria/plugin';
+
+loggerPlugin.rollup({ config, treeshake });
+```
+
+```ts [Rolldown]
+import { loggerPlugin } from 'logaria/plugin';
+
+loggerPlugin.rolldown({ config, treeshake });
+```
+
+```ts [esbuild]
+import { loggerPlugin } from 'logaria/plugin';
+
+loggerPlugin.esbuild({ config, treeshake });
+```
+
+```ts [webpack]
+import { loggerPlugin } from 'logaria/plugin';
+
+loggerPlugin.webpack({ config, treeshake });
+```
+
+```ts [Rspack]
+import { loggerPlugin } from 'logaria/plugin';
+
+loggerPlugin.rspack({ config, treeshake });
+```
+
+```ts [Farm]
+import { loggerPlugin } from 'logaria/plugin';
+
+loggerPlugin.farm({ config, treeshake });
+```
+
+:::
+
+All adapters share the same options and behave identically — the runtime semantics do not change between bundlers.
 
 ## Options
 
-| Option      | Meaning                                                                                        |
-| ----------- | ---------------------------------------------------------------------------------------------- |
-| `config`    | Runtime `LoggerConfig` injected into the bundle. Omit it to use the default visibility policy. |
-| `treeshake` | Defaults to `false`. Set `true` to enable build-time pruning.                                  |
+| Option      | Meaning                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `config`    | Runtime `LoggerConfig` injected into the bundle. Omit to use the default visibility policy.      |
+| `treeshake` | Defaults to `false`. Set `true` to enable build-time pruning of statically suppressed log calls. |
 
-Tree-shaking only runs in build contexts. Dev and watch mode keep calls in place and rely on runtime filtering.
+::: tip Dev vs build
+Tree-shaking only runs in **build** contexts. In dev and watch mode, calls stay in place and runtime filtering is the only gate. This keeps source maps clean and HMR fast.
+:::
 
 ## Rollup Peer Dependency
 
-Rollup hosts must install `@rollup/plugin-replace` before using `loggerPlugin.rollup(...)`.
+Rollup hosts must install `@rollup/plugin-replace` before using `loggerPlugin.rollup(...)`:
 
-The Rollup adapter prepends the replace plugin so Logaria can inline the same control constants that other bundlers inject through their define hooks.
+```sh
+pnpm add -D @rollup/plugin-replace
+```
+
+The Rollup adapter prepends `@rollup/plugin-replace` so Logaria can inline the same control constants that other bundlers inject through their native `define` hooks. Other adapters do **not** need this peer dependency.
 
 ## Tree-Shaking Coverage
 
-Pruning is deliberately conservative. A log call can be removed only when the plugin can prove all of these static facts:
+Pruning is **deliberately conservative**. A log call can be removed only when the plugin can prove **all** of these static facts:
 
 - `createLogger` is imported as a named, unaliased import from `logaria`.
-- `main`, `group`, and the message are string literals.
+- `main`, `group`, and the log message are string literals.
 - The logger binding is not reassigned.
 - The log call is a standalone expression.
 - The plugin is running in a build context with `treeshake: true`.
 
-Supported static shape:
+### Supported Static Shape
 
 ```ts
 import { createLogger } from 'logaria';
@@ -77,13 +128,23 @@ logger.success('static metric uploaded');
 logger.debug('static metric details');
 ```
 
-These shapes are kept for runtime filtering:
+### Shapes That Stay (Falls Back to Runtime)
 
-- dynamic `main`, `group`, or message values
-- aliased `createLogger` imports
-- reassigned logger bindings
-- destructured methods
-- computed method access
-- non-standalone expressions, such as assigning the result of a log call
+The plugin keeps any call shape that it cannot statically verify. Runtime filtering remains canonical for these:
 
-Runtime filtering remains canonical for every call that stays in the bundle.
+- Dynamic `main`, `group`, or message values.
+- Aliased `createLogger` imports (`import { createLogger as cl } from 'logaria'`).
+- Reassigned logger bindings.
+- Destructured methods (`const { info } = logger`).
+- Computed method access (`logger['info']`).
+- Non-standalone expressions, such as assigning the result of a log call.
+
+::: info Why conservative
+A missed removal costs you a few bytes. A wrong removal costs you a missing log on a real incident. Logaria trades the second risk away on purpose. See [Project Philosophy — Conservative by Default](./philosophy.md#conservative-by-default).
+:::
+
+## What to Read Next
+
+- [Runtime Config](./runtime-config.md) — the gate every surviving call still passes through.
+- [Rules & Presets](./rules-and-presets.md) — match by `main`, `group`, message.
+- [Troubleshooting](./troubleshooting.md) — common reasons calls don't get pruned.

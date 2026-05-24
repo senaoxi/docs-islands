@@ -1,12 +1,16 @@
 # Scoped Integrations
 
-The root `logaria` entry uses the default scope. Host integrations can use `logaria/core` to create explicit scopes with independent configuration ownership.
+The root `logaria` entry uses one **default scope**, owned by the application or the bundler plugin. Host integrations — frameworks, build tools, library middleware — should not mutate that default scope.
 
-Use this when a framework, build tool, or host package needs to manage logger visibility for its own graph without mutating application-owned runtime config.
+`logaria/core` is the answer. It lets a host package register an **explicit scope** with its own config, separate from the application-owned default scope. Application config and host config can coexist without conflict.
+
+::: tip When to use this
+Use scoped integrations whenever a library you ship cares about _its own_ logger visibility — for example a framework debugging panel, a build tool's internal log pipeline, or a runtime debug overlay. If you just want logs in a CLI or app, stick to the root `logaria` entry.
+:::
 
 ## Scope Lifecycle
 
-Create a scope id, register config, create scoped loggers, then reset when the host is done:
+The pattern is **register → use → reset**:
 
 ```ts
 import { createScopedLogger, resetScopedLoggerConfig, setScopedLoggerConfig } from 'logaria/core';
@@ -27,7 +31,7 @@ logger.warn('host warning');
 resetScopedLoggerConfig(scopeId);
 ```
 
-`createScopedLogger()` requires the scope config to be registered first. If the scope is missing, it throws instead of silently falling back to the default scope.
+`createScopedLogger()` requires the scope config to be registered first. If the scope is missing, it throws — Logaria refuses to fall back to the default scope silently, because the whole point of scoped integrations is to keep ownership explicit.
 
 ## Reading Scope Config
 
@@ -39,11 +43,11 @@ import { getScopedLoggerConfig } from 'logaria/core';
 const config = getScopedLoggerConfig(scopeId);
 ```
 
-It returns `undefined` when the scope is not registered.
+It returns `undefined` when the scope is not registered. This is useful for "config has been set up before me?" checks or for diagnostic surfaces.
 
 ## Custom Visibility Decisions
 
-Use `shouldSuppressLog()` when custom integration code needs Logaria visibility decisions without emitting through a logger method:
+Use `shouldSuppressLog()` when integration code needs Logaria's visibility decision without emitting through a logger method — for example to short-circuit expensive formatting work before constructing a message:
 
 ```ts
 import { shouldSuppressLog } from 'logaria/core';
@@ -61,8 +65,29 @@ const suppress = shouldSuppressLog(
 
 The return value is `true` when the log should be hidden and `false` when it should be shown.
 
-## Scope Ids
+## Scope IDs
 
-`createLoggerScopeId()` returns a unique string such as `logaria-scope-...`. You may also use your own stable string when the host needs a named scope, but normalize empty strings and whitespace carefully. Empty scope ids normalize to the default scope.
+`createLoggerScopeId()` returns a unique string of the form `logaria-scope-...`. You may also use your own stable string when the host needs a named scope — just normalize empty strings and whitespace carefully. **Empty scope ids normalize to the default scope**, which is rarely what you want.
 
-Prefer generated ids for per-instance scopes and stable ids for singleton host integrations.
+A simple rule of thumb:
+
+- **Generated ids** (`createLoggerScopeId()`) — for per-instance scopes (e.g., one per `vite` plugin instance).
+- **Stable ids** (your own string) — for singleton host integrations (e.g., one well-known id for the framework's debug panel).
+
+## Normalising User Config
+
+`resolveLoggerConfig()` validates and normalizes a public `LoggerConfig` into the internal shape Logaria uses to make decisions. Host packages that want to accept user-provided config — for example, exposing a `logger` option on their own plugin — should run input through this helper before storing it.
+
+```ts
+import { resolveLoggerConfig } from 'logaria/core';
+
+const compiled = resolveLoggerConfig(userConfig);
+```
+
+This catches malformed rules, unknown levels, and conflicting `extends` references at the boundary, instead of letting them surface later as confusing runtime behaviour.
+
+## What to Read Next
+
+- [API Reference — `logaria/core`](./api-reference.md#logaria-core) — full signature list.
+- [Project Philosophy — Explicit Ownership](./philosophy.md#explicit-ownership) — why scopes exist.
+- [Troubleshooting — Missing scope id](./troubleshooting.md#missing-scope-id) — common pitfalls when registering scopes.
