@@ -10,26 +10,28 @@ List the available skills first:
 npx skills add XiSenao/docs-islands --list
 ```
 
-Install the logger skill:
-
-```bash
-npx skills add XiSenao/docs-islands --skill logaria
-```
-
 Install the VitePress skill:
 
 ```bash
 npx skills add XiSenao/docs-islands --skill docs-islands-vitepress
 ```
 
+Install the limina skill:
+
+```bash
+npx skills add XiSenao/docs-islands --skill limina
+```
+
+Install the logaria skill:
+
+```bash
+npx skills add XiSenao/docs-islands --skill logaria
+```
+
 Install both skills globally for Codex:
 
 ```bash
-npx skills add XiSenao/docs-islands \
-  --global \
-  --agent codex \
-  --skill logaria \
-  --skill docs-islands-vitepress
+npx skills add XiSenao/docs-islands --global --agent codex --skill logaria --skill logaria --skill docs-islands-vitepress
 ```
 
 Restart the target agent after installing global skills so it can load the new skill metadata.

@@ -11,26 +11,6 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
   themeConfig: {
     nav: [
       {
-        text: '产品',
-        items: [
-          {
-            text: '@docs-islands/vitepress',
-            link: '/vitepress/zh/',
-            target: '_blank',
-          },
-          {
-            text: 'limina',
-            link: '/limina/zh/',
-            target: '_blank',
-          },
-          {
-            text: 'logaria',
-            link: '/logaria/zh/',
-            target: '_blank',
-          },
-        ],
-      },
-      {
         text: 'Skills',
         link: '/zh/guide/skills',
       },

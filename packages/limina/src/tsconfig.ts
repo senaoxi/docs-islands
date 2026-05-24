@@ -66,7 +66,7 @@ function escapeRegExp(value: string): string {
 
 export function createExtensionPattern(extensions: string[]): RegExp {
   if (extensions.length === 0) {
-    return /$./u;
+    return /(?!)/u;
   }
 
   return new RegExp(

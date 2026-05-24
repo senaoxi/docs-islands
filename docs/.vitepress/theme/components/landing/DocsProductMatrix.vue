@@ -27,8 +27,8 @@ const copy = computed(() =>
         controlsLabel: '控制层',
         vitepressTitle: '@docs-islands/vitepress',
         vitepressBody:
-          '把 React islands 放进 VitePress Markdown，并按组件选择 SSR、client load、visible hydration 或 client-only。',
-        vitepressCommand: 'npm i @docs-islands/vitepress',
+          '把孤岛组件放进 VitePress Markdown，并按组件选择 SSR、client load、visible hydration 或 client-only。',
+        vitepressCommand: 'pnpm i @docs-islands/vitepress',
         vitepressMeta: '跨框架渲染 / SPA 切页稳定 / Site DevTools',
         vitepressOutcome: '静态文档体验',
         vitepressOutcomeDetail: '保留 VitePress 的生成模型',
@@ -38,13 +38,13 @@ const copy = computed(() =>
         loggerTitle: 'logaria',
         loggerBody:
           '用 scope、level、规则和 preset 管理日志可见性，生产构建可裁剪被关闭的调用。',
-        loggerCommand: 'npm i logaria',
+        loggerCommand: 'pnpm i logaria',
         loggerMeta: '日志可见性',
         loggerFit: '适合 runtime diagnostics',
         liminaTitle: 'limina',
         liminaBody:
           '在 CI 和发布前检查 TypeScript monorepo 的 project graph、source proof、paths 和产物边界。',
-        liminaCommand: 'npm i -D limina',
+        liminaCommand: 'pnpm i -D limina',
         liminaMeta: '架构边界',
         liminaFit: '适合 architecture governance',
         open: '打开文档',
@@ -66,8 +66,8 @@ const copy = computed(() =>
         controlsLabel: 'Control layer',
         vitepressTitle: '@docs-islands/vitepress',
         vitepressBody:
-          'Put React islands inside VitePress Markdown, then choose SSR, client load, visible hydration, or client-only per component.',
-        vitepressCommand: 'npm i @docs-islands/vitepress',
+          'Put island components inside VitePress Markdown, then choose SSR, client load, visible hydration, or client-only per component.',
+        vitepressCommand: 'pnpm i @docs-islands/vitepress',
         vitepressMeta:
           'cross-framework rendering / SPA route stability / Site DevTools',
         vitepressOutcome: 'Static docs feel',
@@ -78,13 +78,13 @@ const copy = computed(() =>
         loggerTitle: 'logaria',
         loggerBody:
           'Control log visibility with scopes, levels, rules, and presets, then prune silenced calls from production builds.',
-        loggerCommand: 'npm i logaria',
+        loggerCommand: 'pnpm i logaria',
         loggerMeta: 'Log visibility',
         loggerFit: 'Built for runtime diagnostics',
         liminaTitle: 'limina',
         liminaBody:
           'Check TypeScript monorepo project graphs, source proof, paths, and package output boundaries before CI or release.',
-        liminaCommand: 'npm i -D limina',
+        liminaCommand: 'pnpm i -D limina',
         liminaMeta: 'Architecture boundaries',
         liminaFit: 'Built for architecture governance',
         open: 'Open docs',
@@ -127,6 +127,8 @@ const links = computed(() =>
         <a
           class="product-card product-card-package"
           :href="withBase(links.vitepress)"
+          rel="noopener noreferrer"
+          target="_blank"
         >
           <div class="product-card-topline">
             <span class="product-badge">{{ copy.packageLabel }}</span>
@@ -192,6 +194,8 @@ const links = computed(() =>
         <a
           class="product-card product-card-control"
           :href="withBase(links.logger)"
+          rel="noopener noreferrer"
+          target="_blank"
         >
           <div class="product-card-topline">
             <span class="product-badge">{{ copy.controlsLabel }}</span>
@@ -222,6 +226,8 @@ const links = computed(() =>
         <a
           class="product-card product-card-control"
           :href="withBase(links.limina)"
+          rel="noopener noreferrer"
+          target="_blank"
         >
           <div class="product-card-topline">
             <span class="product-badge">{{ copy.controlsLabel }}</span>
@@ -309,42 +315,125 @@ const links = computed(() =>
 }
 
 .product-section-heading {
-  display: grid;
-  grid-template-columns: minmax(180px, 0.32fr) minmax(0, 1fr);
-  gap: 28px;
-  align-items: end;
-  margin-bottom: 18px;
-  padding-top: 24px;
-  border-top: 1px solid var(--docs-home-border);
+  position: relative;
+  display: flex;
+  max-width: 820px;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 0 auto 24px;
+  padding-top: 34px;
+  text-align: center;
+}
+
+.product-section-heading::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(100%, 760px);
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--docs-home-hero-title-accent) 34%, transparent),
+    color-mix(in srgb, var(--docs-home-accent) 46%, transparent),
+    transparent
+  );
+  content: '';
+  transform: translateX(-50%);
+}
+
+.product-section-heading::after {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  width: 96px;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--docs-home-hero-title-accent),
+    var(--docs-home-accent),
+    transparent
+  );
+  content: '';
+  transform: translateX(-50%);
 }
 
 .product-section-heading p {
-  margin: 0 0 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin: 0;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--docs-home-hero-title-accent) 28%,
+      var(--docs-home-border)
+    );
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--docs-home-surface) 72%,
+    var(--docs-home-accent-soft)
+  );
   color: var(--docs-home-accent-strong);
   font-family: var(--docs-home-font-mono);
   font-size: 12px;
   font-weight: 700;
+  line-height: 1;
   letter-spacing: 0;
+  padding: 0 12px;
   text-transform: uppercase;
+}
+
+.product-section-heading p::before {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--docs-home-hero-title-accent),
+    var(--docs-home-accent)
+  );
+  content: '';
+}
+
+.product-section-heading > div {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
 }
 
 .product-section-heading h3 {
   margin: 0;
+  background: linear-gradient(
+    105deg,
+    var(--vp-c-text-1) 12%,
+    var(--docs-home-hero-title-accent) 58%,
+    var(--docs-home-accent-strong) 100%
+  );
+  background-clip: text;
   color: var(--vp-c-text-1);
   font-family: var(--docs-home-font-serif);
-  font-size: 34px;
+  font-size: 40px;
   font-style: italic;
   font-weight: 400;
-  line-height: 1.14;
+  line-height: 1.08;
   letter-spacing: 0;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .product-section-heading span {
   display: block;
-  max-width: 660px;
-  margin-top: 8px;
+  max-width: 680px;
+  margin: 0;
   color: var(--vp-c-text-2);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.7;
 }
 
@@ -502,6 +591,23 @@ const links = computed(() =>
 }
 
 .product-command {
+  --product-command-bg: color-mix(
+    in srgb,
+    var(--docs-home-surface) 84%,
+    var(--docs-home-accent-soft)
+  );
+  --product-command-border: color-mix(
+    in srgb,
+    var(--docs-home-hero-title-accent) 18%,
+    var(--docs-home-border)
+  );
+  --product-command-text: var(--docs-home-hero-title);
+  --product-command-prompt: var(--docs-home-accent-strong);
+  --product-command-aura: color-mix(
+    in srgb,
+    var(--docs-home-accent) 14%,
+    transparent
+  );
   display: flex;
   align-items: center;
   min-width: 0;
@@ -509,16 +615,38 @@ const links = computed(() =>
   gap: 10px;
   width: fit-content;
   margin-top: 24px;
-  border: 1px solid color-mix(in srgb, var(--docs-home-border) 72%, #000);
+  border: 1px solid var(--product-command-border);
   border-radius: 8px;
-  background: var(--docs-home-code-bg);
-  color: #f5f5f4;
+  background:
+    linear-gradient(135deg, var(--product-command-aura), transparent 58%),
+    var(--product-command-bg);
+  color: var(--product-command-text);
   padding: 11px 14px;
   box-shadow: var(--docs-home-shadow-sm);
 }
 
+:global(.dark) .product-command {
+  --product-command-bg: color-mix(
+    in srgb,
+    var(--docs-home-code-bg) 88%,
+    var(--docs-home-hero-title-accent)
+  );
+  --product-command-border: color-mix(
+    in srgb,
+    var(--docs-home-hero-title-accent) 28%,
+    var(--docs-home-border)
+  );
+  --product-command-text: var(--vp-c-text-1);
+  --product-command-prompt: var(--docs-home-accent-strong);
+  --product-command-aura: color-mix(
+    in srgb,
+    var(--docs-home-hero-title-accent) 18%,
+    transparent
+  );
+}
+
 .product-command span {
-  color: #a8a29e;
+  color: var(--product-command-prompt);
   font-family: var(--docs-home-font-mono);
   font-size: 12px;
   font-weight: 700;
@@ -526,7 +654,7 @@ const links = computed(() =>
 
 .product-command code {
   overflow-wrap: anywhere;
-  color: #f5f5f4;
+  color: var(--product-command-text);
   font-family: var(--docs-home-font-mono);
   font-size: 13px;
   font-weight: 700;
@@ -667,7 +795,6 @@ const links = computed(() =>
     margin-top: 48px;
   }
 
-  .product-section-heading,
   .controls-grid,
   .package-showcase {
     grid-template-columns: 1fr;
@@ -693,6 +820,19 @@ const links = computed(() =>
 
   .matrix-heading span {
     font-size: 15px;
+  }
+
+  .product-section-heading {
+    margin-bottom: 20px;
+    padding-top: 28px;
+  }
+
+  .product-section-heading h3 {
+    font-size: 30px;
+  }
+
+  .product-section-heading span {
+    font-size: 14px;
   }
 
   .product-card-package,

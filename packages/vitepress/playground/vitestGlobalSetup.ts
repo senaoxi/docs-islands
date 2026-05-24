@@ -20,10 +20,31 @@ const generatedMarkdownFixturePaths = [
 
 const { ci, debug, runtime } = loadEnv();
 
+const isUsableChromiumExecutable = (executablePath: string): boolean => {
+  if (!fs.existsSync(executablePath)) {
+    return false;
+  }
+
+  if (process.platform !== 'darwin') {
+    return true;
+  }
+
+  const macAppRoot = executablePath.match(/^(.+\.app)\//)?.[1];
+
+  if (!macAppRoot) {
+    return true;
+  }
+
+  return fs.existsSync(path.join(macAppRoot, 'Contents/Frameworks'));
+};
+
 const resolveChromiumExecutablePath = () => {
   const bundledExecutablePath = chromium.executablePath();
 
-  if (bundledExecutablePath && fs.existsSync(bundledExecutablePath)) {
+  if (
+    bundledExecutablePath &&
+    isUsableChromiumExecutable(bundledExecutablePath)
+  ) {
     return bundledExecutablePath;
   }
 
@@ -49,7 +70,9 @@ const resolveChromiumExecutablePath = () => {
     ),
   ];
 
-  return candidatePaths.find((candidatePath) => fs.existsSync(candidatePath));
+  return candidatePaths.find((candidatePath) =>
+    isUsableChromiumExecutable(candidatePath),
+  );
 };
 
 function materializeMarkdownFixtures(): void {
