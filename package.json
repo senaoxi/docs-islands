@@ -72,7 +72,7 @@
     "@types/prompts": "catalog:dev",
     "eslint": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
-    "limina": "link:./packages/limina/dist",
+    "limina": "catalog:prod",
     "logaria": "workspace:*",
     "@docs-islands/utils": "workspace:*",
     "prettier": "catalog:format",

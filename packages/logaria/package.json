@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@docs-islands/eslint-config": "workspace:*",
-    "limina": "link:../limina/dist",
+    "limina": "catalog:prod",
     "@rollup/plugin-replace": "catalog:dev",
     "@types/babel__traverse": "catalog:dev",
     "@types/node": "catalog:dev",

@@ -54,7 +54,7 @@
   },
   "devDependencies": {
     "@docs-islands/eslint-config": "workspace:*",
-    "limina": "link:./dist",
+    "limina": "catalog:prod",
     "@types/node": "catalog:dev",
     "del-cli": "catalog:dev",
     "eslint": "catalog:lint",
