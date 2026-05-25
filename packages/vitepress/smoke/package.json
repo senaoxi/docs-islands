@@ -5,7 +5,7 @@
   "scripts": {
     "test": "pnpm smoke",
     "smoke": "playwright test",
-    "typecheck": "limina checker typecheck",
+    "typecheck": "limina checker build",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .tsbuild .eslintcache node_modules"
   },

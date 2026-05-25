@@ -53,7 +53,7 @@ Run the BUILT-IN default pipeline.
 limina check
 ```
 
-Order: `graph:check` → `source:check` → `proof:check` → `checker:typecheck`. Stops on the first failure; remaining steps are reported as skipped.
+Order: `graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck`. Stops on the first failure; remaining steps are reported as skipped.
 
 Exit code: 1 if any step fails, 0 otherwise.
 

@@ -790,7 +790,10 @@ function inferProjectReferences(options: {
         continue;
       }
 
-      for (const importRecord of collectImportsFromFile(fileName)) {
+      for (const importRecord of collectImportsFromFile(
+        fileName,
+        options.config.rootDir,
+      )) {
         const resolvedFilePath = resolveImportWithTypeScript({
           cache: resolutionCache,
           host,

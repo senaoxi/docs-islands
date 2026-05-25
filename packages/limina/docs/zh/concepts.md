@@ -60,11 +60,11 @@ tsconfig.tools.dts.json  <->    tsconfig.tools.json
 tsconfig.test.dts.json   <->    tsconfig.test.json
 ```
 
-Companion 负责严格 typecheck 语义，例如 `strict`、`lib`、`types`、`jsx` 和框架设置。`limina checker typecheck` 会用 `--noEmit` 运行这些 companion。
+Companion 负责严格 typecheck 语义，例如 `strict`、`lib`、`types`、`jsx` 和框架设置。Proof check 会验证 declaration leaf 与 companion 的文件集和类型检查相关 compilerOptions 保持一致；checker build 则通过 `tsc -b` 或 `vue-tsc -b` 运行一等公民 entry。
 
 这样可以把构建输出设置和普通类型检查设置分开。
 
-实践中可以让 declaration leaf 只负责可构建的声明输出，把日常开发需要的严格类型检查放在 local companion 里。比如 `tsconfig.lib.dts.json` 只关心 declaration emit，而 `tsconfig.lib.json` 可以包含 `strict`、DOM lib、测试 types 或 JSX 设置。`limina checker typecheck` 会用 companion 做 no-emit 检查，这样既能保持 `tsc -b` 图干净，又不会牺牲普通源码检查的严格程度。
+实践中可以让 declaration leaf 只负责可构建的声明输出，把日常开发需要的严格类型检查语义放在 local companion 里。比如 `tsconfig.lib.dts.json` 只关心 declaration emit，而 `tsconfig.lib.json` 可以包含 `strict`、DOM lib、测试 types 或 JSX 设置。Limina 会证明二者语义一致，而不是额外运行 companion no-emit pass，这样既能保持 `tsc -b` 图干净，又不会牺牲普通源码检查的严格程度。
 
 ## Aggregator config
 

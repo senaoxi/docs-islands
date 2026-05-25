@@ -15,7 +15,7 @@ import {
 } from '../graph-context';
 import { isNodeBuiltinSpecifier } from '../graph-rules';
 import { SourceLogger, clearCliScreen, formatErrorMessage } from '../logger';
-import { collectGraphProjectRoute } from '../tsconfig';
+import { collectSourceGraphProjectExtensions } from '../tsconfig';
 import { isPathInsideDirectory, toRelativePath } from '../utils/path';
 import {
   collectPackageOwners,
@@ -56,6 +56,10 @@ function isUrlOrDataOrFileSpecifier(specifier: string): boolean {
   );
 }
 
+function isVirtualModuleSpecifier(specifier: string): boolean {
+  return specifier.startsWith('virtual:');
+}
+
 function isPackageImportSpecifier(specifier: string): boolean {
   return specifier.startsWith('#');
 }
@@ -65,6 +69,7 @@ function isBarePackageSpecifier(specifier: string): boolean {
     !isRelativeSpecifier(specifier) &&
     !isPackageImportSpecifier(specifier) &&
     !isUrlOrDataOrFileSpecifier(specifier) &&
+    !isVirtualModuleSpecifier(specifier) &&
     !path.isAbsolute(specifier)
   );
 }
@@ -305,8 +310,11 @@ function createSourceProjectEntries(
       const fileNames = new Set(project.fileNames);
 
       if (existsSync(typecheckConfigPath)) {
-        for (const fileName of parseProject(config, typecheckConfigPath)
-          .fileNames) {
+        for (const fileName of parseProject(
+          config,
+          typecheckConfigPath,
+          project.extensions,
+        ).fileNames) {
           fileNames.add(fileName);
         }
       }
@@ -322,10 +330,14 @@ async function runSourceCheckInternal(
   config: ResolvedLiminaConfig,
   options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
-  const graphRoute = collectGraphProjectRoute(config);
-  const projectPaths = graphRoute.projectPaths;
+  const graphRoute = collectSourceGraphProjectExtensions(config);
+  const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
   const projects = projectPaths.map((projectPath) =>
-    parseProject(config, projectPath),
+    parseProject(
+      config,
+      projectPath,
+      graphRoute.projectExtensionsByPath.get(projectPath),
+    ),
   );
   const sourceProjectEntries = createSourceProjectEntries(config, projects);
   const packages = await collectWorkspacePackages(config);
@@ -356,7 +368,8 @@ async function runSourceCheckInternal(
       addProjectOwnerProblems({
         config,
         configPath: typecheckConfigPath,
-        fileNames: parseProject(config, typecheckConfigPath).fileNames,
+        fileNames: parseProject(config, typecheckConfigPath, project.extensions)
+          .fileNames,
         owners: packageOwners,
         problems,
         role: 'typecheck companion',
@@ -372,11 +385,15 @@ async function runSourceCheckInternal(
         continue;
       }
 
-      for (const importRecord of collectImportsFromFile(filePath)) {
+      for (const importRecord of collectImportsFromFile(
+        filePath,
+        config.rootDir,
+      )) {
         const resolvedFilePath = resolveInternalImport(
           importRecord.specifier,
           filePath,
           project.options,
+          project.extensions,
         );
 
         if (isRelativeSpecifier(importRecord.specifier)) {
@@ -411,7 +428,10 @@ async function runSourceCheckInternal(
           continue;
         }
 
-        if (isUrlOrDataOrFileSpecifier(importRecord.specifier)) {
+        if (
+          isUrlOrDataOrFileSpecifier(importRecord.specifier) ||
+          isVirtualModuleSpecifier(importRecord.specifier)
+        ) {
           continue;
         }
 

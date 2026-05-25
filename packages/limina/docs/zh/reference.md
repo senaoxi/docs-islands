@@ -7,7 +7,7 @@
 Limina 的配置入口是 workspace 内部的 `limina.config.mjs`。具体字段按主题拆开阅读：
 
 - [配置文件](./options/config.md)：`defineConfig`、函数配置、`mode` 和 `command`。
-- [Checker entries](./options/checkers.md)：`config.checkers.<name>`、`preset`、`entry` 和 `extensions`。
+- [Checker entries](./options/checkers.md)：`config.checkers.<name>`、内置 `preset`、固定 extensions 和 `entry`。
 - [Source coverage](./options/source.md)：`config.source.include` 和 `config.source.exclude`。
 - [Graph rules](./options/graph-rules.md)：`graph.rules.<label>`、`deny.refs` 和 `deny.deps`。
 - [Paths](./options/paths.md)：compatibility paths 的生成配置。
@@ -26,7 +26,7 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | Command                                         | 说明                                                                                                   |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `limina init [--yes]`                           | 为未初始化的 pnpm workspace 生成 declaration leaves、build aggregators、根配置和 `limina:check` 脚本。 |
-| `limina check`                                  | 运行默认 pipeline：graph、source、proof、checker typecheck。                                           |
+| `limina check`                                  | 运行默认 pipeline：graph、source、proof、checker build 和 checker typecheck。                          |
 | `limina check <pipeline>`                       | 运行 `pipelines` 中的用户命名 pipeline。                                                               |
 | `limina graph check`                            | 校验 project references、workspace imports、graph rules 和 source/artifact dependency 语义。           |
 | `limina source check`                           | 校验 package 归属、相对 import 边界、bare dependency 声明和 `#imports`。                               |
@@ -34,8 +34,8 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina paths generate`                         | 生成兼容 TypeScript `paths` config。                                                                   |
 | `limina paths apply`                            | `paths generate` 的兼容别名。                                                                          |
 | `limina paths check`                            | generated path configs 过期时失败。                                                                    |
-| `limina checker typecheck [--concurrency n]`    | 运行从 checker entries 推导出的 local companion typechecks。                                           |
 | `limina checker build`                          | 运行支持 build mode 的 checker entries。                                                               |
+| `limina checker typecheck`                      | 运行 `svelte-check` 这类 source-only checker entry。                                                   |
 | `limina package check`                          | 运行配置好的 package output checks。                                                                   |
 | `limina package check --package <name>`         | 按配置名运行单个 package target。                                                                      |
 | `limina package check --tool <tool>`            | 只运行 `publint`、`attw`、`boundary` 或 `all`。                                                        |
@@ -46,6 +46,7 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 ### 本地开发
 
 ```sh
+pnpm exec limina checker build
 pnpm exec limina checker typecheck
 pnpm exec limina graph check
 ```
@@ -58,7 +59,7 @@ pnpm exec limina graph check
 pnpm exec limina check
 ```
 
-它会一起证明 graph、source ownership、coverage 和本地 typechecks。
+它会一起证明 graph、source ownership、coverage、一等公民 checker build 和 source-only checker execution。
 
 ### 发布前
 
@@ -104,9 +105,9 @@ jobs:
 
 ## 常见问题
 
-### `limina checker typecheck` 如何选择目标？
+### `limina checker build` 和 `checker typecheck` 如何选择目标？
 
-它会加载 `limina.config.mjs`，遍历每个 checker entry，找到可达的 `tsconfig*.dts.json` leaves，把每个 leaf 映射到 local companion，然后用 no-emit 模式运行 checker。
+`checker build` 会从已配置 entry 运行一等公民 build preset（`tsc -b` 和 `vue-tsc -b`）。`checker typecheck` 会直接运行 source-only preset，目前是 `svelte-check --tsconfig <entry>`。
 
 ### 为什么 package checks 需要先 build？
 

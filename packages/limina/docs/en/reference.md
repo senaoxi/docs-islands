@@ -7,7 +7,7 @@ This page collects CLI commands, common workflows, and FAQ details. Configuratio
 Limina configuration starts from `limina.config.mjs` inside the workspace. Read the option pages by topic:
 
 - [Config File](./options/config.md): `defineConfig`, function config, `mode`, and `command`.
-- [Checker Entries](./options/checkers.md): `config.checkers.<name>`, `preset`, `entry`, and `extensions`.
+- [Checker Entries](./options/checkers.md): `config.checkers.<name>`, built-in `preset`, fixed extensions, and `entry`.
 - [Source Coverage](./options/source.md): `config.source.include` and `config.source.exclude`.
 - [Graph Rules](./options/graph-rules.md): `graph.rules.<label>`, `deny.refs`, and `deny.deps`.
 - [Paths](./options/paths.md): generated compatibility path settings.
@@ -26,7 +26,7 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | Command                                         | Description                                                                                                                   |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `limina init [--yes]`                           | Generate declaration leaves, build aggregators, root config, and a `limina:check` script for an uninitialized pnpm workspace. |
-| `limina check`                                  | Run the default pipeline: graph, source, proof, and checker typecheck.                                                        |
+| `limina check`                                  | Run the default pipeline: graph, source, proof, checker build, and checker typecheck.                                         |
 | `limina check <pipeline>`                       | Run a named user pipeline from `pipelines`.                                                                                   |
 | `limina graph check`                            | Validate project references, workspace imports, graph rules, and source/artifact dependency semantics.                        |
 | `limina source check`                           | Validate package ownership, relative import boundaries, bare dependency declarations, and `#imports`.                         |
@@ -34,8 +34,8 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina paths generate`                         | Generate compatibility TypeScript `paths` configs.                                                                            |
 | `limina paths apply`                            | Compatibility alias for `paths generate`.                                                                                     |
 | `limina paths check`                            | Fail when generated path configs are stale.                                                                                   |
-| `limina checker typecheck [--concurrency n]`    | Run local companion typechecks derived from checker entries.                                                                  |
 | `limina checker build`                          | Run build execution for checker entries that support it.                                                                      |
+| `limina checker typecheck`                      | Run source-only checker entries such as `svelte-check`.                                                                       |
 | `limina package check`                          | Run configured package output checks.                                                                                         |
 | `limina package check --package <name>`         | Run one package target by configured name.                                                                                    |
 | `limina package check --tool <tool>`            | Run only `publint`, `attw`, `boundary`, or `all`.                                                                             |
@@ -46,6 +46,7 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 ### Local Development
 
 ```sh
+pnpm exec limina checker build
 pnpm exec limina checker typecheck
 pnpm exec limina graph check
 ```
@@ -58,7 +59,7 @@ Use these while changing TypeScript configs or package boundaries.
 pnpm exec limina check
 ```
 
-This proves graph, source ownership, coverage, and local typechecks together.
+This proves graph, source ownership, coverage, first-class checker builds, and source-only checker execution together.
 
 ### Pre-publish
 
@@ -104,9 +105,9 @@ jobs:
 
 ## FAQ
 
-### How does `limina checker typecheck` choose targets?
+### How do `limina checker build` and `checker typecheck` choose targets?
 
-It loads `limina.config.mjs`, walks each configured checker entry, finds reachable `tsconfig*.dts.json` leaves, maps every leaf to its local companion, and runs the checker in no-emit mode.
+`checker build` runs first-class build presets from their configured entries (`tsc -b` and `vue-tsc -b`). `checker typecheck` runs source-only presets directly, currently `svelte-check --tsconfig <entry>`.
 
 ### Why do package checks require a build first?
 

@@ -68,9 +68,4 @@ export {
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from './commands/typecheck';
-export {
-  collectTypecheckTargetProjectPaths,
-  isOrdinaryTypecheckConfigPath,
-  type CollectTypecheckTargetProjectPathsOptions,
-  type CollectTypecheckTargetProjectPathsResult,
-} from './tsconfig';
+export { isOrdinaryTypecheckConfigPath } from './tsconfig';

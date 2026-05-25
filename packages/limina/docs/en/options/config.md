@@ -93,6 +93,6 @@ export default defineConfig(({ mode }) => ({
 }));
 ```
 
-When `pnpm exec limina check` runs, Limina loads the default mode and analyzes the pieces needed for graph, source, proof, and checker typecheck. When `pnpm exec limina --mode release package check` runs, Limina loads the config again in release mode and reads `packageChecks.targets`.
+When `pnpm exec limina check` runs, Limina loads the default mode and analyzes the pieces needed for graph, source, proof, checker build, and checker typecheck. When `pnpm exec limina --mode release package check` runs, Limina loads the config again in release mode and reads `packageChecks.targets`.
 
 The result is that everyday local checks do not care whether `dist` exists, while release checks explicitly require `packages/core/dist` to be built and valid as package output.

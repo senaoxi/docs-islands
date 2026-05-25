@@ -29,7 +29,7 @@
     "lint:package:publint": "limina package check --tool publint",
     "lint:package:attw": "limina package check --tool attw",
     "lint:package:boundary": "limina package check --tool boundary",
-    "typecheck": "limina checker typecheck",
+    "typecheck": "limina checker build",
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "test": "vitest run",

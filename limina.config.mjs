@@ -126,8 +126,8 @@ export default defineConfig({
       'graph:check',
       'source:check',
       'proof:check',
-      'checker:typecheck',
       'checker:build',
+      'checker:typecheck',
     ],
     // Default TypeScript project-reference graph check.
     graph: [

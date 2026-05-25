@@ -96,6 +96,13 @@ describe('runPipeline', () => {
     });
   });
 
+  it('recognizes checker:typecheck as a built-in task', () => {
+    expect(normalizePipelineStep('checker:typecheck')).toEqual({
+      name: 'checker:typecheck',
+      type: 'task',
+    });
+  });
+
   it('reports missing user pipeline config with a config hint', async () => {
     const fixture = await createConfig();
 

@@ -60,11 +60,11 @@ tsconfig.tools.dts.json  <->    tsconfig.tools.json
 tsconfig.test.dts.json   <->    tsconfig.test.json
 ```
 
-The companion owns strict typecheck semantics such as `strict`, `lib`, `types`, `jsx`, and framework settings. `limina checker typecheck` runs these companions with `--noEmit`.
+The companion owns strict typecheck semantics such as `strict`, `lib`, `types`, `jsx`, and framework settings. Proof check verifies that declaration leaves and companions keep the same file set and typecheck-relevant compiler options, while checker build runs first-class entries through `tsc -b` or `vue-tsc -b`.
 
 This split keeps build output settings out of the ordinary typecheck config.
 
-In practice, let the declaration leaf handle buildable declaration output and let the local companion handle normal strict typechecking. For example, `tsconfig.lib.dts.json` can focus on declaration emit, while `tsconfig.lib.json` carries `strict`, DOM libs, test types, or JSX settings. `limina checker typecheck` runs the companion in no-emit mode, so the `tsc -b` graph stays clean without weakening everyday source checks.
+In practice, let the declaration leaf handle buildable declaration output and let the local companion describe normal strict typechecking. For example, `tsconfig.lib.dts.json` can focus on declaration emit, while `tsconfig.lib.json` carries `strict`, DOM libs, test types, or JSX settings. Limina proves their semantic parity instead of running a separate companion no-emit pass, so the `tsc -b` graph stays clean without weakening everyday source checks.
 
 ## Aggregator Config
 

@@ -63,6 +63,9 @@ catalogs:
     '@vitejs/plugin-vue':
       specifier: ^6.0.5
       version: 6.0.5
+    '@vue/compiler-sfc':
+      specifier: ^3.5.28
+      version: 3.5.28
     cac:
       specifier: ^6.7.14
       version: 6.7.14
@@ -364,6 +367,9 @@ importers:
       '@types/prompts':
         specifier: catalog:dev
         version: 2.4.9
+      '@vue/compiler-sfc':
+        specifier: catalog:dev
+        version: 3.5.28
       cac:
         specifier: catalog:dev
         version: 6.7.14
@@ -380,8 +386,8 @@ importers:
         specifier: catalog:dev
         version: 9.1.7
       limina:
-        specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+        specifier: workspace:*
+        version: link:packages/limina
       lint-staged:
         specifier: catalog:dev
         version: 16.2.6
@@ -723,6 +729,9 @@ importers:
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
+      '@vue/compiler-sfc':
+        specifier: catalog:dev
+        version: 3.5.28
       del-cli:
         specifier: catalog:dev
         version: 7.0.0

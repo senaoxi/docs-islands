@@ -6,11 +6,14 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runGraphCheck } from '../commands/graph';
 import type { GraphConfig, ResolvedLiminaConfig } from '../config';
+
+const requireFromTest = createRequire(import.meta.url);
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -20,6 +23,12 @@ async function writeText(filePath: string, text: string): Promise<void> {
 async function createFixture(
   files: Record<string, string>,
   graph?: GraphConfig,
+  checkers: NonNullable<ResolvedLiminaConfig['config']>['checkers'] = {
+    typescript: {
+      preset: 'tsc',
+      entry: 'tsconfig.build.json',
+    },
+  },
 ): Promise<{
   cleanup: () => Promise<void>;
   config: ResolvedLiminaConfig;
@@ -42,12 +51,7 @@ async function createFixture(
     },
     config: {
       config: {
-        checkers: {
-          typescript: {
-            preset: 'tsc',
-            entry: 'tsconfig.build.json',
-          },
-        },
+        checkers,
       },
       configPath: path.join(rootDir, 'limina.config.mjs'),
       graph,
@@ -75,6 +79,21 @@ async function linkWorkspacePackage(
   await symlink(
     path.relative(nodeModulesDir, path.join(rootDir, target)),
     path.join(nodeModulesDir, name ?? packageName),
+  );
+}
+
+async function linkCompilerSfc(rootDir: string): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    '@vue/compiler-sfc/package.json',
+  );
+  const nodeModulesDir = path.join(rootDir, 'node_modules', '@vue');
+
+  await mkdir(nodeModulesDir, {
+    recursive: true,
+  });
+  await symlink(
+    path.relative(nodeModulesDir, path.dirname(compilerPackagePath)),
+    path.join(nodeModulesDir, 'compiler-sfc'),
   );
 }
 
@@ -246,6 +265,38 @@ const denyInternalDep: GraphConfig = {
     },
   },
 };
+
+function createVueWorkspacePackageFiles(options: {
+  appReferences?: string[];
+  appSource: string;
+  limina?: unknown;
+}): Record<string, string> {
+  return {
+    ...createWorkspacePackageFiles({
+      appReferences: options.appReferences,
+      appSource: 'export const fallback = 1;\n',
+    }),
+    'packages/app/src/App.vue': options.appSource,
+    'packages/app/tsconfig.vue.dts.json': buildConfig({
+      include: ['src/**/*.vue'],
+      limina: options.limina,
+      references: options.appReferences,
+      tsBuildInfoFile: './.tsbuild/vue.tsbuildinfo',
+    }),
+    'packages/app/tsconfig.vue.json': typecheckConfig(['src/**/*.vue']),
+    'tsconfig.vue.build.json': stringifyConfig({
+      files: [],
+      references: [
+        {
+          path: './packages/internal/tsconfig.lib.dts.json',
+        },
+        {
+          path: './packages/app/tsconfig.vue.dts.json',
+        },
+      ],
+    }),
+  };
+}
 
 describe('runGraphCheck checker entry', () => {
   it('reports missing graph references from nested aggregators', async () => {
@@ -682,6 +733,166 @@ describe('runGraphCheck graph rules', () => {
     );
 
     try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('requires project references for workspace imports from Vue scripts', async () => {
+    const fixture = await createFixture(
+      createVueWorkspacePackageFiles({
+        appSource:
+          '<script setup lang="ts">\nimport { internalValue } from \'@example/internal\';\nconst value = internalValue;\n</script>\n',
+      }),
+      undefined,
+      {
+        vue: {
+          preset: 'vue-tsc',
+          entry: 'tsconfig.vue.build.json',
+        },
+      },
+    );
+
+    try {
+      await linkCompilerSfc(fixture.rootDir);
+      await linkWorkspacePackage(
+        fixture.rootDir,
+        'packages/app',
+        'packages/internal',
+        '@example/internal',
+      );
+
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('accepts referenced workspace imports from Vue scripts', async () => {
+    const fixture = await createFixture(
+      createVueWorkspacePackageFiles({
+        appReferences: ['../internal/tsconfig.lib.dts.json'],
+        appSource:
+          '<script setup lang="ts">\nimport { internalValue } from \'@example/internal\';\nconst value = internalValue;\n</script>\n',
+      }),
+      undefined,
+      {
+        vue: {
+          preset: 'vue-tsc',
+          entry: 'tsconfig.vue.build.json',
+        },
+      },
+    );
+
+    try {
+      await linkCompilerSfc(fixture.rootDir);
+      await linkWorkspacePackage(
+        fixture.rootDir,
+        'packages/app',
+        'packages/internal',
+        '@example/internal',
+      );
+
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('denies graph refs imported from Vue scripts', async () => {
+    const fixture = await createFixture(
+      createVueWorkspacePackageFiles({
+        appReferences: ['../internal/tsconfig.lib.dts.json'],
+        appSource:
+          '<script setup lang="ts">\nimport { internalValue } from \'@example/internal\';\nconst value = internalValue;\n</script>\n',
+        limina: 'runtime',
+      }),
+      {
+        rules: {
+          runtime: {
+            deny: {
+              refs: [
+                {
+                  path: 'packages/internal/tsconfig.lib.dts.json',
+                  reason: 'runtime Vue code must not depend on internal',
+                },
+              ],
+            },
+          },
+        },
+      },
+      {
+        vue: {
+          preset: 'vue-tsc',
+          entry: 'tsconfig.vue.build.json',
+        },
+      },
+    );
+
+    try {
+      await linkCompilerSfc(fixture.rootDir);
+      await linkWorkspacePackage(
+        fixture.rootDir,
+        'packages/app',
+        'packages/internal',
+        '@example/internal',
+      );
+
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps cross-package relative import checks active for Vue scripts', async () => {
+    const fixture = await createFixture(
+      createVueWorkspacePackageFiles({
+        appSource:
+          '<script setup lang="ts">\nimport { internalValue } from \'../../internal/src/index\';\nconst value = internalValue;\n</script>\n',
+      }),
+      undefined,
+      {
+        vue: {
+          preset: 'vue-tsc',
+          entry: 'tsconfig.vue.build.json',
+        },
+      },
+    );
+
+    try {
+      await linkCompilerSfc(fixture.rootDir);
+
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('collects export-from and dynamic imports from Vue scripts', async () => {
+    const fixture = await createFixture(
+      createVueWorkspacePackageFiles({
+        appSource:
+          "<script lang=\"ts\">\nexport { internalValue } from '@example/internal';\nvoid import('@example/internal');\n</script>\n",
+      }),
+      undefined,
+      {
+        vue: {
+          preset: 'vue-tsc',
+          entry: 'tsconfig.vue.build.json',
+        },
+      },
+    );
+
+    try {
+      await linkCompilerSfc(fixture.rootDir);
+      await linkWorkspacePackage(
+        fixture.rootDir,
+        'packages/app',
+        'packages/internal',
+        '@example/internal',
+      );
+
       await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
     } finally {
       await fixture.cleanup();

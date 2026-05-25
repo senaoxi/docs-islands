@@ -255,7 +255,7 @@ Rules:
 - `env` (command steps) is merged over `process.env`.
 - On the first failing step, remaining steps are skipped (not run).
 
-`limina check` (no arg) runs the BUILT-IN default pipeline (NOT defined in `pipelines`): `graph:check` → `source:check` → `proof:check` → `checker:typecheck`. To override the default, define your own and invoke it by name.
+`limina check` (no arg) runs the BUILT-IN default pipeline (NOT defined in `pipelines`): `graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck`. To override the default, define your own and invoke it by name.
 
 `limina check <name>` ONLY runs `pipelines[<name>]`. Missing name is an error — Limina does not fall back to the default.
 

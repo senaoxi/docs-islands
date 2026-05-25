@@ -31,7 +31,10 @@ import {
   type NormalizedGraphRules,
 } from '../graph-rules';
 import { GraphLogger, clearCliScreen, formatErrorMessage } from '../logger';
-import { collectGraphProjectRoute, formatReferences } from '../tsconfig';
+import {
+  collectSourceGraphProjectExtensions,
+  formatReferences,
+} from '../tsconfig';
 import { toRelativePath } from '../utils/path';
 import {
   collectImporters,
@@ -179,7 +182,11 @@ function addTypecheckParityProblems(
     return;
   }
 
-  const typecheckProject = parseProject(config, typecheckConfigPath);
+  const typecheckProject = parseProject(
+    config,
+    typecheckConfigPath,
+    dtsProject.extensions,
+  );
 
   for (const optionName of comparableTypecheckOptions) {
     const buildValue = dtsProject.options[optionName];
@@ -428,10 +435,14 @@ async function runGraphCheckInternal(
   config: ResolvedLiminaConfig,
   options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
-  const graphRoute = collectGraphProjectRoute(config);
-  const projectPaths = graphRoute.projectPaths;
+  const graphRoute = collectSourceGraphProjectExtensions(config);
+  const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
   const projects = projectPaths.map((projectPath) =>
-    parseProject(config, projectPath),
+    parseProject(
+      config,
+      projectPath,
+      graphRoute.projectExtensionsByPath.get(projectPath),
+    ),
   );
   const projectsByPath = new Map(
     projects.map((project) => [project.configPath, project]),
@@ -476,7 +487,10 @@ async function runGraphCheckInternal(
     );
 
     for (const filePath of project.fileNames) {
-      for (const importRecord of collectImportsFromFile(filePath)) {
+      for (const importRecord of collectImportsFromFile(
+        filePath,
+        config.rootDir,
+      )) {
         const rawDeniedDepRule = getDeniedDepRuleForSpecifier(
           graphRules,
           project.label,
@@ -498,6 +512,7 @@ async function runGraphCheckInternal(
           importRecord.specifier,
           filePath,
           project.options,
+          project.extensions,
         );
         const targetPackage = findPackageForSpecifier(
           importRecord.specifier,

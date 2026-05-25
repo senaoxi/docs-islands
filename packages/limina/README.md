@@ -135,7 +135,7 @@ pnpm exec limina package check --package @acme/core
 
 ### Checker entry
 
-Each checker has one required `config.checkers.<name>.entry`, usually a `tsconfig*.build.json` graph aggregator. `limina checker build` runs the checker's build execution from that entry when the preset supports it. `limina checker typecheck` walks the same entry, finds reachable `tsconfig*.dts.json` declaration leaves, and checks their paired local companions.
+Each checker has one required `config.checkers.<name>.entry`, usually a `tsconfig*.build.json` graph aggregator. Built-in first-class presets (`tsc` and `vue-tsc`) participate in graph, source, proof, and build checks. Source-only presets such as `svelte-check` prove source coverage and run direct checker execution through `limina checker typecheck`.
 
 ### Declaration leaf and local companion
 
@@ -168,9 +168,8 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina paths generate`                         | Generate compatibility source `paths` configs for artifact-facing workspace exports.  |
 | `limina paths apply`                            | Compatibility alias for `paths generate`.                                             |
 | `limina paths check`                            | Fail when generated path files are stale.                                             |
-| `limina checker typecheck`                      | Run typecheck targets derived from checker entries.                                   |
 | `limina checker build`                          | Run build execution for checker entries that support it.                              |
-| `limina checker typecheck --concurrency <n>`    | Limit concurrent checker processes.                                                   |
+| `limina checker typecheck`                      | Run source-only checker entries such as `svelte-check`.                               |
 | `limina package check`                          | Run configured package output checks.                                                 |
 | `limina package check --package <name>`         | Check one configured package target.                                                  |
 | `limina package check --tool <tool>`            | Run only `publint`, `attw`, or `boundary`.                                            |
@@ -198,7 +197,7 @@ config: {
 }
 ```
 
-`config.checkers` defines checker entries. Every configured checker must declare a non-empty `entry`. Built-in presets can omit `extensions`; if `source.include` is omitted, Limina derives the source boundary from configured checker extensions, then applies `source.exclude`.
+`config.checkers` defines checker entries. Every configured checker must declare a non-empty `entry` and use a built-in preset. Checker `extensions` are fixed by Limina and cannot be configured; if `source.include` is omitted, Limina derives the source boundary from configured checker extensions, then applies `source.exclude`.
 
 ### `graph`
 
@@ -303,7 +302,7 @@ pipelines: {
 }
 ```
 
-`limina check` runs the built-in default pipeline: `graph:check`, `source:check`, `proof:check`, and `checker:typecheck`. `limina check <pipeline>` only runs user pipelines from `limina.config.mjs#pipelines`; if the name is missing, Limina reports the missing pipeline and asks you to define it there.
+`limina check` runs the built-in default pipeline: `graph:check`, `source:check`, `proof:check`, `checker:build`, and `checker:typecheck`. `limina check <pipeline>` only runs user pipelines from `limina.config.mjs#pipelines`; if the name is missing, Limina reports the missing pipeline and asks you to define it there.
 
 String steps can be built-in task names or simple commands. Use object command steps when arguments, `cwd`, or `env` need to be explicit.
 

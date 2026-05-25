@@ -8,7 +8,7 @@ Limina separates two independent surfaces:
 
 | Surface            | Validated by                                                                       | Purpose                                                                                     |
 | ------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Source graph       | `graph:check`, `proof:check`, `source:check`, `checker:typecheck`, `checker:build` | The repository as the author sees it: source files, project references, imports.            |
+| Source graph       | `graph:check`, `proof:check`, `source:check`, `checker:build`, `checker:typecheck` | The repository as the author sees it: source files, project references, imports.            |
 | Published artifact | `package:check`                                                                    | The package as the consumer installs it: tarball contents, exports, types, runtime imports. |
 
 A green source graph does NOT imply a publishable package. A green package check does NOT imply consistent source.
@@ -102,7 +102,7 @@ Pairing rule (derived from the filename):
 | `tsconfig.<scope>.dts.json` | `tsconfig.<scope>.json` |
 | `tsconfig.dts.json`         | `tsconfig.json`         |
 
-The companion is what `checker:typecheck` runs against in no-emit mode.
+The companion defines strict local typecheck semantics. Proof check compares it with the declaration leaf, while first-class checker build runs the build graph.
 
 ### Default / IDE entry — `tsconfig.json`
 
@@ -205,6 +205,6 @@ Each label can have a single rule. `deny.refs[].path` MUST resolve to a `tsconfi
 - Cross-package relative imports (`../../other-pkg/src/x`) are rejected.
 - Label-based deny rules are applied to both references and imported specifiers.
 
-## Single graph-capable checker
+## Checker tiers
 
-Currently only `tsc` is graph-capable. `vue-tsc` and `svelte-check` integrate as checker entries (for `checker:typecheck` and proof coverage), but they do not own the declaration graph. Their entries still need `tsconfig*.build.json` aggregators and `tsconfig*.dts.json` leaves so `proof:check` can prove coverage; those leaves do not have to be publishable.
+`tsc` and `vue-tsc` are first-class checkers: graph/source/proof collect their entries, and `checker:build` runs `tsc -b` / `vue-tsc -b`. `svelte-check` is source-only: Limina proves `.svelte` coverage and `checker:typecheck` runs `svelte-check --tsconfig <entry>`, but Limina does not parse `.svelte` import graphs yet.

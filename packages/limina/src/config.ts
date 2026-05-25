@@ -5,7 +5,6 @@ import { z } from 'zod';
 import {
   getCheckerAdapter,
   getResolvedCheckers,
-  isBuiltinCheckerPreset,
   normalizeExtensions,
 } from './checkers';
 import { isPathInsideDirectory } from './utils/path';
@@ -81,7 +80,7 @@ export type BuiltinTaskName =
 
 export type BuiltinCheckerPreset = 'svelte-check' | 'tsc' | 'vue-tsc';
 
-export type CheckerPreset = BuiltinCheckerPreset | (string & {});
+export type CheckerPreset = BuiltinCheckerPreset;
 
 export type CheckerExecutionKind = 'build' | 'typecheck';
 
@@ -97,12 +96,6 @@ export interface CheckerConfig {
    * Checker entry project used by both build and typecheck execution modes.
    */
   entry: string;
-  /**
-   * Source file suffixes covered by this checker.
-   *
-   * Built-in presets may omit this and use their default suffixes.
-   */
-  extensions?: string[];
 }
 
 export interface ResolvedCheckerConfig {
@@ -499,15 +492,10 @@ const nonEmptyStringSchema = z
   .string()
   .refine((value) => value.trim().length > 0);
 
-const dotPrefixedStringSchema = nonEmptyStringSchema.refine((value) =>
-  value.startsWith('.'),
-);
-
 const checkerObjectSchema = z.looseObject({});
 
 const checkerConfigShapeSchema = z.looseObject({
   entry: nonEmptyStringSchema,
-  extensions: z.array(dotPrefixedStringSchema).nonempty().optional(),
   preset: nonEmptyStringSchema,
 });
 
@@ -612,17 +600,6 @@ function formatLiminaConfigShapeIssue(
         '  reason: checker entry must be a non-empty string path.',
       ].join('\n');
     }
-
-    if (pathSegments[3] === 'extensions') {
-      const extensionsPath = pathSegments.slice(0, 4);
-
-      return [
-        'Invalid Limina checker config:',
-        `  field: ${checkerField}.extensions`,
-        `  value: ${formatUnknownValue(getValueAtPath(value, extensionsPath))}`,
-        '  reason: checker extensions must be a non-empty array of dot-prefixed strings.',
-      ].join('\n');
-    }
   }
 
   return [
@@ -673,19 +650,14 @@ function collectCheckerConfigProblems(config: LiminaConfig): string[] {
 
     const checkerRecord = checkerObjectResult.data;
     const preset = checkerRecord.preset;
-    const extensions = checkerRecord.extensions;
 
-    if (
-      extensions === undefined &&
-      typeof preset === 'string' &&
-      !isBuiltinCheckerPreset(preset)
-    ) {
+    if (Object.hasOwn(checkerRecord, 'extensions')) {
       problems.push(
         [
           'Invalid Limina checker config:',
           `  field: ${field}.extensions`,
-          '  value: undefined',
-          '  reason: extensions may only be omitted for built-in presets.',
+          `  value: ${formatUnknownValue(checkerRecord.extensions)}`,
+          '  reason: checker extensions are fixed by built-in presets and cannot be configured.',
         ].join('\n'),
       );
     }

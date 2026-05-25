@@ -70,9 +70,10 @@
   "devDependencies": {
     "@types/node": "catalog:dev",
     "@types/prompts": "catalog:dev",
+    "@vue/compiler-sfc": "catalog:dev",
     "eslint": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
-    "limina": "catalog:prod",
+    "limina": "workspace:*",
     "logaria": "workspace:*",
     "@docs-islands/utils": "workspace:*",
     "prettier": "catalog:format",

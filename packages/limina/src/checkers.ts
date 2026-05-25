@@ -4,7 +4,6 @@ import type {
   BuiltinCheckerPreset,
   CheckerConfig,
   CheckerExecutionKind,
-  CheckerPreset,
   ResolvedCheckerConfig,
 } from './config';
 import { toRelativePath } from './utils/path';
@@ -27,11 +26,12 @@ export interface CheckerAdapter {
   createCommandTarget: (
     options: CheckerCommandTargetOptions,
   ) => CheckerCommandTarget;
-  defaultExtensions?: string[];
-  graph: boolean;
-  packageName: string;
+  defaultExtensions: string[];
+  execution: CheckerExecutionKind;
+  packageNames: string[];
   preset: BuiltinCheckerPreset;
-  supportedExecutions: CheckerExecutionKind[];
+  sourceGraph: boolean;
+  tier: 'first-class' | 'source-only';
 }
 
 export interface MissingCheckerPeerDependency {
@@ -53,15 +53,9 @@ function createTscCommandTarget(
   );
 
   return {
-    args:
-      options.executionKind === 'build'
-        ? ['-b', relativeConfigPath, '--pretty', 'false']
-        : ['-p', relativeConfigPath, '--noEmit'],
+    args: ['-b', relativeConfigPath, '--pretty', 'false'],
     command: options.commandOverride ?? 'tsc',
-    label:
-      options.executionKind === 'build'
-        ? `tsc -b ${relativeConfigPath}`
-        : `tsc: ${relativeConfigPath}`,
+    label: `tsc -b ${relativeConfigPath}`,
   };
 }
 
@@ -74,27 +68,15 @@ function createVueTscCommandTarget(
   );
 
   return {
-    args:
-      options.executionKind === 'build'
-        ? ['-b', relativeConfigPath, '--pretty', 'false']
-        : ['-p', relativeConfigPath, '--noEmit'],
+    args: ['-b', relativeConfigPath, '--pretty', 'false'],
     command: 'vue-tsc',
-    label:
-      options.executionKind === 'build'
-        ? `${options.checker.name}: vue-tsc -b ${relativeConfigPath}`
-        : `${options.checker.name}: vue-tsc -p ${relativeConfigPath}`,
+    label: `${options.checker.name}: vue-tsc -b ${relativeConfigPath}`,
   };
 }
 
 function createSvelteCheckCommandTarget(
   options: CheckerCommandTargetOptions,
 ): CheckerCommandTarget {
-  if (options.executionKind === 'build') {
-    throw new Error(
-      `Checker "${options.checker.name}" uses svelte-check, which does not support checker:build.`,
-    );
-  }
-
   const relativeConfigPath = toRelativePath(
     options.projectRootDir,
     options.configPath,
@@ -111,10 +93,11 @@ const builtinCheckerAdapters = {
   'svelte-check': {
     createCommandTarget: createSvelteCheckCommandTarget,
     defaultExtensions: ['.svelte'],
-    graph: false,
-    packageName: 'svelte-check',
+    execution: 'typecheck',
+    packageNames: ['svelte-check'],
     preset: 'svelte-check',
-    supportedExecutions: ['typecheck'],
+    sourceGraph: false,
+    tier: 'source-only',
   },
   tsc: {
     createCommandTarget: createTscCommandTarget,
@@ -128,18 +111,20 @@ const builtinCheckerAdapters = {
       '.d.mts',
       '.json',
     ],
-    graph: true,
-    packageName: 'typescript',
+    execution: 'build',
+    packageNames: ['typescript'],
     preset: 'tsc',
-    supportedExecutions: ['typecheck', 'build'],
+    sourceGraph: true,
+    tier: 'first-class',
   },
   'vue-tsc': {
     createCommandTarget: createVueTscCommandTarget,
     defaultExtensions: ['.vue'],
-    graph: false,
-    packageName: 'vue-tsc',
+    execution: 'build',
+    packageNames: ['vue-tsc', '@vue/compiler-sfc'],
     preset: 'vue-tsc',
-    supportedExecutions: ['typecheck', 'build'],
+    sourceGraph: true,
+    tier: 'first-class',
   },
 } satisfies Record<BuiltinCheckerPreset, CheckerAdapter>;
 
@@ -149,9 +134,7 @@ export function isBuiltinCheckerPreset(
   return Object.hasOwn(builtinCheckerAdapters, value);
 }
 
-export function getCheckerAdapter(
-  preset: CheckerPreset,
-): CheckerAdapter | null {
+export function getCheckerAdapter(preset: string): CheckerAdapter | null {
   return isBuiltinCheckerPreset(preset) ? builtinCheckerAdapters[preset] : null;
 }
 
@@ -198,26 +181,24 @@ export function collectMissingCheckerPeerDependencies(options: {
   const missingCheckersByPackage = new Map<string, Set<string>>();
 
   for (const checker of options.checkers) {
-    const packageName = getCheckerAdapter(checker.preset)?.packageName;
+    const packageNames = getCheckerAdapter(checker.preset)?.packageNames ?? [];
 
-    if (!packageName) {
-      continue;
+    for (const packageName of packageNames) {
+      if (
+        resolvePackage({
+          packageName,
+          projectRootDir: options.projectRootDir,
+        })
+      ) {
+        continue;
+      }
+
+      const checkerNames =
+        missingCheckersByPackage.get(packageName) ?? new Set<string>();
+
+      checkerNames.add(checker.name);
+      missingCheckersByPackage.set(packageName, checkerNames);
     }
-
-    if (
-      resolvePackage({
-        packageName,
-        projectRootDir: options.projectRootDir,
-      })
-    ) {
-      continue;
-    }
-
-    const checkerNames =
-      missingCheckersByPackage.get(packageName) ?? new Set<string>();
-
-    checkerNames.add(checker.name);
-    missingCheckersByPackage.set(packageName, checkerNames);
   }
 
   return [...missingCheckersByPackage.entries()]
@@ -251,19 +232,13 @@ export function formatMissingCheckerPeerDependencies(
 }
 
 export function getCheckerExtensions(checker: CheckerConfig): string[] {
-  if (checker.extensions) {
-    return normalizeExtensions(checker.extensions);
-  }
-
   const adapter = getCheckerAdapter(checker.preset);
 
-  if (adapter?.defaultExtensions) {
+  if (adapter) {
     return normalizeExtensions(adapter.defaultExtensions);
   }
 
-  throw new Error(
-    `Checker preset "${checker.preset}" must declare non-empty extensions because it is not a built-in preset.`,
-  );
+  throw new Error(`Checker preset "${checker.preset}" is not supported.`);
 }
 
 export function getResolvedCheckers(config: {

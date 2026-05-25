@@ -36,7 +36,7 @@
   "scripts": {
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
-    "typecheck": "limina checker typecheck",
+    "typecheck": "limina checker build",
     "test": "vitest run",
     "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"
   },
@@ -55,6 +55,7 @@
   "devDependencies": {
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "link:../../utils/dist",
+    "@vue/compiler-sfc": "catalog:dev",
     "limina": "catalog:prod",
     "@types/node": "catalog:dev",
     "del-cli": "catalog:dev",
@@ -66,11 +67,15 @@
     "vitest": "catalog:test"
   },
   "peerDependencies": {
+    "@vue/compiler-sfc": "catalog:dev",
     "svelte-check": "catalog:dev",
     "typescript": "catalog:dev",
     "vue-tsc": "catalog:dev"
   },
   "peerDependenciesMeta": {
+    "@vue/compiler-sfc": {
+      "optional": true
+    },
     "svelte-check": {
       "optional": true
     },

@@ -1,6 +1,6 @@
 # Checker entries
 
-Checker entries 会被 graph、proof、paths 和 checker commands 共同使用。
+Checker entries 会被 graph、source、proof、paths 和 checker commands 共同使用。
 
 ```js
 import { defineConfig } from 'limina';
@@ -39,7 +39,7 @@ export default defineConfig({
 - `vue-tsc`：处理 `.vue`；
 - `svelte-check`：处理 `.svelte`。
 
-内置 preset 可以省略 `extensions`。当前 runner 不支持自定义 preset，不能把它当作可执行 checker 使用。
+Limina 只接受内置 preset。`tsc` 和 `vue-tsc` 是一等公民 build checker；`svelte-check` 是 source-only checker。
 
 ## `entry`
 
@@ -49,7 +49,13 @@ export default defineConfig({
 
 ## `extensions`
 
-`extensions` 用来声明这个 checker 覆盖哪些文件后缀。内置 preset 通常不需要手写；只有需要覆盖额外后缀时才补。
+`extensions` 不是用户配置项。Limina 会为每个内置 preset 固定 extensions，因为它们是 proof 语义的一部分：
+
+- `tsc`：`.ts`、`.tsx`、`.cts`、`.mts`、`.d.ts`、`.d.cts`、`.d.mts`、`.json`；
+- `vue-tsc`：`.vue`；
+- `svelte-check`：`.svelte`。
+
+配置 `extensions` 会被拒绝。
 
 配置了 `vue` checker 后，源码中如果出现 `.vue` 文件：
 
@@ -60,7 +66,7 @@ const count: number = '1';
 </script>
 ```
 
-`limina checker typecheck` 会用 `vue-tsc` 覆盖这个入口下的 Vue 文件，而不是只跑普通 `tsc`。如果没有给 Vue 源码配置 checker entry，`proof check` 也更容易暴露“这些文件没有被任何 checker 覆盖”的问题。
+`limina checker build` 会用 `vue-tsc -b` 覆盖这个入口下的 Vue 文件，而不是只跑普通 `tsc`。如果没有给 Vue 源码配置 checker entry，`proof check` 也更容易暴露“这些文件没有被任何 checker 覆盖”的问题。
 
 完整一点看，目录通常类似这样：
 
@@ -81,6 +87,8 @@ const count: number = '1';
 </script>
 ```
 
-运行 `pnpm exec limina checker typecheck` 时，Limina 会从 `config.checkers.vue.entry` 指向的 `tsconfig.vue.build.json` 出发，找到可达的 declaration leaf，再映射到 local companion，并用 `vue-tsc` 做 no-emit typecheck。
+运行 `pnpm exec limina checker build` 时，Limina 会从 `config.checkers.vue.entry` 指向的 `tsconfig.vue.build.json` 出发，并执行 `vue-tsc -b`，因为 `vue-tsc` 是一等公民 checker。
 
 结果是这个类型错误由 `vue-tsc` 报出。这样用户能知道 `.vue` 文件不是靠普通 `tsc` 顺便覆盖，而是由专门的 checker entry 进入 Limina 的检查范围。
+
+对于 `svelte-check`，Limina 会证明 `.svelte` 源码覆盖，并通过 `limina checker typecheck` 执行 `svelte-check --tsconfig <entry>`。当前 Limina 不解析 `.svelte` import graph，因此 graph/source/proof 的能力边界比一等公民 checker 更窄。

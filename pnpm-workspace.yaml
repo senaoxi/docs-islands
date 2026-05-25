@@ -35,6 +35,7 @@ catalogs:
     '@rollup/plugin-replace': ^6.0.3
     '@rspack/core': ^1.6.0
     '@types/babel__generator': ^7.27.0
+    '@vue/compiler-sfc': ^3.5.28
     '@types/babel__traverse': ^7.20.7
     '@types/eslint-plugin-jsx-a11y': ^6.10.1
     '@types/estree': ^1.0.8

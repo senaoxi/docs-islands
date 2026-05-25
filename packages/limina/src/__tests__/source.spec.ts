@@ -160,6 +160,20 @@ describe('runSourceCheck package authority', () => {
     }
   });
 
+  it('allows bundler virtual module imports', async () => {
+    const fixture = await createFixture(
+      createPackageFixture({
+        source: "import 'virtual:group-icons.css';\nexport const ok = true;\n",
+      }),
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('rejects dependencies that are only declared in peer or optional sections', async () => {
     const fixture = await createFixture(
       createPackageFixture({

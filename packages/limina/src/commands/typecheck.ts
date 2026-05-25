@@ -1,7 +1,5 @@
 import { createElapsedTimer } from 'logaria/helper';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import {
   collectMissingCheckerPeerDependencies,
@@ -17,12 +15,7 @@ import {
 } from '../config';
 import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
 import { TypecheckLogger, clearCliScreen, formatErrorMessage } from '../logger';
-import {
-  collectGraphProjectRouteFromRoot,
-  getDtsCompanionConfigPath,
-  isDtsConfigPath,
-  resolveProjectConfigPath,
-} from '../tsconfig';
+import { resolveProjectConfigPath } from '../tsconfig';
 import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
 export interface TypecheckTarget {
@@ -45,43 +38,6 @@ export type TypecheckRunner = (
   target: TypecheckTarget,
 ) => Promise<TypecheckTargetResult> | TypecheckTargetResult;
 
-interface TypecheckTargetFlowState {
-  label: string;
-  startedAt: number;
-}
-
-export interface RunCheckerTypecheckOptions {
-  clearScreen?: boolean;
-  config: ResolvedLiminaConfig;
-  concurrency?: number;
-  cwd?: string;
-  flow?: LiminaFlowReporter;
-  flowDepth?: number;
-  checkerPackageResolver?: CheckerPackageResolver;
-  runner?: TypecheckRunner;
-  tscCommand?: string;
-}
-
-export interface RunCheckerTypecheckResult {
-  passed: boolean;
-  projectRootDir: string;
-  results: TypecheckTargetResult[];
-  rootConfigPaths: string[];
-  targetProjectPaths: string[];
-}
-
-function normalizeConcurrency(value: number | undefined): number {
-  if (value === undefined) {
-    return Math.max(1, availableParallelism());
-  }
-
-  if (!Number.isInteger(value) || value < 1) {
-    throw new Error('Typecheck concurrency must be a positive integer.');
-  }
-
-  return value;
-}
-
 function getExecutionCheckers(options: {
   checkers: ResolvedCheckerConfig[];
   executionKind: CheckerExecutionKind;
@@ -89,7 +45,7 @@ function getExecutionCheckers(options: {
   return options.checkers.filter((checker) => {
     const adapter = getCheckerAdapter(checker.preset);
 
-    return adapter?.supportedExecutions.includes(options.executionKind);
+    return adapter?.execution === options.executionKind;
   });
 }
 
@@ -135,81 +91,17 @@ function createCheckerTarget(options: {
   };
 }
 
-function collectCompanionTypecheckTargets(options: {
-  checker: ResolvedCheckerConfig;
-  projectRootDir: string;
-}): {
-  entryConfigPath: string;
-  problems: string[];
-  targetProjectPaths: string[];
-} {
-  const entryConfigPath = resolveProjectConfigPath(
-    options.projectRootDir,
-    options.checker.entry,
-  );
-
-  if (!existsSync(entryConfigPath)) {
-    return {
-      entryConfigPath,
-      problems: [
-        [
-          'Checker entry references a missing tsconfig:',
-          `  checker: ${options.checker.name}`,
-          `  config: ${toRelativePath(options.projectRootDir, entryConfigPath)}`,
-        ].join('\n'),
-      ],
-      targetProjectPaths: [],
-    };
-  }
-
-  const routeCollection = collectGraphProjectRouteFromRoot({
-    rootConfigPath: entryConfigPath,
-    rootDir: options.projectRootDir,
-  });
-  const dtsConfigPaths = routeCollection.projectPaths.filter(isDtsConfigPath);
-  const targetProjectPaths = [
-    ...new Set(dtsConfigPaths.map(getDtsCompanionConfigPath)),
-  ].sort();
-  const problems = [...routeCollection.problems];
-
-  if (dtsConfigPaths.length === 0) {
-    problems.push(
-      [
-        'Checker entry has no declaration leaf targets:',
-        `  checker: ${options.checker.name}`,
-        `  entry: ${toRelativePath(options.projectRootDir, entryConfigPath)}`,
-        '  reason: checker:typecheck derives targets from tsconfig*.dts.json leaves reachable from the checker entry.',
-      ].join('\n'),
-    );
-  }
-
-  for (const configPath of targetProjectPaths) {
-    if (existsSync(configPath)) {
-      continue;
-    }
-
-    problems.push(
-      [
-        'DTS leaf companion config is missing:',
-        `  checker: ${options.checker.name}`,
-        `  expected: ${toRelativePath(options.projectRootDir, configPath)}`,
-        '  reason: checker:typecheck runs the strict local tsconfig companion for each reachable declaration leaf.',
-      ].join('\n'),
-    );
-  }
-
-  return {
-    entryConfigPath,
-    problems,
-    targetProjectPaths,
-  };
-}
-
 function createDefaultRunner(): TypecheckRunner {
   return async (target) =>
     await new Promise<TypecheckTargetResult>((resolve) => {
       const child = spawn(target.command, target.args, {
         cwd: target.cwd,
+        env: {
+          ...process.env,
+          PATH: [path.join(target.cwd, 'node_modules/.bin'), process.env.PATH]
+            .filter(Boolean)
+            .join(path.delimiter),
+        },
         shell: process.platform === 'win32',
         stdio: 'inherit',
       });
@@ -281,233 +173,6 @@ async function runWithConcurrency(
   return results;
 }
 
-async function runCheckerTypecheckInternal(
-  options: RunCheckerTypecheckOptions,
-): Promise<RunCheckerTypecheckResult> {
-  const cwd = path.resolve(options.cwd ?? process.cwd());
-  const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
-  const allCheckers = getActiveCheckers(options.config);
-  const checkers = getExecutionCheckers({
-    checkers: allCheckers,
-    executionKind: 'typecheck',
-  });
-  const flowDepth = options.flowDepth ?? 0;
-
-  const concurrency = normalizeConcurrency(options.concurrency);
-  const problems = collectCheckerPeerDependencyProblems({
-    checkers: allCheckers,
-    projectRootDir,
-    resolvePackage: options.checkerPackageResolver,
-  });
-  const rootConfigPaths: string[] = [];
-  const targetProjectPaths: string[] = [];
-  const targets: TypecheckTarget[] = [];
-
-  if (problems.length > 0) {
-    options.flow?.fail('checker dependency preflight failed', {
-      depth: flowDepth + 1,
-    });
-    TypecheckLogger.error(problems.join('\n\n'));
-
-    return {
-      passed: false,
-      projectRootDir,
-      results: [],
-      rootConfigPaths,
-      targetProjectPaths,
-    };
-  }
-
-  if (checkers.length === 0) {
-    problems.push(
-      [
-        'No checker typecheck entries configured:',
-        '  reason: configure config.checkers.<name>.entry with a preset that supports checker:typecheck.',
-      ].join('\n'),
-    );
-  }
-
-  for (const checker of checkers) {
-    const targetCollection = collectCompanionTypecheckTargets({
-      checker,
-      projectRootDir,
-    });
-
-    problems.push(...targetCollection.problems);
-    rootConfigPaths.push(targetCollection.entryConfigPath);
-    targetProjectPaths.push(...targetCollection.targetProjectPaths);
-    targets.push(
-      ...targetCollection.targetProjectPaths.map((configPath) =>
-        createCheckerTarget({
-          checker,
-          commandOverride: options.tscCommand,
-          configPath,
-          executionKind: 'typecheck',
-          projectRootDir,
-        }),
-      ),
-    );
-  }
-
-  if (problems.length > 0) {
-    options.flow?.fail('typecheck target discovery failed', {
-      depth: flowDepth + 1,
-    });
-    TypecheckLogger.error(problems.join('\n\n'));
-
-    return {
-      passed: false,
-      projectRootDir,
-      results: [],
-      rootConfigPaths,
-      targetProjectPaths,
-    };
-  }
-
-  options.flow?.info(
-    `found ${targets.length} typecheck target config(s) across ${checkers.length} checker(s); concurrency ${concurrency}`,
-    {
-      depth: flowDepth + 1,
-    },
-  );
-
-  TypecheckLogger.info(
-    [
-      `Running checker typechecks for ${targets.length} target config(s).`,
-      `CWD: ${toRelativePath(cwd, projectRootDir)}`,
-      `Entries: ${rootConfigPaths
-        .map((configPath) => toRelativePath(projectRootDir, configPath))
-        .join(', ')}`,
-    ].join('\n'),
-  );
-
-  const targetFlowStates = new Map<string, TypecheckTargetFlowState>();
-
-  const results = await runWithConcurrency(
-    targets,
-    concurrency,
-    options.runner ?? createDefaultRunner(),
-    {
-      onTargetResult: (target, result) => {
-        if (!options.flow) {
-          return;
-        }
-
-        const flowState = targetFlowStates.get(target.configPath);
-
-        if (!flowState) {
-          return;
-        }
-
-        const resultOptions = {
-          depth: flowDepth + 1,
-          elapsedTimeMs: performance.now() - flowState.startedAt,
-        };
-
-        if (result.status === 0) {
-          options.flow.pass(flowState.label, resultOptions);
-        } else {
-          const suffix = result.error
-            ? formatErrorMessage(result.error)
-            : `exited with code ${result.status}`;
-
-          options.flow.fail(flowState.label, {
-            ...resultOptions,
-            error: suffix,
-          });
-        }
-      },
-      onTargetStart: (target) => {
-        if (!options.flow) {
-          return;
-        }
-
-        targetFlowStates.set(target.configPath, {
-          label:
-            target.label ??
-            `checker: ${toRelativePath(projectRootDir, target.configPath)}`,
-          startedAt: performance.now(),
-        });
-      },
-    },
-  );
-  const failedResults = results.filter((result) => result.status !== 0);
-
-  if (failedResults.length > 0) {
-    TypecheckLogger.error(
-      [
-        `Typecheck failed for ${failedResults.length} config(s):`,
-        ...failedResults.map((result) => {
-          const suffix = result.error
-            ? `: ${formatErrorMessage(result.error)}`
-            : ` exited with code ${result.status}`;
-
-          return `  ${toRelativePath(
-            projectRootDir,
-            result.configPath,
-          )}${suffix}`;
-        }),
-      ].join('\n'),
-    );
-  } else {
-    if (!options.flow?.interactive) {
-      TypecheckLogger.success(
-        `Checked ${targets.length} typecheck target config(s) from ${rootConfigPaths.length} checker entry(s).`,
-      );
-    }
-  }
-
-  return {
-    passed: failedResults.length === 0,
-    projectRootDir,
-    results,
-    rootConfigPaths,
-    targetProjectPaths,
-  };
-}
-
-export async function runCheckerTypecheck(
-  options: RunCheckerTypecheckOptions,
-): Promise<RunCheckerTypecheckResult> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
-  const task = options.flow?.start('checker typecheck', {
-    depth: options.flowDepth ?? 0,
-  });
-
-  TypecheckLogger.info('checker typecheck started');
-
-  try {
-    const result = await runCheckerTypecheckInternal(options);
-
-    if (result.passed) {
-      if (!options.flow?.interactive) {
-        TypecheckLogger.success('checker typecheck finished', elapsed());
-      }
-
-      task?.pass();
-    } else {
-      TypecheckLogger.error(
-        'checker typecheck finished with failures',
-        elapsed(),
-      );
-      task?.fail('checker typecheck finished with failures');
-    }
-
-    return result;
-  } catch (error) {
-    TypecheckLogger.error(
-      `checker typecheck failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('checker typecheck failed', { error });
-    throw error;
-  }
-}
-
 export interface RunCheckerBuildOptions {
   clearScreen?: boolean;
   config: ResolvedLiminaConfig;
@@ -520,6 +185,23 @@ export interface RunCheckerBuildOptions {
 }
 
 export interface RunCheckerBuildResult {
+  passed: boolean;
+  projectRootDir: string;
+  rootConfigPaths: string[];
+}
+
+export interface RunCheckerTypecheckOptions {
+  clearScreen?: boolean;
+  config: ResolvedLiminaConfig;
+  cwd?: string;
+  flow?: LiminaFlowReporter;
+  flowDepth?: number;
+  checkerPackageResolver?: CheckerPackageResolver;
+  runner?: TypecheckRunner;
+  tscCommand?: string;
+}
+
+export interface RunCheckerTypecheckResult {
   passed: boolean;
   projectRootDir: string;
   rootConfigPaths: string[];
@@ -692,6 +374,194 @@ export async function runCheckerBuild(
       elapsed(),
     );
     task?.fail('checker build failed', { error });
+    throw error;
+  }
+}
+
+async function runCheckerTypecheckInternal(
+  options: RunCheckerTypecheckOptions,
+): Promise<RunCheckerTypecheckResult> {
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
+  const allCheckers = getActiveCheckers(options.config);
+  const checkers = getExecutionCheckers({
+    checkers: allCheckers,
+    executionKind: 'typecheck',
+  });
+  const flowDepth = options.flowDepth ?? 0;
+  const rootConfigPaths: string[] = [];
+  const problems = collectCheckerPeerDependencyProblems({
+    checkers: allCheckers,
+    projectRootDir,
+    resolvePackage: options.checkerPackageResolver,
+  });
+
+  if (problems.length > 0) {
+    options.flow?.fail('checker dependency preflight failed', {
+      depth: flowDepth + 1,
+    });
+    TypecheckLogger.error(problems.join('\n\n'));
+
+    return {
+      passed: false,
+      projectRootDir,
+      rootConfigPaths,
+    };
+  }
+
+  const targets = checkers.map((checker) => {
+    const configPath = resolveProjectConfigPath(projectRootDir, checker.entry);
+
+    rootConfigPaths.push(configPath);
+
+    return createCheckerTarget({
+      checker,
+      commandOverride: options.tscCommand,
+      configPath,
+      executionKind: 'typecheck',
+      projectRootDir,
+    });
+  });
+
+  if (targets.length === 0) {
+    options.flow?.info('no source-only checker entries configured', {
+      depth: flowDepth + 1,
+    });
+
+    if (!options.flow?.interactive) {
+      TypecheckLogger.success('No source-only checker entries configured.');
+    }
+
+    return {
+      passed: true,
+      projectRootDir,
+      rootConfigPaths,
+    };
+  }
+
+  options.flow?.info(`found ${targets.length} checker typecheck entry(s)`, {
+    depth: flowDepth + 1,
+  });
+
+  TypecheckLogger.info(
+    [
+      `Running typecheck for ${targets.length} checker entry(s).`,
+      `CWD: ${toRelativePath(cwd, projectRootDir)}`,
+      `Entries: ${rootConfigPaths
+        .map((configPath) => toRelativePath(projectRootDir, configPath))
+        .join(', ')}`,
+    ].join('\n'),
+  );
+
+  const targetTasks = new Map<string, LiminaFlowTask>();
+  const results = await runWithConcurrency(
+    targets,
+    1,
+    options.runner ?? createDefaultRunner(),
+    {
+      onTargetResult: (target, result) => {
+        const task = targetTasks.get(target.configPath);
+
+        if (!task) {
+          return;
+        }
+
+        if (result.status === 0) {
+          task.pass();
+        } else {
+          const suffix = result.error
+            ? formatErrorMessage(result.error)
+            : `exited with code ${result.status}`;
+
+          task.fail(undefined, { error: suffix });
+        }
+      },
+      onTargetStart: (target) => {
+        if (!options.flow) {
+          return;
+        }
+
+        targetTasks.set(
+          target.configPath,
+          options.flow.start(
+            target.label ??
+              `checker typecheck: ${toRelativePath(projectRootDir, target.configPath)}`,
+            {
+              collapseOnSuccess: false,
+              depth: flowDepth + 1,
+            },
+          ),
+        );
+      },
+    },
+  );
+  const failedResults = results.filter((result) => result.status !== 0);
+  const passed = failedResults.length === 0;
+
+  if (!passed) {
+    TypecheckLogger.error(
+      [
+        'typecheck checks failed:',
+        ...failedResults.map((result) => {
+          const suffix = result.error
+            ? `: ${formatErrorMessage(result.error)}`
+            : ` exited with code ${result.status}`;
+
+          return `  ${toRelativePath(projectRootDir, result.configPath)}${suffix}`;
+        }),
+      ].join('\n'),
+    );
+  } else if (!options.flow?.interactive) {
+    TypecheckLogger.success(
+      `Checked ${targets.length} checker typecheck entry(s).`,
+    );
+  }
+
+  return {
+    passed,
+    projectRootDir,
+    rootConfigPaths,
+  };
+}
+
+export async function runCheckerTypecheck(
+  options: RunCheckerTypecheckOptions,
+): Promise<RunCheckerTypecheckResult> {
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
+
+  const elapsed = createElapsedTimer();
+  const task = options.flow?.start('checker typecheck', {
+    depth: options.flowDepth ?? 0,
+  });
+
+  TypecheckLogger.info('checker typecheck started');
+
+  try {
+    const result = await runCheckerTypecheckInternal(options);
+
+    if (result.passed) {
+      if (!options.flow?.interactive) {
+        TypecheckLogger.success('checker typecheck finished', elapsed());
+      }
+
+      task?.pass();
+    } else {
+      TypecheckLogger.error(
+        'checker typecheck finished with failures',
+        elapsed(),
+      );
+      task?.fail('checker typecheck finished with failures');
+    }
+
+    return result;
+  } catch (error) {
+    TypecheckLogger.error(
+      `checker typecheck failed: ${formatErrorMessage(error)}`,
+      elapsed(),
+    );
+    task?.fail('checker typecheck failed', { error });
     throw error;
   }
 }

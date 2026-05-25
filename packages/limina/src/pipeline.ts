@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { getCheckerAdapter } from './checkers';
 import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
@@ -10,6 +11,7 @@ import type {
   PipelineStep,
   ResolvedLiminaConfig,
 } from './config';
+import { getActiveCheckers } from './config';
 import type { LiminaFlowReporter } from './flow';
 
 interface RunPipelineOptions {
@@ -32,8 +34,46 @@ const defaultCheckPipeline: PipelineStep[] = [
   'graph:check',
   'source:check',
   'proof:check',
+  'checker:build',
   'checker:typecheck',
 ];
+
+function reportCheckerCapabilities(
+  config: ResolvedLiminaConfig,
+  flow: LiminaFlowReporter | undefined,
+): void {
+  if (!flow) {
+    return;
+  }
+
+  const firstClass: string[] = [];
+  const sourceOnly: string[] = [];
+
+  for (const checker of getActiveCheckers(config)) {
+    const adapter = getCheckerAdapter(checker.preset);
+    const label = `${checker.name} (${checker.preset})`;
+
+    if (adapter?.tier === 'first-class') {
+      firstClass.push(label);
+    } else if (adapter?.tier === 'source-only') {
+      sourceOnly.push(label);
+    }
+  }
+
+  flow.info(
+    [
+      'checker capability summary:',
+      `  first-class: ${firstClass.length > 0 ? firstClass.join(', ') : '(none)'}`,
+      `  source-only: ${sourceOnly.length > 0 ? sourceOnly.join(', ') : '(none)'}`,
+      ...(sourceOnly.length > 0
+        ? [
+            '  note: source-only checkers get coverage proof and direct typecheck, but Limina does not parse their internal import graph.',
+          ]
+        : []),
+    ].join('\n'),
+    { depth: 1 },
+  );
+}
 
 function isBuiltinTaskName(value: string): value is BuiltinTaskName {
   return builtInTaskNames.has(value);
@@ -261,6 +301,8 @@ export async function runDefaultCheck(
   const pipelineTask = options.flow?.start('default check', {
     collapseOnSuccess: false,
   });
+
+  reportCheckerCapabilities(config, options.flow);
 
   for (const [stepIndex, step] of normalizedSteps.entries()) {
     const passed =

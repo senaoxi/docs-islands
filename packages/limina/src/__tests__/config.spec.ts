@@ -96,7 +96,7 @@ describe('defineConfig', () => {
       config: {
         checkers: {
           typescript: {
-            preset: 'tsc',
+            preset: 'tsc' as const,
             entry: `tsconfig.${mode}.build.json`,
           },
         },
@@ -481,7 +481,7 @@ export default {
     }
   });
 
-  it('rejects invalid checker extension lists', async () => {
+  it('rejects checker extension config', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
 
     try {
@@ -507,7 +507,7 @@ export default {
       );
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /checker extensions must be a non-empty array of dot-prefixed strings/u,
+        /checker extensions are fixed by built-in presets and cannot be configured/u,
       );
     } finally {
       await rm(rootDir, {
@@ -555,7 +555,7 @@ export default {
     }
   });
 
-  it('rejects custom checker presets without explicit extensions', async () => {
+  it('rejects custom checker presets', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
 
     try {
@@ -580,7 +580,7 @@ export default {
       );
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /extensions may only be omitted for built-in presets/u,
+        /configured checker entries require a built-in checker adapter/u,
       );
     } finally {
       await rm(rootDir, {
@@ -590,7 +590,7 @@ export default {
     }
   });
 
-  it('rejects active custom checker presets without an adapter', async () => {
+  it('rejects custom checker presets even when extensions are configured', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
 
     try {
@@ -616,7 +616,7 @@ export default {
       );
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /configured checker entries require a built-in checker adapter/u,
+        /checker extensions are fixed by built-in presets and cannot be configured[\s\S]*configured checker entries require a built-in checker adapter/u,
       );
     } finally {
       await rm(rootDir, {

@@ -5,7 +5,7 @@
   "scripts": {
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
-    "typecheck": "limina checker typecheck",
+    "typecheck": "limina checker build",
     "lint": "eslint . --config ./dist/general.js --fix --cache",
     "test": "vitest run",
     "test:watch": "vitest",

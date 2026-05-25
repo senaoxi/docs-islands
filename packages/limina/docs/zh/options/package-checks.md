@@ -84,6 +84,6 @@ packages/core/
   dist/index.js
 ```
 
-源码 `src/index.ts` 可能已经通过 `checker typecheck`，但发布时消费者安装的是 `dist`。运行 `pnpm exec limina package check --package @acme/core` 时，Limina 会读取 `packageChecks.targets` 里 `name` 匹配的 target，然后在 `outDir` 指向的 `packages/core/dist` 中运行配置好的 `publint`、`attw` 和 `boundary`。
+源码 `src/index.ts` 可能已经通过 checker build/source execution，但发布时消费者安装的是 `dist`。运行 `pnpm exec limina package check --package @acme/core` 时，Limina 会读取 `packageChecks.targets` 里 `name` 匹配的 target，然后在 `outDir` 指向的 `packages/core/dist` 中运行配置好的 `publint`、`attw` 和 `boundary`。
 
 结果可能是多个层面的失败：`attw` 发现 `types` 指向 `missing.d.ts`；`boundary` 在 browser target 中发现 `node:fs`；公开 package 还会被要求包含 README 和 license。这样发布前检查的是消费者实际拿到的产物，而不是开发态源码。

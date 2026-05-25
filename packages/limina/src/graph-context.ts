@@ -1,8 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import ts from 'typescript';
 import type { ResolvedLiminaConfig } from './config';
 import {
+  createExtensionPattern,
+  createExtraFileExtensions,
   getDtsCompanionConfigPath,
   getRawReferencePaths,
   isDtsConfigPath,
@@ -21,6 +24,7 @@ import {
 
 export interface ProjectInfo {
   configPath: string;
+  extensions: string[];
   fileNames: string[];
   label: string | null;
   labelProblem: string | null;
@@ -32,6 +36,30 @@ export interface ImportRecord {
   filePath: string;
   line: number;
   specifier: string;
+}
+
+interface VueSfcBlock {
+  content: string;
+  lang?: string;
+  loc: {
+    start: {
+      line: number;
+    };
+  };
+  src?: string;
+}
+
+interface VueCompilerSfc {
+  parse: (
+    source: string,
+    options?: { filename?: string },
+  ) => {
+    descriptor: {
+      script?: VueSfcBlock | null;
+      scriptSetup?: VueSfcBlock | null;
+    };
+    errors: unknown[];
+  };
 }
 
 export function isRelativeSpecifier(specifier: string): boolean {
@@ -103,18 +131,29 @@ function readProjectLabel(
 export function parseProject(
   config: ResolvedLiminaConfig,
   configPath: string,
+  extensions?: string[],
 ): ProjectInfo {
   const diagnostics: ts.Diagnostic[] = [];
-  const parsed = ts.getParsedCommandLineOfConfigFile(
-    configPath,
-    {},
-    {
-      ...ts.sys,
-      onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
-        diagnostics.push(diagnostic);
-      },
-    },
-  );
+  const parsed = extensions
+    ? ts.parseJsonConfigFileContent(
+        readJsonConfig(config, configPath),
+        ts.sys,
+        path.dirname(configPath),
+        {},
+        configPath,
+        undefined,
+        createExtraFileExtensions(extensions),
+      )
+    : ts.getParsedCommandLineOfConfigFile(
+        configPath,
+        {},
+        {
+          ...ts.sys,
+          onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
+            diagnostics.push(diagnostic);
+          },
+        },
+      );
 
   if (!parsed) {
     throw new Error(
@@ -137,11 +176,22 @@ export function parseProject(
   }
 
   const labelInfo = readProjectLabel(config, configPath);
+  const projectExtensions = extensions ?? [
+    '.ts',
+    '.tsx',
+    '.cts',
+    '.mts',
+    '.d.ts',
+    '.d.cts',
+    '.d.mts',
+  ];
+  const filePattern = createExtensionPattern(projectExtensions);
 
   return {
     configPath: normalizeAbsolutePath(configPath),
+    extensions: projectExtensions,
     fileNames: parsed.fileNames
-      .filter((fileName) => /\.(?:[cm]?tsx?|d\.[cm]?ts)$/u.test(fileName))
+      .filter((fileName) => filePattern.test(fileName))
       .map(normalizeAbsolutePath),
     label: labelInfo.label,
     labelProblem: labelInfo.labelProblem,
@@ -166,24 +216,56 @@ function stringLiteralValue(node: ts.Node | undefined): string | null {
   return node && ts.isStringLiteralLike(node) ? node.text : null;
 }
 
-export function collectImportsFromFile(filePath: string): ImportRecord[] {
-  const sourceText = readFileSync(filePath, 'utf8');
+function getVueCompilerSfc(rootDir: string): VueCompilerSfc {
+  const requireFromRoot = createRequire(path.join(rootDir, 'package.json'));
+
+  try {
+    return requireFromRoot('@vue/compiler-sfc') as VueCompilerSfc;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'MODULE_NOT_FOUND'
+    ) {
+      throw new Error(
+        'Vue source graph support requires @vue/compiler-sfc. Fix: pnpm add -D @vue/compiler-sfc',
+      );
+    }
+
+    throw error;
+  }
+}
+
+function getVueBlockScriptKind(block: VueSfcBlock): ts.ScriptKind {
+  return block.lang === 'tsx' || block.lang === 'jsx'
+    ? ts.ScriptKind.TSX
+    : ts.ScriptKind.TS;
+}
+
+function collectImportsFromSourceText(options: {
+  filePath: string;
+  lineOffset?: number;
+  scriptKind: ts.ScriptKind;
+  sourceText: string;
+}): ImportRecord[] {
   const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
+    options.filePath,
+    options.sourceText,
     ts.ScriptTarget.Latest,
     true,
-    getSourceFileKind(filePath),
+    options.scriptKind,
   );
   const imports: ImportRecord[] = [];
+  const lineOffset = options.lineOffset ?? 0;
   const addImport = (specifier: string, node: ts.Node): void => {
     const location = sourceFile.getLineAndCharacterOfPosition(
       node.getStart(sourceFile),
     );
 
     imports.push({
-      filePath,
-      line: location.line + 1,
+      filePath: options.filePath,
+      line: lineOffset + location.line + 1,
       specifier,
     });
   };
@@ -221,10 +303,52 @@ export function collectImportsFromFile(filePath: string): ImportRecord[] {
   return imports;
 }
 
+function collectVueImportsFromFile(
+  filePath: string,
+  rootDir: string,
+): ImportRecord[] {
+  const sourceText = readFileSync(filePath, 'utf8');
+  const compiler = getVueCompilerSfc(rootDir);
+  const result = compiler.parse(sourceText, { filename: filePath });
+
+  if (result.errors.length > 0) {
+    throw new Error(
+      `Failed to parse Vue SFC imports for ${toRelativePath(rootDir, filePath)}: ${String(result.errors[0])}`,
+    );
+  }
+
+  return [result.descriptor.script, result.descriptor.scriptSetup]
+    .filter((block): block is VueSfcBlock => Boolean(block && !block.src))
+    .flatMap((block) =>
+      collectImportsFromSourceText({
+        filePath,
+        lineOffset: block.loc.start.line - 1,
+        scriptKind: getVueBlockScriptKind(block),
+        sourceText: block.content,
+      }),
+    );
+}
+
+export function collectImportsFromFile(
+  filePath: string,
+  rootDir: string,
+): ImportRecord[] {
+  if (filePath.endsWith('.vue')) {
+    return collectVueImportsFromFile(filePath, rootDir);
+  }
+
+  return collectImportsFromSourceText({
+    filePath,
+    scriptKind: getSourceFileKind(filePath),
+    sourceText: readFileSync(filePath, 'utf8'),
+  });
+}
+
 export function resolveInternalImport(
   specifier: string,
   containingFile: string,
   options: ts.CompilerOptions,
+  extensions: string[] = [],
 ): string | null {
   const resolved = ts.resolveModuleName(
     specifier,
@@ -233,9 +357,38 @@ export function resolveInternalImport(
     ts.sys,
   ).resolvedModule;
 
-  return resolved?.resolvedFileName
-    ? normalizeAbsolutePath(resolved.resolvedFileName)
-    : null;
+  if (resolved?.resolvedFileName) {
+    return normalizeAbsolutePath(resolved.resolvedFileName);
+  }
+
+  if (!isRelativeSpecifier(specifier)) {
+    return null;
+  }
+
+  const resolvedSpecifierPath = path.resolve(
+    path.dirname(containingFile),
+    specifier,
+  );
+  const candidatePaths = path.extname(specifier)
+    ? [resolvedSpecifierPath]
+    : extensions.flatMap((extension) => [
+        `${resolvedSpecifierPath}${extension}`,
+        path.join(resolvedSpecifierPath, `index${extension}`),
+      ]);
+
+  for (const candidatePath of candidatePaths) {
+    if (!existsSync(candidatePath)) {
+      continue;
+    }
+
+    if (!statSync(candidatePath).isFile()) {
+      continue;
+    }
+
+    return normalizeAbsolutePath(candidatePath);
+  }
+
+  return null;
 }
 
 function chooseOwningProject(projectPaths: string[]): string {

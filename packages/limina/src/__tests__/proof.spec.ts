@@ -388,8 +388,31 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('reports duplicate graph-capable checker build owners', async () => {
-    const fixture = await createFixture(createPassingFiles());
+  it('reports duplicate same-family checker build owners', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'packages/pkg/tsconfig.alt.dts.json': JSON.stringify({
+          extends: './tsconfig.json',
+          compilerOptions: {
+            composite: true,
+            declaration: true,
+            emitDeclarationOnly: true,
+            noEmit: false,
+            outDir: './.tsbuild',
+            rootDir: 'src',
+            tsBuildInfoFile: './.tsbuild/alt.tsbuildinfo',
+          },
+        }),
+        'tsconfig.alt.build.json': JSON.stringify({
+          files: [],
+          references: [
+            {
+              path: './packages/pkg/tsconfig.alt.dts.json',
+            },
+          ],
+        }),
+      }),
+    );
 
     try {
       await expect(
@@ -404,7 +427,7 @@ describe('runProofCheck dts config semantics', () => {
               },
               secondary: {
                 preset: 'tsc',
-                entry: 'tsconfig.build.json',
+                entry: 'tsconfig.alt.build.json',
               },
             },
           },
@@ -615,10 +638,9 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('accepts source files covered by a checker entry', async () => {
+  it('accepts Vue source files covered by a checker entry', async () => {
     const fixture = await createFixture(
       createPassingFiles({
-        'tools/covered.ts': 'export const covered = 1;\n',
         'tools/covered.vue':
           '<script setup lang="ts">const value = 1;</script>\n',
         'tools/tsconfig.dts.json': JSON.stringify({
@@ -640,7 +662,7 @@ describe('runProofCheck dts config semantics', () => {
             target: 'ES2023',
             types: [],
           },
-          include: ['covered.ts', 'covered.vue'],
+          include: ['covered.vue'],
         }),
       }),
     );

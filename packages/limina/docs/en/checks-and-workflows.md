@@ -39,11 +39,12 @@ The default check runs:
 1. `graph:check`
 2. `source:check`
 3. `proof:check`
-4. `checker:typecheck`
+4. `checker:build`
+5. `checker:typecheck`
 
 Use it as the normal local and PR command once the repository is configured.
 
-It fits well after a local change, before commit, and in pull request CI. When it passes, the source dependency graph, package ownership, coverage proof, and local typechecks agree at the usual development layer. It does not include package output checks, so release flows should still build first and then run `package check`.
+It fits well after a local change, before commit, and in pull request CI. When it passes, the source dependency graph, package ownership, coverage proof, first-class checker builds, and source-only checker execution agree at the usual development layer. It does not include package output checks, so release flows should still build first and then run `package check`.
 
 ## Graph Check
 
@@ -109,26 +110,24 @@ Use allowlists for generated files or intentional exceptions, and keep the reaso
 
 For example, `packages/core/src/generated/runtime.d.ts` may be produced by a build step and not covered by a normal checker entry. Proof check asks you to either include it in checker coverage or document it in `proof.allowlist` with a file and reason. The team can then see which files are really checked and which exceptions are intentional.
 
-## Checker Typecheck and Build
+## Checker Build and Typecheck
 
 ```sh
-pnpm exec limina checker typecheck
 pnpm exec limina checker build
+pnpm exec limina checker typecheck
 ```
 
-`checker typecheck` discovers reachable declaration leaves from each checker entry, maps them to local companions, and runs the checker in no-emit mode.
+`checker build` runs first-class checker entries in build mode.
 
-`checker build` runs supported checker entries in build mode. The built-in presets are:
+`checker typecheck` runs source-only checker entries directly. The built-in presets are:
 
-| Preset         | Typecheck | Build | Default files       |
-| -------------- | --------- | ----- | ------------------- |
-| `tsc`          | yes       | yes   | TypeScript and JSON |
-| `vue-tsc`      | yes       | yes   | `.vue`              |
-| `svelte-check` | yes       | no    | `.svelte`           |
+| Preset         | Tier        | Execution | Default files       |
+| -------------- | ----------- | --------- | ------------------- |
+| `tsc`          | first-class | build     | TypeScript and JSON |
+| `vue-tsc`      | first-class | build     | `.vue`              |
+| `svelte-check` | source-only | typecheck | `.svelte`           |
 
-Use `--concurrency <n>` with `checker typecheck` when you want to limit parallel checker processes.
-
-Run `checker typecheck` after source, `tsconfig`, Vue/Svelte, or checker config changes. Run `checker build` when declaration output or the build graph itself needs confirmation. Limina discovers the targets from checker entries and invokes the right tool, so framework files are handled by framework checkers instead of being forced into a plain `tsc -b` graph.
+Run `checker build` after source, `tsconfig`, Vue, or first-class checker config changes. Run `checker typecheck` when source-only checker entries such as `svelte-check` are configured. Limina discovers the targets from checker entries and invokes the right tool, so framework files are handled by framework checkers instead of being forced into a plain `tsc -b` graph.
 
 ## Paths Generate and Check
 
@@ -179,8 +178,8 @@ export default defineConfig({
       'graph:check',
       'source:check',
       'proof:check',
-      'checker:typecheck',
       'checker:build',
+      'checker:typecheck',
       'package:check',
     ],
   },
@@ -196,4 +195,4 @@ pnpm exec limina check publish
 
 Pipeline steps can be built-in Limina tasks or external commands. Object-form command steps are best when arguments, `cwd`, or environment variables need to be unambiguous.
 
-Teams can turn common flows such as "PR check", "pre-publish check", or "package output only" into named entrypoints. CI, package scripts, and local commands then share the same order. For example, `limina check publish` can run graph/source/proof/typecheck, build, and package output checks without each CI job hand-writing that sequence.
+Teams can turn common flows such as "PR check", "pre-publish check", or "package output only" into named entrypoints. CI, package scripts, and local commands then share the same order. For example, `limina check publish` can run graph/source/proof, checker build/source, and package output checks without each CI job hand-writing that sequence.

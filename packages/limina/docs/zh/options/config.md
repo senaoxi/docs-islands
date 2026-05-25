@@ -93,6 +93,6 @@ export default defineConfig(({ mode }) => ({
 }));
 ```
 
-运行 `pnpm exec limina check` 时，Limina 加载配置得到的是默认模式，只分析 graph、source、proof 和 checker typecheck 需要的内容。运行 `pnpm exec limina --mode release package check` 时，Limina 会用 release 模式重新加载配置，并读取 `packageChecks.targets`。
+运行 `pnpm exec limina check` 时，Limina 加载配置得到的是默认模式，只分析 graph、source、proof、checker build 和 checker typecheck 需要的内容。运行 `pnpm exec limina --mode release package check` 时，Limina 会用 release 模式重新加载配置，并读取 `packageChecks.targets`。
 
 结果是本地日常检查不需要关心 `dist` 是否存在；发布检查则会明确要求 `packages/core/dist` 已经构建好，并按 package target 做产物验证。

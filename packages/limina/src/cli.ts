@@ -29,9 +29,7 @@ interface PackageFlags extends GlobalFlags {
   tool?: string;
 }
 
-interface CheckerFlags extends GlobalFlags {
-  concurrency?: string;
-}
+type CheckerFlags = GlobalFlags;
 
 interface InitFlags {
   yes?: boolean;
@@ -84,22 +82,6 @@ function parsePackageAttwProfile(
   throw new Error(
     `Invalid package check --attw-profile "${profile}". Expected one of: strict, node16, esm-only.`,
   );
-}
-
-function parseConcurrency(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(
-      'Invalid --concurrency value. Expected a positive integer.',
-    );
-  }
-
-  return parsed;
 }
 
 function createCliFlow() {
@@ -253,13 +235,12 @@ async function main(): Promise<void> {
   cli
     .command(
       'checker <action>',
-      'Run configured checker typecheck or build entries',
+      'Run configured checker build or typecheck entries',
     )
-    .option('--concurrency <n>', 'Maximum concurrent checker processes')
     .action(async (action: string, flags: CheckerFlags) => {
       if (action !== 'typecheck' && action !== 'build') {
         throw new Error(
-          `Unknown checker action "${action}". Expected typecheck or build.`,
+          `Unknown checker action "${action}". Expected build or typecheck.`,
         );
       }
 
@@ -290,7 +271,6 @@ async function main(): Promise<void> {
       const result = await runCheckerTypecheck({
         clearScreen: false,
         config,
-        concurrency: parseConcurrency(flags.concurrency),
         cwd: process.cwd(),
         flow,
       });

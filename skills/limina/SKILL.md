@@ -1,6 +1,6 @@
 ---
 name: limina
-description: Use when configuring or operating the `limina` CLI in a TypeScript pnpm monorepo. Triggers on tasks involving `limina.config.mjs`, `defineConfig` from `limina`, the commands `limina init/check/graph/proof/source/paths/checker/package`, the built-in tasks `graph:check`/`source:check`/`proof:check`/`checker:typecheck`/`checker:build`/`package:check`, paired `tsconfig*.dts.json` declaration leaves with `tsconfig*.json` local companions, `tsc -b` project references, `workspace:*` source vs artifact dependencies, `publint`/`@arethetypeswrong/core`/runtime boundary checks before publishing, or generated `tsconfig.dts.paths.generated.json` files.
+description: Use when configuring or operating the `limina` CLI in a TypeScript pnpm monorepo. Triggers on tasks involving `limina.config.mjs`, `defineConfig` from `limina`, the commands `limina init/check/graph/proof/source/paths/checker/package`, the built-in tasks `graph:check`/`source:check`/`proof:check`/`checker:build`/`checker:typecheck`/`package:check`, paired `tsconfig*.dts.json` declaration leaves with `tsconfig*.json` local companions, `tsc -b` project references, `workspace:*` source vs artifact dependencies, `publint`/`@arethetypeswrong/core`/runtime boundary checks before publishing, or generated `tsconfig.dts.paths.generated.json` files.
 ---
 
 # Limina
@@ -59,7 +59,7 @@ export default defineConfig({
 | Command                                                            | Purpose                                                        | Exit non-zero when                                                                                                    |
 | ------------------------------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `limina init [--yes]`                                              | Bootstrap declaration graph, aggregators, config, root script  | Reserved tsconfig names already exist, ambiguous `tsconfig.json` role, `workspace:*` import can't be mapped to a leaf |
-| `limina check`                                                     | Run built-in default pipeline                                  | Any of `graph:check`, `source:check`, `proof:check`, `checker:typecheck` fails                                        |
+| `limina check`                                                     | Run built-in default pipeline                                  | Any of `graph:check`, `source:check`, `proof:check`, `checker:build`, `checker:typecheck` fails                       |
 | `limina check <pipeline>`                                          | Run a user pipeline from `pipelines`                           | Pipeline name missing, or any step fails                                                                              |
 | `limina graph check`                                               | Project refs match real imports; deny rules; dts option parity | Reference mismatch, denied dep/ref, missing project reference, cross-package relative import, etc.                    |
 | `limina source check`                                              | Package-owner boundary checks                                  | Relative import crosses package, bare import not in deps/devDeps, `#imports` outside owner scope                      |
@@ -67,8 +67,8 @@ export default defineConfig({
 | `limina paths generate`                                            | Write `tsconfig.dts.paths.generated.json`                      | (Never fails on stale; use `paths check` for CI)                                                                      |
 | `limina paths apply`                                               | Alias for `paths generate`                                     | —                                                                                                                     |
 | `limina paths check`                                               | Fail if generated path files are stale                         | Any generated file is outdated or missing                                                                             |
-| `limina checker typecheck [--concurrency N]`                       | No-emit typecheck per dts-leaf companion, all checkers         | Any checker exits non-zero, or peer dep missing                                                                       |
-| `limina checker build`                                             | Build execution for graph-capable checkers (`tsc`, `vue-tsc`)  | Any checker exits non-zero                                                                                            |
+| `limina checker build`                                             | Build execution for first-class checkers (`tsc`, `vue-tsc`)    | Any checker exits non-zero                                                                                            |
+| `limina checker typecheck`                                         | Direct execution for source-only checkers (`svelte-check`)     | Any checker exits non-zero, or peer dep missing                                                                       |
 | `limina package check [--package N] [--tool T] [--attw-profile P]` | publint + attw + boundary on built outputs                     | Any check fails, or required `README.md`/`LICENSE.md` missing for public output                                       |
 
 Global flags on every command: `--config <path>` (override config file), `--mode <mode>` (passed to function-style configs, defaults to `NODE_ENV` then `"default"`).
@@ -77,17 +77,17 @@ For complete flag tables and exit semantics: see [references/cli.md](references/
 
 ## Built-in task names (use inside `pipelines`)
 
-`graph:check`, `source:check`, `proof:check`, `checker:typecheck`, `checker:build`, `package:check`
+`graph:check`, `source:check`, `proof:check`, `checker:build`, `checker:typecheck`, `package:check`
 
-The default `limina check` pipeline (no name argument) runs `graph:check` → `source:check` → `proof:check` → `checker:typecheck` in that order. `limina check <name>` ONLY runs user pipelines — it does NOT fall back to the default if the name is missing.
+The default `limina check` pipeline (no name argument) runs `graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck` in that order. `limina check <name>` ONLY runs user pipelines — it does NOT fall back to the default if the name is missing.
 
 ## Checker presets
 
-| Preset         | Default extensions                             | Graph-capable                  | Build support       | Required peer dep |
-| -------------- | ---------------------------------------------- | ------------------------------ | ------------------- | ----------------- |
-| `tsc`          | `.ts .tsx .cts .mts .d.ts .d.cts .d.mts .json` | yes (drives declaration graph) | yes                 | `typescript`      |
-| `vue-tsc`      | `.vue`                                         | no                             | yes                 | `vue-tsc`         |
-| `svelte-check` | `.svelte`                                      | no                             | no (typecheck only) | `svelte-check`    |
+| Preset         | Default extensions                             | Graph-capable | Execution | Required peer dep              |
+| -------------- | ---------------------------------------------- | ------------- | --------- | ------------------------------ |
+| `tsc`          | `.ts .tsx .cts .mts .d.ts .d.cts .d.mts .json` | first-class   | build     | `typescript`                   |
+| `vue-tsc`      | `.vue`                                         | first-class   | build     | `vue-tsc`, `@vue/compiler-sfc` |
+| `svelte-check` | `.svelte`                                      | source-only   | typecheck | `svelte-check`                 |
 
 Only graph-capable checkers (currently `tsc`) drive the declaration leaf graph that `graph:check` validates. Other checkers still need a `tsconfig*.build.json` entry and `tsconfig*.dts.json` leaves so `proof:check` can prove coverage.
 
@@ -223,7 +223,7 @@ const config = await loadConfig({ cwd: process.cwd() });
 
 `loadConfig` options: `{ command?, configPath?, cwd?, mode? }`. With no `configPath`, Limina walks up from `cwd` to find the nearest `limina.config.mjs`, bounded by the `pnpm-workspace.yaml` root.
 
-Other named exports from the `limina` entry: `validateLiminaConfig`, `getActiveCheckers`, `getActiveCheckerExtensions`, `runInit`, `runSourceCheck`, `runCheckerBuild`, `runCheckerTypecheck`, `createLiminaFlowReporter`, `LiminaFlowReporter`, `collectTypecheckTargetProjectPaths`, `isOrdinaryTypecheckConfigPath`, and the full set of config types (`LiminaConfig`, `ResolvedLiminaConfig`, etc.). For a typed config file with no runtime use, import only from the `limina/config` subpath.
+Other named exports from the `limina` entry: `validateLiminaConfig`, `getActiveCheckers`, `getActiveCheckerExtensions`, `runInit`, `runSourceCheck`, `runCheckerBuild`, `runCheckerTypecheck`, `createLiminaFlowReporter`, `LiminaFlowReporter`, `isOrdinaryTypecheckConfigPath`, and the full set of config types (`LiminaConfig`, `ResolvedLiminaConfig`, etc.). For a typed config file with no runtime use, import only from the `limina/config` subpath.
 
 ## Requirements
 

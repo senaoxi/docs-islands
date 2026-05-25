@@ -39,7 +39,7 @@
     "lint:package:attw": "limina package check --tool attw",
     "lint:package:boundary": "limina package check --tool boundary",
     "smoke": "pnpm --dir ./smoke test",
-    "typecheck": "limina checker typecheck",
+    "typecheck": "limina checker build",
     "typecheck:theme": "vue-tsc -p theme/tsconfig.json --noEmit",
     "build": "rolldown --config rolldown.config.ts && pnpm build:theme && pnpm build-types-check",
     "build:theme": "rolldown --config rolldown.theme.config.ts",

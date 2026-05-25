@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import ts from 'typescript';
+import { getCheckerAdapter, normalizeExtensions } from '../checkers';
 import {
   getActiveCheckerExtensions,
   getActiveCheckers,
@@ -16,15 +17,15 @@ import {
   collectGraphProjectRouteFromRoot,
   collectGraphProjectRoutes,
   createExtensionPattern,
+  createExtraFileExtensions,
   createFormatHost,
   getDtsCompanionConfigPath,
-  isDtsConfigPath,
   isOrdinaryTypecheckConfigPath,
-  parseProjectFileNames,
   parseProjectFileNamesForExtensions,
   readJsonConfig,
   resolveProjectConfigPath,
   resolveReferencePath,
+  type CheckerGraphProjectRoute,
 } from '../tsconfig';
 import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
@@ -116,6 +117,25 @@ const ignoredSemanticCompilerOptions = new Set([
   'sourceRoot',
   'tsBuildInfoFile',
 ]);
+
+const typeScriptCheckerExtensions =
+  getCheckerAdapter('tsc')?.defaultExtensions ?? [];
+
+function getFirstClassCoverageExtensions(extensions: string[]): string[] {
+  return normalizeExtensions([...typeScriptCheckerExtensions, ...extensions]);
+}
+
+function getCheckerCoverageExtensions(
+  checker: ResolvedCheckerConfig,
+): string[] {
+  const adapter = getCheckerAdapter(checker.preset);
+
+  if (!adapter?.sourceGraph) {
+    return checker.extensions;
+  }
+
+  return getFirstClassCoverageExtensions(checker.extensions);
+}
 
 async function collectTsconfigPaths(
   config: ResolvedLiminaConfig,
@@ -380,48 +400,39 @@ function addCoverage(
 
 function collectCoverage(options: {
   config: ResolvedLiminaConfig;
-  graphProjectPaths: string[];
+  graphRoutes: CheckerGraphProjectRoute[];
   includeAllowlist?: boolean;
   allowlistEntries: AllowlistEntry[];
   checkerTargets: CheckerCoverageTarget[];
   sourceFiles: Set<string>;
 }): Map<string, CoverageSource[]> {
   const coverageByFile = new Map<string, CoverageSource[]>();
-  const proofFilePattern = createExtensionPattern(
-    getActiveCheckerExtensions(options.config),
-  );
-  const typeScriptChecker = getActiveCheckers(options.config).find(
-    (checker) => checker.preset === 'tsc',
-  );
 
-  for (const graphProjectPath of options.graphProjectPaths) {
-    for (const filePath of parseProjectFileNames(
-      options.config,
-      graphProjectPath,
-      proofFilePattern,
-    )) {
-      if (!options.sourceFiles.has(filePath)) {
-        continue;
+  for (const route of options.graphRoutes) {
+    for (const graphProjectPath of route.projectPaths) {
+      for (const filePath of parseProjectFileNamesForExtensions(
+        options.config,
+        graphProjectPath,
+        getFirstClassCoverageExtensions(route.extensions),
+      )) {
+        if (!options.sourceFiles.has(filePath)) {
+          continue;
+        }
+
+        addCoverage(coverageByFile, filePath, {
+          label: toRelativePath(options.config.rootDir, graphProjectPath),
+          type: 'graph',
+        });
       }
-
-      addCoverage(coverageByFile, filePath, {
-        label: toRelativePath(options.config.rootDir, graphProjectPath),
-        type: 'graph',
-      });
     }
   }
 
   for (const checkerTarget of options.checkerTargets) {
-    const checkerExtensions = [
-      ...(typeScriptChecker?.extensions ?? []),
-      ...checkerTarget.checker.extensions,
-    ];
-
     for (const configPath of checkerTarget.coverageConfigPaths) {
       for (const filePath of parseProjectFileNamesForExtensions(
         options.config,
         configPath,
-        checkerExtensions,
+        getCheckerCoverageExtensions(checkerTarget.checker),
       )) {
         if (!options.sourceFiles.has(filePath)) {
           continue;
@@ -454,23 +465,43 @@ function collectCoverage(options: {
   return coverageByFile;
 }
 
+function collectProjectExtensionsByPath(
+  routes: CheckerGraphProjectRoute[],
+): Map<string, string[]> {
+  const projectExtensionsByPath = new Map<string, string[]>();
+
+  for (const route of routes) {
+    for (const projectPath of route.projectPaths) {
+      const extensions = new Set([
+        ...(projectExtensionsByPath.get(projectPath) ?? []),
+        ...route.extensions,
+      ]);
+
+      projectExtensionsByPath.set(projectPath, [...extensions].sort());
+    }
+  }
+
+  return projectExtensionsByPath;
+}
+
 function parseConfig(
   config: ResolvedLiminaConfig,
   configPath: string,
+  extensions: string[] = [],
 ): ParsedConfig {
   const diagnostics: ts.Diagnostic[] = [];
-  const parsed = ts.getParsedCommandLineOfConfigFile(
-    configPath,
+  const configObject = readJsonConfig(config, configPath);
+  const parsed = ts.parseJsonConfigFileContent(
+    configObject,
+    ts.sys,
+    path.dirname(configPath),
     {},
-    {
-      ...ts.sys,
-      onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
-        diagnostics.push(diagnostic);
-      },
-    },
+    configPath,
+    undefined,
+    createExtraFileExtensions(extensions),
   );
 
-  if (!parsed) {
+  if (diagnostics.length > 0) {
     throw new Error(
       ts.formatDiagnosticsWithColorAndContext(
         diagnostics,
@@ -610,6 +641,7 @@ function addDtsConfigProblems(options: {
   graphProjectPaths: Set<string>;
   problems: string[];
   dtsConfigPaths: string[];
+  projectExtensionsByPath: Map<string, string[]>;
 }): void {
   for (const configPath of options.dtsConfigPaths) {
     if (!options.graphProjectPaths.has(configPath)) {
@@ -634,8 +666,13 @@ function addDtsConfigProblems(options: {
       continue;
     }
 
-    const dtsConfig = parseConfig(options.config, configPath);
-    const localConfig = parseConfig(options.config, localConfigPath);
+    const extensions = options.projectExtensionsByPath.get(configPath) ?? [];
+    const dtsConfig = parseConfig(options.config, configPath, extensions);
+    const localConfig = parseConfig(
+      options.config,
+      localConfigPath,
+      extensions,
+    );
 
     if (dtsConfig.options.composite !== true) {
       options.problems.push(
@@ -881,32 +918,31 @@ function addDefaultTsconfigEnvironmentProblems(options: {
 
 function collectConfigFileOwners(
   config: ResolvedLiminaConfig,
-  configPaths: string[],
+  graphRoutes: CheckerGraphProjectRoute[],
   sourceFiles: Set<string>,
 ): ConfigFileOwners {
   const ownersByFile: ConfigFileOwners = new Map();
-  const proofFilePattern = createExtensionPattern(
-    getActiveCheckerExtensions(config),
-  );
 
-  for (const configPath of configPaths) {
-    if (!existsSync(configPath)) {
-      continue;
-    }
-
-    for (const filePath of parseProjectFileNames(
-      config,
-      configPath,
-      proofFilePattern,
-    )) {
-      if (!sourceFiles.has(filePath)) {
+  for (const route of graphRoutes) {
+    for (const configPath of route.projectPaths) {
+      if (!existsSync(configPath)) {
         continue;
       }
 
-      const owners = ownersByFile.get(filePath) ?? [];
+      for (const filePath of parseProjectFileNamesForExtensions(
+        config,
+        configPath,
+        route.extensions,
+      )) {
+        if (!sourceFiles.has(filePath)) {
+          continue;
+        }
 
-      owners.push(configPath);
-      ownersByFile.set(filePath, owners);
+        const owners = ownersByFile.get(filePath) ?? [];
+
+        owners.push(configPath);
+        ownersByFile.set(filePath, owners);
+      }
     }
   }
 
@@ -946,33 +982,6 @@ function addDuplicateGraphCoverageProblems(options: {
               `    - ${toRelativePath(options.config.rootDir, configPath)}`,
           ),
         '  reason: a checker graph file must have a single declaration owner; move the file to one dts leaf or narrow include/exclude patterns.',
-      ].join('\n'),
-    );
-  }
-}
-
-function addDuplicateGraphOwnerProblems(options: {
-  config: ResolvedLiminaConfig;
-  graphOwnersByConfigPath: Map<string, string[]>;
-  problems: string[];
-}): void {
-  for (const [
-    configPath,
-    ownerCheckerNames,
-  ] of options.graphOwnersByConfigPath.entries()) {
-    const uniqueOwnerCheckerNames = [...new Set(ownerCheckerNames)].sort();
-
-    if (uniqueOwnerCheckerNames.length <= 1) {
-      continue;
-    }
-
-    options.problems.push(
-      [
-        'Duplicate checker graph declaration owner:',
-        `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
-        '  owned by:',
-        ...uniqueOwnerCheckerNames.map((checkerName) => `    - ${checkerName}`),
-        '  reason: each tsconfig*.dts.json must be reached by exactly one graph-capable checker entry.',
       ].join('\n'),
     );
   }
@@ -1051,17 +1060,6 @@ function addUncoveredSourceProblems(options: {
   );
 }
 
-function addGraphOwner(
-  ownersByConfigPath: Map<string, string[]>,
-  configPath: string,
-  checkerName: string,
-): void {
-  const owners = ownersByConfigPath.get(configPath) ?? [];
-
-  owners.push(checkerName);
-  ownersByConfigPath.set(configPath, owners);
-}
-
 async function runProofCheckInternal(
   config: ResolvedLiminaConfig,
   options: { logSuccess?: boolean } = {},
@@ -1069,42 +1067,30 @@ async function runProofCheckInternal(
   const problems: string[] = [];
   const graphRouteCollection = collectGraphProjectRoutes(config);
   const entryRouteCollection = collectCheckerEntryProjectRoutes(config);
-  const graphProjectPaths = [
-    ...new Set(
-      graphRouteCollection.routes.flatMap((route) => route.projectPaths),
-    ),
-  ].sort();
   const entryProjectPaths = [
     ...new Set(
       entryRouteCollection.routes.flatMap((route) => route.projectPaths),
     ),
   ].sort();
   const entryProjectPathSet = new Set(entryProjectPaths);
+  const entryProjectExtensionsByPath = collectProjectExtensionsByPath(
+    entryRouteCollection.routes,
+  );
   const dtsConfigPaths = await collectDtsConfigPaths(config);
   const buildGraphConfigPaths = await collectBuildGraphConfigPaths(config);
   const defaultTsconfigPaths = await collectDefaultTsconfigPaths(config);
   const ordinaryTypecheckConfigPaths =
     await collectOrdinaryTypecheckConfigPaths(config);
-  const graphOwnersByConfigPath = new Map<string, string[]>();
 
   problems.push(...graphRouteCollection.problems);
   problems.push(...entryRouteCollection.problems);
-
-  for (const route of graphRouteCollection.routes) {
-    for (const projectPath of route.projectPaths) {
-      if (!isDtsConfigPath(projectPath)) {
-        continue;
-      }
-
-      addGraphOwner(graphOwnersByConfigPath, projectPath, route.checkerName);
-    }
-  }
 
   addDtsConfigProblems({
     config,
     dtsConfigPaths,
     graphProjectPaths: entryProjectPathSet,
     problems,
+    projectExtensionsByPath: entryProjectExtensionsByPath,
   });
   addBuildGraphConfigProblems({
     buildGraphConfigPaths,
@@ -1119,11 +1105,6 @@ async function runProofCheckInternal(
   addDefaultTsconfigEnvironmentProblems({
     config,
     ordinaryConfigPaths: ordinaryTypecheckConfigPaths,
-    problems,
-  });
-  addDuplicateGraphOwnerProblems({
-    config,
-    graphOwnersByConfigPath,
     problems,
   });
 
@@ -1152,7 +1133,7 @@ async function runProofCheckInternal(
     allowlistEntries,
     checkerTargets,
     config,
-    graphProjectPaths,
+    graphRoutes: graphRouteCollection.routes,
     includeAllowlist: false,
     sourceFiles,
   });
@@ -1160,12 +1141,12 @@ async function runProofCheckInternal(
     allowlistEntries,
     checkerTargets,
     config,
-    graphProjectPaths,
+    graphRoutes: graphRouteCollection.routes,
     sourceFiles,
   });
   const graphFileOwners = collectConfigFileOwners(
     config,
-    graphProjectPaths,
+    graphRouteCollection.routes,
     sourceFiles,
   );
 

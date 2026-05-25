@@ -84,6 +84,6 @@ packages/core/
   dist/index.js
 ```
 
-Source `src/index.ts` may already pass `checker typecheck`, but consumers install `dist`. When `pnpm exec limina package check --package @acme/core` runs, Limina finds the target whose `name` matches the CLI filter, then runs the configured `publint`, `attw`, and `boundary` checks inside `packages/core/dist`.
+Source `src/index.ts` may already pass checker build/source execution, but consumers install `dist`. When `pnpm exec limina package check --package @acme/core` runs, Limina finds the target whose `name` matches the CLI filter, then runs the configured `publint`, `attw`, and `boundary` checks inside `packages/core/dist`.
 
 The result can include several output-layer failures: `attw` finds `types` pointing to `missing.d.ts`; `boundary` finds `node:fs` in a browser target; public packages must also include README and license files. The pre-publish check is validating the package consumers actually receive, not only development-time source.

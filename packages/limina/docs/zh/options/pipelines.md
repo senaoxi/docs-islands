@@ -11,8 +11,8 @@ export default defineConfig({
       'graph:check',
       'source:check',
       'proof:check',
-      'checker:typecheck',
       'checker:build',
+      'checker:typecheck',
       'package:check',
       {
         type: 'command',

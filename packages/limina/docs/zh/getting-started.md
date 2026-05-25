@@ -102,16 +102,18 @@ pnpm typecheck
 1. `graph:check`
 2. `source:check`
 3. `proof:check`
-4. `checker:typecheck`
+4. `checker:build`
+5. `checker:typecheck`
 
 第一次运行失败时，可以按类别判断下一步：
 
 - `graph:check` 失败，多半是 import、project reference、`workspace:*` 或 label rule 没有对齐；
 - `source:check` 失败，多半是文件归属、跨 package 相对 import、依赖声明或 `#imports` 有问题；
 - `proof:check` 失败，多半是 checker entry、declaration leaf、local companion 或 allowlist 没有覆盖到源码；
-- `checker:typecheck` 失败，则回到对应的 `tsconfig*.json` 或框架 checker 修类型错误。
+- `checker:build` 失败，说明 `tsc` 或 `vue-tsc` 这类一等公民 checker 在 build 模式发现类型错误；
+- `checker:typecheck` 失败，说明 `svelte-check` 这类 source-only checker 发现类型错误。
 
-例如 `@acme/app` 新增了 `@acme/core` import，第一次跑 `pnpm typecheck` 报 graph 问题时，优先看提示里的 importing file 和 expected reference。修完后再跑同一个命令，确认 graph、source ownership 和 typecheck coverage 一起通过。
+例如 `@acme/app` 新增了 `@acme/core` import，第一次跑 `pnpm typecheck` 报 graph 问题时，优先看提示里的 importing file 和 expected reference。修完后再跑同一个命令，确认 graph、source ownership、coverage proof 和 checker execution 一起通过。
 
 ## 添加框架 checker
 
@@ -136,7 +138,7 @@ export default defineConfig({
 });
 ```
 
-内置 preset 包括 `tsc`、`vue-tsc`、`svelte-check`。启用某个 checker 时，请安装对应 package。
+内置 preset 包括 `tsc`、`vue-tsc`、`svelte-check`。启用某个 checker 时，请安装对应 package；`vue-tsc` entry 还需要 `@vue/compiler-sfc`，这样 Limina 才能解析 SFC imports。
 
 ## 下一步
 

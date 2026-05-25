@@ -135,7 +135,7 @@ pnpm exec limina package check --package @acme/core
 
 ### Checker entry
 
-每个 checker 都必须有一个 `config.checkers.<name>.entry`，通常是一个 `tsconfig*.build.json` graph 聚合配置。`limina checker build` 会在 preset 支持时从这个 entry 执行 build 模式；`limina checker typecheck` 会遍历同一个 entry，找到可达的 `tsconfig*.dts.json` 声明叶子，并检查它们配对的本地 companion。
+每个 checker 都必须有一个 `config.checkers.<name>.entry`，通常是一个 `tsconfig*.build.json` graph 聚合配置。内置一等公民 preset（`tsc` 和 `vue-tsc`）会参与 graph、source、proof 和 build 检查；`svelte-check` 这类 source-only preset 会证明源码覆盖，并通过 `limina checker typecheck` 执行直接类型检查。
 
 ### 声明叶子与 local companion
 
@@ -168,9 +168,8 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina paths generate`                         | 为 artifact-facing workspace exports 生成源码 `paths` 兼容配置。 |
 | `limina paths apply`                            | `paths generate` 的兼容别名。                                    |
 | `limina paths check`                            | 当 generated path files 过期时失败。                             |
-| `limina checker typecheck`                      | 运行从 checker entry 推导出的 typecheck targets。                |
 | `limina checker build`                          | 对支持 build 模式的 checker entry 执行 build。                   |
-| `limina checker typecheck --concurrency <n>`    | 限制并发 checker 进程数。                                        |
+| `limina checker typecheck`                      | 运行 `svelte-check` 这类 source-only checker entry。             |
 | `limina package check`                          | 运行已配置的 package output checks。                             |
 | `limina package check --package <name>`         | 检查单个已配置 package target。                                  |
 | `limina package check --tool <tool>`            | 只运行 `publint`、`attw` 或 `boundary`。                         |
@@ -198,7 +197,7 @@ config: {
 }
 ```
 
-`config.checkers` 定义 checker entry。每个已配置的 checker 都必须声明非空 `entry`。内置 preset 可以省略 `extensions`；如果省略 `source.include`，Limina 会从已配置 checker 的 extensions 推导源码边界，然后再应用 `source.exclude`。
+`config.checkers` 定义 checker entry。每个已配置的 checker 都必须声明非空 `entry` 并使用内置 preset。Checker `extensions` 由 Limina 固定，用户不能配置；如果省略 `source.include`，Limina 会从已配置 checker 的 extensions 推导源码边界，然后再应用 `source.exclude`。
 
 ### `graph`
 
@@ -303,7 +302,7 @@ pipelines: {
 }
 ```
 
-`limina check` 会运行内置默认 pipeline：`graph:check`、`source:check`、`proof:check` 和 `checker:typecheck`。`limina check <pipeline>` 只运行 `limina.config.mjs#pipelines` 中的用户 pipeline；如果名称不存在，Limina 会报出缺失的 pipeline，并提示到这里完成配置。
+`limina check` 会运行内置默认 pipeline：`graph:check`、`source:check`、`proof:check`、`checker:build` 和 `checker:typecheck`。`limina check <pipeline>` 只运行 `limina.config.mjs#pipelines` 中的用户 pipeline；如果名称不存在，Limina 会报出缺失的 pipeline，并提示到这里完成配置。
 
 字符串步骤可以是内置任务名，也可以是简单命令。当参数、`cwd` 或 `env` 需要明确表达时，请使用对象形式的 command step。
 
