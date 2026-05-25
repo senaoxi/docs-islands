@@ -19,6 +19,7 @@ export interface PackageManifest {
   private?: boolean;
   scripts?: Record<string, string>;
   type?: string;
+  version?: string;
   workspaces?: string[];
 }
 
@@ -44,6 +45,16 @@ export interface ImporterInfo {
   directory: string;
   name?: string;
   workspaceDependencies: Set<string>;
+}
+
+export type PublishDependencySectionName =
+  | 'dependencies'
+  | 'peerDependencies'
+  | 'optionalDependencies';
+
+export interface DependencySection {
+  dependencies: Record<string, string>;
+  name: PublishDependencySectionName;
 }
 
 export function readJsonFile<T>(filePath: string): T {
@@ -379,6 +390,27 @@ export function getDependencySections(
     importer.optionalDependencies,
     importer.peerDependencies,
   ].filter((section): section is Record<string, string> => Boolean(section));
+}
+
+export function getPublishDependencySections(
+  importer: PackageManifest,
+): DependencySection[] {
+  return [
+    {
+      dependencies: importer.dependencies,
+      name: 'dependencies',
+    },
+    {
+      dependencies: importer.peerDependencies,
+      name: 'peerDependencies',
+    },
+    {
+      dependencies: importer.optionalDependencies,
+      name: 'optionalDependencies',
+    },
+  ].filter((section): section is DependencySection =>
+    Boolean(section.dependencies),
+  );
 }
 
 export function isWorkspaceDependencySpecifier(specifier: string): boolean {

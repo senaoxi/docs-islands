@@ -23,6 +23,10 @@ import type {
 } from '../config';
 import type { LiminaFlowReporter } from '../flow';
 import { PackageLogger, clearCliScreen, formatErrorMessage } from '../logger';
+import {
+  PackageReleaseConsistencyError,
+  assertPackageReleaseConsistency,
+} from '../package-release-consistency';
 import { toRelativePath } from '../utils/path';
 import { getPackageRootSpecifier } from '../workspace';
 
@@ -623,7 +627,7 @@ async function assertPublicPackageMetadata(options: {
   label: string;
   outDir: string;
   packageJsonPath: string;
-}): Promise<void> {
+}): Promise<DistPackageJson> {
   const manifest = await readDistPackageJson({
     config: options.config,
     label: options.label,
@@ -631,7 +635,7 @@ async function assertPublicPackageMetadata(options: {
   });
 
   if (manifest.private === true) {
-    return;
+    return manifest;
   }
 
   const missingFiles = REQUIRED_PUBLIC_PACKAGE_FILES.filter(
@@ -639,7 +643,7 @@ async function assertPublicPackageMetadata(options: {
   );
 
   if (missingFiles.length === 0) {
-    return;
+    return manifest;
   }
 
   throw new Error(
@@ -826,14 +830,19 @@ async function runPackageCheckTarget(options: {
   let packedDist: PackedPackageTarball | undefined;
 
   try {
-    await assertPublicPackageMetadata({
+    const outputManifest = await assertPublicPackageMetadata({
       config: options.config,
       label,
       outDir: target.outDir,
       packageJsonPath: outputPackageJsonPath,
     });
 
-    if (options.checks.includes('publint') || options.checks.includes('attw')) {
+    const needsPackedTarball =
+      outputManifest.private !== true ||
+      options.checks.includes('publint') ||
+      options.checks.includes('attw');
+
+    if (needsPackedTarball) {
       const packTask = options.flow?.start(`package tarball: ${label}`, {
         depth: (options.flowDepth ?? 0) + 1,
       });
@@ -857,6 +866,26 @@ async function runPackageCheckTarget(options: {
       }
 
       packTask?.pass();
+    }
+
+    if (outputManifest.private !== true) {
+      try {
+        await assertPackageReleaseConsistency({
+          config: options.config,
+          label,
+          outDir: target.outDir,
+          outputManifest,
+          packedTarball: packedDist!.tarball,
+        });
+      } catch (error) {
+        if (!(error instanceof PackageReleaseConsistencyError)) {
+          throw error;
+        }
+
+        PackageLogger.error(formatErrorMessage(error));
+        task?.fail(`package checks failed: ${label}`);
+        return false;
+      }
     }
 
     let passed = true;

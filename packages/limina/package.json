@@ -48,6 +48,7 @@
     "cac": "catalog:dev",
     "es-module-lexer": "catalog:dev",
     "publint": "catalog:lint",
+    "semver": "catalog:dev",
     "tinyglobby": "catalog:prod",
     "yaml": "catalog:dev",
     "zod": "catalog:dev"

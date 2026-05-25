@@ -126,6 +126,9 @@ catalogs:
     rollup-plugin-license:
       specifier: ^3.6.0
       version: 3.6.0
+    semver:
+      specifier: ^7.8.1
+      version: 7.8.1
     shiki:
       specifier: ^2.5.0
       version: 2.5.0
@@ -710,6 +713,9 @@ importers:
       publint:
         specifier: catalog:lint
         version: 0.3.17
+      semver:
+        specifier: catalog:dev
+        version: 7.8.1
       tinyglobby:
         specifier: catalog:prod
         version: 0.2.15
@@ -8277,6 +8283,14 @@ packages:
     engines: { node: '>=10' }
     hasBin: true
 
+  semver@7.8.1:
+    resolution:
+      {
+        integrity: sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg==,
+      }
+    engines: { node: '>=10' }
+    hasBin: true
+
   set-function-length@1.2.2:
     resolution:
       {
@@ -14053,6 +14067,8 @@ snapshots:
   semver@6.3.1: {}
 
   semver@7.7.3: {}
+
+  semver@7.8.1: {}
 
   set-function-length@1.2.2:
     dependencies:

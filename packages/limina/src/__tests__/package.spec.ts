@@ -8,8 +8,12 @@ import { LiminaFlowReporter } from '../flow';
 const packageCheckMocks = vi.hoisted(() => ({
   attwProblems: [] as unknown[],
   attwRuns: 0,
+  changedPackageDirs: new Set<string>(),
+  packedManifestOverrides: new Map<string, Record<string, unknown>>(),
+  packedTarballManifests: new Map<string, Record<string, unknown>>(),
   packCalls: [] as string[],
   publintCalls: [] as unknown[],
+  registryPackages: new Map<string, Record<string, unknown>>(),
 }));
 
 vi.mock('@publint/pack', async () => {
@@ -26,14 +30,75 @@ vi.mock('@publint/pack', async () => {
       ) => {
         packageCheckMocks.packCalls.push(outDir);
         const tarballPath = pathModule.join(options.destination, 'package.tgz');
+        const packageJson = JSON.parse(
+          await fs.readFile(pathModule.join(outDir, 'package.json'), 'utf8'),
+        ) as Record<string, unknown>;
+        const packedManifest =
+          packageCheckMocks.packedManifestOverrides.get(outDir) ?? packageJson;
+        const tarballData = `mock tarball ${packageCheckMocks.packCalls.length}`;
 
-        await fs.writeFile(tarballPath, 'mock tarball');
+        packageCheckMocks.packedTarballManifests.set(
+          tarballData,
+          packedManifest,
+        );
+        await fs.writeFile(tarballPath, tarballData);
 
         return tarballPath;
       },
     ),
+    unpack: vi.fn(async (tarball: Uint8Array) => {
+      const tarballData = Buffer.from(tarball).toString('utf8');
+      const manifest =
+        packageCheckMocks.packedTarballManifests.get(tarballData) ?? {};
+
+      return {
+        files: [
+          {
+            data: Buffer.from(JSON.stringify(manifest)),
+            name: 'package/package.json',
+          },
+        ],
+        rootDir: 'package',
+      };
+    }),
   };
 });
+
+vi.mock('node:child_process', () => ({
+  execFile: vi.fn(
+    (
+      command: string,
+      args: string[],
+      _options: unknown,
+      callback: (error: Error | null, stdout: string) => void,
+    ) => {
+      if (command === 'git') {
+        const gitArgs = args.slice(args.indexOf('-C') + 2);
+        const relativePackageDir = gitArgs.at(-1) ?? '';
+
+        if (gitArgs[0] === 'diff') {
+          if (packageCheckMocks.changedPackageDirs.has(relativePackageDir)) {
+            callback(Object.assign(new Error('changed'), { code: 1 }), '');
+            return;
+          }
+
+          callback(null, '');
+          return;
+        }
+
+        if (gitArgs[0] === 'ls-files') {
+          callback(null, '');
+          return;
+        }
+      }
+
+      callback(
+        Object.assign(new Error('mock command unavailable'), { code: 1 }),
+        '',
+      );
+    },
+  ),
+}));
 
 vi.mock('publint', () => ({
   publint: vi.fn(async (options: unknown) => {
@@ -123,6 +188,69 @@ async function createOutputPackage(
   };
 }
 
+async function createWorkspacePackage(
+  rootDir: string,
+  packageName: string,
+  manifest: Record<string, unknown>,
+  outputManifest: Record<string, unknown> = manifest,
+): Promise<string> {
+  const packageDirName = packageName.split('/').at(-1) ?? packageName;
+  const packageDir = path.join(rootDir, 'packages', packageDirName);
+  const outDir = path.join(packageDir, 'dist');
+
+  await writeText(
+    path.join(packageDir, 'package.json'),
+    JSON.stringify({
+      name: packageName,
+      version: '1.0.0',
+      ...manifest,
+    }),
+  );
+  await writeText(path.join(packageDir, 'src/index.ts'), 'export {};\n');
+  await writeText(
+    path.join(outDir, 'package.json'),
+    JSON.stringify({
+      dependencies: {},
+      exports: {
+        '.': './index.js',
+      },
+      name: packageName,
+      version: '1.0.0',
+      ...outputManifest,
+    }),
+  );
+  await writeText(path.join(outDir, 'index.js'), 'export const value = 1;\n');
+  await writeText(path.join(outDir, 'README.md'), '# Example package\n');
+  await writeText(path.join(outDir, 'LICENSE.md'), 'MIT\n');
+
+  return outDir;
+}
+
+async function createWorkspaceRoot(): Promise<string> {
+  const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-package-root-'));
+
+  await writeText(
+    path.join(rootDir, 'pnpm-workspace.yaml'),
+    'packages:\n  - packages/*\n',
+  );
+
+  return rootDir;
+}
+
+function registerPublishedPackage(
+  packageName: string,
+  version: string,
+  gitHead = `${packageName}@${version}`,
+): void {
+  packageCheckMocks.registryPackages.set(packageName, {
+    versions: {
+      [version]: {
+        gitHead,
+      },
+    },
+  });
+}
+
 function createConfig(
   rootDir: string,
   targets: NonNullable<
@@ -166,8 +294,30 @@ function createFlow(): {
 beforeEach(() => {
   packageCheckMocks.attwProblems = [];
   packageCheckMocks.attwRuns = 0;
+  packageCheckMocks.changedPackageDirs.clear();
+  packageCheckMocks.packedManifestOverrides.clear();
+  packageCheckMocks.packedTarballManifests.clear();
   packageCheckMocks.packCalls = [];
   packageCheckMocks.publintCalls = [];
+  packageCheckMocks.registryPackages.clear();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string | URL) => {
+      const packageName = decodeURIComponent(
+        new URL(String(url)).pathname.slice(1),
+      );
+      const metadata = packageCheckMocks.registryPackages.get(packageName) ?? {
+        versions: {},
+      };
+
+      return {
+        json: async () => metadata,
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+      };
+    }),
+  );
 });
 
 describe('auditPublishedPackageBoundaries', () => {
@@ -383,6 +533,431 @@ describe('runPackageCheck', () => {
       expect(packageCheckMocks.attwRuns).toBe(0);
     } finally {
       await pkg.cleanup();
+    }
+  });
+
+  it('fails when a publishable package depends on a private workspace package', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'workspace:*',
+          },
+        },
+        {
+          dependencies: {
+            '@example/b': '^1.0.0',
+          },
+        },
+      );
+
+      await createWorkspacePackage(rootDir, '@example/b', {
+        private: true,
+      });
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('fails when a publishable source manifest uses link in publish dependencies', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'link:../b/dist',
+          },
+        },
+        {
+          dependencies: {
+            '@example/b': '^1.0.0',
+          },
+        },
+      );
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('skips release dependency consistency for private package outputs', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'link:../b/dist',
+          },
+        },
+        {
+          private: true,
+        },
+      );
+
+      await rm(path.join(outDir, 'README.md'), {
+        force: true,
+      });
+      await rm(path.join(outDir, 'LICENSE.md'), {
+        force: true,
+      });
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('ignores workspace and link specifiers in source devDependencies', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(rootDir, '@example/a', {
+        devDependencies: {
+          '@example/b': 'workspace:*',
+          '@example/c': 'link:../c/dist',
+        },
+      });
+
+      await createWorkspacePackage(rootDir, '@example/b', {
+        private: true,
+      });
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('fails when the packed manifest leaks workspace or link specifiers', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'workspace:*',
+          },
+        },
+        {
+          dependencies: {
+            '@example/b': 'workspace:*',
+            '@example/c': 'link:../c/dist',
+          },
+        },
+      );
+
+      await createWorkspacePackage(rootDir, '@example/b', {
+        version: '1.0.0',
+      });
+      registerPublishedPackage('@example/b', '1.0.0');
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('fails when a workspace dependency version is not published', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'workspace:*',
+          },
+        },
+        {
+          dependencies: {
+            '@example/b': '^1.0.0',
+          },
+        },
+      );
+
+      await createWorkspacePackage(rootDir, '@example/b', {
+        version: '1.0.0',
+      });
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('fails when a workspace dependency has changes after its registry gitHead', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'workspace:*',
+          },
+        },
+        {
+          dependencies: {
+            '@example/b': '^1.0.0',
+          },
+        },
+      );
+
+      await createWorkspacePackage(rootDir, '@example/b', {
+        version: '1.0.0',
+      });
+      registerPublishedPackage('@example/b', '1.0.0', 'published-b');
+      packageCheckMocks.changedPackageDirs.add('packages/b');
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('fails when the packed dependency range does not cover the workspace package version', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'workspace:*',
+          },
+        },
+        {
+          dependencies: {
+            '@example/b': '^1.0.0',
+          },
+        },
+      );
+
+      await createWorkspacePackage(rootDir, '@example/b', {
+        version: '2.0.0',
+      });
+      registerPublishedPackage('@example/b', '2.0.0');
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('passes when workspace dependencies are published and packed ranges cover them', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'workspace:*',
+          },
+        },
+        {
+          dependencies: {
+            '@example/b': '^1.2.0',
+          },
+        },
+      );
+
+      await createWorkspacePackage(rootDir, '@example/b', {
+        version: '1.2.0',
+      });
+      registerPublishedPackage('@example/b', '1.2.0');
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('reports recursive workspace dependency publish order', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(
+        rootDir,
+        '@example/a',
+        {
+          dependencies: {
+            '@example/b': 'workspace:*',
+          },
+        },
+        {
+          dependencies: {
+            '@example/b': '^1.0.0',
+          },
+        },
+      );
+
+      await createWorkspacePackage(rootDir, '@example/b', {
+        dependencies: {
+          '@example/c': 'workspace:*',
+        },
+        version: '1.0.0',
+      });
+      await createWorkspacePackage(rootDir, '@example/c', {
+        version: '1.0.0',
+      });
+      registerPublishedPackage('@example/b', '1.0.0', 'published-b');
+      registerPublishedPackage('@example/c', '1.0.0', 'published-c');
+      packageCheckMocks.changedPackageDirs.add('packages/b');
+      packageCheckMocks.changedPackageDirs.add('packages/c');
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+        }),
+      ).resolves.toBe(false);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
     }
   });
 
