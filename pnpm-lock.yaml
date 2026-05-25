@@ -267,8 +267,8 @@ catalogs:
       specifier: ^1.2.0
       version: 1.2.0
     limina:
-      specifier: 0.0.2
-      version: 0.0.2
+      specifier: 0.0.3
+      version: 0.0.3
     logaria:
       specifier: 0.0.2
       version: 0.0.2
@@ -746,7 +746,7 @@ importers:
         version: 9.39.2
       limina:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       rolldown:
         specifier: catalog:dev
         version: 1.0.0-rc.4
@@ -841,7 +841,7 @@ importers:
         version: 28.0.0
       limina:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       magic-string:
         specifier: catalog:dev
         version: 0.30.21
@@ -1207,7 +1207,7 @@ importers:
         version: 7.1.0
       limina:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       playwright-chromium:
         specifier: catalog:test
         version: 1.58.2
@@ -1268,7 +1268,7 @@ importers:
         version: 17.3.0
       limina:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -6804,18 +6804,21 @@ packages:
       }
     engines: { node: '>= 0.8.0' }
 
-  limina@0.0.2:
+  limina@0.0.3:
     resolution:
       {
-        integrity: sha512-MrFlajWATQX1GC1DgV4lBBRc+u/QGCvbUuyc632TcdnWB1NN9dn/Wqd25vwZMunBWrv8dCz4nQePyXEaiJnzZw==,
+        integrity: sha512-029bRXBsXoXYJ5H9QWL6zs/kSK4kj/IaqIk3pcbQLQNnP5fn9I1IZx8SIA9jS3Ypu6sc/khU4fOHMyai/JhgPg==,
       }
     engines: { node: ^20.19.0 || >=22.12.0 }
     hasBin: true
     peerDependencies:
+      '@vue/compiler-sfc': ^3.5.28
       svelte-check: ^4.4.7
       typescript: ~5.9.3
       vue-tsc: ~3.2.4
     peerDependenciesMeta:
+      '@vue/compiler-sfc':
+        optional: true
       svelte-check:
         optional: true
       typescript:
@@ -6877,21 +6880,6 @@ packages:
         integrity: sha512-9ie8ItPR6tjY5uYJh8K/Zrv/RMZ5VOlOWvtZdEHYSTFKZfIBPQa9tOAEeAWhd+AnIneLJ22w5fjOYtoutpWq5w==,
       }
     engines: { node: '>=18' }
-
-  logaria@0.0.1:
-    resolution:
-      {
-        integrity: sha512-8Ea5b6O/gHUVyRDnHYd26VGsHeW1HGaacoYd2qlpedDvm0gvvtVmNigxSB0ej3sVq5TeW6iMlV5cPOjr+P0BOA==,
-      }
-    engines: { node: ^20.19.0 || >=22.12.0 }
-    peerDependencies:
-      '@rollup/plugin-replace': ^6.0.3
-      rolldown: ^1.0.0
-    peerDependenciesMeta:
-      '@rollup/plugin-replace':
-        optional: true
-      rolldown:
-        optional: true
 
   logaria@0.0.2:
     resolution:
@@ -13028,19 +13016,21 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
-  limina@0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3)):
+  limina@0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3)):
     dependencies:
       '@arethetypeswrong/core': 0.18.2
       '@clack/prompts': 1.4.0
       '@publint/pack': 0.1.4
       cac: 6.7.14
       es-module-lexer: 2.0.0
-      logaria: 0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+      logaria: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       publint: 0.3.17
+      semver: 7.8.1
       tinyglobby: 0.2.15
       yaml: 2.8.3
       zod: 4.3.6
     optionalDependencies:
+      '@vue/compiler-sfc': 3.5.28
       typescript: 5.9.3
       vue-tsc: 3.2.4(typescript@5.9.3)
     transitivePeerDependencies:
@@ -13088,20 +13078,6 @@ snapshots:
       slice-ansi: 7.1.2
       strip-ansi: 7.1.2
       wrap-ansi: 9.0.2
-
-  logaria@0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4):
-    dependencies:
-      '@babel/parser': 7.29.0
-      '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
-      picocolors: 1.1.1
-      picomatch: 4.0.4
-      unplugin: 3.0.0
-    optionalDependencies:
-      '@rollup/plugin-replace': 6.0.3(rollup@4.59.0)
-      rolldown: 1.0.0-rc.4
-    transitivePeerDependencies:
-      - supports-color
 
   logaria@0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4):
     dependencies:
