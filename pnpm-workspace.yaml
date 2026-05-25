@@ -119,7 +119,7 @@ catalogs:
   prod:
     cheerio: ^1.2.0
     limina: 0.0.2
-    logaria: 0.0.1
+    logaria: 0.0.2
     picomatch: ^4.0.4
     tinyglobby: ^0.2.15
     unplugin: ^3.0.0

@@ -270,8 +270,8 @@ catalogs:
       specifier: 0.0.2
       version: 0.0.2
     logaria:
-      specifier: 0.0.1
-      version: 0.0.1
+      specifier: 0.0.2
+      version: 0.0.2
     picomatch:
       specifier: ^4.0.4
       version: 4.0.4
@@ -502,7 +502,7 @@ importers:
         version: link:../../utils/dist
       logaria:
         specifier: catalog:prod
-        version: 0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
       del-cli:
         specifier: catalog:dev
@@ -527,7 +527,7 @@ importers:
         version: 10.1.0
       logaria:
         specifier: catalog:prod
-        version: 0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       magic-string:
         specifier: catalog:dev
         version: 0.30.21
@@ -709,7 +709,7 @@ importers:
         version: 2.0.0
       logaria:
         specifier: catalog:prod
-        version: 0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       publint:
         specifier: catalog:lint
         version: 0.3.17
@@ -924,7 +924,7 @@ importers:
     dependencies:
       logaria:
         specifier: catalog:prod
-        version: 0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
       '@docs-islands/eslint-config':
         specifier: workspace:*
@@ -1097,7 +1097,7 @@ importers:
     dependencies:
       logaria:
         specifier: catalog:prod
-        version: 0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -1237,7 +1237,7 @@ importers:
         version: 1.2.0
       logaria:
         specifier: catalog:prod
-        version: 0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       vue:
         specifier: catalog:prod
         version: 3.5.28(typescript@5.9.3)
@@ -1289,7 +1289,7 @@ importers:
     dependencies:
       logaria:
         specifier: catalog:prod
-        version: 0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       tinyglobby:
         specifier: catalog:prod
         version: 0.2.15
@@ -6882,6 +6882,21 @@ packages:
     resolution:
       {
         integrity: sha512-8Ea5b6O/gHUVyRDnHYd26VGsHeW1HGaacoYd2qlpedDvm0gvvtVmNigxSB0ej3sVq5TeW6iMlV5cPOjr+P0BOA==,
+      }
+    engines: { node: ^20.19.0 || >=22.12.0 }
+    peerDependencies:
+      '@rollup/plugin-replace': ^6.0.3
+      rolldown: ^1.0.0
+    peerDependenciesMeta:
+      '@rollup/plugin-replace':
+        optional: true
+      rolldown:
+        optional: true
+
+  logaria@0.0.2:
+    resolution:
+      {
+        integrity: sha512-Jn1A2aBG70JDYJM94uZvsxiJLByTyC4fGkcq6RWntFkm71DD39gwbnB3fs1CVKRsY0/8k4diebNc3HcUVK80Aw==,
       }
     engines: { node: ^20.19.0 || >=22.12.0 }
     peerDependencies:
@@ -13075,6 +13090,20 @@ snapshots:
       wrap-ansi: 9.0.2
 
   logaria@0.0.1(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4):
+    dependencies:
+      '@babel/parser': 7.29.0
+      '@babel/traverse': 7.29.0
+      '@babel/types': 7.29.0
+      picocolors: 1.1.1
+      picomatch: 4.0.4
+      unplugin: 3.0.0
+    optionalDependencies:
+      '@rollup/plugin-replace': 6.0.3(rollup@4.59.0)
+      rolldown: 1.0.0-rc.4
+    transitivePeerDependencies:
+      - supports-color
+
+  logaria@0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4):
     dependencies:
       '@babel/parser': 7.29.0
       '@babel/traverse': 7.29.0
