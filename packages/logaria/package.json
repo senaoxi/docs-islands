@@ -51,7 +51,7 @@
     "@types/node": "catalog:dev",
     "@typescript-eslint/parser": "catalog:lint",
     "@docs-islands/utils": "link:../../utils/dist",
-    "@docs-islands/plugin-license": "link:../plugins/license",
+    "@docs-islands/plugin-license": "link:../plugins/license/dist",
     "es-module-lexer": "catalog:dev",
     "globals": "catalog:test",
     "magic-string": "catalog:dev",

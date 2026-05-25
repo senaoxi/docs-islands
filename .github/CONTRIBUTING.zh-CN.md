@@ -195,6 +195,59 @@ pnpm install
 pnpm docs:link:prod
 ```
 
+## 发布公开包
+
+公开 npm 包从仓库根目录统一发布。本地 `pnpm release` 负责生成版本提交和 package 级 git tag；真正的 npm publish 会交给 `Publish npm packages` GitHub Actions workflow 执行，这样 npm 能生成 Provenance 并显示绿色标记。
+
+- 交互式预览可发布目标：
+
+  ```bash
+  pnpm release
+  ```
+
+- 为一个或多个公开包生成 changelog：
+
+  ```bash
+  pnpm changelog logaria --type patch
+  pnpm changelog --package limina --type patch
+  pnpm changelog --package logaria,vitepress --type prerelease --preid beta
+  ```
+
+- 对指定包做不改文件的预览：
+
+  ```bash
+  pnpm release logaria --type patch --dry-run --yes
+  pnpm release --package limina --type patch --dry-run --yes
+  pnpm release --package vitepress --type prerelease --preid beta --dry-run --yes
+  ```
+
+- 从仓库根目录执行正式 release。本地执行时，npm publish 会等 tag push 后由 GitHub Actions 接管：
+
+  ```bash
+  pnpm release --package vitepress --type patch --yes
+  ```
+
+- 如需在已经打好 tag 的 checkout 上只重试 publish 步骤：
+
+  ```bash
+  pnpm release publish --package vitepress --dry-run
+  pnpm release publish --package vitepress
+  ```
+
+当前公开发布目标：
+
+- `logaria` -> `logaria`
+- `limina` -> `limina`
+- `vitepress` -> `@docs-islands/vitepress`
+
+对应的 package 级 git tag：
+
+- `logaria/v<version>`
+- `limina/v<version>`
+- `vitepress/v<version>`
+
+发布 workflow 已配置 `id-token: write`，并默认启用 npm Provenance。npm package 设置中需要信任这个仓库 workflow，并使用 `Release` environment。发布成功后，对应版本应在 npm 页面显示绿色 Provenance 标记。
+
 ## 许可证
 
 通过为 Docs Islands 做出贡献，你同意你的贡献将在 [MIT 许可证](https://github.com/XiSenao/docs-islands/blob/main/LICENSE) 下许可。

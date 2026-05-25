@@ -1,0 +1,108 @@
+name: Publish npm packages
+
+on:
+  push:
+    tags:
+      - "logaria/v*"
+      - "limina/v*"
+      - "vitepress/v*"
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package to publish from the selected ref"
+        required: true
+        type: choice
+        options:
+          - logaria
+          - limina
+          - vitepress
+      npm_tag:
+        description: "Optional npm dist-tag override"
+        required: false
+        type: string
+
+env:
+  NODE_OPTIONS: --max-old-space-size=4096
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+jobs:
+  publish:
+    name: Publish to npm
+    if: github.repository == 'XiSenao/docs-islands'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment: Release
+
+    steps:
+      - name: Checkout code
+        # actions/checkout@v5.0.0.
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set node version to 20
+        # actions/setup-node@v5.0.0.
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20.19.0
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+
+      - name: Setup pnpm via Corepack
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare "$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).packageManager")" --activate
+          pnpm --version
+
+      - name: Resolve package selector
+        shell: bash
+        env:
+          INPUT_PACKAGE: ${{ inputs.package }}
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            logaria/v*) package_selector="logaria" ;;
+            limina/v*) package_selector="limina" ;;
+            vitepress/v*) package_selector="vitepress" ;;
+            *) package_selector="${INPUT_PACKAGE}" ;;
+          esac
+
+          if [[ -z "${package_selector}" ]]; then
+            echo "Unable to determine package selector from ref ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          echo "PACKAGE_SELECTOR=${package_selector}" >> "$GITHUB_ENV"
+
+      - name: Disallow installation scripts
+        run: yq '.onlyBuiltDependencies = []' -i pnpm-workspace.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore workspace manifest
+        run: git restore -- pnpm-workspace.yaml
+
+      - name: Install Playwright browser
+        if: env.PACKAGE_SELECTOR == 'vitepress'
+        run: pnpm playwright install chromium
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "0"
+
+      - name: Publish package with provenance
+        shell: bash
+        env:
+          NPM_TAG: ${{ inputs.npm_tag }}
+        run: |
+          set -euo pipefail
+          npm i -g npm@^11.5.2
+          args=(scripts/release.ts publish --package "${PACKAGE_SELECTOR}")
+          if [[ -n "${NPM_TAG}" ]]; then
+            args+=(--npm-tag "${NPM_TAG}")
+          fi
+          pnpm exec tsx "${args[@]}"

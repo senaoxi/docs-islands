@@ -9,6 +9,7 @@
     "lint": "del-cli .eslintcache || true && eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },
+  "types": "./src/index.ts",
   "dependencies": {
     "logaria": "catalog:prod"
   },
@@ -31,9 +32,6 @@
     }
   },
   "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
-    }
+    ".": "./src/index.ts"
   }
 }

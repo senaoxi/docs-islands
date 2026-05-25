@@ -130,11 +130,24 @@ export interface ReleaseCliOptions {
   skipTests: boolean;
   skipBuild: boolean;
   skipChangelog: boolean;
+  skipNpmPublish: boolean;
   skipPush: boolean;
   skipGithubRelease: boolean;
   fromTag?: string;
   registry?: string;
   npmTag?: string;
+  provenance: boolean;
+  help: boolean;
+}
+
+export interface PublishCliOptions {
+  packageSelectors: string[];
+  dryRun: boolean;
+  skipTests: boolean;
+  skipBuild: boolean;
+  registry?: string;
+  npmTag?: string;
+  provenance: boolean;
   help: boolean;
 }
 

@@ -62,8 +62,12 @@ function runPnpm(
 }
 
 async function main(): Promise<void> {
-  for (const packageDir of ['utils', 'packages/limina']) {
-    // These packages are consumed through link:*/dist during local installs.
+  for (const packageDir of [
+    'utils',
+    'packages/plugins/license',
+    'packages/limina',
+  ]) {
+    // These local packages are consumed through link: deps whose exports point at dist.
     // Build them before refreshing pnpm's generated bin shims below.
     await runPnpm([
       '--dir',

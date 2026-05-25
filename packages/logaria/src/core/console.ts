@@ -26,8 +26,13 @@ const formatRuleLabelPrefix = (labels: string[]): string => {
   return `${labels.map((label) => `[${label}]`).join('')} `;
 };
 
+const isNodeRuntime = (): boolean =>
+  typeof process !== 'undefined' && Boolean(process.versions?.node);
+
 const isBrowserConsole = (): boolean =>
-  globalThis.window !== undefined && globalThis.document !== undefined;
+  !isNodeRuntime() &&
+  globalThis.window !== undefined &&
+  globalThis.document !== undefined;
 
 const formatNodePrefix = (main: string, group: string): string => {
   if (!colors) {

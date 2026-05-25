@@ -807,8 +807,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/plugin-license':
-        specifier: link:../plugins/license
-        version: link:../plugins/license
+        specifier: link:../plugins/license/dist
+        version: link:../plugins/license/dist
       '@docs-islands/utils':
         specifier: link:../../utils/dist
         version: link:../../utils/dist
@@ -982,8 +982,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/plugin-license':
-        specifier: link:../plugins/license
-        version: link:../plugins/license
+        specifier: link:../plugins/license/dist
+        version: link:../plugins/license/dist
       '@docs-islands/utils':
         specifier: link:../../utils/dist
         version: link:../../utils/dist

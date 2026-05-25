@@ -1,5 +1,9 @@
 import { defineConfig, type ViteUserConfig } from 'vitest/config';
 
+// Logger assertions compare message text; terminal colors split those strings.
+delete process.env.FORCE_COLOR;
+process.env.NO_COLOR = '1';
+
 const config: ViteUserConfig = defineConfig({
   test: {
     environment: 'node',
