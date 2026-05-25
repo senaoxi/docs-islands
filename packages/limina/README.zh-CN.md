@@ -50,16 +50,6 @@ Limina 让这些规则变得可审查、可执行，并适合放进 CI。
 pnpm add -D limina typescript
 ```
 
-如果某个 workspace package 会在自己的 scripts 中调用 `limina`，也请在该 package 中声明 Limina：
-
-```json
-{
-  "devDependencies": {
-    "limina": "workspace:*"
-  }
-}
-```
-
 ## 快速开始
 
 在 workspace 根目录创建 `limina.config.mjs`：

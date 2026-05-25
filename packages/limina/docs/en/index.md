@@ -18,11 +18,11 @@ hero:
 
 features:
   - title: See the real dependency graph
-    details: Resolve source imports with TypeScript, then compare them with project references, workspace protocols, and architecture rules.
+    details: When a PR adds a cross-package import, see whether it needs a project reference, a workspace dependency, or an architecture rule change.
   - title: Keep packages in their lanes
-    details: Catch cross-package relative imports, undeclared dependencies, and #imports that escape the package that owns them.
+    details: Catch cross-package relative imports, undeclared dependencies, and #imports that escape their package, so dependencies return to manifests and exports.
   - title: Know every file is checked
-    details: Connect declaration leaves to local typecheck companions and framework checkers, with explicit allowlists for generated code.
+    details: Connect declaration leaves to local typecheck companions and framework checkers, so first failures point to graph, source, proof, or typecheck work.
   - title: Ship what consumers install
-    details: Validate built packages with publint, Are The Types Wrong, README and license checks, and runtime import boundaries.
+    details: Validate the dist files consumers install before publish, including exports, types, README/license files, and runtime import boundaries.
 ---

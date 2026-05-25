@@ -2,6 +2,32 @@
 
 Limina commands are small on purpose. Each one checks one layer of the repository, and `limina check` composes the common layers together.
 
+## Limina's pnpm Monorepo Standard
+
+Limina does not judge whether a pnpm monorepo is well-formed by one fixed folder template. The core standard is simpler: every dependency edge should say the same thing in source imports, `package.json`, TypeScript project references, package exports, and built output.
+
+When those layers agree, a reviewer can answer three questions quickly:
+
+- Who owns this file?
+- Is this package using another package as source, or as a built artifact?
+- Is the same edge visible to TypeScript, pnpm, and the package consumer?
+
+In practice, that leads to a few repository rules.
+
+First, make package ownership obvious. A source file belongs to the nearest `package.json`. A leaf `tsconfig` should stay inside one package owner, and relative imports should not jump into another package. If `packages/app` needs code from `packages/core`, import `@acme/core`, declare the source import in `dependencies` or `devDependencies`, and let the package export describe the public entry. `peerDependencies` and `optionalDependencies` can describe consumer contracts, but they do not by themselves authorize a source file to import the package. That keeps the boundary visible instead of hiding it in `../../core/src`.
+
+Second, use dependency protocols to say what kind of relationship you want. `workspace:*` means "this is a source dependency inside the workspace". Limina expects that edge to have a matching declaration project reference and source-facing resolution. If the package should be consumed like an installed output, use `link:`, `file:`, `catalog:`, or a semver range instead, and do not keep a project reference for that edge. In short: source dependency means source graph; artifact dependency means package output.
+
+Third, keep the TypeScript graph split by responsibility. A `tsconfig.build.json` should be a pure aggregator with `files: []` and `references`. Each buildable source boundary should have a `tsconfig*.dts.json` declaration leaf for `tsc -b`, plus a local `tsconfig*.json` companion for normal strict typechecking. The declaration leaf explains "what this project builds and references"; the companion explains "how this source should be checked while editing".
+
+Fourth, prefer source-facing package exports for workspace source dependencies. TypeScript resolves package imports through exports, even inside a monorepo. If `@acme/app` depends on `@acme/core` with `workspace:*` but `@acme/core` exports `dist`, the source graph is quietly reading a built artifact. The cleanest fix is to expose source entries for the development graph. Generated `paths` are useful as a compatibility bridge, but they should be explicit, checked in, and reviewed.
+
+Fifth, make coverage provable. Every source file inside Limina's configured source boundary should be covered by a checker entry, a declaration graph project, or a documented allowlist entry. This is why Limina cares about checker entries, local companions, and allowlist reasons: it should be clear which files are checked, which files are generated or exceptional, and why.
+
+Finally, check the published shape separately. Source graph checks prove the workspace is coherent while developing. `package check` proves the built package directory works for consumers: exports, types, runtime imports, README, and license. A healthy pnpm monorepo usually has both workflows: one for PR-time source governance, and one for release-time package output.
+
+The shortest version is: packages own files, manifests own dependency intent, project references own source graph edges, exports own public entrypoints, and package checks own the final artifact. Limina works best when those responsibilities do not blur together.
+
 ## Default Check
 
 ```sh
@@ -16,6 +42,8 @@ The default check runs:
 4. `checker:typecheck`
 
 Use it as the normal local and PR command once the repository is configured.
+
+It fits well after a local change, before commit, and in pull request CI. When it passes, the source dependency graph, package ownership, coverage proof, and local typechecks agree at the usual development layer. It does not include package output checks, so release flows should still build first and then run `package check`.
 
 ## Graph Check
 
@@ -37,6 +65,8 @@ It checks:
 
 When this fails, read the importing file and the expected reference first. The fix is usually to add a project reference, change the dependency protocol, expose source from package exports, or tighten a graph rule.
 
+For example, `@acme/app` imports `@acme/core`, but app's declaration leaf does not reference core. Graph check points at the importing file, the referenced project, and the current references. Once fixed, real source imports, the `workspace:*` dependency, and TypeScript project references describe the same edge, so the PR does not merge an invisible cross-package dependency.
+
 ## Source Check
 
 ```sh
@@ -54,6 +84,8 @@ It checks:
 - `#imports` match the nearest package's `imports` field and stay inside that package.
 
 Use this to keep package ownership boring and easy to review.
+
+For example, `packages/app/src/main.ts` might reach into another package through `../core/src/foo`, or import `zod` without declaring it in the nearest `package.json`. After the fix, cross-package dependencies go through package exports and manifests, which is easier to review and closer to how consumers use the package.
 
 ## Proof Check
 
@@ -75,6 +107,8 @@ It checks:
 
 Use allowlists for generated files or intentional exceptions, and keep the reason useful for reviewers.
 
+For example, `packages/core/src/generated/runtime.d.ts` may be produced by a build step and not covered by a normal checker entry. Proof check asks you to either include it in checker coverage or document it in `proof.allowlist` with a file and reason. The team can then see which files are really checked and which exceptions are intentional.
+
 ## Checker Typecheck and Build
 
 ```sh
@@ -94,6 +128,8 @@ pnpm exec limina checker build
 
 Use `--concurrency <n>` with `checker typecheck` when you want to limit parallel checker processes.
 
+Run `checker typecheck` after source, `tsconfig`, Vue/Svelte, or checker config changes. Run `checker build` when declaration output or the build graph itself needs confirmation. Limina discovers the targets from checker entries and invokes the right tool, so framework files are handled by framework checkers instead of being forced into a plain `tsc -b` graph.
+
 ## Paths Generate and Check
 
 ```sh
@@ -106,6 +142,8 @@ Paths generation helps with one specific compatibility case: a package is declar
 Limina can generate `tsconfig.dts.paths.generated.json` files with source-facing aliases. It does not inject them automatically. Add the generated file manually as the first entry in the relevant declaration leaf's `extends` array.
 
 Use `paths check` in CI to fail when generated files are stale.
+
+For example, `@acme/core` still exports `dist`, but `@acme/app` consumes it with `workspace:*` as a source dependency. Graph check reports artifact resolution; `paths generate` writes source aliases. After you add the generated config as the first `extends` entry in the declaration leaf, `paths check` can catch stale aliases when exports or source entries change.
 
 ## Package Check
 
@@ -126,6 +164,8 @@ It runs configured targets from `packageChecks.targets`:
 Public package outputs must include `README.md` and `LICENSE.md` unless the output `package.json` sets `private: true`.
 
 Build first, then run package checks.
+
+For example, source typechecking may pass while `packages/core/dist/package.json` points `types` at a missing declaration file, or browser output still imports `node:fs`. Package check fails at the built-output layer. It validates the directory consumers install, not only the development-time source tree.
 
 ## Custom Pipelines
 
@@ -155,3 +195,5 @@ pnpm exec limina check publish
 ```
 
 Pipeline steps can be built-in Limina tasks or external commands. Object-form command steps are best when arguments, `cwd`, or environment variables need to be unambiguous.
+
+Teams can turn common flows such as "PR check", "pre-publish check", or "package output only" into named entrypoints. CI, package scripts, and local commands then share the same order. For example, `limina check publish` can run graph/source/proof/typecheck, build, and package output checks without each CI job hand-writing that sequence.

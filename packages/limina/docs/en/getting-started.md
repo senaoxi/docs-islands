@@ -19,15 +19,11 @@ pnpm add -D limina typescript
 
 :::
 
-If a workspace package calls `limina` from its own scripts, add `limina` to that package too:
+## Pick an Adoption Path
 
-```json
-{
-  "devDependencies": {
-    "limina": "workspace:*"
-  }
-}
-```
+If your workspace does not yet have clear `tsconfig*.dts.json`, `tsconfig.build.json`, and project references, start with `limina init`. It infers the declaration graph it can safely generate from existing `tsconfig*.json` files and stops when the structure is ambiguous.
+
+If your repository already has a stable declaration build graph, write the minimal `limina.config.mjs` directly. In that case, Limina does not redesign the graph; it starts from the checker entry you provide and checks the structure that already exists.
 
 ## Initialize an Existing Workspace
 
@@ -54,6 +50,8 @@ Initialization can create:
 - a missing root `limina` dev dependency.
 
 It refuses ambiguous inputs instead of guessing, including existing `tsconfig*.build.json` or `tsconfig*.dts.json` files and `tsconfig.json` files that mix source files with project references.
+
+When init stops this way, it usually means the repository already has a tsconfig convention. Read the files named in the error, then decide whether to keep the current layout and write config manually, or split that area into an aggregator, declaration leaf, and local companion.
 
 After initialization, run:
 
@@ -106,6 +104,15 @@ The default check pipeline runs:
 3. `proof:check`
 4. `checker:typecheck`
 
+The first failure usually tells you which layer to inspect:
+
+- `graph:check` usually points to imports, project references, `workspace:*`, or label rules that are out of sync;
+- `source:check` usually points to file ownership, cross-package relative imports, dependency declarations, or `#imports`;
+- `proof:check` usually points to checker entries, declaration leaves, local companions, or allowlists that do not cover source files;
+- `checker:typecheck` means the matching `tsconfig*.json` or framework checker found type errors.
+
+For example, if `@acme/app` adds an import from `@acme/core` and the first `pnpm typecheck` fails in graph checking, start with the importing file and expected reference shown in the report. Re-run the same command after the fix to confirm graph, source ownership, and typecheck coverage together.
+
 ## Add Framework Checkers
 
 Limina can also run framework-aware checkers. Add another checker entry when part of the workspace needs it:
@@ -133,6 +140,7 @@ Built-in presets are `tsc`, `vue-tsc`, and `svelte-check`. Install the matching 
 
 ## Next Steps
 
+- Read [Why Limina](./why.md) if you are still deciding what problem Limina solves.
 - Learn the model in [Core Concepts](./concepts.md).
 - See each command in [Checks & Workflows](./checks-and-workflows.md).
-- Add package output validation with [`packageChecks.targets`](./reference.md#packagecheckstargets).
+- Add package output validation with [`packageChecks.targets`](./options/package-checks.md).

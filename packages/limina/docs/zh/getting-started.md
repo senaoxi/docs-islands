@@ -19,15 +19,11 @@ pnpm add -D limina typescript
 
 :::
 
-如果某个 workspace package 会在自己的 scripts 中调用 `limina`，也建议在该 package 中声明：
+## 选择接入方式
 
-```json
-{
-  "devDependencies": {
-    "limina": "workspace:*"
-  }
-}
-```
+如果你的 workspace 还没有清晰的 `tsconfig*.dts.json`、`tsconfig.build.json` 和 project references，优先使用 `limina init`。它会从已有 `tsconfig*.json` 推导能安全生成的声明图，并在遇到含糊结构时停下来，让你手动确认。
+
+如果你的仓库已经有稳定的 declaration build graph，直接写最小 `limina.config.mjs` 更快。此时 Limina 不会重新设计你的 graph，只会从你指定的 checker entry 开始检查现有结构。
 
 ## 初始化已有 workspace
 
@@ -54,6 +50,8 @@ pnpm exec limina init --yes
 - 缺失的根目录 `limina` dev dependency。
 
 遇到含糊输入时，init 会拒绝而不是猜测。例如已经存在 `tsconfig*.build.json` 或 `tsconfig*.dts.json`，或者 `tsconfig.json` 同时混合源码文件和 project references。
+
+这类失败通常说明仓库已经有自己的 tsconfig 约定。先读报错中列出的文件，再决定是保留现状并手写配置，还是把该目录拆成 aggregator、declaration leaf 和 local companion。
 
 初始化后执行：
 
@@ -106,6 +104,15 @@ pnpm typecheck
 3. `proof:check`
 4. `checker:typecheck`
 
+第一次运行失败时，可以按类别判断下一步：
+
+- `graph:check` 失败，多半是 import、project reference、`workspace:*` 或 label rule 没有对齐；
+- `source:check` 失败，多半是文件归属、跨 package 相对 import、依赖声明或 `#imports` 有问题；
+- `proof:check` 失败，多半是 checker entry、declaration leaf、local companion 或 allowlist 没有覆盖到源码；
+- `checker:typecheck` 失败，则回到对应的 `tsconfig*.json` 或框架 checker 修类型错误。
+
+例如 `@acme/app` 新增了 `@acme/core` import，第一次跑 `pnpm typecheck` 报 graph 问题时，优先看提示里的 importing file 和 expected reference。修完后再跑同一个命令，确认 graph、source ownership 和 typecheck coverage 一起通过。
+
 ## 添加框架 checker
 
 Limina 也可以运行框架感知 checker。当 workspace 某部分需要它时，增加一个 checker entry：
@@ -133,6 +140,7 @@ export default defineConfig({
 
 ## 下一步
 
+- 如果你还不确定 Limina 解决什么问题，先看 [为什么需要 Limina](./why.md)。
 - 在 [核心概念](./concepts.md) 中理解模型。
 - 在 [检查与工作流](./checks-and-workflows.md) 中了解每个命令。
-- 用 [`packageChecks.targets`](./reference.md#packagecheckstargets) 添加发布产物检查。
+- 用 [`packageChecks.targets`](./options/package-checks.md) 添加发布产物检查。

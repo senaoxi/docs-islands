@@ -18,6 +18,8 @@ Project references are supposed to describe which project depends on which other
 
 Limina reads the projects reachable from your checker entries, resolves real imports with TypeScript, and reports missing or forbidden references. It also checks label-based rules, so a browser runtime project can be denied access to Node-only projects or dependencies.
 
+For example, `@acme/app` imports `@acme/core`, but `packages/app/tsconfig.lib.dts.json` does not reference `packages/core/tsconfig.lib.dts.json`. Limina points at the importing file, the current references, and the missing edge. After the fix, `tsc -b`, the editor, and CI are looking at the same dependency graph.
+
 ## Workspace Dependencies Need Clear Meaning
 
 `workspace:*` means "this package is part of the source workspace". That is different from `link:`, `file:`, `catalog:`, or a normal semver dependency, which usually means "consume this package as an artifact".
@@ -25,6 +27,8 @@ Limina reads the projects reachable from your checker entries, resolves real imp
 That distinction matters because TypeScript project references do not rewrite package exports. If package A references package B but imports `@scope/b`, TypeScript still follows B's package exports. When those exports point to `dist`, the graph may silently consume build output instead of source.
 
 Limina detects this situation. It asks you to either expose source entries, stop modeling the edge as a source dependency, or generate an explicit compatibility `paths` file.
+
+For example, `@acme/app` depends on `@acme/core` with `workspace:*`, but `@acme/core` exports `./dist/index.js`. Limina reports that the source dependency resolved to build output. You can expose source entries instead, or run `limina paths generate` to create `tsconfig.dts.paths.generated.json` and manually add it as the first `extends` entry in the relevant declaration leaf. The compatibility path becomes reviewable configuration instead of an invisible TypeScript resolution accident.
 
 ## Source Ownership Should Be Boring
 
@@ -38,14 +42,20 @@ Limina's source check keeps these rules plain:
 - bare imports must be listed in `dependencies` or `devDependencies`;
 - `#imports` must match the nearest package's `imports` field and resolve inside that package.
 
+For example, `packages/app/src/main.ts` reaches into another package with `../core/src/index`. Limina reports the cross-package relative import and nudges the dependency back through `@acme/core` package exports. After that, reviewers can understand the dependency from manifests and exports instead of chasing relative paths.
+
 ## Passing Source Checks Is Not Enough
 
 A source graph can pass while the published package is still broken. Consumers install the built output, not your source tsconfigs.
 
 Limina package checks run after your build. They pack the output and check package metadata, type resolution, runtime imports, dependency declarations, self imports, README, and license files. This catches a different class of release bugs than `tsc`.
 
+For example, source typechecking passes, but `dist/package.json` points `types` at a missing declaration file, or browser output still imports `node:fs`. `limina package check` fails before release. The thing being validated is the package consumers install, not only the source tree in your repository.
+
 ## The Design Goal
 
 Limina tries to keep the rules visible. Instead of hiding policy in a preset, it keeps checker entries, graph rules, package targets, allowlists, paths options, and pipelines in `limina.config.mjs`.
 
 That makes architecture changes something reviewers can read, not something CI discovers only after the merge.
+
+For example, if browser runtime code must never reach Node-only packages, put `"limina": "runtime-client"` in the declaration leaf and define the deny rule under `graph.rules.runtime-client`. Future boundary changes then appear in config or tsconfig diffs, where reviewers can discuss them directly.

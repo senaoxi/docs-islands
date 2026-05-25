@@ -295,4 +295,80 @@ describe('RenderingFrameworkParserManager', () => {
     );
     expect(result.map).toBeNull();
   });
+
+  it('recognizes framework script lang attributes with HTML-style spacing', async () => {
+    const calls: string[] = [];
+    const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
+    const react = createFakeParser({
+      calls,
+      framework: 'react',
+      lang: 'react',
+    });
+
+    manager.registerParser(react.parser);
+
+    const result = await manager.transformMarkdown(
+      `<script setup lang = 'react' data-example>
+import Card from './Card'
+</script>
+<Card />`,
+      '/guide/spaced-lang.md',
+      createTestModuleResolver(),
+    );
+
+    expect(calls).toEqual(['parse:react', 'transform:react']);
+    expect(result.code).toContain('data-framework="react"');
+    expect(result.code).not.toContain('<script setup lang');
+  });
+
+  it('does not treat data-lang as a framework script language', async () => {
+    const calls: string[] = [];
+    const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
+    const react = createFakeParser({
+      calls,
+      framework: 'react',
+      lang: 'react',
+    });
+
+    manager.registerParser(react.parser);
+
+    const result = await manager.transformMarkdown(
+      `<script data-lang="react">console.log('stay')</script>
+<Card />`,
+      '/guide/data-lang.md',
+      createTestModuleResolver(),
+    );
+
+    expect(calls).toEqual([]);
+    expect(result.code).toContain(
+      `<script data-lang="react">console.log('stay')</script>`,
+    );
+    expect(result.map).toBeNull();
+  });
+
+  it('keeps Vue script setup blocks for the VitePress SFC pipeline', async () => {
+    const calls: string[] = [];
+    const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
+    const react = createFakeParser({
+      calls,
+      framework: 'react',
+      lang: 'react',
+    });
+
+    manager.registerParser(react.parser);
+
+    const result = await manager.transformMarkdown(
+      `<script setup lang="ts">
+const message = 'stay'
+</script>
+<Demo />`,
+      '/guide/vue-setup.md',
+      createTestModuleResolver(),
+    );
+
+    expect(calls).toEqual([]);
+    expect(result.code).toContain('<script setup lang="ts">');
+    expect(result.code).toContain(`const message = 'stay'`);
+    expect(result.map).toBeNull();
+  });
 });

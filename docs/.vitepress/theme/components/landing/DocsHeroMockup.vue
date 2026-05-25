@@ -4,15 +4,14 @@ import { computed, ref } from 'vue';
 
 const { lang } = useData();
 const route = useRoute();
-const isFlowActivated = ref(false);
+const hoveredDocFramework = ref<string | null>(null);
+const isFlowHovered = computed(() => hoveredDocFramework.value !== null);
 const isZh = computed(
   () => route.path.startsWith('/zh/') || lang.value.startsWith('zh'),
 );
 
-const activateFlow = () => {
-  if (isFlowActivated.value) return;
-
-  isFlowActivated.value = true;
+const setHoveredDocFramework = (framework: string | null) => {
+  hoveredDocFramework.value = framework;
 };
 
 const text = computed(() => {
@@ -64,6 +63,41 @@ const text = computed(() => {
   };
 });
 
+interface ConnectorPoint {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+const uiConnectorPoints: ConnectorPoint[] = [
+  { x1: -44, y1: -34, x2: -96, y2: -58 },
+  { x1: -22, y1: -42, x2: -38, y2: -76 },
+  { x1: 22, y1: -42, x2: 38, y2: -76 },
+  { x1: 44, y1: -34, x2: 96, y2: -58 },
+];
+
+const docConnectorPoints: ConnectorPoint[] = [
+  { x1: -96, y1: 58, x2: -44, y2: 34 },
+  { x1: -38, y1: 76, x2: -22, y2: 42 },
+  { x1: 38, y1: 76, x2: 22, y2: 42 },
+  { x1: 96, y1: 58, x2: 44, y2: 34 },
+];
+
+const uiConnectorLines = computed(() =>
+  text.value.uiFrameworks.map((framework, index) => ({
+    framework,
+    ...uiConnectorPoints[index],
+  })),
+);
+
+const docConnectorLines = computed(() =>
+  text.value.docsFrameworks.map((framework, index) => ({
+    framework,
+    ...docConnectorPoints[index],
+  })),
+);
+
 const frameworkMarks: Record<string, string> = {
   Vue: 'V',
   React: 'R',
@@ -111,13 +145,98 @@ const getFrameworkMark = (framework: string) =>
 
         <div
           class="mockup-code"
-          :class="{ 'is-flow-active': isFlowActivated }"
+          :class="{ 'is-flow-active': isFlowHovered }"
           :aria-label="text.diagramLabel"
         >
           <span class="flow-kicker">{{ text.diagramLabel }}</span>
 
           <div class="flow-diagram" aria-hidden="true">
             <div class="tile-scene">
+              <svg
+                class="tile-connectors-svg"
+                viewBox="-255 -160 510 320"
+                preserveAspectRatio="none"
+              >
+                <g
+                  v-for="line in uiConnectorLines"
+                  :key="`ui-connector-${line.framework}`"
+                  class="tile-connector-group tile-connector-group-ui"
+                  :class="{ 'is-line-active': isFlowHovered }"
+                >
+                  <line
+                    class="tile-connector-segment tile-connector-dash"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                  <line
+                    class="tile-connector-segment tile-connector-glow"
+                    pathLength="1"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                  <line
+                    class="tile-connector-segment tile-connector-core"
+                    pathLength="1"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                  <line
+                    class="tile-connector-segment tile-connector-sheen"
+                    pathLength="1"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                </g>
+                <g
+                  v-for="line in docConnectorLines"
+                  :key="`doc-connector-${line.framework}`"
+                  class="tile-connector-group tile-connector-group-doc"
+                  :class="{
+                    'is-line-active': hoveredDocFramework === line.framework,
+                  }"
+                >
+                  <line
+                    class="tile-connector-segment tile-connector-dash"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                  <line
+                    class="tile-connector-segment tile-connector-glow"
+                    pathLength="1"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                  <line
+                    class="tile-connector-segment tile-connector-core"
+                    pathLength="1"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                  <line
+                    class="tile-connector-segment tile-connector-sheen"
+                    pathLength="1"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                </g>
+              </svg>
+
               <div class="flow-ui-frameworks tile-cluster">
                 <span
                   v-for="framework in text.uiFrameworks"
@@ -133,22 +252,10 @@ const getFrameworkMark = (framework: string) =>
                 </span>
               </div>
 
-              <div class="flow-stream flow-stream-to-ui">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-
               <div class="flow-islands flow-tile">
                 <span class="flow-tile-mark">DI</span>
                 <strong>{{ text.islandsTile }}</strong>
                 <small>{{ text.islandsTileNote }}</small>
-              </div>
-
-              <div class="flow-stream flow-stream-to-islands">
-                <span></span>
-                <span></span>
-                <span></span>
               </div>
 
               <div class="flow-doc-frameworks tile-cluster">
@@ -156,11 +263,14 @@ const getFrameworkMark = (framework: string) =>
                   v-for="framework in text.docsFrameworks"
                   :key="framework"
                   class="flow-doc-tile flow-tile"
-                  @mouseenter="activateFlow"
-                  @mouseover="activateFlow"
-                  @pointerenter="activateFlow"
-                  @pointerdown="activateFlow"
-                  @touchstart.passive="activateFlow"
+                  :class="{
+                    'is-doc-active': hoveredDocFramework === framework,
+                  }"
+                  @mouseenter="setHoveredDocFramework(framework)"
+                  @mouseover="setHoveredDocFramework(framework)"
+                  @mouseleave="setHoveredDocFramework(null)"
+                  @pointerenter="setHoveredDocFramework(framework)"
+                  @pointerleave="setHoveredDocFramework(null)"
                 >
                   <span class="flow-tile-mark">
                     {{ getFrameworkMark(framework) }}
@@ -348,8 +458,18 @@ const getFrameworkMark = (framework: string) =>
   );
   --mockup-code-flow-line: color-mix(
     in srgb,
-    var(--docs-home-accent) 34%,
-    transparent
+    var(--docs-home-border-hover) 72%,
+    var(--docs-home-accent)
+  );
+  --mockup-code-flow-core: color-mix(
+    in srgb,
+    var(--docs-home-border-hover) 62%,
+    var(--docs-home-accent)
+  );
+  --mockup-code-flow-hot: color-mix(
+    in srgb,
+    white 82%,
+    var(--docs-home-accent)
   );
   --mockup-code-pill-bg: color-mix(
     in srgb,
@@ -406,7 +526,9 @@ const getFrameworkMark = (framework: string) =>
   --mockup-code-docs-aura: rgb(255 255 255 / 7%);
   --mockup-code-islands-aura: rgb(109 91 208 / 38%);
   --mockup-code-sheen: rgb(245 245 244 / 16%);
-  --mockup-code-flow-line: rgb(97 218 251 / 72%);
+  --mockup-code-flow-line: rgb(224 184 138 / 52%);
+  --mockup-code-flow-core: rgb(215 191 166 / 72%);
+  --mockup-code-flow-hot: rgb(255 245 232 / 78%);
   --mockup-code-pill-bg: rgb(255 255 255 / 6%);
   --mockup-code-pill-border: rgb(97 218 251 / 20%);
   --mockup-code-pill-text: #d8dee9;
@@ -594,9 +716,74 @@ const getFrameworkMark = (framework: string) =>
 
 .flow-doc-frameworks .flow-tile {
   --tile-opacity: 0.84;
+  --tile-edge: color-mix(in srgb, var(--mockup-code-pill-border) 42%, #8a7460);
   z-index: 1;
   cursor: pointer;
   pointer-events: auto;
+  border-color: color-mix(
+    in srgb,
+    var(--mockup-code-layer-border) 72%,
+    var(--mockup-code-pill-border)
+  );
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 42%), transparent 52%),
+    radial-gradient(
+      circle at 50% -18%,
+      color-mix(in srgb, var(--mockup-code-pill-border) 34%, transparent),
+      transparent 58%
+    ),
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--mockup-code-layer-border) 18%, transparent) 0 1px,
+      transparent 1px 7px
+    ),
+    var(--mockup-code-layer-muted-bg);
+  box-shadow:
+    0 18px 24px color-mix(in srgb, var(--docs-home-code-bg) 18%, transparent),
+    0 8px 14px color-mix(in srgb, var(--tile-edge) 16%, transparent),
+    0 1px 0 rgb(255 255 255 / 58%) inset,
+    0 -1px 0 color-mix(in srgb, var(--tile-edge) 22%, transparent) inset;
+}
+
+.flow-doc-frameworks .flow-tile::after {
+  right: 12px;
+  bottom: -11px;
+  left: 14px;
+  height: 12px;
+  opacity: 0.78;
+  filter: blur(0.2px);
+}
+
+.flow-doc-frameworks .flow-tile::before {
+  background: linear-gradient(
+    112deg,
+    transparent 0%,
+    transparent 31%,
+    rgb(255 255 255 / 32%) 48%,
+    transparent 66%,
+    transparent 100%
+  );
+  opacity: 0.38;
+  transform: translateX(-16%);
+}
+
+.flow-doc-frameworks .flow-tile .flow-tile-mark {
+  border-color: color-mix(
+    in srgb,
+    var(--mockup-code-pill-border) 54%,
+    var(--mockup-code-layer-border)
+  );
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 54%), transparent 60%),
+    color-mix(in srgb, var(--mockup-code-pill-bg) 92%, var(--docs-home-bg));
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 58%) inset,
+    0 6px 14px color-mix(in srgb, var(--tile-edge) 10%, transparent);
+}
+
+.flow-doc-frameworks .flow-tile strong {
+  color: color-mix(in srgb, var(--mockup-code-text) 88%, var(--tile-edge));
+  text-shadow: 0 1px 0 rgb(255 255 255 / 34%);
 }
 
 .flow-doc-frameworks .flow-tile:nth-child(1) {
@@ -619,9 +806,15 @@ const getFrameworkMark = (framework: string) =>
   --tile-y: 86px;
 }
 
-.flow-doc-frameworks .flow-tile:hover {
+.flow-doc-frameworks .flow-tile:is(:hover, .is-doc-active) {
   border-color: var(--mockup-code-pill-border);
-  box-shadow: 0 0 18px var(--mockup-code-docs-aura);
+  box-shadow:
+    0 18px 24px color-mix(in srgb, var(--docs-home-code-bg) 18%, transparent),
+    0 8px 14px color-mix(in srgb, var(--tile-edge) 18%, transparent),
+    0 0 18px var(--mockup-code-docs-aura),
+    0 1px 0 rgb(255 255 255 / 62%) inset,
+    0 -1px 0 color-mix(in srgb, var(--tile-edge) 30%, transparent) inset;
+  opacity: 1;
   transform: translate3d(var(--tile-x), calc(var(--tile-y) - 3px), 0) scale(1);
 }
 
@@ -646,58 +839,134 @@ const getFrameworkMark = (framework: string) =>
     var(--mockup-code-pill-bg);
 }
 
-.flow-stream {
+.tile-connectors-svg {
   position: absolute;
-  left: 50%;
   z-index: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  width: 168px;
-  height: 52px;
-  pointer-events: none;
-  transform: translateX(-50%);
-}
-
-.flow-stream-to-ui {
-  top: 82px;
-}
-
-.flow-stream-to-islands {
-  top: 186px;
-}
-
-.flow-stream span {
-  display: block;
+  inset: 0;
   width: 100%;
   height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(
-    180deg,
-    transparent,
-    var(--mockup-code-flow-line),
-    transparent
-  );
-  opacity: 0.35;
-  transform: translateY(7px) scaleY(0.24);
-  animation: none;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tile-connector-segment {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.tile-connector-dash {
+  opacity: 0.62;
+  stroke: color-mix(in srgb, var(--mockup-code-flow-line) 88%, transparent);
+  stroke-width: 1.35;
+  stroke-dasharray: 4 6.5;
+  filter: drop-shadow(
+      0 0 4px color-mix(in srgb, var(--mockup-code-flow-line) 24%, transparent)
+    )
+    drop-shadow(
+      0 1px 0 color-mix(in srgb, var(--docs-home-bg) 54%, transparent)
+    );
   transition:
-    opacity 0.24s ease,
-    transform 0.24s ease;
+    filter 0.42s ease,
+    opacity 0.42s ease,
+    stroke 0.42s ease,
+    stroke-dasharray 0.42s ease,
+    stroke-width 0.42s ease;
 }
 
-.mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
-  .flow-doc-frameworks
-  .flow-tile {
-  border-color: var(--mockup-code-pill-border);
-  box-shadow: 0 0 18px var(--mockup-code-docs-aura);
-  opacity: 1;
-  transform: translate3d(var(--tile-x), var(--tile-y), 0) scale(1);
+.tile-connector-glow,
+.tile-connector-core,
+.tile-connector-sheen {
+  --connector-active-opacity: 1;
+  opacity: 0;
+  stroke-dashoffset: 1;
+  transition:
+    filter 0.42s ease,
+    opacity 0.42s ease,
+    stroke 0.42s ease,
+    stroke-width 0.42s ease;
 }
 
-.mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
-  .flow-doc-frameworks
-  .flow-tile::before,
+.tile-connector-glow {
+  --connector-active-opacity: 0.34;
+  stroke: var(--mockup-code-flow-core);
+  stroke-width: 6.5;
+  stroke-dasharray: 1;
+  filter: blur(2.8px);
+}
+
+.tile-connector-core {
+  stroke: var(--mockup-code-flow-core);
+  stroke-width: 1.45;
+  stroke-dasharray: 1;
+  filter: drop-shadow(0 0 2px var(--mockup-code-flow-line))
+    drop-shadow(
+      0 0 7px color-mix(in srgb, var(--mockup-code-flow-core) 28%, transparent)
+    );
+}
+
+.tile-connector-sheen {
+  stroke: var(--mockup-code-flow-hot);
+  stroke-width: 0.68;
+  stroke-dasharray: 0.18 0.82;
+  stroke-dashoffset: 1.18;
+  filter: drop-shadow(0 0 2px var(--mockup-code-flow-hot))
+    drop-shadow(0 0 5px var(--mockup-code-flow-core));
+}
+
+.tile-connector-group-ui .tile-connector-dash {
+  opacity: 0.5;
+}
+
+.tile-connector-group-doc .tile-connector-dash {
+  opacity: 0.68;
+}
+
+.tile-connector-group.is-line-active .tile-connector-dash {
+  opacity: 0.2;
+  stroke: var(--mockup-code-flow-line);
+  stroke-dasharray: none;
+  stroke-width: 1.05;
+}
+
+.tile-connector-group.is-line-active .tile-connector-glow {
+  animation: connector-line-draw 1.08s cubic-bezier(0.2, 0.82, 0.22, 1) forwards;
+}
+
+.tile-connector-group.is-line-active .tile-connector-core {
+  animation: connector-line-draw 1.08s cubic-bezier(0.2, 0.82, 0.22, 1) forwards;
+}
+
+.tile-connector-group.is-line-active .tile-connector-sheen {
+  animation: connector-sheen 5.2s linear 1.05s infinite;
+}
+
+.tile-connector-group-doc.is-line-active .tile-connector-glow {
+  --connector-active-opacity: 0.42;
+  stroke-width: 7.5;
+}
+
+.tile-connector-group-doc.is-line-active .tile-connector-core {
+  stroke-width: 1.72;
+}
+
+.tile-connector-group-ui.is-line-active .tile-connector-glow,
+.tile-connector-group-ui.is-line-active .tile-connector-core {
+  animation-delay: 1.08s;
+  animation-duration: 1.26s;
+}
+
+.tile-connector-group-ui.is-line-active .tile-connector-dash {
+  transition-delay: 1.08s;
+}
+
+.tile-connector-group-ui.is-line-active .tile-connector-sheen {
+  animation-delay: 2.28s;
+}
+
+.flow-doc-frameworks .flow-tile:is(:hover, .is-doc-active)::before,
 .mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
   .flow-islands::before,
 .mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
@@ -706,54 +975,13 @@ const getFrameworkMark = (framework: string) =>
   animation: flow-sheen 4.8s ease-in-out infinite;
 }
 
-.mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
-  .flow-stream-to-islands
-  span {
-  opacity: 0.88;
-  transform: translateY(0) scaleY(0.8);
-  animation: flow-rise 2.4s ease-in-out infinite;
-}
-
-.mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
-  .flow-stream-to-islands
-  span:nth-child(2) {
-  animation-delay: 0.28s;
-}
-
-.mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
-  .flow-stream-to-islands
-  span:nth-child(3) {
-  animation-delay: 0.56s;
-}
-
 .mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover)) .flow-islands {
   border-color: var(--mockup-code-pill-border);
   filter: none;
   opacity: 1;
   transform: translate3d(var(--tile-x), var(--tile-y), 0) scale(1);
-  animation: layer-breathe 4.8s ease-in-out 0.2s infinite;
-  transition-delay: 0.18s;
-}
-
-.mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
-  .flow-stream-to-ui
-  span {
-  opacity: 0.88;
-  transform: translateY(0) scaleY(0.8);
-  animation: flow-rise 2.4s ease-in-out 0.52s infinite;
-  transition-delay: 0.44s;
-}
-
-.mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
-  .flow-stream-to-ui
-  span:nth-child(2) {
-  animation-delay: 0.8s;
-}
-
-.mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
-  .flow-stream-to-ui
-  span:nth-child(3) {
-  animation-delay: 1.08s;
+  animation: layer-breathe 4.8s ease-in-out 0.92s infinite;
+  transition-delay: 0.74s;
 }
 
 .mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
@@ -764,34 +992,34 @@ const getFrameworkMark = (framework: string) =>
   opacity: 1;
   box-shadow: 0 0 14px var(--mockup-code-ui-aura);
   transform: translate3d(var(--tile-x), var(--tile-y), 0) scale(1);
-  animation: framework-signal 4.8s ease-in-out 0.9s infinite;
+  animation: framework-signal 4.8s ease-in-out 2.5s infinite;
 }
 
 .mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
   .flow-ui-frameworks
   .flow-tile:nth-child(1) {
-  transition-delay: 0.76s;
+  transition-delay: 2.08s;
 }
 
 .mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
   .flow-ui-frameworks
   .flow-tile:nth-child(2) {
-  animation-delay: 1.04s;
-  transition-delay: 0.88s;
+  animation-delay: 2.66s;
+  transition-delay: 2.2s;
 }
 
 .mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
   .flow-ui-frameworks
   .flow-tile:nth-child(3) {
-  animation-delay: 1.18s;
-  transition-delay: 1s;
+  animation-delay: 2.8s;
+  transition-delay: 2.32s;
 }
 
 .mockup-code:is(.is-flow-active, :has(.flow-doc-tile:hover))
   .flow-ui-frameworks
   .flow-tile:nth-child(4) {
-  animation-delay: 1.32s;
-  transition-delay: 1.12s;
+  animation-delay: 2.94s;
+  transition-delay: 2.44s;
 }
 
 @keyframes flow-sheen {
@@ -824,16 +1052,36 @@ const getFrameworkMark = (framework: string) =>
   }
 }
 
-@keyframes flow-rise {
-  0%,
-  100% {
-    opacity: 0.25;
-    transform: translateY(5px) scaleY(0.42);
+@keyframes connector-line-draw {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 1;
   }
 
-  50% {
-    opacity: 0.9;
-    transform: translateY(-5px) scaleY(1);
+  22% {
+    opacity: calc(var(--connector-active-opacity) * 0.72);
+  }
+
+  100% {
+    opacity: var(--connector-active-opacity);
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes connector-sheen {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 1.18;
+  }
+
+  20%,
+  78% {
+    opacity: 0.52;
+  }
+
+  100% {
+    opacity: 0;
+    stroke-dashoffset: -0.2;
   }
 }
 
@@ -976,56 +1224,43 @@ const getFrameworkMark = (framework: string) =>
   }
 
   .flow-ui-frameworks .flow-tile:nth-child(1) {
-    --tile-x: -68px;
-    --tile-y: -152px;
+    --tile-x: -88px;
+    --tile-y: -118px;
   }
 
   .flow-ui-frameworks .flow-tile:nth-child(2) {
-    --tile-x: 68px;
-    --tile-y: -152px;
+    --tile-x: -29px;
+    --tile-y: -164px;
   }
 
   .flow-ui-frameworks .flow-tile:nth-child(3) {
-    --tile-x: -68px;
-    --tile-y: -72px;
+    --tile-x: 29px;
+    --tile-y: -164px;
   }
 
   .flow-ui-frameworks .flow-tile:nth-child(4) {
-    --tile-x: 68px;
-    --tile-y: -72px;
+    --tile-x: 88px;
+    --tile-y: -118px;
   }
 
   .flow-doc-frameworks .flow-tile:nth-child(1) {
-    --tile-x: -68px;
-    --tile-y: 72px;
+    --tile-x: -88px;
+    --tile-y: 118px;
   }
 
   .flow-doc-frameworks .flow-tile:nth-child(2) {
-    --tile-x: 68px;
-    --tile-y: 72px;
+    --tile-x: -29px;
+    --tile-y: 164px;
   }
 
   .flow-doc-frameworks .flow-tile:nth-child(3) {
-    --tile-x: -68px;
-    --tile-y: 152px;
+    --tile-x: 29px;
+    --tile-y: 164px;
   }
 
   .flow-doc-frameworks .flow-tile:nth-child(4) {
-    --tile-x: 68px;
-    --tile-y: 152px;
-  }
-
-  .flow-stream {
-    width: 132px;
-    height: 44px;
-  }
-
-  .flow-stream-to-ui {
-    top: 142px;
-  }
-
-  .flow-stream-to-islands {
-    top: 252px;
+    --tile-x: 88px;
+    --tile-y: 118px;
   }
 }
 
@@ -1033,7 +1268,7 @@ const getFrameworkMark = (framework: string) =>
   .flow-tile::before,
   .flow-tile,
   .flow-islands,
-  .flow-stream span {
+  .tile-connector-segment {
     animation: none;
   }
 }

@@ -717,6 +717,9 @@ importers:
       '@docs-islands/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
+      '@docs-islands/utils':
+        specifier: link:../../utils/dist
+        version: link:../../utils/dist
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0

@@ -78,11 +78,25 @@ interface RenderingFrameworkParserState {
   pendingResolver?: (value: CompilationContainerType) => void;
 }
 
-const escapeRegExp = (value: string): string =>
-  value.replaceAll(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
+const htmlAttrRE =
+  /(?:^|\s)(?<name>[:A-Za-z_][:\w.-]*)(?:\s*=\s*(?:"(?<doubleQuoted>[^"]*)"|'(?<singleQuoted>[^']*)'|(?<unquoted>[^\s"'=<>`]+)))?/g;
 
-const createLangAttrRE = (lang: string): RegExp =>
-  new RegExp(String.raw`\blang=(?<q>["'])${escapeRegExp(lang)}\k<q>`);
+function getHtmlAttributeValue(attrs: string, name: string): string | null {
+  for (const match of attrs.matchAll(htmlAttrRE)) {
+    if (match.groups?.name !== name) {
+      continue;
+    }
+
+    return (
+      match.groups.doubleQuoted ??
+      match.groups.singleQuoted ??
+      match.groups.unquoted ??
+      ''
+    );
+  }
+
+  return null;
+}
 
 function cleanScriptByMatches(
   s: MagicString,
@@ -397,9 +411,8 @@ export class RenderingFrameworkParserManager {
           continue;
         }
 
-        const parser = parsers.find((item) =>
-          createLangAttrRE(item.lang).test(groups.attrs),
-        );
+        const scriptLang = getHtmlAttributeValue(groups.attrs, 'lang');
+        const parser = parsers.find((item) => item.lang === scriptLang);
 
         if (!parser) {
           continue;

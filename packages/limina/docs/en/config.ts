@@ -25,6 +25,43 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/checks-and-workflows',
       },
       {
+        text: 'Options',
+        items: [
+          {
+            text: 'Config File',
+            link: '/options/config',
+          },
+          {
+            text: 'Checker Entries',
+            link: '/options/checkers',
+          },
+          {
+            text: 'Source Coverage',
+            link: '/options/source',
+          },
+          {
+            text: 'Graph Rules',
+            link: '/options/graph-rules',
+          },
+          {
+            text: 'Paths',
+            link: '/options/paths',
+          },
+          {
+            text: 'Proof Allowlist',
+            link: '/options/proof-allowlist',
+          },
+          {
+            text: 'Package Checks',
+            link: '/options/package-checks',
+          },
+          {
+            text: 'Pipelines',
+            link: '/options/pipelines',
+          },
+        ],
+      },
+      {
         text: 'Reference',
         link: '/reference',
       },

@@ -21,8 +21,45 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/zh/concepts',
       },
       {
-        text: '检查与工作流',
+        text: 'limina 眼中的 pnpm monorepo',
         link: '/zh/checks-and-workflows',
+      },
+      {
+        text: '配置项',
+        items: [
+          {
+            text: '配置文件',
+            link: '/zh/options/config',
+          },
+          {
+            text: 'Checker entries',
+            link: '/zh/options/checkers',
+          },
+          {
+            text: 'Source coverage',
+            link: '/zh/options/source',
+          },
+          {
+            text: 'Graph rules',
+            link: '/zh/options/graph-rules',
+          },
+          {
+            text: 'Paths',
+            link: '/zh/options/paths',
+          },
+          {
+            text: 'Proof allowlist',
+            link: '/zh/options/proof-allowlist',
+          },
+          {
+            text: 'Package checks',
+            link: '/zh/options/package-checks',
+          },
+          {
+            text: 'Pipelines',
+            link: '/zh/options/pipelines',
+          },
+        ],
       },
       {
         text: '参考',

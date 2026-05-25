@@ -342,11 +342,11 @@ class ProxyHandler {
     try {
       const projectInfo =
         await this.projectManager.getOrStartProject(packageName);
-      const originalUrl = req.url;
+      // const originalUrl = req.url;
 
-      this.logger.info(
-        `HTTP ${req.method} ${originalUrl} -> http://localhost:${projectInfo.port}${originalUrl}`,
-      );
+      // this.logger.info(
+      //   `HTTP ${req.method} ${originalUrl} -> http://localhost:${projectInfo.port}${originalUrl}`,
+      // );
 
       this.proxy.web(req, res, {
         target: `http://localhost:${projectInfo.port}`,

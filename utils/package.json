@@ -45,6 +45,7 @@
     "./fs-utils": "./src/fs-utils.ts",
     "./general": "./src/general.ts",
     "./logger": "./src/logger.ts",
+    "./package-plugin": "./src/package-plugin.ts",
     "./path": "./src/path.ts",
     "./package.json": "./package.json"
   },
