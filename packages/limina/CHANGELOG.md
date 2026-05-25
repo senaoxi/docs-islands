@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-05-25
+
+### Features
+
+- feat(limina): release dependency consistency check for package check ([04749e4](https://github.com/XiSenao/docs-islands/commit/04749e4))
+- feat(limina): vue-tsc as a first-class citizen ([e640742](https://github.com/XiSenao/docs-islands/commit/e640742))
+
+### Documentation
+
+- docs: enhance document readability ([77cffd7](https://github.com/XiSenao/docs-islands/commit/77cffd7))
+- docs: optimize theme display ([339ae89](https://github.com/XiSenao/docs-islands/commit/339ae89))
+
+### Maintenance
+
+- chore(deps): switch limina to production package ([e543810](https://github.com/XiSenao/docs-islands/commit/e543810))
+
 ## [0.0.2] - 2026-05-24
 
 ### Features
