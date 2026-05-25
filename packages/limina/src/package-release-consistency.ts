@@ -198,7 +198,7 @@ async function fetchRegistryPackageMetadata(
 
   const response = await fetch(getNpmPackageMetadataUrl(packageName), {
     headers: {
-      accept: 'application/vnd.npm.install-v1+json, application/json',
+      accept: 'application/json',
     },
   });
 
