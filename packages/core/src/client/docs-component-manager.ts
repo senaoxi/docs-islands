@@ -1,9 +1,6 @@
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
-import type { LoggerElapsedLogOptions } from '@docs-islands/logger/types';
 import { createLogger } from '@docs-islands/utils/logger';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
+import type { LoggerElapsedLogOptions } from 'logaria/types';
 import { getFrameworkComponentManagerLogGroup } from '../shared/constants/log-groups/runtime';
 import { PAGE_METAFILE_META_NAMES } from '../shared/constants/page-metafile';
 import { RENDER_STRATEGY_CONSTANTS } from '../shared/constants/render-strategy';

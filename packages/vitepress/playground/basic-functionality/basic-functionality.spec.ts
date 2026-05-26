@@ -1,5 +1,5 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { expect } from '@playwright/test';
+import { createElapsedTimer } from 'logaria/helper';
 import { getPlaygroundLogger } from '../test-utils/logger';
 
 const TestLogger = getPlaygroundLogger('test.playground.basic-functionality');

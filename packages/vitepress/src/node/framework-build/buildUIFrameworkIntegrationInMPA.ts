@@ -1,10 +1,7 @@
 import type { OutputChunk, RollupOutput } from '#dep-types/rollup';
 import type { ConfigType } from '#dep-types/utils';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'pathe';

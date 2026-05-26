@@ -1,11 +1,7 @@
 {
-  "extends": "../tsconfig.base.json",
-  "compilerOptions": {
-    "isolatedDeclarations": true,
-    "declaration": true,
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["node"],
-  },
-  "include": ["./"],
-  "exclude": ["picomatch.d.ts"],
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.lib.json" },
+    { "path": "./tsconfig.tools.json" },
+  ],
 }

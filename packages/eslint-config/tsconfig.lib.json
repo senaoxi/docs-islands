@@ -1,0 +1,23 @@
+{
+  // Package-local library check. Declaration leaf: tsconfig.lib.dts.json.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"]
+  },
+  "include": ["src/"],
+  "exclude": [
+    "dist",
+    "cache",
+    "**/*cache*/**",
+    "coverage",
+    "node_modules",
+    ".eslintcache",
+    "packagePlugin.ts",
+    "rolldown.config.ts",
+    "scripts",
+    "vitest.config.ts",
+    "**/__tests__/**",
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
+}

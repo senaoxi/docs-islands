@@ -195,7 +195,7 @@ describe('node/plugins', () => {
         missingImports: ['OldCard'],
       },
     });
-    expect(await ctx.read()).toBe('# transformed');
+    await expect(ctx.read()).resolves.toBe('# transformed');
   });
 
   it('reuses the shared component HMR plugin to broadcast page-scoped updates', async () => {

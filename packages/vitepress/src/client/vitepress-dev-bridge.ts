@@ -11,12 +11,12 @@ import {
   applySsrRenderResult,
   requiresPreRenderDirective,
 } from '@docs-islands/core/client';
+import { createLogger } from '@docs-islands/vitepress/logger';
 import {
   createElapsedTimer,
   formatDebugMessage,
   formatErrorMessage,
-} from '@docs-islands/logger/helper';
-import { createLogger } from '@docs-islands/vitepress/logger';
+} from 'logaria/helper';
 
 const loggerInstance = createLogger({
   main: '@docs-islands/vitepress',

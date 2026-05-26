@@ -8,7 +8,7 @@ import type {
   LoggerPresetConfig,
   LoggerPresetPlugin,
   LoggerPresetRuleUserConfig,
-} from '@docs-islands/logger/types';
+} from 'logaria/types';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '../constants/log-groups/build';
 import { VITEPRESS_CONFIG_LOG_GROUPS } from '../constants/log-groups/config';
 import { VITEPRESS_HMR_LOG_GROUPS } from '../constants/log-groups/hmr';

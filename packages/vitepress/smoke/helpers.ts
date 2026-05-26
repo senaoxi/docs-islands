@@ -1,8 +1,8 @@
-import type { createElapsedTimer } from '@docs-islands/logger/helper';
-import { formatErrorMessage } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/utils/logger';
 import type { ConsoleMessage, Page, Request, Response } from '@playwright/test';
 import { load } from 'cheerio';
+import type { createElapsedTimer } from 'logaria/helper';
+import { formatErrorMessage } from 'logaria/helper';
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, mkdtemp, rm as nodeRm, writeFile } from 'node:fs/promises';
@@ -10,11 +10,15 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { packDistTarball } from '../scripts/package-artifacts';
 
 export interface DistPackageJson {
   dependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+}
+
+interface PackedDistTarball {
+  cleanup: () => Promise<void>;
+  tarballPath: string;
 }
 
 export interface ConsumerFixture {
@@ -63,10 +67,10 @@ const MANAGED_LOGGER_SPECIFIERS = ['@docs-islands/utils/logger'] as const;
 
 export const PACKAGE_ROOT_DIR = fileURLToPath(new URL('..', import.meta.url));
 export const DIST_DIR = path.join(PACKAGE_ROOT_DIR, 'dist');
-export const LOGGER_DIST_DIR = path.join(
+export const LOGARIA_DIST_DIR = path.join(
   PACKAGE_ROOT_DIR,
   '..',
-  'logger',
+  'logaria',
   'dist',
 );
 
@@ -92,6 +96,36 @@ export function formatUnknownError(error: unknown): string {
 
 export function getPnpmCommand(): string {
   return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+}
+
+async function packDistTarball(distDir: string): Promise<PackedDistTarball> {
+  const destination = await mkdtemp(
+    path.join(tmpdir(), 'docs-islands-package-'),
+  );
+  const output = execFileSync(
+    'npm',
+    ['pack', distDir, '--pack-destination', destination, '--ignore-scripts'],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+    },
+  );
+  const fileName = output.trim().split(/\r?\n/u).at(-1);
+
+  if (!fileName) {
+    await nodeRm(destination, { force: true, recursive: true });
+    throw new Error(`npm pack did not report a tarball for ${distDir}`);
+  }
+
+  return {
+    cleanup: async () => {
+      await nodeRm(destination, {
+        force: true,
+        recursive: true,
+      }).catch(() => null);
+    },
+    tarballPath: path.join(destination, fileName),
+  };
 }
 
 export function readCurrentPnpmConfig<T>(key: string): T | undefined {
@@ -551,8 +585,8 @@ export async function packVitepressDist() {
   return await packDistTarball(DIST_DIR);
 }
 
-export async function packLoggerDist() {
-  return await packDistTarball(LOGGER_DIST_DIR);
+export async function packLogariaDist() {
+  return await packDistTarball(LOGARIA_DIST_DIR);
 }
 
 export function isCriticalRequestFailure(

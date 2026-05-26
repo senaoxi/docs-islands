@@ -3,6 +3,10 @@ import { supportedEcmaVersion } from '@docs-islands/eslint-config/config';
 import typescriptESlintParser from '@typescript-eslint/parser';
 import { defineConfig } from 'eslint/config';
 import globals from 'globals';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const tsconfigRootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig([
   ...eslintGeneralConfig,
@@ -13,6 +17,7 @@ export default defineConfig([
       parser: typescriptESlintParser,
       parserOptions: {
         projectService: true,
+        tsconfigRootDir,
         ecmaVersion: supportedEcmaVersion,
         sourceType: 'module',
       },

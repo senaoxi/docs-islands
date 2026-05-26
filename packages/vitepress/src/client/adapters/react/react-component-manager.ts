@@ -7,12 +7,12 @@ import {
 } from '#shared/internal/devtools';
 import { DocsComponentManager } from '@docs-islands/core/client';
 import type { DocsComponentManagerInitializeOptions } from '@docs-islands/core/types/client';
+import { createLogger } from '@docs-islands/vitepress/logger';
 import {
   createElapsedTimer,
   formatDebugMessage,
   formatErrorMessage,
-} from '@docs-islands/logger/helper';
-import { createLogger } from '@docs-islands/vitepress/logger';
+} from 'logaria/helper';
 import type React from 'react';
 import { getCleanPathname } from '../../../shared/runtime';
 

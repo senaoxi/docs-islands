@@ -2041,23 +2041,15 @@ describe('generateSiteDevToolsAiBuildReports', () => {
         'Current Page Rendered React Components:',
       );
 
-      if (testCase.shouldContainChunks) {
-        expect(pageReport.prompt).toContain('Build Chunks (');
-      } else {
-        expect(pageReport.prompt).not.toContain('Build Chunks (');
-      }
-
-      if (testCase.shouldContainChunkModules) {
-        expect(pageReport.prompt).toContain('Chunk Modules:');
-      } else {
-        expect(pageReport.prompt).not.toContain('Chunk Modules:');
-      }
-
-      if (testCase.shouldContainComponentModules) {
-        expect(pageReport.prompt).toContain('Component Modules (');
-      } else {
-        expect(pageReport.prompt).not.toContain('Component Modules (');
-      }
+      expect(pageReport.prompt.includes('Build Chunks (')).toBe(
+        testCase.shouldContainChunks,
+      );
+      expect(pageReport.prompt.includes('Chunk Modules:')).toBe(
+        testCase.shouldContainChunkModules,
+      );
+      expect(pageReport.prompt.includes('Component Modules (')).toBe(
+        testCase.shouldContainComponentModules,
+      );
     }
   });
 

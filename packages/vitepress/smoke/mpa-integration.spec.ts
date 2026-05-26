@@ -1,5 +1,5 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { expect, test } from '@playwright/test';
+import { createElapsedTimer } from 'logaria/helper';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import {
   getPnpmCommand,
   getSmokeLogger,
   importMpaIntegrationScripts,
-  packLoggerDist,
+  packLogariaDist,
   packVitepressDist,
   resolveClientEntryFromFixture,
   runVitePressBuild,
@@ -116,7 +116,7 @@ test('MPA dist integration bundle resolves and imports cleanly', async () => {
   const logger = getSmokeLogger('task.mpa-integration-smoke');
   const smokeElapsed = createElapsedTimer();
   let cleanupPackedDist: (() => Promise<void>) | undefined;
-  let cleanupPackedLogger: (() => Promise<void>) | undefined;
+  let cleanupPackedLogaria: (() => Promise<void>) | undefined;
   let cleanupFixture: (() => Promise<void>) | undefined;
 
   try {
@@ -125,16 +125,16 @@ test('MPA dist integration bundle resolves and imports cleanly', async () => {
     logger.info('packing vitepress dist tarball for MPA integration smoke');
     const packedDist = await packVitepressDist();
     cleanupPackedDist = packedDist.cleanup;
-    logger.info('packing logger dist tarball for MPA integration smoke');
-    const packedLogger = await packLoggerDist();
-    cleanupPackedLogger = packedLogger.cleanup;
+    logger.info('packing logaria dist tarball for MPA integration smoke');
+    const packedLogaria = await packLogariaDist();
+    cleanupPackedLogaria = packedLogaria.cleanup;
 
     const fixture = await createConsumerFixture({
       fixtureRootPrefix: 'docs-islands-mpa-integration-smoke-',
       installLogMessage: 'installing MPA integration smoke dependencies',
       logger,
       localDependencyTarballPaths: {
-        '@docs-islands/logger': packedLogger.tarballPath,
+        logaria: packedLogaria.tarballPath,
       },
       manifest,
       tarballPath: packedDist.tarballPath,
@@ -173,8 +173,8 @@ test('MPA dist integration bundle resolves and imports cleanly', async () => {
     if (cleanupPackedDist) {
       await cleanupPackedDist();
     }
-    if (cleanupPackedLogger) {
-      await cleanupPackedLogger();
+    if (cleanupPackedLogaria) {
+      await cleanupPackedLogaria();
     }
   }
 });

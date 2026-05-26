@@ -4,10 +4,7 @@ import type {
 } from '#dep-types/component';
 import type { OutputChunk } from '#dep-types/rollup';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'pathe';
 import { getVitePressGroupLogger } from '../../logger';
@@ -20,7 +17,7 @@ async function renderComponentForSnippet(
   componentName: string,
   adapter: UIFrameworkBuildAdapter,
   loggerScopeId: string,
-): Promise<string | null> {
+): Promise<string> {
   const Logger = getVitePressGroupLogger(
     VITEPRESS_BUILD_LOG_GROUPS.frameworkSsrBundle,
     loggerScopeId,
@@ -38,11 +35,9 @@ async function renderComponentForSnippet(
     );
     return frameworkSSRHtml;
   } catch (error) {
-    Logger.error(
-      `failed to render component "${componentName}" for render ID ${renderId}: ${formatErrorMessage(error)}`,
-      renderElapsed(),
-    );
-    return null;
+    const message = `failed to render component "${componentName}" for render ID ${renderId}: ${formatErrorMessage(error)}`;
+    Logger.error(message, renderElapsed());
+    throw new Error(message);
   }
 }
 
@@ -66,9 +61,7 @@ async function processComponentRenders(
         adapter,
         loggerScopeId,
       );
-      if (html) {
-        renderedComponents.set(renderId, html);
-      }
+      renderedComponents.set(renderId, html);
     }
   }
 }
@@ -97,31 +90,29 @@ export async function executeSSRRender(
 
   const bundlePath = resolve(ssrTempDir, chunk.fileName);
   const importElapsed = createElapsedTimer();
+  let ssrModuleComponent: unknown;
 
   try {
     const ssrModule = await import(pathToFileURL(bundlePath).href);
-    const ssrModuleComponent = ssrModule.default;
+    ssrModuleComponent = ssrModule.default;
 
     if (!ssrModuleComponent) {
-      Logger.warn(
-        `Component "${ssrComponent.componentName}" not found in bundle`,
-        importElapsed(),
-      );
-      return;
+      const message = `Component "${ssrComponent.componentName}" not found in SSR bundle`;
+      Logger.error(message, importElapsed());
+      throw new Error(message);
     }
-
-    await processComponentRenders(
-      ssrModuleComponent,
-      ssrComponent,
-      usedSnippetContainer,
-      adapter,
-      loggerScopeId,
-      renderedComponents,
-    );
   } catch (error) {
-    Logger.error(
-      `failed to import SSR bundle for ${ssrComponent.componentName}: ${formatErrorMessage(error)}`,
-      importElapsed(),
-    );
+    const message = `failed to import SSR bundle for ${ssrComponent.componentName}: ${formatErrorMessage(error)}`;
+    Logger.error(message, importElapsed());
+    throw new Error(message);
   }
+
+  await processComponentRenders(
+    ssrModuleComponent,
+    ssrComponent,
+    usedSnippetContainer,
+    adapter,
+    loggerScopeId,
+    renderedComponents,
+  );
 }

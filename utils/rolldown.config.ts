@@ -1,40 +1,33 @@
 import { defineConfig, type RolldownOptions } from 'rolldown';
 import { dts } from 'rolldown-plugin-dts';
-import { glob } from 'tinyglobby';
-import { loadEnv } from './env';
+import packagePlugin from './packagePlugin';
+import { loadEnv } from './src/env';
 
 const { config } = loadEnv();
 const { sourcemap, minify } = config;
 
-async function getModuleEntries(): Promise<string[]> {
-  const files = await glob(['**/*.ts'], {
-    cwd: process.cwd(),
-    absolute: false,
-    onlyFiles: true,
-    ignore: [
-      '**/*.d.ts',
-      '**/*.config.ts',
-      '**/*.test.ts',
-      '**/*.spec.ts',
-      '**/node_modules/**',
-      'bin/**',
-    ],
-  });
-
-  return files.map((file) => `./${file}`);
-}
-
-const modules = await getModuleEntries();
-
 const moduleConfig: RolldownOptions = defineConfig({
-  input: [...modules, './bin/link-guard.ts'],
+  input: {
+    builtin: 'src/builtin.ts',
+    'dom-iterable': 'src/dom-iterable.ts',
+    env: 'src/env.ts',
+    'fs-utils': 'src/fs-utils.ts',
+    general: 'src/general.ts',
+    logger: 'src/logger.ts',
+    'package-plugin': 'src/package-plugin.ts',
+    path: 'src/path.ts',
+    'bin/link-guard': 'bin/link-guard.ts',
+  },
   platform: 'neutral',
   preserveEntrySignatures: 'strict',
   external: [/^[\w@][^:]/],
+  plugins: [packagePlugin()],
   output: {
     dir: 'dist',
     format: 'esm',
-    preserveModules: true,
+    entryFileNames: '[name].js',
+    chunkFileNames: 'chunks/dep-[hash].js',
+    exports: 'named',
     sourcemap,
     ...(minify && {
       minify: {
@@ -58,16 +51,22 @@ const dtsConfig: RolldownOptions = defineConfig({
   // is preserved. The dts plugin converts all default exports to the former
   // form during its fake-js transform, so the dts build is always affected.
   // The JS build is only safe when the source uses `export default X` directly.
-  input: modules,
+  input: {
+    builtin: 'src/builtin.ts',
+    'dom-iterable': 'src/dom-iterable.ts',
+    env: 'src/env.ts',
+    'fs-utils': 'src/fs-utils.ts',
+    general: 'src/general.ts',
+    logger: 'src/logger.ts',
+    'package-plugin': 'src/package-plugin.ts',
+    path: 'src/path.ts',
+  },
   platform: 'neutral',
   preserveEntrySignatures: 'strict',
   external: [/^[\w@][^:]/],
-  output: {
-    dir: 'dist',
-    preserveModules: true,
-  },
   plugins: [
     dts({
+      tsconfig: './tsconfig.lib.dts.json',
       emitDtsOnly: true,
       sourcemap,
     }),

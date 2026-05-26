@@ -1,7 +1,7 @@
-import { createLogger } from '@docs-islands/logger';
-import { createElapsedTimer } from '@docs-islands/logger/helper';
-import type { ScopedLogger } from '@docs-islands/logger/types';
 import httpProxy from 'http-proxy';
+import { createLogger } from 'logaria';
+import { createElapsedTimer } from 'logaria/helper';
+import type { ScopedLogger } from 'logaria/types';
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -23,7 +23,7 @@ interface ProxyConfig {
 }
 
 const DEFAULT_CONFIG: ProxyConfig = {
-  validProjects: ['vitepress'],
+  validProjects: ['vitepress', 'limina', 'logaria'],
   basePath: '/docs-islands',
   packageScope: '@docs-islands',
   devCommand: 'docs:dev',
@@ -342,11 +342,11 @@ class ProxyHandler {
     try {
       const projectInfo =
         await this.projectManager.getOrStartProject(packageName);
-      const originalUrl = req.url;
+      // const originalUrl = req.url;
 
-      this.logger.info(
-        `HTTP ${req.method} ${originalUrl} -> http://localhost:${projectInfo.port}${originalUrl}`,
-      );
+      // this.logger.info(
+      //   `HTTP ${req.method} ${originalUrl} -> http://localhost:${projectInfo.port}${originalUrl}`,
+      // );
 
       this.proxy.web(req, res, {
         target: `http://localhost:${projectInfo.port}`,
@@ -409,7 +409,9 @@ class ProxyHandler {
   private findMatchingProject(url: string): string | undefined {
     return this.config.validProjects.find((packageName) => {
       const base = `${this.config.basePath}/${packageName}`;
-      return url.startsWith(base);
+      return (
+        url === base || url.startsWith(`${base}/`) || url.startsWith(`${base}?`)
+      );
     });
   }
 

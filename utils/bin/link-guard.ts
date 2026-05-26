@@ -13,10 +13,10 @@
  * Distributed as a bin via @docs-islands/utils.
  * Relies on pnpm setting npm_package_json to the calling package's package.json path.
  */
-import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from 'logaria/helper';
 import { execSync, spawn } from 'node:child_process';
 import path from 'node:path';
-import { createLogger } from '../logger';
+import { createLogger } from '../src/logger';
 
 const Log = createLogger({
   main: '@docs-islands/utils',

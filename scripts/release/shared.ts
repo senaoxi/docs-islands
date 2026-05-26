@@ -1,9 +1,6 @@
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
-import type { LoggerLogOptions } from '@docs-islands/logger/types';
 import { createLogger } from '@docs-islands/utils/logger';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
+import type { LoggerLogOptions } from 'logaria/types';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -96,7 +93,7 @@ export interface ReleasePackageManifest {
 }
 
 export interface ReleasePackageConfig {
-  key: 'logger' | 'vitepress';
+  key: 'logaria' | 'limina' | 'vitepress';
   packageName: string;
   relativeDir: string;
   publishRelativeDir: string;
@@ -133,11 +130,24 @@ export interface ReleaseCliOptions {
   skipTests: boolean;
   skipBuild: boolean;
   skipChangelog: boolean;
+  skipNpmPublish: boolean;
   skipPush: boolean;
   skipGithubRelease: boolean;
   fromTag?: string;
   registry?: string;
   npmTag?: string;
+  provenance: boolean;
+  help: boolean;
+}
+
+export interface PublishCliOptions {
+  packageSelectors: string[];
+  dryRun: boolean;
+  skipTests: boolean;
+  skipBuild: boolean;
+  registry?: string;
+  npmTag?: string;
+  provenance: boolean;
   help: boolean;
 }
 
@@ -184,22 +194,44 @@ export interface CommandOptions {
 
 const RELEASE_PACKAGE_CONFIGS: readonly ReleasePackageConfig[] = [
   {
-    key: 'logger',
-    packageName: '@docs-islands/logger',
-    relativeDir: 'packages/logger',
-    publishRelativeDir: 'packages/logger/dist',
-    changelogRelativePath: 'packages/logger/CHANGELOG.md',
+    key: 'logaria',
+    packageName: 'logaria',
+    relativeDir: 'packages/logaria',
+    publishRelativeDir: 'packages/logaria/dist',
+    changelogRelativePath: 'packages/logaria/CHANGELOG.md',
     changelogPaths: [
-      'packages/logger',
-      'docs/en/logger.md',
-      'docs/zh/logger.md',
+      'packages/logaria',
+      'docs/en/logaria.md',
+      'docs/zh/logaria.md',
     ],
-    tagPrefix: 'logger',
+    tagPrefix: 'logaria',
     previewChecks: [
       'test',
       'build package',
       'verify dist/package.json version',
-      'lint:package',
+      'limina package check',
+      'limina release check',
+      'npm pack --dry-run',
+    ],
+  },
+  {
+    key: 'limina',
+    packageName: 'limina',
+    relativeDir: 'packages/limina',
+    publishRelativeDir: 'packages/limina/dist',
+    changelogRelativePath: 'packages/limina/CHANGELOG.md',
+    changelogPaths: [
+      'packages/limina',
+      'docs/en/limina.md',
+      'docs/zh/limina.md',
+    ],
+    tagPrefix: 'limina',
+    previewChecks: [
+      'test',
+      'build package',
+      'verify dist/package.json version',
+      'limina package check',
+      'limina release check',
       'npm pack --dry-run',
     ],
   },
@@ -218,7 +250,8 @@ const RELEASE_PACKAGE_CONFIGS: readonly ReleasePackageConfig[] = [
       'build workspace dependencies',
       'build package',
       'verify dist/package.json version',
-      'lint:package',
+      'limina package check',
+      'limina release check',
       'npm pack --dry-run',
     ],
   },
@@ -337,11 +370,9 @@ export function getInternalDependencyNames(
   manifest: ReleasePackageManifest,
 ): Set<string> {
   const names = new Set<string>();
-  const dependencyMaps = [
-    manifest.dependencies,
-    manifest.devDependencies,
-    manifest.peerDependencies,
-  ];
+  // Release ordering follows publish-facing contracts. Dev dependencies can
+  // point back to local release tooling and create false package cycles.
+  const dependencyMaps = [manifest.dependencies, manifest.peerDependencies];
 
   for (const dependencyMap of dependencyMaps) {
     if (!dependencyMap) {

@@ -40,6 +40,8 @@
 | 包名称                                        | 版本（点击查看变更日志）                                                                                                    |
 | --------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------- |
 | [@docs-islands/vitepress](packages/vitepress) | [![vitepress version](https://img.shields.io/npm/v/@docs-islands/vitepress.svg?label=%20)](packages/vitepress/CHANGELOG.md) |
+| [limina](packages/limina)                     | [![logaria version](https://img.shields.io/npm/v/limina.svg?label=%20)](packages/limina/CHANGELOG.md)                       |
+| [logaria](packages/logaria)                   | [![logaria version](https://img.shields.io/npm/v/logaria.svg?label=%20)](packages/logaria/CHANGELOG.md)                     |
 
 ## 贡献
 

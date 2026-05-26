@@ -5,10 +5,7 @@ import {
   createEmptyCompilationContainer,
   type RenderController,
 } from '@docs-islands/core/node/render-controller';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import MagicString, { type SourceMap } from 'magic-string';
 import MarkdownIt from 'markdown-it';
 import type { Plugin } from 'vite';
@@ -81,11 +78,25 @@ interface RenderingFrameworkParserState {
   pendingResolver?: (value: CompilationContainerType) => void;
 }
 
-const escapeRegExp = (value: string): string =>
-  value.replaceAll(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
+const htmlAttrRE =
+  /(?:^|\s)(?<name>[:A-Z_a-z][\w.:-]*)(?:\s*=\s*(?:"(?<doubleQuoted>[^"]*)"|'(?<singleQuoted>[^']*)'|(?<unquoted>[^\s"'<=>`]+)))?/g;
 
-const createLangAttrRE = (lang: string): RegExp =>
-  new RegExp(String.raw`\blang=(?<q>["'])${escapeRegExp(lang)}\k<q>`);
+function getHtmlAttributeValue(attrs: string, name: string): string | null {
+  for (const match of attrs.matchAll(htmlAttrRE)) {
+    if (match.groups?.name !== name) {
+      continue;
+    }
+
+    return (
+      match.groups.doubleQuoted ??
+      match.groups.singleQuoted ??
+      match.groups.unquoted ??
+      ''
+    );
+  }
+
+  return null;
+}
 
 function cleanScriptByMatches(
   s: MagicString,
@@ -172,26 +183,19 @@ export class RenderingFrameworkParserManager {
       code,
       this.#parsers,
     );
-    const parserStates = this.#prepareParserStates(
-      normalizedId,
-      scriptMatchesByFramework,
-    );
     const transformElapsed = createElapsedTimer();
     const allRecognizedScriptMatches = [...scriptMatchesByFramework.values()]
       .flat()
       .toSorted((left, right) => left.startIndex - right.startIndex);
 
-    const skippedFrameworks = new Set<string>();
     for (const [framework, scriptMatches] of scriptMatchesByFramework) {
       if (scriptMatches.length <= 1) {
         continue;
       }
 
-      skippedFrameworks.add(framework);
-      this.#getFrameworkLogger().error(
-        `Single file can contain only one <script lang="${scriptMatches[0].lang}"> element.`,
-        transformElapsed(),
-      );
+      const message = `Failed to parse ${id}: framework "${framework}" can contain only one <script lang="${scriptMatches[0].lang}"> element per file.`;
+      this.#getFrameworkLogger().error(message, transformElapsed());
+      throw new Error(message);
     }
 
     const parsedScripts = new Map<
@@ -200,10 +204,6 @@ export class RenderingFrameworkParserManager {
     >();
 
     for (const parser of this.#parsers) {
-      if (skippedFrameworks.has(parser.framework)) {
-        continue;
-      }
-
       const scriptMatch = scriptMatchesByFramework.get(parser.framework)?.[0];
       if (!scriptMatch) {
         continue;
@@ -220,20 +220,14 @@ export class RenderingFrameworkParserManager {
           }),
         );
       } catch (error) {
-        skippedFrameworks.add(parser.framework);
-        this.#getFrameworkLogger().error(
-          `failed to parse <script lang="${parser.lang}"> in ${id}: ${formatErrorMessage(error)}`,
-          transformElapsed(),
-        );
+        const message = `Failed to parse <script lang="${parser.lang}"> for framework "${parser.framework}" in ${id}: ${formatErrorMessage(error)}`;
+        this.#getFrameworkLogger().error(message, transformElapsed());
+        throw new Error(message);
       }
     }
 
     const componentNameToFramework = new Map<string, string>();
     for (const parser of this.#parsers) {
-      if (skippedFrameworks.has(parser.framework)) {
-        continue;
-      }
-
       const parsedScript = parsedScripts.get(parser.framework);
       if (!parsedScript) {
         continue;
@@ -246,14 +240,16 @@ export class RenderingFrameworkParserManager {
           continue;
         }
 
-        skippedFrameworks.add(existingFramework);
-        skippedFrameworks.add(parser.framework);
-        this.#getFrameworkLogger().error(
-          `Duplicate component local name "${componentName}" found across rendering frameworks in ${id}. Rename one of the imports before mixing frameworks on the same page.`,
-          transformElapsed(),
-        );
+        const message = `Duplicate component local name "${componentName}" found across rendering frameworks in ${id}: "${existingFramework}" and "${parser.framework}". Rename one of the imports before mixing frameworks on the same page.`;
+        this.#getFrameworkLogger().error(message, transformElapsed());
+        throw new Error(message);
       }
     }
+
+    const parserStates = this.#prepareParserStates(
+      normalizedId,
+      scriptMatchesByFramework,
+    );
 
     if (allRecognizedScriptMatches.length === 0) {
       if (parserStates.size === 0) {
@@ -290,7 +286,7 @@ export class RenderingFrameworkParserManager {
     for (const parserState of parserStates.values()) {
       const { parser } = parserState;
       const parsedScript = parsedScripts.get(parser.framework);
-      if (skippedFrameworks.has(parser.framework) || !parsedScript) {
+      if (!parsedScript) {
         this.#finalizeParserState(
           parserState,
           normalizedId,
@@ -415,9 +411,8 @@ export class RenderingFrameworkParserManager {
           continue;
         }
 
-        const parser = parsers.find((item) =>
-          createLangAttrRE(item.lang).test(groups.attrs),
-        );
+        const scriptLang = getHtmlAttributeValue(groups.attrs, 'lang');
+        const parser = parsers.find((item) => item.lang === scriptLang);
 
         if (!parser) {
           continue;

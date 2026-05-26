@@ -45,6 +45,7 @@ const config: Config = [
     languageOptions: {
       parser: vueParser,
       parserOptions: {
+        projectService: true,
         parser: tsParser,
         extraFileExtensions: ['.vue'],
         sourceType: 'module',
@@ -138,6 +139,7 @@ const config: Config = [
     languageOptions: {
       parser: tsParser,
       parserOptions: {
+        projectService: true,
         ecmaFeatures: {
           jsx: true,
         },

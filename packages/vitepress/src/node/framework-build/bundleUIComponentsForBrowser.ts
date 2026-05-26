@@ -23,11 +23,8 @@ import type { ConfigType } from '#dep-types/utils';
 import { VITEPRESS_BUILD_LOG_GROUPS } from '#shared/constants/log-groups/build';
 import { parse, type ParserPlugin } from '@babel/parser';
 import { RENDER_STRATEGY_CONSTANTS } from '@docs-islands/core/shared/constants/render-strategy';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
 import { isNodeLikeBuiltin } from '@docs-islands/utils/builtin';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { basename, dirname, extname, join, relative } from 'pathe';

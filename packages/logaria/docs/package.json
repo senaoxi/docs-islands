@@ -1,0 +1,24 @@
+{
+  "name": "@docs-islands/logaria-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "docs:build": "vitepress build",
+    "docs:dev": "vitepress dev --host 0.0.0.0",
+    "docs:preview": "vitepress preview --host 0.0.0.0",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "clean": "del-cli .vitepress/cache .vitepress/dist .tsbuild node_modules"
+  },
+  "packageManager": "pnpm@10.26.0",
+  "dependencies": {
+    "logaria": "workspace:*",
+    "vue": "catalog:prod"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:dev",
+    "del-cli": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitepress": "catalog:frameworks",
+    "vue-tsc": "catalog:dev"
+  }
+}

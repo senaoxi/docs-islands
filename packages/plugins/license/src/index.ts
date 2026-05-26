@@ -1,5 +1,5 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/utils/logger';
+import { createElapsedTimer } from 'logaria/helper';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

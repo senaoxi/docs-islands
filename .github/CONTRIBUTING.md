@@ -197,7 +197,10 @@ pnpm docs:link:prod
 
 ## Releasing Public Packages
 
-Public npm releases are now coordinated from the repository root.
+Public npm releases are coordinated from the repository root. The local release
+command creates the version commit and package-scoped git tags; npm publishing is
+then performed by the `Publish npm packages` GitHub Actions workflow so npm can
+attach provenance attestations.
 
 - Preview the available release targets and choose interactively:
 
@@ -210,35 +213,56 @@ Public npm releases are now coordinated from the repository root.
 - Generate changelogs from the root for one or more public packages:
 
   ```bash
-  pnpm changelog logger --type patch
-  pnpm changelog --package logger --type patch
-  pnpm changelog --package logger,vitepress --type prerelease --preid beta
+  pnpm changelog logaria --type patch
+  pnpm changelog --package limina --type patch
+  pnpm changelog --package logaria,vitepress --type prerelease --preid beta
   ```
 
 - Run a non-mutating preview for a specific package:
 
   ```bash
-  pnpm release logger --type patch --dry-run --yes
-  pnpm release --package logger --type patch --dry-run --yes
+  pnpm release logaria --type patch --dry-run --yes
+  pnpm release --package limina --type patch --dry-run --yes
   pnpm release --package vitepress --type prerelease --preid beta --dry-run --yes
+  ```
+
+- Run the release from the repository root. On a local machine, npm publish is
+  deferred until the pushed tag triggers GitHub Actions:
+
+  ```bash
+  pnpm release --package vitepress --type patch --yes
+  ```
+
+- Retry only the GitHub Actions publish step from an already tagged checkout:
+
+  ```bash
+  pnpm release publish --package vitepress --dry-run
+  pnpm release publish --package vitepress
   ```
 
 - Package-local compatibility commands still work:
 
   ```bash
-  pnpm --filter @docs-islands/logger release --type patch --dry-run --yes
+  pnpm --filter logaria test
   pnpm --filter @docs-islands/vitepress changelog --type patch
   ```
 
 Current public release targets:
 
-- `logger` -> `@docs-islands/logger`
+- `logaria` -> `logaria`
+- `limina` -> `limina`
 - `vitepress` -> `@docs-islands/vitepress`
 
 Each public package now uses package-scoped git tags:
 
-- `logger/v<version>`
+- `logaria/v<version>`
+- `limina/v<version>`
 - `vitepress/v<version>`
+
+The npm publish workflow grants `id-token: write` and runs
+`pnpm release publish` with provenance enabled. Published versions should show
+the green provenance check on npm. The npm package settings must trust this
+repository workflow, using the `Release` environment.
 
 ## License
 

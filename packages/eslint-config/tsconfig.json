@@ -1,8 +1,12 @@
 {
+  // Package-local IDE/typecheck solution. Build graph leaf: tsconfig.build.json.
   "files": [],
   "references": [
     {
-      "path": "./tsconfig.source.json",
+      "path": "./tsconfig.lib.json",
+    },
+    {
+      "path": "./tsconfig.tools.json",
     },
     {
       "path": "./tsconfig.test.json",

@@ -1,12 +1,12 @@
 /**
  * @vitest-environment node
  */
-import { resetLoggerConfig } from '@docs-islands/logger';
+import { resetLoggerConfig } from 'logaria';
 import {
   resetScopedLoggerConfig,
   resolveLoggerConfig,
   shouldSuppressLog,
-} from '@docs-islands/logger/core';
+} from 'logaria/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VITEPRESS_HMR_LOG_GROUPS } from '../../../../shared/constants/log-groups/hmr';
 import { vitepress as vitepressLogger } from '../../../../shared/logger/presets';

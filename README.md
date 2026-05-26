@@ -40,7 +40,8 @@ Brings the performance benefits of Islands Architecture to documentation framewo
 | Package                                       | Version (click for changelogs)                                                                                              |
 | --------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------- |
 | [@docs-islands/vitepress](packages/vitepress) | [![vitepress version](https://img.shields.io/npm/v/@docs-islands/vitepress.svg?label=%20)](packages/vitepress/CHANGELOG.md) |
-| [@docs-islands/logger](packages/logger)       | [![vitepress version](https://img.shields.io/npm/v/@docs-islands/logger.svg?label=%20)](packages/logger/CHANGELOG.md)       |
+| [limina](packages/limina)                     | [![logaria version](https://img.shields.io/npm/v/limina.svg?label=%20)](packages/limina/CHANGELOG.md)                       |
+| [logaria](packages/logaria)                   | [![logaria version](https://img.shields.io/npm/v/logaria.svg?label=%20)](packages/logaria/CHANGELOG.md)                     |
 
 ## Contributing
 

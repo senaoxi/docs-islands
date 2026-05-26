@@ -1,4 +1,4 @@
-import { createElapsedTimer } from '@docs-islands/logger/helper';
+import { createElapsedTimer } from 'logaria/helper';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -10,6 +10,7 @@ import {
   REPO_ROOT,
   ReleaseLogger,
   commandExists,
+  createGitTag,
   discoverReleasePackages,
   formatReleasePlans,
   getGhCommand,
@@ -21,9 +22,11 @@ import {
   promptForPackageSelections,
   promptForVersionSelection,
   readPublishBranch,
+  resolveDefaultNpmTag,
   resolvePackageSelections,
   runCommand,
   sortReleasePackageConfigs,
+  type PublishCliOptions,
   type ReleaseCliOptions,
   type ReleasePackageManifest,
   type ReleasePlan,
@@ -33,6 +36,16 @@ import {
 interface ReleaseRunContext {
   options: ReleaseCliOptions;
   plans: ReleasePlan[];
+}
+
+interface PublishRunContext {
+  options: PublishCliOptions;
+  plans: ReleasePlan[];
+}
+
+interface PublishPackageOptions {
+  registry?: string;
+  provenance: boolean;
 }
 
 function getPackageScriptRunner(
@@ -47,6 +60,34 @@ function getPackageScriptRunner(
     stdio: 'inherit',
     logger: ReleaseLogger,
   });
+}
+
+function runPackageArtifactChecks(config: ResolvedReleasePackageConfig): void {
+  ReleaseLogger.info(`Running package checks for ${config.packageName}`);
+  runCommand(
+    getPnpmCommand(),
+    ['exec', 'limina', 'package', 'check', '--package', config.packageName],
+    {
+      cwd: REPO_ROOT,
+      stdio: 'inherit',
+      logger: ReleaseLogger,
+    },
+  );
+}
+
+function runPackageReleaseConsistencyChecks(
+  config: ResolvedReleasePackageConfig,
+): void {
+  ReleaseLogger.info(`Running release checks for ${config.packageName}`);
+  runCommand(
+    getPnpmCommand(),
+    ['exec', 'limina', 'release', 'check', '--package', config.packageName],
+    {
+      cwd: REPO_ROOT,
+      stdio: 'inherit',
+      logger: ReleaseLogger,
+    },
+  );
 }
 
 function getWorkspaceDependencies(manifest: ReleasePackageManifest): string[] {
@@ -131,26 +172,42 @@ function verifyDistVersion(plan: ReleasePlan): void {
   }
 }
 
-function runPackageReleaseChecks(
+function runStandardPackageReleaseChecks(
   plan: ReleasePlan,
-  options: ReleaseCliOptions,
+  options: Pick<
+    ReleaseCliOptions | PublishCliOptions,
+    'skipBuild' | 'skipTests'
+  >,
 ): void {
   const { config } = plan;
 
-  if (config.key === 'logger') {
-    if (!options.skipTests) {
-      getPackageScriptRunner(config, 'test');
-    }
-    if (!options.skipBuild) {
-      getPackageScriptRunner(config, 'build');
-      verifyDistVersion(plan);
-      getPackageScriptRunner(config, 'lint:package');
-      runCommand(getNpmCommand(), ['pack', '--dry-run'], {
-        cwd: config.publishDir,
-        stdio: 'inherit',
-        logger: ReleaseLogger,
-      });
-    }
+  if (!options.skipTests) {
+    getPackageScriptRunner(config, 'test');
+  }
+  if (!options.skipBuild) {
+    getPackageScriptRunner(config, 'build');
+    verifyDistVersion(plan);
+    runPackageArtifactChecks(config);
+    runPackageReleaseConsistencyChecks(config);
+    runCommand(getNpmCommand(), ['pack', '--dry-run'], {
+      cwd: config.publishDir,
+      stdio: 'inherit',
+      logger: ReleaseLogger,
+    });
+  }
+}
+
+function runPackageReleaseChecks(
+  plan: ReleasePlan,
+  options: Pick<
+    ReleaseCliOptions | PublishCliOptions,
+    'skipBuild' | 'skipTests'
+  >,
+): void {
+  const { config } = plan;
+
+  if (config.key !== 'vitepress') {
+    runStandardPackageReleaseChecks(plan, options);
     return;
   }
 
@@ -165,7 +222,8 @@ function runPackageReleaseChecks(
   if (!options.skipBuild) {
     buildVitepressProject(config);
     verifyDistVersion(plan);
-    getPackageScriptRunner(config, 'lint:package');
+    runPackageArtifactChecks(config);
+    runPackageReleaseConsistencyChecks(config);
     runCommand(getNpmCommand(), ['pack', '--dry-run'], {
       cwd: config.publishDir,
       stdio: 'inherit',
@@ -174,7 +232,7 @@ function runPackageReleaseChecks(
   }
 }
 
-function ensureWorkingTreeIsClean(options: ReleaseCliOptions): void {
+function ensureWorkingTreeIsClean(options: { dryRun: boolean }): void {
   if (options.dryRun) {
     return;
   }
@@ -208,9 +266,16 @@ function warnOnBranchMismatch(options: ReleaseCliOptions): void {
   }
 }
 
-function checkNpmAuth(options: ReleaseCliOptions): void {
+function checkNpmAuth(options: { dryRun: boolean; provenance: boolean }): void {
   if (options.dryRun) {
     ReleaseLogger.info('Dry-run mode skips npm authentication checks');
+    return;
+  }
+
+  if (options.provenance && canPublishWithProvenanceInCurrentProcess()) {
+    ReleaseLogger.info(
+      'Skipping npm whoami because provenance publishing uses CI trusted publishing credentials',
+    );
     return;
   }
 
@@ -220,16 +285,116 @@ function checkNpmAuth(options: ReleaseCliOptions): void {
   });
 }
 
-function refreshGitTags(): void {
-  try {
-    runCommand(getGitCommand(), ['fetch', '--tags'], {
-      cwd: REPO_ROOT,
-      logger: ReleaseLogger,
-    });
-  } catch {
-    ReleaseLogger.warn(
-      'Failed to refresh git tags, continuing with local tags',
+function canPublishWithProvenanceInCurrentProcess(): boolean {
+  return (
+    process.env.GITHUB_ACTIONS === 'true' || process.env.GITLAB_CI === 'true'
+  );
+}
+
+function hasGitHubActionsIdTokenPermission(): boolean {
+  return Boolean(
+    process.env.ACTIONS_ID_TOKEN_REQUEST_URL &&
+      process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN,
+  );
+}
+
+function ensureProvenancePublishEnvironment(options: {
+  dryRun?: boolean;
+  provenance: boolean;
+}): void {
+  if (options.dryRun || !options.provenance) {
+    return;
+  }
+
+  if (!canPublishWithProvenanceInCurrentProcess()) {
+    throw new Error(
+      'npm provenance publishing requires a supported cloud CI/CD environment. Push a release tag and let the GitHub Actions publish workflow run, or pass --no-provenance for an intentional non-provenance publish.',
     );
+  }
+
+  if (
+    process.env.GITHUB_ACTIONS === 'true' &&
+    !hasGitHubActionsIdTokenPermission()
+  ) {
+    throw new Error(
+      'npm provenance publishing from GitHub Actions requires permissions.id-token: write.',
+    );
+  }
+}
+
+function shouldPublishNpmInCurrentRelease(options: ReleaseCliOptions): boolean {
+  if (options.skipNpmPublish) {
+    return false;
+  }
+  if (!options.provenance) {
+    return true;
+  }
+  return canPublishWithProvenanceInCurrentProcess();
+}
+
+function validateReleasePublishPath(options: ReleaseCliOptions): void {
+  if (
+    options.dryRun ||
+    options.skipNpmPublish ||
+    shouldPublishNpmInCurrentRelease(options)
+  ) {
+    return;
+  }
+  if (options.skipPush) {
+    throw new Error(
+      'Cannot defer npm provenance publishing while --skip-push is set. Remove --skip-push so the release tag can trigger GitHub Actions, or pass --no-provenance for an intentional local publish.',
+    );
+  }
+}
+
+function getReleaseTagPrefixes(plans: ReleasePlan[]): string[] {
+  return [...new Set(plans.map((plan) => plan.config.tagPrefix))];
+}
+
+function remoteHasTagPrefix(tagPrefix: string): boolean {
+  return Boolean(
+    runCommand(
+      getGitCommand(),
+      ['ls-remote', '--refs', '--tags', 'origin', `${tagPrefix}/*`],
+      {
+        cwd: REPO_ROOT,
+        allowFailure: true,
+        logger: ReleaseLogger,
+      },
+    ).trim(),
+  );
+}
+
+function refreshGitTags(plans: ReleasePlan[]): void {
+  const tagPrefixes = getReleaseTagPrefixes(plans);
+
+  for (const tagPrefix of tagPrefixes) {
+    if (!remoteHasTagPrefix(tagPrefix)) {
+      ReleaseLogger.info(
+        `No remote tags found for ${tagPrefix}/*, skipping tag refresh`,
+      );
+      continue;
+    }
+
+    try {
+      runCommand(
+        getGitCommand(),
+        [
+          'fetch',
+          'origin',
+          '--no-tags',
+          `refs/tags/${tagPrefix}/*:refs/tags/${tagPrefix}/*`,
+        ],
+        {
+          cwd: REPO_ROOT,
+          logger: ReleaseLogger,
+        },
+      );
+    } catch {
+      ReleaseLogger.warn(
+        `Failed to refresh remote tags for ${tagPrefix}/*, continuing with local tags`,
+      );
+    }
   }
 }
 
@@ -274,7 +439,7 @@ function warnOnAheadBehind(): void {
 
 function ensureVersionNotPublished(
   plan: ReleasePlan,
-  options: ReleaseCliOptions,
+  options: Pick<ReleaseCliOptions | PublishCliOptions, 'dryRun'>,
 ): void {
   if (options.dryRun) {
     ReleaseLogger.info(
@@ -369,23 +534,111 @@ function createGitTags(context: ReleaseRunContext): void {
   }
 }
 
-function publishPackage(plan: ReleasePlan, options: ReleaseCliOptions): void {
-  const args = ['publish', '--no-git-checks'];
+function readCurrentGitHead(): string {
+  const gitHead = runCommand(getGitCommand(), ['rev-parse', 'HEAD'], {
+    cwd: REPO_ROOT,
+    logger: ReleaseLogger,
+  }).trim();
+
+  if (!/^[\da-f]{40}$/i.test(gitHead)) {
+    throw new Error(`Unable to resolve a valid git HEAD: ${gitHead}`);
+  }
+
+  return gitHead;
+}
+
+function publishPackage(
+  plan: ReleasePlan,
+  options: PublishPackageOptions,
+): void {
+  const args = ['publish'];
   if (plan.npmTag) {
     args.push('--tag', plan.npmTag);
   }
   if (options.registry) {
     args.push('--registry', options.registry);
   }
+  if (options.provenance) {
+    args.push('--provenance');
+  }
 
+  const gitHead = readCurrentGitHead();
   ReleaseLogger.info(
-    `Publishing ${plan.config.packageName}@${plan.newVersion} from ${path.relative(REPO_ROOT, plan.config.publishDir)}`,
+    [
+      `Publishing ${plan.config.packageName}@${plan.newVersion}`,
+      `from ${path.relative(REPO_ROOT, plan.config.publishDir)}`,
+      `with gitHead ${gitHead}`,
+    ].join(' '),
   );
-  runCommand(getPnpmCommand(), args, {
+  // npm's publish path prepares the registry manifest with gitHead. pnpm
+  // publishes its generated manifest directly, which leaves gitHead absent.
+  runCommand(getNpmCommand(), args, {
     cwd: plan.config.publishDir,
     stdio: 'inherit',
     logger: ReleaseLogger,
   });
+}
+
+function createPublishPlanFromCurrentVersion(
+  config: ResolvedReleasePackageConfig,
+  options: Pick<PublishCliOptions, 'npmTag'> = {},
+): ReleasePlan {
+  const version = config.manifest.version;
+  if (!version) {
+    throw new Error(`Package ${config.packageName} is missing a version`);
+  }
+
+  return {
+    config,
+    currentVersion: version,
+    newVersion: version,
+    gitTag: createGitTag(config, version),
+    npmTag: resolveDefaultNpmTag(version, options.npmTag),
+  };
+}
+
+async function resolvePublishPlans(
+  options: PublishCliOptions,
+): Promise<ReleasePlan[]> {
+  const availableConfigs = discoverReleasePackages();
+  const packageConfigs =
+    options.packageSelectors.length > 0
+      ? resolvePackageSelections(options.packageSelectors, availableConfigs)
+      : process.stdin.isTTY
+        ? resolvePackageSelections(
+            (
+              await promptForPackageSelections(
+                availableConfigs,
+                'Select package(s) to publish',
+              )
+            ).packageSelectors,
+            availableConfigs,
+          )
+        : (() => {
+            throw new Error(
+              'Missing --package. Use --package <name> or run the command in an interactive terminal.',
+            );
+          })();
+
+  return sortReleasePackageConfigs(packageConfigs).map((config) =>
+    createPublishPlanFromCurrentVersion(config, {
+      npmTag: options.npmTag,
+    }),
+  );
+}
+
+function previewPublishPlan(context: PublishRunContext): void {
+  ReleaseLogger.info(
+    [
+      context.options.dryRun ? 'Dry-run publish plan:' : 'Publish plan:',
+      formatReleasePlans(context.plans),
+      '',
+      `npm provenance: ${context.options.provenance ? 'enabled' : 'disabled'}`,
+      context.options.dryRun
+        ? 'Dry-run mode only previews the plan. No packages will be published.'
+        : 'The packages above will now be checked and published.',
+    ].join('\n'),
+  );
 }
 
 function pushRelease(context: ReleaseRunContext): void {
@@ -418,14 +671,20 @@ function createGithubReleases(context: ReleaseRunContext): void {
   }
 
   for (const plan of context.plans) {
-    runCommand(
-      getGhCommand(),
-      ['release', 'create', plan.gitTag, '--generate-notes'],
-      {
-        cwd: REPO_ROOT,
-        logger: ReleaseLogger,
-      },
-    );
+    try {
+      runCommand(
+        getGhCommand(),
+        ['release', 'create', plan.gitTag, '--generate-notes'],
+        {
+          cwd: REPO_ROOT,
+          logger: ReleaseLogger,
+        },
+      );
+    } catch {
+      ReleaseLogger.warn(
+        `Failed to create GitHub release for ${plan.gitTag}. The release commit and tag were already pushed; rerun "gh release create ${plan.gitTag} --generate-notes" when GitHub is reachable.`,
+      );
+    }
   }
 }
 
@@ -526,6 +785,14 @@ async function resolveReleasePlans(options: ReleaseCliOptions): Promise<{
 }
 
 function previewReleasePlan(context: ReleaseRunContext): void {
+  const npmPublishMode = context.options.skipNpmPublish
+    ? 'skipped by --skip-npm-publish'
+    : shouldPublishNpmInCurrentRelease(context.options)
+      ? context.options.provenance
+        ? 'current process with provenance'
+        : 'current process without provenance'
+      : 'deferred to the GitHub Actions tag workflow for provenance';
+
   ReleaseLogger.info(
     [
       context.options.dryRun
@@ -533,6 +800,7 @@ function previewReleasePlan(context: ReleaseRunContext): void {
         : 'Release execution plan:',
       formatReleasePlans(context.plans),
       '',
+      `npm publish: ${npmPublishMode}`,
       context.options.dryRun
         ? 'Dry-run mode only previews the plan. No files will be changed and no publish steps will run.'
         : 'The steps above will now be executed in order.',
@@ -552,15 +820,66 @@ function prepareReleaseFiles(context: ReleaseRunContext): void {
 }
 
 function performPreflightChecks(context: ReleaseRunContext): void {
+  const publishInCurrentProcess = shouldPublishNpmInCurrentRelease(
+    context.options,
+  );
+
   ensureWorkingTreeIsClean(context.options);
   warnOnBranchMismatch(context.options);
-  checkNpmAuth(context.options);
-  refreshGitTags();
+  validateReleasePublishPath(context.options);
+  if (publishInCurrentProcess) {
+    ensureProvenancePublishEnvironment(context.options);
+    checkNpmAuth(context.options);
+  } else {
+    ReleaseLogger.info(
+      'Skipping npm authentication checks because npm publish is deferred to GitHub Actions',
+    );
+  }
+  refreshGitTags(context.plans);
   warnOnAheadBehind();
 
   for (const plan of context.plans) {
     ensureVersionNotPublished(plan, context.options);
   }
+}
+
+function performPublishPreflightChecks(context: PublishRunContext): void {
+  ensureWorkingTreeIsClean(context.options);
+  ensureProvenancePublishEnvironment(context.options);
+  checkNpmAuth(context.options);
+
+  for (const plan of context.plans) {
+    ensureVersionNotPublished(plan, context.options);
+  }
+}
+
+export async function runPublishCommand(
+  options: PublishCliOptions,
+): Promise<void> {
+  const plans = await resolvePublishPlans(options);
+  const context: PublishRunContext = { plans, options };
+
+  previewPublishPlan(context);
+
+  if (context.options.dryRun) {
+    return;
+  }
+
+  ReleaseLogger.info('publish started');
+  const publishElapsed = createElapsedTimer();
+  performPublishPreflightChecks(context);
+
+  for (const plan of context.plans) {
+    runPackageReleaseChecks(plan, context.options);
+    publishPackage(plan, context.options);
+  }
+
+  ReleaseLogger.success(
+    `Publish completed: ${context.plans
+      .map((plan) => `${plan.config.packageName}@${plan.newVersion}`)
+      .join(', ')}`,
+    publishElapsed(),
+  );
 }
 
 export async function runReleaseCommand(
@@ -587,8 +906,14 @@ export async function runReleaseCommand(
   stageReleaseFiles(context);
   createGitTags(context);
 
-  for (const plan of context.plans) {
-    publishPackage(plan, context.options);
+  if (shouldPublishNpmInCurrentRelease(context.options)) {
+    for (const plan of context.plans) {
+      publishPackage(plan, context.options);
+    }
+  } else {
+    ReleaseLogger.info(
+      'Skipping local npm publish. Pushing the release tag will trigger the GitHub Actions provenance publish workflow.',
+    );
   }
 
   pushRelease(context);

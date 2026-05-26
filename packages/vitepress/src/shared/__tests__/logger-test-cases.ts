@@ -1,4 +1,4 @@
-import type { LoggerConfig, LogKind } from '@docs-islands/logger/types';
+import type { LoggerConfig, LogKind } from 'logaria/types';
 
 export const LOGGER_SPEC_CASE_COUNT = 31;
 export const LOGGER_SPEC_ELAPSED = '42.00ms';

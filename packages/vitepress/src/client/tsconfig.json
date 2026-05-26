@@ -1,5 +1,6 @@
 {
-  "extends": "../../tsconfig.source.json",
+  // Runtime local check and rolldown-plugin-dts input. Declaration leaf: ./tsconfig.lib.dts.json.
+  "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
     "isolatedDeclarations": true,
     "declaration": true,
@@ -7,5 +8,5 @@
     "types": [],
     "jsx": "preserve",
   },
-  "include": ["./", "../types"],
+  "include": ["./"],
 }

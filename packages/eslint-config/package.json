@@ -5,12 +5,11 @@
   "scripts": {
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
-    "typecheck": "tsc -p tsconfig.source.json --noEmit",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "limina checker build",
     "lint": "eslint . --config ./dist/general.js --fix --cache",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "del-cli .eslintcache dist node_modules"
+    "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },
   "dependencies": {
     "tinyglobby": "catalog:prod"
@@ -31,6 +30,7 @@
     "eslint-plugin-pnpm": "catalog:lint",
     "@eslint/markdown": "catalog:lint",
     "@html-eslint/eslint-plugin": "catalog:lint",
+    "@vitest/eslint-plugin": "catalog:test",
     "@html-eslint/parser": "catalog:lint",
     "eslint-plugin-vue": "catalog:lint",
     "vue-eslint-parser": "catalog:lint",
@@ -40,7 +40,7 @@
     "@typescript-eslint/parser": "catalog:lint",
     "typescript-eslint": "catalog:lint",
     "typescript": "catalog:dev",
-    "@docs-islands/utils": "workspace:*",
+    "@docs-islands/utils": "link:../../utils/dist",
     "rolldown": "catalog:dev",
     "rolldown-plugin-dts": "catalog:dev",
     "globals": "catalog:test",
@@ -48,10 +48,22 @@
     "vitest": "catalog:test"
   },
   "exports": {
-    ".": "./dist/general.js",
-    "./presets": "./dist/presets/index.js",
-    "./plugins": "./dist/plugins/index.js",
-    "./config": "./dist/config/index.js",
+    ".": {
+      "types": "./src/general.ts",
+      "default": "./dist/general.js"
+    },
+    "./presets": {
+      "types": "./src/presets/index.ts",
+      "default": "./dist/presets/index.js"
+    },
+    "./plugins": {
+      "types": "./src/plugins/index.ts",
+      "default": "./dist/plugins/index.js"
+    },
+    "./config": {
+      "types": "./src/config/index.ts",
+      "default": "./dist/config/index.js"
+    },
     "./package.json": "./package.json"
   }
 }

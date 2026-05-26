@@ -427,7 +427,7 @@ describe('createDocsIslands + react adapter', () => {
     ).toBeNull();
   });
 
-  it('logs error and strips scripts when multiple <script lang="react"> blocks exist in one html_block', async () => {
+  it('throws when multiple <script lang="react"> blocks exist in one html_block', async () => {
     const vitepressConfig: any = {};
     await applyReactDocsIslands(vitepressConfig);
 
@@ -443,21 +443,24 @@ describe('createDocsIslands + react adapter', () => {
 
     mockError.mockClear();
 
-    const result = await plugin.transform.handler.call(
-      {
-        resolve: vi.fn(),
-      },
-      markdownWithInlineDoubleScripts,
-      '/virtual/docs/double-script.md',
+    await expect(
+      plugin.transform.handler.call(
+        {
+          resolve: vi.fn(),
+        },
+        markdownWithInlineDoubleScripts,
+        '/virtual/docs/double-script.md',
+      ),
+    ).rejects.toThrow(
+      'Failed to parse /virtual/docs/double-script.md: framework "react" can contain only one <script lang="react"> element per file.',
     );
 
     expect(mockError).toHaveBeenCalledWith(
-      'Single file can contain only one <script lang="react"> element.',
+      'Failed to parse /virtual/docs/double-script.md: framework "react" can contain only one <script lang="react"> element per file.',
       expect.objectContaining({
         elapsedTimeMs: expect.any(Number),
       }),
     );
-    expect(result.code).not.toContain('<script lang="react">');
   });
 
   it('does not intercept __docs-islands/debug-ai in dev and still serves __docs-islands/debug-source', async () => {

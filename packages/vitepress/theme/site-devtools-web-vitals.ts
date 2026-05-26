@@ -28,7 +28,7 @@ const layoutShiftEntries: SiteDevToolsWebVitalsLayoutShift[] = [];
 const observers: PerformanceObserver[] = [];
 
 let isTracking = false;
-let notifyTimer: NodeJS.Timeout | undefined;
+let notifyTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
 const canUseBrowserPerformance = () =>
   globalThis.window !== undefined && globalThis.performance !== undefined;

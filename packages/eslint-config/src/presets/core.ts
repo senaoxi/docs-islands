@@ -1,4 +1,5 @@
 import typescriptESlintParser from '@typescript-eslint/parser';
+import vitest from '@vitest/eslint-plugin';
 import type { defineConfig } from 'eslint/config';
 import { globalIgnores } from 'eslint/config';
 import { untypedTypeScriptRules } from '../config';
@@ -13,6 +14,7 @@ type Config = ReturnType<typeof defineConfig>;
  *   - packageName (monorepo)
  *     - docs (monorepo)
  *     - playground (monorepo)
+ *     - smoke (monorepo)
  *     - src
  *       - client
  *       - node
@@ -27,7 +29,7 @@ type Config = ReturnType<typeof defineConfig>;
 const config: Config = [
   ...eslintGeneralConfig,
 
-  globalIgnores(['docs/**', 'playground/**']),
+  globalIgnores(['docs/**', 'playground/**', 'smoke/**']),
   // Core rendering files - complex rendering logic requires flexibility
   {
     files: ['src/client/**/*.ts', 'src/node/**/*.ts'],
@@ -71,6 +73,42 @@ const config: Config = [
     },
   },
 
+  // Core Vitest specs - community recommended test semantics.
+  // Keep the generic test relaxations in ../general, and only add Vitest-aware
+  // rules here for core package __tests__/*.spec.ts modules.
+  {
+    name: 'Core Vitest Specs',
+    files: ['**/__tests__/**/*.spec.ts'],
+    plugins: {
+      vitest,
+    },
+    languageOptions: {
+      globals: {
+        ...vitest.environments.env.globals,
+      },
+    },
+    rules: {
+      ...vitest.configs.recommended.rules,
+
+      // Keep test suites readable without banning nested describe entirely.
+      'vitest/max-nested-describe': ['warn', { max: 3 }],
+
+      // Useful in large OSS suites: these catch accidental focused/skipped
+      // tests before CI/release, while recommended already covers the basics.
+      'vitest/no-focused-tests': 'error',
+      'vitest/no-disabled-tests': 'warn',
+      'vitest/no-commented-out-tests': 'warn',
+      'vitest/no-identical-title': 'error',
+
+      // Prefer clearer async assertion styles where possible, but keep them as
+      // warnings because existing tests may need incremental cleanup.
+      'vitest/prefer-expect-resolves': 'warn',
+      'vitest/prefer-mock-promise-shorthand': 'warn',
+      'vitest/prefer-mock-return-shorthand': 'warn',
+      'vitest/prefer-spy-on': 'warn',
+    },
+  },
+
   // Tooling config files - disable typed linting
   {
     files: ['vitest.config.ts', 'rolldown.*config.ts', 'packagePlugin.ts'],
@@ -78,7 +116,7 @@ const config: Config = [
       // Tooling config files - parse TS syntax without TS project services.
       parser: typescriptESlintParser,
       parserOptions: {
-        projectService: false,
+        projectService: true,
         ecmaVersion: supportedEcmaVersion,
         sourceType: 'module',
       },

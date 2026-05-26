@@ -1,0 +1,107 @@
+{
+  "name": "logaria",
+  "version": "0.0.2",
+  "type": "module",
+  "license": "MIT",
+  "author": "Senao Xi",
+  "description": "Shared runtime logger and compile-time pruning plugin for docs-islands packages",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XiSenao/docs-islands.git",
+    "directory": "packages/logaria"
+  },
+  "bugs": {
+    "url": "https://github.com/XiSenao/docs-islands/issues"
+  },
+  "homepage": "https://docs.senao.me/docs-islands/logaria/",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "lint": "eslint . --config ./eslint.config.mjs --fix --cache --cache-location ./node_modules/.cache/eslint/",
+    "lint:package": "limina package check",
+    "lint:package:publint": "limina package check --tool publint",
+    "lint:package:attw": "limina package check --tool attw",
+    "lint:package:boundary": "limina package check --tool boundary",
+    "typecheck": "limina checker build",
+    "build": "rolldown --config rolldown.config.ts",
+    "build:watch": "rolldown --config rolldown.config.ts --watch",
+    "test": "vitest run",
+    "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"
+  },
+  "dependencies": {
+    "@babel/parser": "catalog:dev",
+    "@babel/traverse": "catalog:dev",
+    "@babel/types": "catalog:dev",
+    "picocolors": "catalog:dev",
+    "picomatch": "catalog:prod",
+    "unplugin": "catalog:prod"
+  },
+  "devDependencies": {
+    "@docs-islands/eslint-config": "workspace:*",
+    "limina": "catalog:prod",
+    "@rollup/plugin-replace": "catalog:dev",
+    "@types/babel__traverse": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "@typescript-eslint/parser": "catalog:lint",
+    "@docs-islands/utils": "link:../../utils/dist",
+    "@docs-islands/plugin-license": "link:../plugins/license/dist",
+    "es-module-lexer": "catalog:dev",
+    "globals": "catalog:test",
+    "magic-string": "catalog:dev",
+    "del-cli": "catalog:dev",
+    "eslint": "catalog:lint",
+    "jsdom": "catalog:test",
+    "rollup": "catalog:dev",
+    "rolldown": "catalog:dev",
+    "rolldown-plugin-dts": "catalog:dev",
+    "tsx": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:test"
+  },
+  "peerDependencies": {
+    "@rollup/plugin-replace": "catalog:dev",
+    "rolldown": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@rollup/plugin-replace": {
+      "optional": true
+    },
+    "rolldown": {
+      "optional": true
+    }
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./helper": "./src/helper/index.ts",
+    "./core": "./src/core/index.ts",
+    "./core/helper": "./src/core/helper/index.ts",
+    "./plugin": "./src/plugin/index.ts",
+    "./package.json": "./package.json",
+    "./types": "./src/types/index.ts"
+  },
+  "types": "./src/index.ts",
+  "typesVersions": {
+    "*": {
+      "helper": [
+        "./helper/index.d.ts"
+      ],
+      "core": [
+        "./core/index.d.ts"
+      ],
+      "core/helper": [
+        "./core/helper/index.d.ts"
+      ],
+      "plugin": [
+        "./plugin/index.d.ts"
+      ]
+    }
+  },
+  "sideEffects": false
+}

@@ -1,10 +1,12 @@
 {
-  "extends": "../../tsconfig.source.json",
+  // Runtime local check kept stable for package scripts. Declaration leaf: ./tsconfig.lib.dts.json.
+  "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
     "isolatedDeclarations": true,
     "declaration": true,
     "stripInternal": true,
     "lib": ["ESNext", "DOM"],
+    "types": [],
   },
-  "include": ["./", "../types/"],
+  "include": ["./"],
 }

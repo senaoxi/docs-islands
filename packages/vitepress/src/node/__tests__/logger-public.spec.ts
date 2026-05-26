@@ -1,11 +1,11 @@
-import { resetScopedLoggerConfig } from '@docs-islands/logger/core';
-import type { LoggerConfig } from '@docs-islands/logger/types';
 import * as vitepressPublicModule from '@docs-islands/vitepress';
 import * as publicLoggerModule from '@docs-islands/vitepress/logger';
 import { createLogger } from '@docs-islands/vitepress/logger';
 import loggerPreset, {
   vitepress as vitepressLogger,
 } from '@docs-islands/vitepress/logger/presets';
+import { resetScopedLoggerConfig } from 'logaria/core';
+import type { LoggerConfig } from 'logaria/types';
 import type { Plugin } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {

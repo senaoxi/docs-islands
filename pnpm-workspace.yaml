@@ -30,10 +30,12 @@ catalogs:
     '@babel/parser': ^7.29.0
     '@babel/traverse': ^7.29.0
     '@babel/types': ^7.29.0
+    '@clack/prompts': ^1.4.0
     '@farmfe/core': 2.0.0-beta.10
     '@rollup/plugin-replace': ^6.0.3
     '@rspack/core': ^1.6.0
     '@types/babel__generator': ^7.27.0
+    '@vue/compiler-sfc': ^3.5.28
     '@types/babel__traverse': ^7.20.7
     '@types/eslint-plugin-jsx-a11y': ^6.10.1
     '@types/estree': ^1.0.8
@@ -66,6 +68,7 @@ catalogs:
     rollup: ^4.59.0
     rollup-plugin-license: ^3.6.0
     shiki: ^2.5.0
+    svelte-check: ^4.4.7
     tsx: ^4.21.0
     typescript: ~5.9.3
     vue-json-pretty: ^2.6.0
@@ -73,7 +76,9 @@ catalogs:
     vue-tsc: ~3.2.4
     wait-on: ^9.0.3
     webpack: ^5.102.1
+    yaml: ^2.8.3
     zod: ^4.3.6
+    semver: ^7.8.1
   docs-dev:
     '@nolebase/vitepress-plugin-enhanced-mark': ^2.18.2
     '@types/http-proxy': ^1.17.16
@@ -112,8 +117,9 @@ catalogs:
     vue-eslint-parser: ^10.2.0
     yaml-eslint-parser: ^1.3.0
   prod:
-    '@docs-islands/logger': 0.0.5
     cheerio: ^1.2.0
+    limina: 0.0.3
+    logaria: 0.0.2
     picomatch: ^4.0.4
     tinyglobby: ^0.2.15
     unplugin: ^3.0.0
@@ -121,6 +127,7 @@ catalogs:
     vue: ^3.5.28
   test:
     '@playwright/test': 1.58.2
+    '@vitest/eslint-plugin': ^1.6.17
     get-port: ^7.1.0
     globals: ^17.3.0
     jsdom: ^28.0.0
@@ -152,11 +159,11 @@ overrides:
   gray-matter>js-yaml: 3.14.2
   lodash: 4.18.0
   minimatch@^10.0.0: ^10.2.3
-  minimatch@^10.0.0>brace-expansion: 5.0.5
+  minimatch@^10.0.0>brace-expansion: 5.0.6
   minimatch@^3.0.0: ^3.1.4
-  minimatch@^3.0.0>brace-expansion: 5.0.5
+  minimatch@^3.0.0>brace-expansion: 5.0.6
   minimatch@^9.0.0: ^9.0.7
-  minimatch@^9.0.0>brace-expansion: 5.0.5
+  minimatch@^9.0.0>brace-expansion: 5.0.6
   picomatch@^2.0.0: 2.3.2
   picomatch@^4.0.0: 4.0.4
   undici-types: ^6.24.0
@@ -182,7 +189,16 @@ strictPeerDependencies: true
 
 trustPolicy: no-downgrade
 
+# semver v5/v6 legacy releases do not have npm provenance,
+# while semver v7.5.1+ has provenance. pnpm trust checks are
+# publish-date based rather than semver-major based, so v5/v6
+# are flagged as trust downgrades. Exact selectors like
+# semver@5.7.2 / semver@6.3.1 do not appear to match reliably
+# in pnpm 10.26.0, so exclude the package name only.
+# TODO: remove this once pnpm supports reliable exact-version matching here,
+# or once transitive deps no longer pull semver v5/v6.
 trustPolicyExclude:
   - vite@5.4.21
+  - semver
 
 verifyDepsBeforeRun: install

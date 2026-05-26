@@ -1,7 +1,7 @@
 /**
  * @vitest-environment node
  */
-import { createLoggerScopeId } from '@docs-islands/logger/core/helper';
+import { createLoggerScopeId } from 'logaria/core/helper';
 import type { PluginOption } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { react } from '../../adapters/react';
@@ -106,16 +106,13 @@ describe('createDocsIslands', () => {
     const firstScopeId = createLoggerScopeId();
     const secondScopeId = createLoggerScopeId();
     const finishedAt = Date.now();
+    const scopeIdRe = /^logaria-scope-([\da-z]+)-[\da-f]{32}$/;
 
-    expect(firstScopeId).toMatch(
-      /^docs-islands-logger-scope-[\da-z]+-[\da-f]{32}$/,
-    );
-    expect(secondScopeId).toMatch(
-      /^docs-islands-logger-scope-[\da-z]+-[\da-f]{32}$/,
-    );
+    expect(firstScopeId).toMatch(scopeIdRe);
+    expect(secondScopeId).toMatch(scopeIdRe);
 
-    const firstTimestamp = firstScopeId.split('-')[4];
-    const secondTimestamp = secondScopeId.split('-')[4];
+    const firstTimestamp = scopeIdRe.exec(firstScopeId)?.[1];
+    const secondTimestamp = scopeIdRe.exec(secondScopeId)?.[1];
 
     expect(Number.parseInt(firstTimestamp!, 36)).toBeGreaterThanOrEqual(
       startedAt,

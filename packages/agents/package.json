@@ -8,8 +8,8 @@
     "clean": "del-cli node_modules"
   },
   "dependencies": {
-    "@docs-islands/logger": "catalog:prod",
-    "@docs-islands/utils": "workspace:*"
+    "logaria": "catalog:prod",
+    "@docs-islands/utils": "link:../../utils/dist"
   },
   "devDependencies": {
     "del-cli": "catalog:dev"

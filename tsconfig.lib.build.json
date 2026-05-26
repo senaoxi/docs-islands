@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Production library/runtime declaration graph.
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/logaria/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "./utils/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "./packages/plugins/license/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "./packages/core/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "./packages/eslint-config/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "./packages/limina/tsconfig.lib.dts.json"
+    },
+    {
+      "path": "./packages/vitepress/tsconfig.build.json"
+    }
+  ]
+}

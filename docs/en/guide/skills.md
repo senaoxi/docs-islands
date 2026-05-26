@@ -1,6 +1,6 @@
 # Agent Skills
 
-Docs Islands publishes optional agent skills for using its packages with AI coding agents. These skills package the practical usage rules for `@docs-islands/logger` and `@docs-islands/vitepress`, so the agent can load focused guidance when it is changing logger calls, VitePress configuration, Markdown islands, render strategies, diagnostics, or related integration code.
+Docs Islands publishes optional agent skills for using its packages with AI coding agents. These skills package the practical usage rules for `logaria` and `@docs-islands/vitepress`, so the agent can load focused guidance when it is changing logger calls, VitePress configuration, Markdown islands, render strategies, diagnostics, or related integration code.
 
 ## Install
 
@@ -10,26 +10,28 @@ List the available skills first:
 npx skills add XiSenao/docs-islands --list
 ```
 
-Install the logger skill:
-
-```bash
-npx skills add XiSenao/docs-islands --skill docs-islands-logger
-```
-
 Install the VitePress skill:
 
 ```bash
 npx skills add XiSenao/docs-islands --skill docs-islands-vitepress
 ```
 
+Install the limina skill:
+
+```bash
+npx skills add XiSenao/docs-islands --skill limina
+```
+
+Install the logaria skill:
+
+```bash
+npx skills add XiSenao/docs-islands --skill logaria
+```
+
 Install both skills globally for Codex:
 
 ```bash
-npx skills add XiSenao/docs-islands \
-  --global \
-  --agent codex \
-  --skill docs-islands-logger \
-  --skill docs-islands-vitepress
+npx skills add XiSenao/docs-islands --global --agent codex --skill logaria --skill logaria --skill docs-islands-vitepress
 ```
 
 Restart the target agent after installing global skills so it can load the new skill metadata.
@@ -42,7 +44,7 @@ Docs Islands uses namespaced skill names:
 
 | Skill                    | Package it helps with     |
 | ------------------------ | ------------------------- |
-| `docs-islands-logger`    | `@docs-islands/logger`    |
+| `logaria`                | `logaria`                 |
 | `docs-islands-vitepress` | `@docs-islands/vitepress` |
 
 The namespace is intentional. Short names like `logger` or `vitepress` can conflict with unrelated global skills and make the agent load guidance that is broader than Docs Islands.
@@ -56,6 +58,6 @@ The namespace is intentional. Short names like `logger` or `vitepress` can confl
 - Update skills after Docs Islands documentation or package behavior changes:
 
 ```bash
-npx skills update docs-islands-logger
+npx skills update logaria
 npx skills update docs-islands-vitepress
 ```
