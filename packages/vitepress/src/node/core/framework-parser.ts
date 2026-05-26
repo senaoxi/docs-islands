@@ -79,7 +79,7 @@ interface RenderingFrameworkParserState {
 }
 
 const htmlAttrRE =
-  /(?:^|\s)(?<name>[:A-Za-z_][:\w.-]*)(?:\s*=\s*(?:"(?<doubleQuoted>[^"]*)"|'(?<singleQuoted>[^']*)'|(?<unquoted>[^\s"'=<>`]+)))?/g;
+  /(?:^|\s)(?<name>[:A-Z_a-z][\w.:-]*)(?:\s*=\s*(?:"(?<doubleQuoted>[^"]*)"|'(?<singleQuoted>[^']*)'|(?<unquoted>[^\s"'<=>`]+)))?/g;
 
 function getHtmlAttributeValue(attrs: string, name: string): string | null {
   for (const match of attrs.matchAll(htmlAttrRE)) {

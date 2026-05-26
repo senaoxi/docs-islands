@@ -164,14 +164,14 @@ const getFrameworkMark = (framework: string) =>
                   :class="{ 'is-line-active': isFlowHovered }"
                 >
                   <line
-                    class="tile-connector-segment tile-connector-dash"
+                    class="tile-connector-dash tile-connector-segment"
                     :x1="line.x1"
                     :y1="line.y1"
                     :x2="line.x2"
                     :y2="line.y2"
                   />
                   <line
-                    class="tile-connector-segment tile-connector-glow"
+                    class="tile-connector-glow tile-connector-segment"
                     pathLength="1"
                     :x1="line.x1"
                     :y1="line.y1"
@@ -179,7 +179,7 @@ const getFrameworkMark = (framework: string) =>
                     :y2="line.y2"
                   />
                   <line
-                    class="tile-connector-segment tile-connector-core"
+                    class="tile-connector-core tile-connector-segment"
                     pathLength="1"
                     :x1="line.x1"
                     :y1="line.y1"
@@ -204,14 +204,14 @@ const getFrameworkMark = (framework: string) =>
                   }"
                 >
                   <line
-                    class="tile-connector-segment tile-connector-dash"
+                    class="tile-connector-dash tile-connector-segment"
                     :x1="line.x1"
                     :y1="line.y1"
                     :x2="line.x2"
                     :y2="line.y2"
                   />
                   <line
-                    class="tile-connector-segment tile-connector-glow"
+                    class="tile-connector-glow tile-connector-segment"
                     pathLength="1"
                     :x1="line.x1"
                     :y1="line.y1"
@@ -219,7 +219,7 @@ const getFrameworkMark = (framework: string) =>
                     :y2="line.y2"
                   />
                   <line
-                    class="tile-connector-segment tile-connector-core"
+                    class="tile-connector-core tile-connector-segment"
                     pathLength="1"
                     :x1="line.x1"
                     :y1="line.y1"

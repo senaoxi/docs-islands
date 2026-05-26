@@ -29,7 +29,7 @@ const isUsableChromiumExecutable = (executablePath: string): boolean => {
     return true;
   }
 
-  const macAppRoot = executablePath.match(/^(.+\.app)\//)?.[1];
+  const macAppRoot = /^(.+\.app)\//.exec(executablePath)?.[1];
 
   if (!macAppRoot) {
     return true;
