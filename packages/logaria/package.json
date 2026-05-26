@@ -45,12 +45,12 @@
   },
   "devDependencies": {
     "@docs-islands/eslint-config": "workspace:*",
-    "limina": "catalog:prod",
     "@rollup/plugin-replace": "catalog:dev",
     "@types/babel__traverse": "catalog:dev",
     "@types/node": "catalog:dev",
     "@typescript-eslint/parser": "catalog:lint",
     "@docs-islands/utils": "link:../../utils/dist",
+    "limina": "workspace:*",
     "@docs-islands/plugin-license": "link:../plugins/license/dist",
     "es-module-lexer": "catalog:dev",
     "globals": "catalog:test",

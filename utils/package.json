@@ -28,6 +28,7 @@
     "eslint": "catalog:lint",
     "@types/picomatch": "catalog:dev",
     "@docs-islands/eslint-config": "workspace:*",
+    "limina": "workspace:*",
     "typescript": "catalog:dev",
     "pathe": "catalog:dev",
     "is-in-ci": "catalog:dev",

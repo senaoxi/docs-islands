@@ -68,7 +68,7 @@
     "@babel/types": "catalog:dev",
     "@docs-islands/core": "workspace:*",
     "@docs-islands/eslint-config": "workspace:*",
-    "limina": "link:../limina/dist",
+    "limina": "workspace:*",
     "@docs-islands/plugin-license": "link:../plugins/license/dist",
     "@docs-islands/utils": "link:../../utils/dist",
     "@types/babel__generator": "catalog:dev",

@@ -35,7 +35,6 @@ catalogs:
     '@rollup/plugin-replace': ^6.0.3
     '@rspack/core': ^1.6.0
     '@types/babel__generator': ^7.27.0
-    '@vue/compiler-sfc': ^3.5.28
     '@types/babel__traverse': ^7.20.7
     '@types/eslint-plugin-jsx-a11y': ^6.10.1
     '@types/estree': ^1.0.8
@@ -47,6 +46,7 @@ catalogs:
     '@types/react-dom': ^18.2.0
     '@vitejs/plugin-react-swc': ^4.2.3
     '@vitejs/plugin-vue': ^6.0.5
+    '@vue/compiler-sfc': ^3.5.28
     cac: ^6.7.14
     concurrently: ^9.2.1
     del-cli: ^7.0.0
@@ -67,6 +67,7 @@ catalogs:
     rolldown-plugin-dts: ^0.23.1
     rollup: ^4.59.0
     rollup-plugin-license: ^3.6.0
+    semver: ^7.8.1
     shiki: ^2.5.0
     svelte-check: ^4.4.7
     tsx: ^4.21.0
@@ -78,7 +79,6 @@ catalogs:
     webpack: ^5.102.1
     yaml: ^2.8.3
     zod: ^4.3.6
-    semver: ^7.8.1
   docs-dev:
     '@nolebase/vitepress-plugin-enhanced-mark': ^2.18.2
     '@types/http-proxy': ^1.17.16
@@ -118,7 +118,6 @@ catalogs:
     yaml-eslint-parser: ^1.3.0
   prod:
     cheerio: ^1.2.0
-    limina: 0.0.3
     logaria: 0.0.2
     picomatch: ^4.0.4
     tinyglobby: ^0.2.15
@@ -189,14 +188,6 @@ strictPeerDependencies: true
 
 trustPolicy: no-downgrade
 
-# semver v5/v6 legacy releases do not have npm provenance,
-# while semver v7.5.1+ has provenance. pnpm trust checks are
-# publish-date based rather than semver-major based, so v5/v6
-# are flagged as trust downgrades. Exact selectors like
-# semver@5.7.2 / semver@6.3.1 do not appear to match reliably
-# in pnpm 10.26.0, so exclude the package name only.
-# TODO: remove this once pnpm supports reliable exact-version matching here,
-# or once transitive deps no longer pull semver v5/v6.
 trustPolicyExclude:
   - vite@5.4.21
   - semver

@@ -266,9 +266,6 @@ catalogs:
     cheerio:
       specifier: ^1.2.0
       version: 1.2.0
-    limina:
-      specifier: 0.0.3
-      version: 0.0.3
     logaria:
       specifier: 0.0.2
       version: 0.0.2
@@ -574,6 +571,9 @@ importers:
       jsdom:
         specifier: catalog:test
         version: 28.0.0
+      limina:
+        specifier: workspace:*
+        version: link:../limina
       rolldown:
         specifier: catalog:dev
         version: 1.0.0-rc.4
@@ -665,6 +665,9 @@ importers:
       jsonc-eslint-parser:
         specifier: catalog:lint
         version: 2.4.1
+      limina:
+        specifier: workspace:*
+        version: link:../limina
       prettier:
         specifier: catalog:format
         version: 3.5.3
@@ -772,6 +775,9 @@ importers:
       del-cli:
         specifier: catalog:dev
         version: 7.0.0
+      limina:
+        specifier: workspace:*
+        version: link:..
       typescript:
         specifier: catalog:dev
         version: 5.9.3
@@ -837,8 +843,8 @@ importers:
         specifier: catalog:test
         version: 28.0.0
       limina:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+        specifier: workspace:*
+        version: link:../limina
       magic-string:
         specifier: catalog:dev
         version: 0.30.21
@@ -935,6 +941,9 @@ importers:
       eslint:
         specifier: catalog:lint
         version: 9.39.2
+      limina:
+        specifier: workspace:*
+        version: link:../../limina
       rolldown:
         specifier: catalog:dev
         version: 1.0.0-rc.4
@@ -1033,8 +1042,8 @@ importers:
         specifier: catalog:test
         version: 28.0.0
       limina:
-        specifier: link:../limina/dist
-        version: link:../limina/dist
+        specifier: workspace:*
+        version: link:../limina
       magic-string:
         specifier: catalog:dev
         version: 0.30.21
@@ -1203,8 +1212,8 @@ importers:
         specifier: catalog:test
         version: 7.1.0
       limina:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+        specifier: workspace:*
+        version: link:../../limina
       playwright-chromium:
         specifier: catalog:test
         version: 1.58.2
@@ -1264,8 +1273,8 @@ importers:
         specifier: catalog:test
         version: 17.3.0
       limina:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+        specifier: workspace:*
+        version: link:../../limina
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -1306,6 +1315,9 @@ importers:
       is-in-ci:
         specifier: catalog:dev
         version: 2.0.0
+      limina:
+        specifier: workspace:*
+        version: link:../packages/limina
       pathe:
         specifier: catalog:dev
         version: 2.0.3
@@ -6800,28 +6812,6 @@ packages:
         integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==,
       }
     engines: { node: '>= 0.8.0' }
-
-  limina@0.0.3:
-    resolution:
-      {
-        integrity: sha512-029bRXBsXoXYJ5H9QWL6zs/kSK4kj/IaqIk3pcbQLQNnP5fn9I1IZx8SIA9jS3Ypu6sc/khU4fOHMyai/JhgPg==,
-      }
-    engines: { node: ^20.19.0 || >=22.12.0 }
-    hasBin: true
-    peerDependencies:
-      '@vue/compiler-sfc': ^3.5.28
-      svelte-check: ^4.4.7
-      typescript: ~5.9.3
-      vue-tsc: ~3.2.4
-    peerDependenciesMeta:
-      '@vue/compiler-sfc':
-        optional: true
-      svelte-check:
-        optional: true
-      typescript:
-        optional: true
-      vue-tsc:
-        optional: true
 
   linkify-it@5.0.0:
     resolution:
@@ -13012,28 +13002,6 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
-
-  limina@0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(@vue/compiler-sfc@3.5.28)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3)):
-    dependencies:
-      '@arethetypeswrong/core': 0.18.2
-      '@clack/prompts': 1.4.0
-      '@publint/pack': 0.1.4
-      cac: 6.7.14
-      es-module-lexer: 2.0.0
-      logaria: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
-      publint: 0.3.17
-      semver: 7.8.1
-      tinyglobby: 0.2.15
-      yaml: 2.8.3
-      zod: 4.3.6
-    optionalDependencies:
-      '@vue/compiler-sfc': 3.5.28
-      typescript: 5.9.3
-      vue-tsc: 3.2.4(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@rollup/plugin-replace'
-      - rolldown
-      - supports-color
 
   linkify-it@5.0.0:
     dependencies:

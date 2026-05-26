@@ -41,6 +41,7 @@
     "typescript-eslint": "catalog:lint",
     "typescript": "catalog:dev",
     "@docs-islands/utils": "link:../../utils/dist",
+    "limina": "workspace:*",
     "rolldown": "catalog:dev",
     "rolldown-plugin-dts": "catalog:dev",
     "globals": "catalog:test",

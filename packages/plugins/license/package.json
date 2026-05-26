@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "eslint": "catalog:lint",
+    "limina": "workspace:*",
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "link:../../../utils/dist",
     "rolldown": "catalog:dev",

@@ -17,7 +17,7 @@
   "devDependencies": {
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "link:../../../utils/dist",
-    "limina": "catalog:prod",
+    "limina": "workspace:*",
     "@typescript-eslint/parser": "catalog:lint",
     "@vitejs/plugin-react-swc": "catalog:dev",
     "@playwright/test": "catalog:test",
