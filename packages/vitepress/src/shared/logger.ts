@@ -1,4 +1,4 @@
-import type { CreateLoggerOptions, Logger } from '@docs-islands/logger/types';
+import type { CreateLoggerOptions, Logger } from 'logaria/types';
 
 export function createLogger(options: CreateLoggerOptions): Logger;
 export function createLogger(): Logger {

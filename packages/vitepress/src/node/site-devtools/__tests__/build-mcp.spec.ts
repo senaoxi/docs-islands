@@ -47,7 +47,7 @@ const parseFramedResponses = (output: string) => {
     expect(headerEnd).toBeGreaterThanOrEqual(0);
 
     const headerText = buffer.slice(0, headerEnd).toString('utf8');
-    const contentLengthMatch = headerText.match(/content-length:\s*(\d+)/i);
+    const contentLengthMatch = /content-length:\s*(\d+)/i.exec(headerText);
 
     expect(contentLengthMatch).toBeTruthy();
     const contentLength = Number.parseInt(contentLengthMatch![1], 10);
@@ -403,13 +403,13 @@ describe('createSiteDevToolsBuildMcpServer', () => {
       outDir: fixture.outDir,
     });
 
-    expect(
-      await server.handleMessage({
+    await expect(
+      server.handleMessage({
         id: 1,
         jsonrpc: '2.0',
         method: 'initialize',
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       id: 1,
       jsonrpc: '2.0',
       result: expect.objectContaining({
@@ -641,12 +641,12 @@ describe('createSiteDevToolsBuildMcpServer', () => {
       outDir: fixture.outDir,
     });
 
-    expect(
-      await server.handleMessage({
+    await expect(
+      server.handleMessage({
         id: 1,
         method: 'initialize',
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       error: {
         code: -32_600,
         message: '"jsonrpc" must be "2.0".',
@@ -654,13 +654,13 @@ describe('createSiteDevToolsBuildMcpServer', () => {
       id: 1,
     });
 
-    expect(
-      await server.handleMessage({
+    await expect(
+      server.handleMessage({
         id: 2,
         jsonrpc: '1.0',
         method: 'initialize',
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       error: {
         code: -32_600,
         message: '"jsonrpc" must be "2.0".',
@@ -668,8 +668,8 @@ describe('createSiteDevToolsBuildMcpServer', () => {
       id: 2,
     });
 
-    expect(
-      await server.handleMessage({
+    await expect(
+      server.handleMessage({
         id: 3,
         jsonrpc: '2.0',
         method: 'tools/call',
@@ -677,7 +677,7 @@ describe('createSiteDevToolsBuildMcpServer', () => {
           arguments: {},
         },
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       error: {
         code: -32_602,
         message: '"name" must be a non-empty string.',
@@ -685,14 +685,14 @@ describe('createSiteDevToolsBuildMcpServer', () => {
       id: 3,
     });
 
-    expect(
-      await server.handleMessage({
+    await expect(
+      server.handleMessage({
         id: 4,
         jsonrpc: '2.0',
         method: 'resources/read',
         params: {},
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       error: {
         code: -32_602,
         message: '"uri" must be a non-empty string.',
@@ -707,8 +707,8 @@ describe('createSiteDevToolsBuildMcpServer', () => {
       outDir: fixture.outDir,
     });
 
-    expect(
-      await server.handleMessage({
+    await expect(
+      server.handleMessage({
         id: 1,
         jsonrpc: '2.0',
         method: 'tools/call',
@@ -719,7 +719,7 @@ describe('createSiteDevToolsBuildMcpServer', () => {
           name: 'get_build_overview',
         },
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       id: 1,
       result: expect.objectContaining({
         isError: true,
@@ -729,8 +729,8 @@ describe('createSiteDevToolsBuildMcpServer', () => {
       }),
     });
 
-    expect(
-      await server.handleMessage({
+    await expect(
+      server.handleMessage({
         id: 2,
         jsonrpc: '2.0',
         method: 'tools/call',
@@ -741,7 +741,7 @@ describe('createSiteDevToolsBuildMcpServer', () => {
           name: 'get_artifact',
         },
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       id: 2,
       result: expect.objectContaining({
         isError: true,

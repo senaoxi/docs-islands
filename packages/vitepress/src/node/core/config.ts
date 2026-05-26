@@ -5,10 +5,10 @@ import type {
   SiteDevToolsUserConfig,
 } from '#dep-types/utils';
 import { VITEPRESS_CONFIG_LOG_GROUPS } from '#shared/constants/log-groups/config';
-import { setScopedLoggerConfig } from '@docs-islands/logger/core';
-import { createElapsedTimer } from '@docs-islands/logger/helper';
-import { LOGGER_TREE_SHAKING_PLUGIN_NAME } from '@docs-islands/logger/plugin';
-import type { LoggerConfig, LoggerPluginMap } from '@docs-islands/logger/types';
+import { setScopedLoggerConfig } from 'logaria/core';
+import { createElapsedTimer } from 'logaria/helper';
+import { LOGGER_TREE_SHAKING_PLUGIN_NAME } from 'logaria/plugin';
+import type { LoggerConfig, LoggerPluginMap } from 'logaria/types';
 import type { DefaultTheme, UserConfig } from 'vitepress';
 import { LOGGER_FACADE_PLUGIN_NAME } from '../constants/core/plugin-names';
 import { getVitePressGroupLogger } from '../logger';

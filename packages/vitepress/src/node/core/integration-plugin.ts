@@ -1,5 +1,4 @@
 import type { ConfigType } from '#dep-types/utils';
-import { resolveConfig } from '#shared/config';
 
 import type { PluginOption } from 'vite';
 import type { DefaultTheme, UserConfig } from 'vitepress';
@@ -17,6 +16,7 @@ import {
   createRenderingModuleResolution,
   type RenderingModuleResolution,
 } from './module-resolution';
+import { resolveConfig } from './resolve-config';
 
 export interface RenderingIntegrationPluginContext {
   frameworkParserManager: RenderingFrameworkParserManager;

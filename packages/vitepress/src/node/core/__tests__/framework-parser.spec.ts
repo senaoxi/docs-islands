@@ -39,10 +39,12 @@ function createFakeParser({
   framework,
   lang,
   calls,
+  parseError,
 }: {
   framework: string;
   lang: string;
   calls: string[];
+  parseError?: Error;
 }): { controller: RenderController; parser: RenderingFrameworkParser } {
   const controller = new RenderController();
 
@@ -52,6 +54,9 @@ function createFakeParser({
     renderController: controller,
     async parseScript({ script }) {
       calls.push(`parse:${framework}`);
+      if (parseError) {
+        throw parseError;
+      }
 
       const componentReferences = new Map<
         string,
@@ -164,7 +169,7 @@ describe('RenderingFrameworkParserManager', () => {
     expect(solidContainer.importsByLocalName.has('SolidBadge')).toBe(true);
   });
 
-  it('errors and strips all recognized scripts when one framework declares multiple script blocks', async () => {
+  it('throws when one framework declares multiple script blocks', async () => {
     const calls: string[] = [];
     const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
     const react = createFakeParser({
@@ -178,30 +183,58 @@ describe('RenderingFrameworkParserManager', () => {
 
     const input = `<script lang="react">import A from './A'</script><script lang="react">import B from './B'</script>
 <A />`;
-    const result = await manager.transformMarkdown(
-      input,
-      '/guide/double-react.md',
-      createTestModuleResolver(),
+    await expect(
+      manager.transformMarkdown(
+        input,
+        '/guide/double-react.md',
+        createTestModuleResolver(),
+      ),
+    ).rejects.toThrow(
+      'Failed to parse /guide/double-react.md: framework "react" can contain only one <script lang="react"> element per file.',
     );
 
     expect(mockError).toHaveBeenCalledWith(
-      'Single file can contain only one <script lang="react"> element.',
+      'Failed to parse /guide/double-react.md: framework "react" can contain only one <script lang="react"> element per file.',
       expect.objectContaining({
         elapsedTimeMs: expect.any(Number),
       }),
     );
-    expect(result.code).not.toContain('<script lang="react">');
-    expect(result.code.split('\n')).toHaveLength(input.split('\n').length);
-    const reactContainer =
-      await react.controller.getCompilationContainerByMarkdownModuleId(
-        'react',
-        '/guide/double-react.md',
-      );
-    expect(reactContainer.importsByLocalName.size).toBe(0);
     expect(calls).toEqual([]);
   });
 
-  it('errors when multiple frameworks reuse the same local component name on one page', async () => {
+  it('throws when a framework parser fails to parse a recognized script', async () => {
+    const calls: string[] = [];
+    const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
+    const react = createFakeParser({
+      calls,
+      framework: 'react',
+      lang: 'react',
+      parseError: new Error('broken parser'),
+    });
+
+    manager.registerParser(react.parser);
+    mockError.mockClear();
+
+    await expect(
+      manager.transformMarkdown(
+        `<script lang="react">import Card from './Card'</script>
+<Card />`,
+        '/guide/broken-parser.md',
+        createTestModuleResolver(),
+      ),
+    ).rejects.toThrow(
+      'Failed to parse <script lang="react"> for framework "react" in /guide/broken-parser.md: broken parser',
+    );
+    expect(mockError).toHaveBeenCalledWith(
+      'Failed to parse <script lang="react"> for framework "react" in /guide/broken-parser.md: broken parser',
+      expect.objectContaining({
+        elapsedTimeMs: expect.any(Number),
+      }),
+    );
+    expect(calls).toEqual(['parse:react']);
+  });
+
+  it('throws when multiple frameworks reuse the same local component name on one page', async () => {
     const calls: string[] = [];
     const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
     const react = createFakeParser({
@@ -219,35 +252,24 @@ describe('RenderingFrameworkParserManager', () => {
     manager.registerParser(solid.parser);
     mockError.mockClear();
 
-    const result = await manager.transformMarkdown(
-      `<script lang="react">import Button from './ReactButton'</script>
+    await expect(
+      manager.transformMarkdown(
+        `<script lang="react">import Button from './ReactButton'</script>
 <script lang="solid">import Button from './SolidButton'</script>
 <Button />`,
-      '/guide/conflict.md',
-      createTestModuleResolver(),
+        '/guide/conflict.md',
+        createTestModuleResolver(),
+      ),
+    ).rejects.toThrow(
+      'Duplicate component local name "Button" found across rendering frameworks in /guide/conflict.md: "react" and "solid". Rename one of the imports before mixing frameworks on the same page.',
     );
 
     expect(mockError).toHaveBeenCalledWith(
-      'Duplicate component local name "Button" found across rendering frameworks in /guide/conflict.md. Rename one of the imports before mixing frameworks on the same page.',
+      'Duplicate component local name "Button" found across rendering frameworks in /guide/conflict.md: "react" and "solid". Rename one of the imports before mixing frameworks on the same page.',
       expect.objectContaining({
         elapsedTimeMs: expect.any(Number),
       }),
     );
-    expect(result.code).not.toContain('<script lang="react">');
-    expect(result.code).not.toContain('<script lang="solid">');
-    expect(result.code).toContain('<Button />');
-    const reactContainer =
-      await react.controller.getCompilationContainerByMarkdownModuleId(
-        'react',
-        '/guide/conflict.md',
-      );
-    const solidContainer =
-      await solid.controller.getCompilationContainerByMarkdownModuleId(
-        'solid',
-        '/guide/conflict.md',
-      );
-    expect(reactContainer.importsByLocalName.size).toBe(0);
-    expect(solidContainer.importsByLocalName.size).toBe(0);
     expect(calls).toEqual(['parse:react', 'parse:solid']);
   });
 
@@ -271,6 +293,82 @@ describe('RenderingFrameworkParserManager', () => {
     expect(result.code).toContain(
       `<script lang="ts">console.log('stay')</script>`,
     );
+    expect(result.map).toBeNull();
+  });
+
+  it('recognizes framework script lang attributes with HTML-style spacing', async () => {
+    const calls: string[] = [];
+    const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
+    const react = createFakeParser({
+      calls,
+      framework: 'react',
+      lang: 'react',
+    });
+
+    manager.registerParser(react.parser);
+
+    const result = await manager.transformMarkdown(
+      `<script setup lang = 'react' data-example>
+import Card from './Card'
+</script>
+<Card />`,
+      '/guide/spaced-lang.md',
+      createTestModuleResolver(),
+    );
+
+    expect(calls).toEqual(['parse:react', 'transform:react']);
+    expect(result.code).toContain('data-framework="react"');
+    expect(result.code).not.toContain('<script setup lang');
+  });
+
+  it('does not treat data-lang as a framework script language', async () => {
+    const calls: string[] = [];
+    const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
+    const react = createFakeParser({
+      calls,
+      framework: 'react',
+      lang: 'react',
+    });
+
+    manager.registerParser(react.parser);
+
+    const result = await manager.transformMarkdown(
+      `<script data-lang="react">console.log('stay')</script>
+<Card />`,
+      '/guide/data-lang.md',
+      createTestModuleResolver(),
+    );
+
+    expect(calls).toEqual([]);
+    expect(result.code).toContain(
+      `<script data-lang="react">console.log('stay')</script>`,
+    );
+    expect(result.map).toBeNull();
+  });
+
+  it('keeps Vue script setup blocks for the VitePress SFC pipeline', async () => {
+    const calls: string[] = [];
+    const manager = new RenderingFrameworkParserManager(getTestLoggerScopeId);
+    const react = createFakeParser({
+      calls,
+      framework: 'react',
+      lang: 'react',
+    });
+
+    manager.registerParser(react.parser);
+
+    const result = await manager.transformMarkdown(
+      `<script setup lang="ts">
+const message = 'stay'
+</script>
+<Demo />`,
+      '/guide/vue-setup.md',
+      createTestModuleResolver(),
+    );
+
+    expect(calls).toEqual([]);
+    expect(result.code).toContain('<script setup lang="ts">');
+    expect(result.code).toContain(`const message = 'stay'`);
     expect(result.map).toBeNull();
   });
 });

@@ -247,7 +247,7 @@ export default [
       parser: typescriptESlint.parser,
       parserOptions: {
         ecmaVersion: supportedEcmaVersion,
-        projectService: false,
+        projectService: true,
         sourceType: 'module',
       },
       globals: {

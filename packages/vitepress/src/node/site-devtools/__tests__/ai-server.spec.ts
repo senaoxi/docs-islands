@@ -1,10 +1,7 @@
 /**
  * @vitest-environment node
  */
-import {
-  resetScopedLoggerConfig,
-  setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+import { resetScopedLoggerConfig, setScopedLoggerConfig } from 'logaria/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SiteDevToolsAiAnalysisTarget } from '../../../shared/site-devtools-ai';
 import {
@@ -278,52 +275,48 @@ describe('analyzeSiteDevToolsAiTarget', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    try {
-      await analyzeTestSiteDevToolsAiTarget({
-        config: {
-          buildReports: {
-            models: [
-              {
-                id: 'doubao-default',
-                model: 'doubao-seed-2-0-pro-260215',
-                provider: 'doubao',
-                providerKey: 'cn',
-              },
-            ],
-          },
-          providers: {
-            doubao: [
-              {
-                apiKey: 'test-key',
-                default: true,
-                key: 'cn',
-                timeoutMs: 5,
-              },
-            ],
-          },
+    const caughtError = await analyzeTestSiteDevToolsAiTarget({
+      config: {
+        buildReports: {
+          models: [
+            {
+              id: 'doubao-default',
+              model: 'doubao-seed-2-0-pro-260215',
+              provider: 'doubao',
+              providerKey: 'cn',
+            },
+          ],
         },
-        provider: 'doubao',
-        target: createAnalysisTarget({
-          artifactKind: 'bundle-module',
-          artifactLabel: 'component.ts',
-          content: 'export const value = 1;',
-          displayPath: '/src/component.ts',
-          language: 'ts',
-        }),
-      });
-    } catch (error) {
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain('Doubao analysis timed out.');
-      expect((error as Error).message).toContain('Trace ');
-      expect((error as Error).message).toContain(
-        'bundle-module /src/component.ts',
-      );
-      expect((error as Error).message).toContain('timeout 5 ms');
-      return;
-    }
+        providers: {
+          doubao: [
+            {
+              apiKey: 'test-key',
+              default: true,
+              key: 'cn',
+              timeoutMs: 5,
+            },
+          ],
+        },
+      },
+      provider: 'doubao',
+      target: createAnalysisTarget({
+        artifactKind: 'bundle-module',
+        artifactLabel: 'component.ts',
+        content: 'export const value = 1;',
+        displayPath: '/src/component.ts',
+        language: 'ts',
+      }),
+    }).then(
+      () => null,
+      (error: unknown) => error as Error,
+    );
 
-    throw new Error('Expected timeout rejection');
+    expect(caughtError).toBeInstanceOf(Error);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(caughtError?.message).toContain('Doubao analysis timed out.');
+    expect(caughtError?.message).toContain('Trace ');
+    expect(caughtError?.message).toContain('bundle-module /src/component.ts');
+    expect(caughtError?.message).toContain('timeout 5 ms');
   });
 
   it('uses the first Doubao provider entry when no default is configured', async () => {
@@ -550,52 +543,48 @@ describe('analyzeSiteDevToolsAiTarget', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    try {
-      await analyzeTestSiteDevToolsAiTarget({
-        config: {
-          buildReports: {
-            models: [
-              {
-                id: 'claude-default',
-                model: 'claude-sonnet-4-20250514',
-                provider: 'claude',
-                providerKey: 'us',
-              },
-            ],
-          },
-          providers: {
-            claude: [
-              {
-                apiKey: 'test-key',
-                default: true,
-                key: 'us',
-                timeoutMs: 5,
-              },
-            ],
-          },
+    const caughtError = await analyzeTestSiteDevToolsAiTarget({
+      config: {
+        buildReports: {
+          models: [
+            {
+              id: 'claude-default',
+              model: 'claude-sonnet-4-20250514',
+              provider: 'claude',
+              providerKey: 'us',
+            },
+          ],
         },
-        provider: 'claude',
-        target: createAnalysisTarget({
-          artifactKind: 'bundle-module',
-          artifactLabel: 'component.ts',
-          content: 'export const value = 1;',
-          displayPath: '/src/component.ts',
-          language: 'ts',
-        }),
-      });
-    } catch (error) {
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain('Claude analysis timed out.');
-      expect((error as Error).message).toContain('Trace ');
-      expect((error as Error).message).toContain(
-        'bundle-module /src/component.ts',
-      );
-      expect((error as Error).message).toContain('timeout 5 ms');
-      return;
-    }
+        providers: {
+          claude: [
+            {
+              apiKey: 'test-key',
+              default: true,
+              key: 'us',
+              timeoutMs: 5,
+            },
+          ],
+        },
+      },
+      provider: 'claude',
+      target: createAnalysisTarget({
+        artifactKind: 'bundle-module',
+        artifactLabel: 'component.ts',
+        content: 'export const value = 1;',
+        displayPath: '/src/component.ts',
+        language: 'ts',
+      }),
+    }).then(
+      () => null,
+      (error: unknown) => error as Error,
+    );
 
-    throw new Error('Expected timeout rejection');
+    expect(caughtError).toBeInstanceOf(Error);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(caughtError?.message).toContain('Claude analysis timed out.');
+    expect(caughtError?.message).toContain('Trace ');
+    expect(caughtError?.message).toContain('bundle-module /src/component.ts');
+    expect(caughtError?.message).toContain('timeout 5 ms');
   });
 
   it('surfaces Claude HTTP errors', async () => {

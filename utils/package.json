@@ -10,18 +10,18 @@
     "access": "public"
   },
   "bin": {
-    "link-guard": "./bin/link-guard-stub.mjs"
+    "link-guard": "./bin/link-guard.js"
   },
   "scripts": {
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "limina checker build",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
-    "clean": "del-cli .eslintcache dist node_modules"
+    "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },
   "dependencies": {
-    "@docs-islands/logger": "catalog:prod",
+    "logaria": "catalog:prod",
     "tinyglobby": "catalog:prod"
   },
   "devDependencies": {
@@ -39,13 +39,14 @@
     "vitest": "catalog:test"
   },
   "exports": {
-    "./builtin": "./dist/builtin.js",
-    "./dom-iterable": "./dist/dom-iterable.js",
-    "./env": "./dist/env.js",
-    "./fs-utils": "./dist/fs-utils.js",
-    "./general": "./dist/general.js",
-    "./logger": "./dist/logger.js",
-    "./path": "./dist/path.js",
+    "./builtin": "./src/builtin.ts",
+    "./dom-iterable": "./src/dom-iterable.ts",
+    "./env": "./src/env.ts",
+    "./fs-utils": "./src/fs-utils.ts",
+    "./general": "./src/general.ts",
+    "./logger": "./src/logger.ts",
+    "./package-plugin": "./src/package-plugin.ts",
+    "./path": "./src/path.ts",
     "./package.json": "./package.json"
   },
   "sideEffects": false

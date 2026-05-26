@@ -1,9 +1,6 @@
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
 import { loadEnv } from '@docs-islands/utils/env';
 import { createLogger } from '@docs-islands/utils/logger';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import { execSync, spawn } from 'node:child_process';
 import {
   BUILD_AUTO_DISCOVER_PLACEHOLDER,

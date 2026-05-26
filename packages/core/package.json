@@ -34,11 +34,10 @@
   },
   "scripts": {
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache --cache-location ./node_modules/.cache/eslint/",
-    "typecheck": "tsc -p tsconfig.source.json --noEmit",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "limina checker build",
     "test": "pnpm test:unit",
     "test:unit": "vitest run",
-    "clean": "del-cli .eslintcache dist coverage node_modules"
+    "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"
   },
   "dependencies": {
     "@babel/generator": "catalog:dev",
@@ -49,13 +48,12 @@
     "magic-string": "catalog:dev",
     "markdown-it": "catalog:dev",
     "pathe": "catalog:dev",
-    "@docs-islands/logger": "catalog:prod"
+    "logaria": "catalog:prod"
   },
   "devDependencies": {
     "@types/babel__generator": "catalog:dev",
     "@types/babel__traverse": "catalog:dev",
     "@docs-islands/eslint-config": "workspace:*",
-    "@docs-islands/plugin-license": "workspace:*",
     "@docs-islands/utils": "workspace:*",
     "@types/node": "catalog:dev",
     "@types/markdown-it": "catalog:dev",

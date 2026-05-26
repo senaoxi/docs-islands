@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Root Vue checker entry. Docs projects stay check-only; the package theme emits declarations.
+  "files": [],
+  "references": [
+    {
+      "path": "./docs/tsconfig.dts.json"
+    },
+    {
+      "path": "./packages/limina/docs/tsconfig.dts.json"
+    },
+    {
+      "path": "./packages/logaria/docs/tsconfig.dts.json"
+    },
+    {
+      "path": "./packages/vitepress/tsconfig.vue.build.json"
+    }
+  ]
+}

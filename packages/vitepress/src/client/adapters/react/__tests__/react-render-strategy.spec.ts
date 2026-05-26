@@ -169,12 +169,12 @@ describe('ReactRenderStrategy', () => {
     });
 
     it('should fallback to client render on hydration failure', async () => {
-      const mockRoot = { render: vi.fn() };
+      const mockRoot = { render: vi.fn(), unmount: vi.fn() };
       if (globalThis.ReactDOM) {
-        globalThis.ReactDOM.hydrateRoot = vi.fn().mockImplementation(() => {
+        vi.spyOn(globalThis.ReactDOM, 'hydrateRoot').mockImplementation(() => {
           throw new Error('Hydration failed');
         });
-        globalThis.ReactDOM.createRoot = vi.fn().mockReturnValue(mockRoot);
+        vi.spyOn(globalThis.ReactDOM, 'createRoot').mockReturnValue(mockRoot);
       }
 
       await strategy.executeReactRuntime({
@@ -206,12 +206,13 @@ describe('ReactRenderStrategy', () => {
         disconnect: vi.fn(),
       };
 
-      (globalThis as any).IntersectionObserver = vi
-        .fn()
-        .mockImplementation((callback: any) => {
+      vi.stubGlobal(
+        'IntersectionObserver',
+        vi.fn().mockImplementation((callback: any) => {
           mockIntersectionObserver.callback = callback;
           return mockIntersectionObserver;
-        });
+        }),
+      );
     });
 
     it('should setup visibility observer for client:visible components', async () => {

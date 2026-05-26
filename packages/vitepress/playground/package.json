@@ -4,25 +4,27 @@
   "type": "module",
   "scripts": {
     "docs:dev": "vitepress dev",
-    "docs:build": "vitepress build",
+    "docs:build": "pnpm clean:e2e-fixtures && vitepress build",
     "docs:preview": "vitepress preview",
     "test:e2e": "vitest run",
     "test:e2e:watch": "DEBUG=1 vitest",
-    "typecheck": "tsc -p tsconfig.source.json --noEmit",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "limina checker build",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
-    "clean": "pnpm clean:remaining && del-cli .eslintcache .vitepress/dist .vitepress/cache node_modules",
-    "clean:remaining": "del-cli .vitepress/config.ts.timestamp-*.mjs || true"
+    "clean": "pnpm clean:remaining && del-cli .tsbuild .eslintcache .vitepress/dist .vitepress/cache node_modules",
+    "clean:remaining": "del-cli .vitepress/config.ts.timestamp-*.mjs error-handling/invalid-syntax.md error-handling/multiple-react-scripts.md script-content-changes/import-path-error.md || true",
+    "clean:e2e-fixtures": "del-cli error-handling/invalid-syntax.md error-handling/multiple-react-scripts.md script-content-changes/import-path-error.md || true"
   },
   "dependencies": {
     "vue": "catalog:prod",
     "tinyglobby": "catalog:prod",
-    "@docs-islands/logger": "workspace:*"
+    "logaria": "workspace:*"
   },
   "devDependencies": {
     "eslint": "catalog:lint",
+    "@typescript-eslint/parser": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
-    "@docs-islands/utils": "workspace:*",
+    "@docs-islands/utils": "link:../../../utils/dist",
+    "limina": "catalog:prod",
     "typescript": "catalog:dev",
     "react": "catalog:dev",
     "react-dom": "catalog:dev",

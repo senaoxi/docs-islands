@@ -22,5 +22,5 @@
     "skipLibCheck": true,
     "stripInternal": true
   },
-  "exclude": ["**/*cache", "**/*dist", "**/__tests__/**"]
+  "exclude": ["**/.tsbuild/**", "**/*cache", "**/*dist", "**/__tests__/**"]
 }

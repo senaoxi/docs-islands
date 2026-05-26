@@ -27,6 +27,34 @@
  * -------------------------------------------------------------------------- */
 
 :root {
+  --docs-home-bg: #fbfaf7;
+  --docs-home-surface: #ffffff;
+  --docs-home-primary: #44403c;
+  --docs-home-primary-hover: #292524;
+  --docs-home-primary-soft: #f2efea;
+  --docs-home-accent: #d4a574;
+  --docs-home-accent-strong: #9a6335;
+  --docs-home-accent-soft: #fdf6ee;
+  --docs-home-hero-title: #4b405f;
+  --docs-home-hero-title-accent: #7b67d6;
+  --docs-home-button-bg: #57466d;
+  --docs-home-button-bg-hover: #413451;
+  --docs-home-button-text: #fffaf2;
+  --docs-home-button-alt-bg: #f1eee9;
+  --docs-home-button-alt-text: #3f3a35;
+  --docs-home-success: #10b981;
+  --docs-home-success-soft: #ecfdf5;
+  --docs-home-border: #e8e2dc;
+  --docs-home-border-hover: #d8d0c7;
+  --docs-home-code-bg: #1e1e2e;
+  --docs-home-shadow-sm: 0 1px 4px rgb(41 37 36 / 0.06);
+  --docs-home-shadow-md: 0 2px 12px rgb(0 0 0 / 0.08);
+  --docs-home-shadow-lg: 0 8px 24px rgb(0 0 0 / 0.12);
+  --docs-home-font-serif:
+    Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+  --docs-home-font-mono:
+    'SF Mono', 'JetBrains Mono', 'Fira Code', SFMono-Regular, ui-monospace,
+    Menlo, Monaco, Consolas, monospace;
   --vp-c-sky-1: #2196f3;
   --vp-c-sky-2: #49a1d4;
   --vp-c-sky-3: #49a1d4;
@@ -38,6 +66,29 @@
 }
 
 .dark {
+  --docs-home-bg: #0c0a09;
+  --docs-home-surface: #1c1917;
+  --docs-home-primary: #d6d3d1;
+  --docs-home-primary-hover: #e7e5e4;
+  --docs-home-primary-soft: rgb(214 211 209 / 0.12);
+  --docs-home-accent: #e0b88a;
+  --docs-home-accent-strong: #f2cfa3;
+  --docs-home-accent-soft: rgb(212 165 116 / 0.15);
+  --docs-home-hero-title: #ede8ff;
+  --docs-home-hero-title-accent: #b9a8ff;
+  --docs-home-button-bg: #c8b8ff;
+  --docs-home-button-bg-hover: #ddceff;
+  --docs-home-button-text: #181322;
+  --docs-home-button-alt-bg: rgb(255 250 242 / 0.08);
+  --docs-home-button-alt-text: #f5efe7;
+  --docs-home-success: #34d399;
+  --docs-home-success-soft: rgb(52 211 153 / 0.16);
+  --docs-home-border: #292524;
+  --docs-home-border-hover: #44403c;
+  --docs-home-code-bg: #171720;
+  --docs-home-shadow-sm: 0 1px 4px rgb(0 0 0 / 0.3);
+  --docs-home-shadow-md: 0 2px 12px rgb(0 0 0 / 0.4);
+  --docs-home-shadow-lg: 0 8px 24px rgb(0 0 0 / 0.5);
   --vp-c-sky-1: #49a3d7;
   --vp-c-sky-2: #58b1e5;
   --vp-c-sky-3: #58b1e5;

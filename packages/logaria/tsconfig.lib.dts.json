@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Library declaration leaf. Keep Logaria tooling out to avoid tool/runtime cycles.
+  "extends": ["./tsconfig.lib.json", "../../tsconfig.dts.base.json"],
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "./.tsbuild",
+    "tsBuildInfoFile": "./.tsbuild/lib.tsbuildinfo"
+  }
+}

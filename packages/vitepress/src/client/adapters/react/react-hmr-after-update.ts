@@ -16,8 +16,8 @@ import {
   NEED_PRE_RENDER_DIRECTIVES,
   RENDER_STRATEGY_CONSTANTS,
 } from '@docs-islands/core/shared/constants/render-strategy';
-import { formatDebugMessage } from '@docs-islands/logger/helper';
 import { createLogger } from '@docs-islands/vitepress/logger';
+import { formatDebugMessage } from 'logaria/helper';
 import type React from 'react';
 import type ReactDOM from 'react-dom/client';
 import { reactComponentManager } from './react-component-manager';

@@ -1,4 +1,5 @@
 {
+  // Post-build dist artifact check used after rolldown output exists; not part of pnpm typecheck.
   "extends": "../../tsconfig.check.json",
   "include": ["dist/**/*"]
 }

@@ -1,4 +1,5 @@
 {
+  // Test fixture config consumed by framework-build tests; not part of the root build graph.
   "compilerOptions": {
     "jsx": "preserve",
     "module": "ESNext",

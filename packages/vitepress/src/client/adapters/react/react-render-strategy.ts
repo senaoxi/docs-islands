@@ -7,7 +7,7 @@ import {
 import { validateLegalRenderElements } from '#shared/utils';
 import type { DocsHydrateResult } from '@docs-islands/core/client';
 import { DocsRenderStrategy } from '@docs-islands/core/client';
-import { formatErrorMessage } from '@docs-islands/logger/helper';
+import { formatErrorMessage } from 'logaria/helper';
 import type React from 'react';
 import { getCleanPathname } from '../../../shared/runtime';
 import { reactComponentManager } from './react-component-manager';

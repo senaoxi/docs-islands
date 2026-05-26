@@ -1,0 +1,24 @@
+{
+  // Package-local tooling check. Declaration leaf: tsconfig.tools.dts.json.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "isolatedDeclarations": false,
+    "declaration": true,
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["rolldown.config.ts", "packagePlugin.ts"],
+  "exclude": [
+    "dist",
+    "cache",
+    "**/*cache*/**",
+    "coverage",
+    "node_modules",
+    ".eslintcache",
+    "eslint.config.mjs",
+    "vitest.config.ts",
+    "**/__tests__/**",
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
+}

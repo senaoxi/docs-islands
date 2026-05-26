@@ -1,7 +1,12 @@
 {
-  "extends": "../../../tsconfig.base.json",
-  "compilerOptions": {
-    "types": ["node"]
-  },
-  "include": ["src/", "rolldown.config.ts"],
+  // Package-local IDE/typecheck solution. Build graph leaf: tsconfig.build.json.
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.tools.json"
+    }
+  ]
 }

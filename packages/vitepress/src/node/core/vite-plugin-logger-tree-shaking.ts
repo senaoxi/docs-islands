@@ -1,8 +1,8 @@
 import {
   LOGGER_TREE_SHAKING_PLUGIN_NAME,
   transformLoggerTreeShaking as transformBaseLoggerTreeShaking,
-} from '@docs-islands/logger/plugin';
-import type { LoggerTreeShakingTransformResult } from '@docs-islands/logger/types';
+} from 'logaria/plugin';
+import type { LoggerTreeShakingTransformResult } from 'logaria/types';
 import type { PluginOption } from 'vite';
 
 export const VITEPRESS_LOGGER_TREE_SHAKING_MODULE_ID =
@@ -60,4 +60,4 @@ export const transformLoggerTreeShaking = (
 ): Promise<LoggerTreeShakingTransformResult | null> =>
   transformLoggerTreeShakingForModuleIds(code, id, loggerScopeId);
 
-export { LOGGER_TREE_SHAKING_PLUGIN_NAME } from '@docs-islands/logger/plugin';
+export { LOGGER_TREE_SHAKING_PLUGIN_NAME } from 'logaria/plugin';

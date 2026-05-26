@@ -14,10 +14,7 @@ import type {
   SiteDevToolsAnalysisResolvedBuildReportsConfig,
 } from '#dep-types/utils';
 import { VITEPRESS_SITE_DEVTOOLS_LOG_GROUPS } from '#shared/constants/log-groups/site-devtools';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import { join } from 'pathe';
 import {
   buildSiteDevToolsAiAnalysisPrompt,

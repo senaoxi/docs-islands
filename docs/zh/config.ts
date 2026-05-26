@@ -11,17 +11,8 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
   themeConfig: {
     nav: [
       {
-        text: 'Logger',
-        link: '/zh/logger',
-      },
-      {
         text: 'Skills',
         link: '/zh/guide/skills',
-      },
-      {
-        text: 'VitePress',
-        target: '_blank',
-        link: '/vitepress/zh/',
       },
       {
         text: '参与贡献',

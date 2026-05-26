@@ -1,6 +1,5 @@
-import { resolveConfig } from '#shared/config';
-import { createLoggerScopeId } from '@docs-islands/logger/core/helper';
-import type { LoggerPluginMap } from '@docs-islands/logger/types';
+import { createLoggerScopeId } from 'logaria/core/helper';
+import type { LoggerPluginMap } from 'logaria/types';
 import type { PluginOption } from 'vite';
 import type { DefaultTheme, UserConfig } from 'vitepress';
 import {
@@ -24,6 +23,7 @@ import {
 } from './config';
 import { resolveCurrentDependencyResolutionBase } from './dependency-resolution';
 import { ensureVitepressViteConfig } from './integration-plugin';
+import { resolveConfig } from './resolve-config';
 
 export interface DocsIslandsAdapter {
   apply: (

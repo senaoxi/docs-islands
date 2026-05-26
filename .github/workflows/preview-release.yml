@@ -60,6 +60,9 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
+      - name: Restore workspace manifest
+        run: git restore -- pnpm-workspace.yaml
+
       - name: Build packages
         working-directory: .
         run: pnpm build

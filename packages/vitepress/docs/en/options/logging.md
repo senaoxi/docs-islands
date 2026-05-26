@@ -7,7 +7,7 @@
 
 `logging` controls the package-owned logs emitted by `createDocsIslands()` and the public logger helpers exposed by this package. It does not change rendering; it only decides which `@docs-islands/*` messages stay visible in Node and in the browser.
 
-Each `createDocsIslands()` instance owns an isolated logger scope. VitePress injects that scope into the build graph, and the shared `@docs-islands/logger` runtime reads it when no explicit scope is passed. Parallel VitePress instances or test runs therefore do not overwrite each other's logging config. Use `@docs-islands/logger` for framework-agnostic direct logger usage.
+Each `createDocsIslands()` instance owns an isolated logger scope. VitePress injects that scope into the build graph, and the shared `logaria` runtime reads it when no explicit scope is passed. Parallel VitePress instances or test runs therefore do not overwrite each other's logging config. Use `logaria` for framework-agnostic direct logger usage.
 
 ## When to Use It
 
@@ -110,35 +110,35 @@ The `vitepress` preset exported by `@docs-islands/vitepress/logger/presets` cont
 
 ## Public Logger Usage
 
-`@docs-islands/vitepress/logger` is the VitePress logger facade. It exposes `createLogger`; shared helpers such as `formatDebugMessage` live in `@docs-islands/logger/helper`, and generic direct runtime configuration lives in `@docs-islands/logger`.
+`@docs-islands/vitepress/logger` is the VitePress logger facade. It exposes `createLogger`; shared helpers such as `formatDebugMessage` live in `logaria/helper`, and generic direct runtime configuration lives in `logaria`.
 
 `logging` defines the runtime visibility policy. It decides whether a log is emitted at runtime, and in `debug` mode it also controls which rule labels and elapsed-time metadata are attached to visible logs.
 
-`@docs-islands/logger` stays framework-agnostic. In managed VitePress builds, `createDocsIslands()` resolves `@docs-islands/vitepress/logger` to a scope-bound virtual module, so each integration instance uses its own logger registry entry.
+`logaria` stays framework-agnostic. In managed VitePress builds, `createDocsIslands()` resolves `@docs-islands/vitepress/logger` to a scope-bound virtual module, so each integration instance uses its own logger registry entry.
 
-Monorepo packages that need a single runtime logger entry should use `@docs-islands/utils/logger`. It falls back to `@docs-islands/logger` when no host controls it, and VitePress rewrites it to `@docs-islands/vitepress/logger` when bundling controlled internal modules.
+Monorepo packages that need a single runtime logger entry should use `@docs-islands/utils/logger`. It falls back to `logaria` when no host controls it, and VitePress rewrites it to `@docs-islands/vitepress/logger` when bundling controlled internal modules.
 
 ### Entry Ownership
 
 | Situation                                                  | Import from                      | Config owner                                     |
 | ---------------------------------------------------------- | -------------------------------- | ------------------------------------------------ |
 | Code processed by the managed VitePress Vite pipeline      | `@docs-islands/vitepress/logger` | `createDocsIslands({ logging })`                 |
-| VitePress internals that already carry a `loggerScopeId`   | `@docs-islands/logger/core`      | The current `createDocsIslands()` instance       |
+| VitePress internals that already carry a `loggerScopeId`   | `logaria/core`                   | The current `createDocsIslands()` instance       |
 | Reusable docs-islands packages that may need host takeover | `@docs-islands/utils/logger`     | Host alias when bundled, otherwise root fallback |
-| Framework-agnostic user code outside the managed graph     | `@docs-islands/logger`           | The root logger runtime or `loggerPlugin`        |
-| Shared formatting and elapsed-time helpers                 | `@docs-islands/logger/helper`    | No runtime config                                |
+| Framework-agnostic user code outside the managed graph     | `logaria`                        | The root logger runtime or `loggerPlugin`        |
+| Shared formatting and elapsed-time helpers                 | `logaria/helper`                 | No runtime config                                |
 
 `@docs-islands/vitepress/logger` is not a generic logger entry. Do not call it from `.vitepress/config.ts` or from standalone Node scripts; those files run before the Vite module graph can replace the facade with the active scope-bound virtual module.
 
 For this package, the project-level constraints are:
 
 - Use `@docs-islands/vitepress/logger` for logs that are created inside the Vite module graph owned by `createDocsIslands()`. This is the only entry covered by VitePress automatic scope injection and VitePress automatic tree-shaking.
-- Use `@docs-islands/logger/core` only for VitePress internals that run outside that Vite graph but already receive the active `loggerScopeId`. Those callers must register or consume an explicit scope through the core API.
+- Use `logaria/core` only for VitePress internals that run outside that Vite graph but already receive the active `loggerScopeId`. Those callers must register or consume an explicit scope through the core API.
 - A reusable monorepo package should use `@docs-islands/utils/logger` as its runtime logger entry. It falls back to the generic logger outside managed bundling, and VitePress aliases it to `@docs-islands/vitepress/logger` when the package must participate in the current `createDocsIslands()` scope.
-- A reusable package that does not need VitePress takeover should use the generic `@docs-islands/logger` entry. If a host installs `loggerPlugin`, that generic default scope becomes plugin-controlled; otherwise it remains directly configurable with `setLoggerConfig(...)` / `resetLoggerConfig()`.
-- Shared formatting, elapsed-time, and diagnostic helpers should come from `@docs-islands/logger/helper` or `@docs-islands/logger/core/helper`; do not import a runtime logger entry only to access helpers.
+- A reusable package that does not need VitePress takeover should use the generic `logaria` entry. If a host installs `loggerPlugin`, that generic default scope becomes plugin-controlled; otherwise it remains directly configurable with `setLoggerConfig(...)` / `resetLoggerConfig()`.
+- Shared formatting, elapsed-time, and diagnostic helpers should come from `logaria/helper` or `logaria/core/helper`; do not import a runtime logger entry only to access helpers.
 
-`@docs-islands/vitepress` may contain `@docs-islands/vitepress/logger`, `@docs-islands/utils/logger`, and lower-level `@docs-islands/logger/*` imports. They intentionally represent different ownership models: the VitePress facade is tied to the current `createDocsIslands()` scope, the utils facade is the monorepo fallback-or-controlled entry, and lower-level logger imports provide helper, type, plugin, or explicit scope APIs.
+`@docs-islands/vitepress` may contain `@docs-islands/vitepress/logger`, `@docs-islands/utils/logger`, and lower-level `logaria/*` imports. They intentionally represent different ownership models: the VitePress facade is tied to the current `createDocsIslands()` scope, the utils facade is the monorepo fallback-or-controlled entry, and lower-level logger imports provide helper, type, plugin, or explicit scope APIs.
 
 ### Runtime Policy vs Build-Time Optimization
 
@@ -204,17 +204,17 @@ With this setup, `userland.metrics` stays visible, while `userland.hidden` is su
 
 ### Logger Tree-Shaking Plugin
 
-In `createDocsIslands()` managed builds, docs-islands can install a logger tree-shaking transform when `logging.treeshake` is enabled. This VitePress transform only targets `@docs-islands/vitepress/logger` imports in the managed VitePress module graph, including user component browser/SSR bundles and Vite-bundled runtime modules such as the unified loader. It does not prune framework-agnostic `@docs-islands/logger` imports.
+In `createDocsIslands()` managed builds, docs-islands can install a logger tree-shaking transform when `logging.treeshake` is enabled. This VitePress transform only targets `@docs-islands/vitepress/logger` imports in the managed VitePress module graph, including user component browser/SSR bundles and Vite-bundled runtime modules such as the unified loader. It does not prune framework-agnostic `logaria` imports.
 
 Set `logging.treeshake: true` when you want build-time pruning in addition to the managed VitePress logger facade and runtime filtering.
 
 The shared utils facade participates in this takeover. For example, `@docs-islands/core` imports `@docs-islands/utils/logger`; the VitePress package rewrites that facade to `@docs-islands/vitepress/logger` while building its own output. Keeping the rewritten import external in the VitePress package output is intentional: the final consumer site's Vite pipeline must still see and resolve `@docs-islands/vitepress/logger` so the scope-bound virtual module and VitePress tree-shaking transform can run. Do not externalize `@docs-islands/vitepress/logger` in the consumer site's Vite build.
 
-If you use the framework-agnostic `@docs-islands/logger` entry in a VitePress site and still want production pruning for that generic logger, install the public plugin explicitly:
+If you use the framework-agnostic `logaria` entry in a VitePress site and still want production pruning for that generic logger, install the public plugin explicitly:
 
 ```ts [.vitepress/config.ts]
 import { defineConfig } from 'vitepress';
-import { loggerPlugin } from '@docs-islands/logger/plugin';
+import { loggerPlugin } from 'logaria/plugin';
 
 export default defineConfig({
   vite: {
@@ -281,7 +281,7 @@ Those forms remain compatible, but docs-islands does not guarantee that their me
 For direct logger usage outside VitePress managed builds, import from the framework-agnostic package:
 
 ```ts
-import { createLogger, resetLoggerConfig, setLoggerConfig } from '@docs-islands/logger';
+import { createLogger, resetLoggerConfig, setLoggerConfig } from 'logaria';
 
 setLoggerConfig({
   levels: ['warn', 'error'],
@@ -303,7 +303,7 @@ Without `loggerPlugin`, this generic runtime uses the default scope and can be c
 The playground below runs the VitePress logger facade from inside this docs site:
 
 - A normal `@docs-islands/vitepress/logger` import uses the current `createDocsIslands()` logger scope through runtime injection.
-- The framework-agnostic `@docs-islands/logger` runtime demo lives on the standalone logger package page.
+- The framework-agnostic `logaria` runtime demo lives on the standalone logger package page.
 
 <LoggerScopePlayground
   client:load

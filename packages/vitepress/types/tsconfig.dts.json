@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Package-level public/helper declaration declaration leaf.
+  "extends": ["./tsconfig.json", "../../../tsconfig.dts.base.json"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./.tsbuild",
+    "tsBuildInfoFile": "./.tsbuild/build.tsbuildinfo"
+  },
+  "references": [
+    {
+      "path": "../../logaria/tsconfig.lib.dts.json"
+    }
+  ]
+}

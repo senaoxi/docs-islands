@@ -1,39 +1,11 @@
 {
   "files": [],
   "references": [
-    // package-level source/test projects
     {
-      "path": "./tsconfig.source.json",
+      "path": "./tsconfig.tools.json",
     },
     {
       "path": "./tsconfig.test.json",
-    },
-
-    // runtime-specific declaration projects
-    {
-      "path": "./src/node",
-    },
-    {
-      "path": "./src/client",
-    },
-    {
-      "path": "./src/shared",
-    },
-
-    // theme project
-    {
-      "path": "./theme",
-    },
-
-    // owned consumer/integration projects
-    {
-      "path": "./docs",
-    },
-    {
-      "path": "./playground",
-    },
-    {
-      "path": "./smoke",
     },
   ],
 }

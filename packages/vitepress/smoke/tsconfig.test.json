@@ -1,4 +1,8 @@
 {
-  "extends": "./tsconfig.source.json",
+  // Smoke-local test check. Declaration leaf: tsconfig.test.dts.json.
+  "extends": "../../../tsconfig.test.base.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"]
+  },
   "include": ["consumer.fixtures.ts", "helpers.ts", "*.spec.ts"]
 }

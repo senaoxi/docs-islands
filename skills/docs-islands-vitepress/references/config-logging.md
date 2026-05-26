@@ -94,7 +94,7 @@ const logger = createLogger({
 logger.info('visible userland info');
 ```
 
-Do not call the VitePress logger facade from `.vitepress/config.ts` or standalone Node scripts. Use `@docs-islands/logger` for framework-agnostic direct logger usage.
+Do not call the VitePress logger facade from `.vitepress/config.ts` or standalone Node scripts. Use `logaria` for framework-agnostic direct logger usage.
 
 ## Production Tree Shaking
 

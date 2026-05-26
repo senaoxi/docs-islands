@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // VitePress production runtime/type declaration graph.
+  "files": [],
+  "references": [
+    {
+      "path": "./types/tsconfig.dts.json"
+    },
+    {
+      "path": "./shared/tsconfig.dts.json"
+    },
+    {
+      "path": "./node/tsconfig.dts.json"
+    },
+    {
+      "path": "./client/tsconfig.dts.json"
+    }
+  ]
+}

@@ -1,17 +1,15 @@
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
 import { cac } from 'cac';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import process from 'node:process';
 import { runChangelogCommand } from './changelog';
-import { runReleaseCommand } from './release';
+import { runPublishCommand, runReleaseCommand } from './release';
 import {
   ChangelogLogger,
   ReleaseLogger,
   isReleaseType,
   splitCsvValues,
   type ChangelogCliOptions,
+  type PublishCliOptions,
   type ReleaseCliOptions,
   type ReleaseType,
 } from './shared';
@@ -34,11 +32,23 @@ interface ReleaseCommandFlags extends BaseCliFlags {
   skipTests?: boolean;
   skipBuild?: boolean;
   skipChangelog?: boolean;
+  skipNpmPublish?: boolean;
   skipPush?: boolean;
   skipGithubRelease?: boolean;
   fromTag?: string;
   registry?: string;
   npmTag?: string;
+  provenance?: boolean;
+}
+
+interface PublishCommandFlags extends BaseCliFlags {
+  package?: RepeatableStringOption;
+  dryRun?: boolean;
+  skipTests?: boolean;
+  skipBuild?: boolean;
+  registry?: string;
+  npmTag?: string;
+  provenance?: boolean;
 }
 
 interface ChangelogCommandFlags extends BaseCliFlags {
@@ -127,11 +137,32 @@ function createReleaseCliOptions(
     skipTests: Boolean(flags.skipTests),
     skipBuild: Boolean(flags.skipBuild),
     skipChangelog: Boolean(flags.skipChangelog),
+    skipNpmPublish: Boolean(flags.skipNpmPublish),
     skipPush: Boolean(flags.skipPush),
     skipGithubRelease: Boolean(flags.skipGithubRelease),
     fromTag: normalizeOptionalString('--from-tag', flags.fromTag),
     registry: normalizeOptionalString('--registry', flags.registry),
     npmTag: normalizeOptionalString('--npm-tag', flags.npmTag),
+    provenance: flags.provenance !== false,
+    help: Boolean(flags.help),
+  };
+}
+
+function createPublishCliOptions(
+  positionals: PositionalArgs,
+  flags: PublishCommandFlags,
+): PublishCliOptions {
+  return {
+    packageSelectors: [
+      ...normalizePositionals(positionals),
+      ...normalizeRepeatableOption('--package', flags.package),
+    ],
+    dryRun: Boolean(flags.dryRun),
+    skipTests: Boolean(flags.skipTests),
+    skipBuild: Boolean(flags.skipBuild),
+    registry: normalizeOptionalString('--registry', flags.registry),
+    npmTag: normalizeOptionalString('--npm-tag', flags.npmTag),
+    provenance: flags.provenance !== false,
     help: Boolean(flags.help),
   };
 }
@@ -159,6 +190,28 @@ function createReleaseCli() {
   cli.help();
 
   cli
+    .command(
+      'publish [...packages]',
+      'Publish current public package versions to npm',
+      {
+        ignoreOptionDefaultValue: true,
+      },
+    )
+    .option(
+      '-p, --package <name>',
+      'Package key or full package name (repeatable or comma-separated)',
+    )
+    .option('--dry-run', 'Preview the publish plan without publishing')
+    .option('--skip-tests', 'Skip package test steps')
+    .option('--skip-build', 'Skip package build and verification steps')
+    .option('--registry <url>', 'Custom npm registry')
+    .option('--npm-tag <tag>', 'Override the npm dist-tag')
+    .option('--no-provenance', 'Publish without npm provenance attestations')
+    .action(async (packages: string[], flags: PublishCommandFlags) => {
+      await runPublishCommand(createPublishCliOptions(packages, flags));
+    });
+
+  cli
     .command('[...packages]', 'Release selected public packages', {
       ignoreOptionDefaultValue: true,
     })
@@ -177,6 +230,10 @@ function createReleaseCli() {
     .option('--skip-tests', 'Skip package test steps')
     .option('--skip-build', 'Skip package build and verification steps')
     .option('--skip-changelog', 'Skip changelog generation')
+    .option(
+      '--skip-npm-publish',
+      'Skip npm publishing after creating the release commit and tags',
+    )
     .option('--skip-push', 'Skip pushing commits and tags')
     .option('--skip-github-release', 'Skip GitHub release creation')
     .option(
@@ -185,6 +242,7 @@ function createReleaseCli() {
     )
     .option('--registry <url>', 'Custom npm registry')
     .option('--npm-tag <tag>', 'Override the npm dist-tag')
+    .option('--no-provenance', 'Publish without npm provenance attestations')
     .action(async (packages: string[], flags: ReleaseCommandFlags) => {
       await runReleaseCommand(createReleaseCliOptions(packages, flags));
     });

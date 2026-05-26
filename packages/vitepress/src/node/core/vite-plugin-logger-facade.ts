@@ -1,5 +1,5 @@
-import { getScopedLoggerConfig } from '@docs-islands/logger/core';
-import type { LoggerConfig, LoggerScopeId } from '@docs-islands/logger/types';
+import { getScopedLoggerConfig } from 'logaria/core';
+import type { LoggerConfig, LoggerScopeId } from 'logaria/types';
 import { normalizePath, type Plugin } from 'vite';
 import { LOGGER_FACADE_PLUGIN_NAME } from '../constants/core/plugin-names';
 
@@ -29,7 +29,7 @@ const createVitePressLoggerFacadeSource = (
   loggerScopeId: LoggerScopeId,
   logging: LoggerConfig | null | undefined,
 ): string => `
-import { createScopedLogger, setScopedLoggerConfig } from '@docs-islands/logger/core';
+import { createScopedLogger, setScopedLoggerConfig } from 'logaria/core';
 
 ${createSharedHeader(loggerScopeId, logging)}
 

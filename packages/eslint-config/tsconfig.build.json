@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // ESLint config package graph aggregator.
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.dts.json"
+    },
+    {
+      "path": "./tsconfig.tools.dts.json"
+    },
+    {
+      "path": "./tsconfig.test.dts.json"
+    }
+  ]
+}

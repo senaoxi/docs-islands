@@ -1,0 +1,5 @@
+{
+  // Package-level public and helper declaration modules.
+  "extends": "../../../tsconfig.base.json",
+  "include": ["./"],
+}

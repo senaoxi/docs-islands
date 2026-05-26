@@ -3,11 +3,10 @@ import type {
   UsedSnippetContainerType,
 } from '#dep-types/component';
 import type { ConfigType } from '#dep-types/utils';
-import { resolveConfig } from '#shared/config';
 import {
   resetScopedLoggerConfig,
   setScopedLoggerConfig as setLoggerConfigForScope,
-} from '@docs-islands/logger/core';
+} from 'logaria/core';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'pathe';
@@ -21,6 +20,7 @@ import {
   vi,
 } from 'vitest';
 import { reactAdapter } from '../../adapters/react/adapter';
+import { resolveConfig } from '../../core/resolve-config';
 import { setVitePressLoggerTreeShakingEnabled } from '../../core/vite-plugin-logger-tree-shaking';
 import { bundleUIComponentsForSSR } from '../bundleUIComponentsForSSR';
 

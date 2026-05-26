@@ -1,9 +1,9 @@
-import { createScopedLogger } from '@docs-islands/logger/core';
-import type { ScopedLogger } from '@docs-islands/logger/types';
+import { createScopedLogger } from 'logaria/core';
+import type { ScopedLogger } from 'logaria/types';
 
 const MAIN_NAME = '@docs-islands/vitepress';
 
-export type { LoggerElapsedLogOptions } from '@docs-islands/logger/types';
+export type { LoggerElapsedLogOptions } from 'logaria/types';
 
 export const getVitePressGroupLogger = (
   group: string,

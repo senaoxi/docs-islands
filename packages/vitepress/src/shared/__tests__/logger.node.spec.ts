@@ -1,17 +1,13 @@
 /**
  * @vitest-environment node
  */
-import {
-  createLogger,
-  resetLoggerConfig,
-  setLoggerConfig,
-} from '@docs-islands/logger';
+import { createLogger, resetLoggerConfig, setLoggerConfig } from 'logaria';
 import {
   createScopedLogger as createLoggerWithScopeId,
   getScopedLoggerConfig as getLoggerConfigForScope,
   resetScopedLoggerConfig,
   setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+} from 'logaria/core';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

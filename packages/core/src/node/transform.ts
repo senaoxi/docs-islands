@@ -8,11 +8,8 @@ import type {
   ImportSpecifier,
   StringLiteral,
 } from '@babel/types';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
 import { Parser } from 'htmlparser2';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import MagicString, { type SourceMap } from 'magic-string';
 import MarkdownIt from 'markdown-it';
 import { createHash } from 'node:crypto';

@@ -1,5 +1,6 @@
 {
-  "extends": "../tsconfig.source.json",
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "preserve",
     "isolatedDeclarations": false,

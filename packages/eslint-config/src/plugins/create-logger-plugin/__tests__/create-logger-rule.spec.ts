@@ -21,7 +21,7 @@ describe('unified-log-entry rule', () => {
       ],
       invalid: [
         {
-          code: "import { createLogger } from '@docs-islands/logger';",
+          code: "import { createLogger } from 'logaria';",
           errors: [{ messageId: 'useUtilsLogger' }],
         },
         {
@@ -29,7 +29,7 @@ describe('unified-log-entry rule', () => {
           errors: [{ messageId: 'useUtilsLogger' }],
         },
         {
-          code: "export { createLogger } from '@docs-islands/logger';",
+          code: "export { createLogger } from 'logaria';",
           errors: [{ messageId: 'useUtilsLogger' }],
         },
       ],

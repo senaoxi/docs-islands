@@ -46,7 +46,7 @@ export default defineConfig({
     },
     screenshot: 'only-on-failure',
     trace: isCi ? 'on-first-retry' : 'retain-on-failure',
-    video: isCi ? 'on-first-retry' : 'retain-on-failure',
+    video: 'off',
   },
   workers: 1,
 });

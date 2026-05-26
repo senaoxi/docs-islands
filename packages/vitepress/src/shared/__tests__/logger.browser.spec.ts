@@ -1,17 +1,13 @@
 /**
  * @vitest-environment jsdom
  */
-import {
-  createLogger,
-  resetLoggerConfig,
-  setLoggerConfig,
-} from '@docs-islands/logger';
+import { createLogger, resetLoggerConfig, setLoggerConfig } from 'logaria';
 import {
   createScopedLogger as createLoggerWithScopeId,
   getScopedLoggerConfig as getLoggerConfigForScope,
   resetScopedLoggerConfig,
   setScopedLoggerConfig,
-} from '@docs-islands/logger/core';
+} from 'logaria/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VITEPRESS_RUNTIME_LOG_GROUPS } from '../constants/log-groups/runtime';
 import {
@@ -21,8 +17,13 @@ import {
   loggerSpecCases,
 } from './logger-test-cases';
 
+const ANSI_ESCAPE_RE = new RegExp(
+  `${String.fromCodePoint(27)}\\[[\\d;]*m`,
+  'g',
+);
+
 const normalizeConsoleMessage = (value: unknown): string =>
-  String(value).replaceAll('%c', '');
+  String(value).replaceAll(ANSI_ESCAPE_RE, '').replaceAll('%c', '');
 
 const captureConsoleOutput = (): string[] => {
   const output: string[] = [];

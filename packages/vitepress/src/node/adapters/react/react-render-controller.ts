@@ -65,7 +65,7 @@ import { startTransition as __start_transition__ } from 'react';
 import {
   formatDebugMessage as __docs_islands_format_debug__,
   formatErrorMessage as __docs_islands_format_error__
-} from '@docs-islands/logger/helper';
+} from 'logaria/helper';
 import { createLogger } from '@docs-islands/vitepress/logger';
 
 ${this.getSiteDevToolsRuntimePrelude()}

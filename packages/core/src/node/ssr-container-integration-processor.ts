@@ -3,10 +3,7 @@ import { parse } from '@babel/parser';
 import type { NodePath } from '@babel/traverse';
 import babelTraverse from '@babel/traverse';
 import * as t from '@babel/types';
-import {
-  createElapsedTimer,
-  formatErrorMessage,
-} from '@docs-islands/logger/helper';
+import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import { CORE_TRANSFORM_LOG_GROUPS } from '../shared/constants/log-groups/transform';
 import {
   RENDER_STRATEGY_ATTRS,

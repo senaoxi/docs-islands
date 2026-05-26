@@ -4,8 +4,11 @@ coverage
 .pnpm-store
 node_modules
 .eslintcache
+.tsbuild/
+**/.tsbuild/
 .temp
 cache
+**/tsconfig.graph.paths.generated.json
 # ignore the temporary config.ts build output, 
 # when vitepress fails to build config.ts, 
 # it will remain in the workspace.

@@ -1,6 +1,6 @@
-import { createScopedLogger } from '@docs-islands/logger/core';
-import type { Logger, ScopedLogger } from '@docs-islands/logger/types';
 import { createLogger } from '@docs-islands/utils/logger';
+import { createScopedLogger } from 'logaria/core';
+import type { Logger, ScopedLogger } from 'logaria/types';
 
 const MAIN_NAME = '@docs-islands/core';
 

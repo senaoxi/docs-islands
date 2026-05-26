@@ -7,7 +7,7 @@
 
 `logging` 用来控制 `createDocsIslands()` 产生的包内日志，以及这个包公开暴露的 logger helper。它不会改变渲染逻辑，只决定 `@docs-islands/*` 在 Node 和浏览器里哪些消息可见。
 
-每个 `createDocsIslands()` 实例都会持有隔离的 logger scope。VitePress 会把这个 scope 注入到构建图中，通用的 `@docs-islands/logger` runtime 会在没有显式 scope 时读取它，所以并行的多个 VitePress 实例或测试不会互相覆盖 logging 配置。框架无关的直接 logger 用法请使用 `@docs-islands/logger`。
+每个 `createDocsIslands()` 实例都会持有隔离的 logger scope。VitePress 会把这个 scope 注入到构建图中，通用的 `logaria` runtime 会在没有显式 scope 时读取它，所以并行的多个 VitePress 实例或测试不会互相覆盖 logging 配置。框架无关的直接 logger 用法请使用 `logaria`。
 
 ## 什么时候用它
 
@@ -110,35 +110,35 @@ const logging = {
 
 ## 公开 Logger 用法
 
-`@docs-islands/vitepress/logger` 是 VitePress logger facade。它只暴露 `createLogger`；`formatDebugMessage` 等共享 helper 位于 `@docs-islands/logger/helper`，通用的直接 runtime 配置能力位于 `@docs-islands/logger`。
+`@docs-islands/vitepress/logger` 是 VitePress logger facade。它只暴露 `createLogger`；`formatDebugMessage` 等共享 helper 位于 `logaria/helper`，通用的直接 runtime 配置能力位于 `logaria`。
 
 `logging` 定义的是 logger 的运行时可见性策略。它决定日志在运行时是否输出；在 `debug` 模式下，也会决定可见日志附带哪些规则标签和相对耗时信息。
 
-`@docs-islands/logger` 保持 framework-agnostic。在受 `createDocsIslands()` 管理的 VitePress 构建中，`@docs-islands/vitepress/logger` 会被解析为绑定当前 scope 的 virtual module，因此每个集成实例都会使用自己的 logger registry 条目。
+`logaria` 保持 framework-agnostic。在受 `createDocsIslands()` 管理的 VitePress 构建中，`@docs-islands/vitepress/logger` 会被解析为绑定当前 scope 的 virtual module，因此每个集成实例都会使用自己的 logger registry 条目。
 
-需要统一 runtime logger 入口的 monorepo 子包应使用 `@docs-islands/utils/logger`。没有宿主接管时它会退回到 `@docs-islands/logger`；VitePress 打包需要受控的内部模块时，会把它改写成 `@docs-islands/vitepress/logger`。
+需要统一 runtime logger 入口的 monorepo 子包应使用 `@docs-islands/utils/logger`。没有宿主接管时它会退回到 `logaria`；VitePress 打包需要受控的内部模块时，会把它改写成 `@docs-islands/vitepress/logger`。
 
 ### 入口归属
 
 | 场景                                           | 导入来源                         | 配置归属                              |
 | ---------------------------------------------- | -------------------------------- | ------------------------------------- |
 | 受 VitePress 管理的 Vite 管道处理的代码        | `@docs-islands/vitepress/logger` | `createDocsIslands({ logging })`      |
-| 已经携带 `loggerScopeId` 的 VitePress 内部流程 | `@docs-islands/logger/core`      | 当前 `createDocsIslands()` 实例       |
+| 已经携带 `loggerScopeId` 的 VitePress 内部流程 | `logaria/core`                   | 当前 `createDocsIslands()` 实例       |
 | 可能需要宿主接管的可复用 docs-islands 子包     | `@docs-islands/utils/logger`     | 打包时宿主 alias，否则 root fallback  |
-| 受控构建图之外的框架无关用户代码               | `@docs-islands/logger`           | root logger runtime 或 `loggerPlugin` |
-| 共享格式化、耗时和消息 helper                  | `@docs-islands/logger/helper`    | 无 runtime 配置                       |
+| 受控构建图之外的框架无关用户代码               | `logaria`                        | root logger runtime 或 `loggerPlugin` |
+| 共享格式化、耗时和消息 helper                  | `logaria/helper`                 | 无 runtime 配置                       |
 
 `@docs-islands/vitepress/logger` 不是通用 logger 入口。不要在 `.vitepress/config.ts` 或独立 Node 脚本里调用它；这些文件执行时，Vite module graph 还没有机会把 facade 替换成当前激活的、绑定 scope 的 virtual module。
 
 在这个包里，项目级约束是：
 
 - Vite 管道内、由 `createDocsIslands()` 接管的模块，使用 `@docs-islands/vitepress/logger`。只有这个入口会自动获得 VitePress scope 注入和 VitePress 自动 tree-shaking。
-- 跑在 Vite graph 之外、但已经拿到当前 `loggerScopeId` 的 VitePress 内部流程，才使用 `@docs-islands/logger/core`。这类调用方必须通过 core API 注册或消费显式 scope。
+- 跑在 Vite graph 之外、但已经拿到当前 `loggerScopeId` 的 VitePress 内部流程，才使用 `logaria/core`。这类调用方必须通过 core API 注册或消费显式 scope。
 - 可复用 monorepo 子包应把 `@docs-islands/utils/logger` 作为 runtime logger 入口。脱离受控打包时它会退回到通用 logger；需要加入当前 `createDocsIslands()` scope 时，VitePress 会把它 alias 到 `@docs-islands/vitepress/logger`。
-- 不需要 VitePress 接管的可复用包，应使用通用的 `@docs-islands/logger` 入口。如果宿主安装了 `loggerPlugin`，这个通用默认 scope 会被 plugin 接管；否则它仍然可以通过 `setLoggerConfig(...)` / `resetLoggerConfig()` 直接配置。
-- 共享的格式化、耗时和诊断 helper 应来自 `@docs-islands/logger/helper` 或 `@docs-islands/logger/core/helper`；不要为了使用 helper 去导入 runtime logger 入口。
+- 不需要 VitePress 接管的可复用包，应使用通用的 `logaria` 入口。如果宿主安装了 `loggerPlugin`，这个通用默认 scope 会被 plugin 接管；否则它仍然可以通过 `setLoggerConfig(...)` / `resetLoggerConfig()` 直接配置。
+- 共享的格式化、耗时和诊断 helper 应来自 `logaria/helper` 或 `logaria/core/helper`；不要为了使用 helper 去导入 runtime logger 入口。
 
-`@docs-islands/vitepress` 内部允许同时出现 `@docs-islands/vitepress/logger`、`@docs-islands/utils/logger` 和底层的 `@docs-islands/logger/*` 导入。它们代表不同控制模型：VitePress facade 绑定当前 `createDocsIslands()` scope；utils facade 是 monorepo 内 fallback-or-controlled 的统一入口；底层 logger 导入则提供 helper、类型、plugin 或显式 scope API。
+`@docs-islands/vitepress` 内部允许同时出现 `@docs-islands/vitepress/logger`、`@docs-islands/utils/logger` 和底层的 `logaria/*` 导入。它们代表不同控制模型：VitePress facade 绑定当前 `createDocsIslands()` scope；utils facade 是 monorepo 内 fallback-or-controlled 的统一入口；底层 logger 导入则提供 helper、类型、plugin 或显式 scope API。
 
 ### Runtime Policy 与 Build-Time Optimization
 
@@ -204,17 +204,17 @@ hiddenLogger.info('suppressed userland info');
 
 ### Logger Tree-Shaking Plugin
 
-在 `createDocsIslands()` 管理的构建链里，设置 `logging.treeshake: true` 后，docs-islands 会安装 logger tree-shaking transform。这个 VitePress transform 只处理受控 VitePress module graph 里的 `@docs-islands/vitepress/logger` 导入，包括用户组件的 browser/SSR bundle，以及 unified loader 这类经 Vite 二次打包的 runtime module。它不会裁剪框架无关的 `@docs-islands/logger` 导入。
+在 `createDocsIslands()` 管理的构建链里，设置 `logging.treeshake: true` 后，docs-islands 会安装 logger tree-shaking transform。这个 VitePress transform 只处理受控 VitePress module graph 里的 `@docs-islands/vitepress/logger` 导入，包括用户组件的 browser/SSR bundle，以及 unified loader 这类经 Vite 二次打包的 runtime module。它不会裁剪框架无关的 `logaria` 导入。
 
 如果你希望在 VitePress managed logger facade 和 runtime 过滤之外启用构建期裁剪，可以设置 `logging.treeshake: true`。
 
 共享的 utils facade 也会参与这条接管链路。例如 `@docs-islands/core` 会导入 `@docs-islands/utils/logger`；VitePress 包在构建自身产物时，会把这个 facade 改写为 `@docs-islands/vitepress/logger`。改写后的 import 在 VitePress 包产物里保持 external 是有意的：最终消费方站点的 Vite 管道仍然需要看到并解析 `@docs-islands/vitepress/logger`，这样绑定 scope 的 virtual module 和 VitePress tree-shaking transform 才能生效。不要在消费方站点的 Vite 构建中把 `@docs-islands/vitepress/logger` external 掉。
 
-如果你在 VitePress 站点里使用框架无关的 `@docs-islands/logger` 入口，同时又希望这个通用 logger 拿到生产环境裁剪能力，可以显式安装公开 plugin：
+如果你在 VitePress 站点里使用框架无关的 `logaria` 入口，同时又希望这个通用 logger 拿到生产环境裁剪能力，可以显式安装公开 plugin：
 
 ```ts [.vitepress/config.ts]
 import { defineConfig } from 'vitepress';
-import { loggerPlugin } from '@docs-islands/logger/plugin';
+import { loggerPlugin } from 'logaria/plugin';
 
 export default defineConfig({
   vite: {
@@ -281,7 +281,7 @@ createLogger({ main }).getLoggerByGroup(group).info('dynamic binding');
 如果需要在 VitePress 管理的构建链之外直接使用 logger，请从框架无关的包导入：
 
 ```ts
-import { createLogger, resetLoggerConfig, setLoggerConfig } from '@docs-islands/logger';
+import { createLogger, resetLoggerConfig, setLoggerConfig } from 'logaria';
 
 setLoggerConfig({
   levels: ['warn', 'error'],
@@ -303,7 +303,7 @@ resetLoggerConfig();
 下面这个 playground 会直接在当前 docs 站里运行 VitePress logger facade：
 
 - 正常的 `@docs-islands/vitepress/logger` 导入会通过 runtime 注入使用当前 `createDocsIslands()` 实例的 logger scope。
-- 框架无关的 `@docs-islands/logger` runtime 演示已经放在独立 logger 包页面中。
+- 框架无关的 `logaria` runtime 演示已经放在独立 logger 包页面中。
 
 <LoggerScopePlayground
   client:load

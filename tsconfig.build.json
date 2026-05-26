@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.dts.json"
+    },
+    {
+      "path": "./utils/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/logaria/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/core/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/plugins/license/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/eslint-config/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/limina/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/vitepress/tsconfig.build.json"
+    }
+  ]
+}
