@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -33,6 +33,38 @@ async function createConfig(): Promise<{
       rootDir,
     },
   };
+}
+
+async function writeText(filePath: string, text: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, text);
+}
+
+async function createOutputPackage(
+  rootDir: string,
+  packageName: string,
+  source: string,
+): Promise<string> {
+  const packageDirName = packageName.split('/').at(-1) ?? packageName;
+  const outDir = path.join(rootDir, 'packages', packageDirName, 'dist');
+
+  await writeText(
+    path.join(outDir, 'package.json'),
+    JSON.stringify({
+      dependencies: {
+        '@example/dep': '1.0.0',
+      },
+      exports: {
+        '.': './index.js',
+      },
+      name: packageName,
+    }),
+  );
+  await writeText(path.join(outDir, 'index.js'), source);
+  await writeText(path.join(outDir, 'README.md'), '# Example package\n');
+  await writeText(path.join(outDir, 'LICENSE.md'), 'MIT\n');
+
+  return outDir;
 }
 
 function createFlow(): {
@@ -99,6 +131,13 @@ describe('runPipeline', () => {
   it('recognizes checker:typecheck as a built-in task', () => {
     expect(normalizePipelineStep('checker:typecheck')).toEqual({
       name: 'checker:typecheck',
+      type: 'task',
+    });
+  });
+
+  it('recognizes release:check as a built-in task', () => {
+    expect(normalizePipelineStep('release:check')).toEqual({
+      name: 'release:check',
       type: 'task',
     });
   });
@@ -182,6 +221,49 @@ describe('runPipeline', () => {
       expect(
         chunks.filter((chunk) => chunk.includes('[pass] command:')).length,
       ).toBe(2);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('passes package selection to package-aware built-in tasks', async () => {
+    const fixture = await createConfig();
+
+    try {
+      const validOutDir = await createOutputPackage(
+        fixture.config.rootDir,
+        '@example/valid',
+        "import '@example/dep';\n",
+      );
+      const invalidOutDir = await createOutputPackage(
+        fixture.config.rootDir,
+        '@example/invalid',
+        "import 'node:fs';\n",
+      );
+
+      fixture.config.package = {
+        entries: [
+          {
+            checks: ['boundary'],
+            name: '@example/valid',
+            outDir: validOutDir,
+          },
+          {
+            checks: ['boundary'],
+            name: '@example/invalid',
+            outDir: invalidOutDir,
+          },
+        ],
+      };
+      fixture.config.pipelines = {
+        publish: ['package:check'],
+      };
+
+      await expect(
+        runPipeline(fixture.config, 'publish', {
+          packageNames: ['@example/valid'],
+        }),
+      ).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }

@@ -8,7 +8,7 @@ import {
   formatUnknownError,
   getPnpmCommand,
   getSmokeLogger,
-  packLoggerDist,
+  packLogariaDist,
   packVitepressDist,
   readDistManifest,
   reserveTcpPort,
@@ -170,7 +170,7 @@ export const test = base.extend<
       const logger = getSmokeLogger('task.consumer-smoke');
       const smokeElapsed = createElapsedTimer();
       let cleanupPackedDist: (() => Promise<void>) | undefined;
-      let cleanupPackedLogger: (() => Promise<void>) | undefined;
+      let cleanupPackedLogaria: (() => Promise<void>) | undefined;
       let cleanupFixture: (() => Promise<void>) | undefined;
       let childProcess: ChildProcess | undefined;
       let serverLogs: string[] = [];
@@ -181,16 +181,16 @@ export const test = base.extend<
         logger.info('packing vitepress dist tarball for consumer smoke');
         const packedDist = await packVitepressDist();
         cleanupPackedDist = packedDist.cleanup;
-        logger.info('packing logger dist tarball for consumer smoke');
-        const packedLogger = await packLoggerDist();
-        cleanupPackedLogger = packedLogger.cleanup;
+        logger.info('packing logaria dist tarball for consumer smoke');
+        const packedLogaria = await packLogariaDist();
+        cleanupPackedLogaria = packedLogaria.cleanup;
 
         const fixture = await createConsumerFixture({
           fixtureRootPrefix: 'docs-islands-consumer-smoke-',
           installLogMessage: 'installing consumer fixture dependencies',
           logger,
           localDependencyTarballPaths: {
-            logaria: packedLogger.tarballPath,
+            logaria: packedLogaria.tarballPath,
           },
           manifest,
           tarballPath: packedDist.tarballPath,
@@ -236,8 +236,8 @@ export const test = base.extend<
         if (cleanupPackedDist) {
           await cleanupPackedDist();
         }
-        if (cleanupPackedLogger) {
-          await cleanupPackedLogger();
+        if (cleanupPackedLogaria) {
+          await cleanupPackedLogaria();
         }
       }
     },

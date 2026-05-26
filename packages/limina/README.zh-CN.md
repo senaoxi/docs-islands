@@ -34,6 +34,7 @@ Limina 让这些规则变得可审查、可执行，并适合放进 CI。
 - **Compatibility path generation**：当 `workspace:*` 依赖的 package exports 仍指向 build artifacts 时，生成可选的 `tsconfig.dts.paths.generated.json` 源码 paths 配置。
 - **Checker target runner**：按 `typecheck` 或 `build` 执行模式运行已配置的 TypeScript 与 UI 框架 checker entry。
 - **Published package checks**：使用 `publint`、Are The Types Wrong 和 runtime import boundary audit 校验构建后的 package output。
+- **Release checks**：校验 npm tarball 发布卫生、source/packed manifest 一致性，以及基于 registry 的 workspace 发布顺序。
 - **Composable pipelines**：把内置检查和 shell 命令组合成 `typecheck`、`package`、`publish` 等命名 workflow。
 - **Typed configuration**：提供 `defineConfig(...)`，让用户配置拥有编辑器提示和类型约束。
 
@@ -95,8 +96,8 @@ export default defineConfig({
     ],
   },
 
-  packageChecks: {
-    targets: [
+  package: {
+    entries: [
       {
         name: '@acme/core',
         outDir: 'packages/core/dist',
@@ -106,7 +107,7 @@ export default defineConfig({
 
   pipelines: {
     package: ['package:check'],
-    publish: ['graph:check', 'proof:check', 'package:check'],
+    publish: ['graph:check', 'proof:check', 'package:check', 'release:check'],
   },
 });
 ```
@@ -151,7 +152,7 @@ pnpm exec limina package check --package @acme/core
 
 ### Package checks
 
-Source graph checks 不能证明安装后的 package 对消费者可用。`limina package check` 会检查 `packageChecks.targets[].outDir` 下的构建产物，并验证实际 package manifest、exports、类型解析和 runtime imports。如果产物 `package.json` 没有设置 `private: true`，还必须在产物根目录包含 `README.md` 和 `LICENSE.md`。
+Source graph checks 不能证明安装后的 package 对消费者可用。`limina package check` 会检查 `package.entries[].outDir` 下的构建产物，并用 `publint`、`attw`、`boundary` 验证实际 package manifest、exports、类型解析和 runtime imports。`limina release check` 负责 npm publish 前的发布卫生：拒绝 private output、要求 README/license、禁止 source map、校验 source/packed manifest 一致性，以及基于 registry 的 workspace 发布顺序。
 
 ## CLI
 
@@ -171,9 +172,11 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina checker build`                          | 对支持 build 模式的 checker entry 执行 build。                   |
 | `limina checker typecheck`                      | 运行 `svelte-check` 这类 source-only checker entry。             |
 | `limina package check`                          | 运行已配置的 package output checks。                             |
-| `limina package check --package <name>`         | 检查单个已配置 package target。                                  |
+| `limina package check --package <name>`         | 检查单个已配置 package entry。                                   |
 | `limina package check --tool <tool>`            | 只运行 `publint`、`attw` 或 `boundary`。                         |
 | `limina package check --attw-profile <profile>` | 覆盖 ATTW profile：`strict`、`node16` 或 `esm-only`。            |
+| `limina release check`                          | 按 cwd package entry 校验发布卫生和发布依赖一致性。              |
+| `limina release check --package <name>`         | 校验一个或多个 package entry 的发布卫生和发布依赖一致性。        |
 
 ## 配置参考
 
@@ -269,11 +272,11 @@ proof: {
 
 Checker entry 覆盖由 TypeScript 或框架感知工具验证的文件。allowlist 是所有 checker entry 都无法覆盖某个源码文件后的最后兜底；条目应该少而明确，并且必须包含 reason。
 
-### `packageChecks`
+### `package`
 
 ```js
-packageChecks: {
-  targets: [
+package: {
+  entries: [
     {
       name: '@acme/core',
       outDir: 'packages/core/dist',
@@ -289,7 +292,7 @@ packageChecks: {
 }
 ```
 
-`outDir` 必须指向包含可发布 `package.json` 的构建后 package 目录。如果该 manifest 没有设置 `private: true`，同一目录还必须包含 `README.md` 和 `LICENSE.md`。
+`outDir` 必须指向包含可发布 `package.json` 的构建后 package 目录。`package:check` 会用该 output 做消费者视角的 resolver 和 runtime 检查；`release:check` 会打包同一个 output，并校验 README/license、source map 禁令等发布卫生规则。
 
 ### `pipelines`
 
@@ -356,7 +359,7 @@ const config = await loadConfig();
 
 Limina 会通过 `pnpm-workspace.yaml` 推断 workspace root。请把配置文件放在 workspace 内，或传入位于 workspace root 下的配置路径。
 
-### `packageChecks.targets[x].outDir` is invalid
+### `package.entries[x].outDir` is invalid
 
 请把 `outDir` 指向构建后的 package 目录，而不是源码 package 目录，除非该目录本身就是可发布的 package output。
 

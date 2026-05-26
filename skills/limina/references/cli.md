@@ -145,21 +145,35 @@ Exit code: 1 if any target exits non-zero.
 
 Action must be `check`.
 
-| Flag                      | Values                                  | Effect                                                                                                                                                                  |
-| ------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--package <name>` / `-p` | Configured target `name`                | Limit to one target. If omitted, Limina compares the nearest `package.json#name` from cwd to configured target names; runs only that match, or all targets if no match. |
-| `--tool <name>`           | `publint`, `attw`, `boundary`, or `all` | Limit to one tool. `all` is identical to omitting the flag.                                                                                                             |
-| `--attw-profile <name>`   | `strict`, `node16`, `esm-only`          | Override the configured ATTW profile for this invocation only.                                                                                                          |
+| Flag                      | Values                                  | Effect                                                                                                                                                                          |
+| ------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--package <name>` / `-p` | Configured entry `name`                 | Limit to one or more entries. If omitted, Limina compares the nearest `package.json#name` from cwd to configured entry names; runs only that match, or all entries if no match. |
+| `--tool <name>`           | `publint`, `attw`, `boundary`, or `all` | Limit to one tool. `all` is identical to omitting the flag.                                                                                                                     |
+| `--attw-profile <name>`   | `strict`, `node16`, `esm-only`          | Override the configured ATTW profile for this invocation only.                                                                                                                  |
 
-For every selected target:
+For every selected entry:
 
-1. Read `<outDir>/package.json`. If `private !== true`, require `README.md` and `LICENSE.md` in the same directory.
+1. Read `<outDir>/package.json`.
 2. If `publint` or `attw` is enabled, pack the directory with `@publint/pack` (ignoring scripts) into a temporary directory and feed the tarball to both tools.
 3. Run boundary check if enabled: parse every `.js`/`.mjs`/`.cjs` in the output, extract bare-package imports, validate them against the output manifest's dependencies, self-export specifiers, and runtime environment classification.
 
-`publint` is run in strict mode by default (overridable per target with `publint.strict`).
+`publint` is run in strict mode by default (overridable per entry with `publint.strict`).
 
-Exit code: 1 if any check on any target fails, or if no runnable target exists for the selected tool.
+Exit code: 1 if any check on any entry fails, or if no runnable entry exists for the selected tool.
+
+## `limina release <check> [--package N]`
+
+Action must be `check`.
+
+| Flag                      | Values                  | Effect                                                                                         |
+| ------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------- |
+| `--package <name>` / `-p` | Configured entry `name` | Limit to one or more entries and skip cwd matching. Repeat the flag to check multiple entries. |
+
+Without `--package`, Limina walks from cwd to the workspace root, reads the nearest `package.json#name`, and requires it to match exactly one configured `package.entries[].name`.
+
+For every selected entry, Limina rejects `private: true`, packs `<outDir>`, checks tarball publish hygiene (`README.md`, `LICENSE.md`, no `*.map`, no JS `sourceMappingURL` directive), and verifies source/packed manifest consistency plus workspace publish dependency consistency against npm registry metadata.
+
+Exit code: 1 if cwd matching fails, a requested entry is missing, or any release consistency check fails.
 
 ## Help and errors
 

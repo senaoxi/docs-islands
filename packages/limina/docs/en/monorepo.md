@@ -260,9 +260,9 @@ packages/core/dist/package.json  has broken exports / types
 
 This problem is not fully covered by the source-level project graph, because consumers install the package from `dist`.
 
-limina therefore separates source graph checks from package artifact checks. The README explicitly says that source graph checks do not prove that an installed package is usable by consumers; `limina package check` checks the manifest, exports, type resolution, and runtime imports under built package outputs.
+limina therefore separates source graph checks, package artifact checks, and release hygiene checks. The README explicitly says that source graph checks do not prove that an installed package is usable by consumers; `limina package check` checks the manifest, exports, type resolution, and runtime imports under built package outputs, while `limina release check` owns npm tarball hygiene and publish dependency consistency.
 
-This is why publishing needs `package:check`, not just `typecheck`.
+This is why publishing needs `package:check` and `release:check`, not just `typecheck`.
 
 ---
 
@@ -929,8 +929,8 @@ So limina treats package checks as a separate layer:
 
 ```js
 export default defineConfig({
-  packageChecks: {
-    targets: [
+  package: {
+    entries: [
       {
         name: '@acme/core',
         outDir: 'packages/core/dist',

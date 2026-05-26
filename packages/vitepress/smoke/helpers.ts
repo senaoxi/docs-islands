@@ -67,10 +67,10 @@ const MANAGED_LOGGER_SPECIFIERS = ['@docs-islands/utils/logger'] as const;
 
 export const PACKAGE_ROOT_DIR = fileURLToPath(new URL('..', import.meta.url));
 export const DIST_DIR = path.join(PACKAGE_ROOT_DIR, 'dist');
-export const LOGGER_DIST_DIR = path.join(
+export const LOGARIA_DIST_DIR = path.join(
   PACKAGE_ROOT_DIR,
   '..',
-  'logger',
+  'logaria',
   'dist',
 );
 
@@ -585,8 +585,8 @@ export async function packVitepressDist() {
   return await packDistTarball(DIST_DIR);
 }
 
-export async function packLoggerDist() {
-  return await packDistTarball(LOGGER_DIST_DIR);
+export async function packLogariaDist() {
+  return await packDistTarball(LOGARIA_DIST_DIR);
 }
 
 export function isCriticalRequestFailure(

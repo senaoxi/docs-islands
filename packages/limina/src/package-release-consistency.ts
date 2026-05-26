@@ -39,6 +39,21 @@ interface PublishManifest {
   version?: string;
 }
 
+interface PackedPackageFile {
+  data: Uint8Array;
+  name: string;
+}
+
+interface PackedPackage {
+  files: PackedPackageFile[];
+  rootDir: string;
+}
+
+interface PackedPackageContentFile {
+  data: Uint8Array;
+  relativePath: string;
+}
+
 interface RegistryVersionMetadata {
   gitHead?: unknown;
 }
@@ -68,6 +83,7 @@ interface ReleaseConsistencyState {
   missingWorkspaceDependencies: ReleaseConsistencyProblem[];
   packedManifestProblems: ReleaseConsistencyProblem[];
   privateWorkspaceDependencies: ReleaseConsistencyProblem[];
+  releaseHygieneProblems: ReleaseConsistencyProblem[];
   registryMetadataCache: Map<string, RegistryPackageMetadata | null>;
   registryProblems: ReleaseConsistencyProblem[];
   sourceLinkDependencies: ReleaseConsistencyProblem[];
@@ -89,6 +105,9 @@ export class PackageReleaseConsistencyError extends Error {
 
 const require = createRequire(import.meta.url);
 const semver = require('semver') as SemverModule;
+const REQUIRED_RELEASE_FILES = ['README.md', 'LICENSE.md'] as const;
+const SOURCE_MAPPING_URL_PATTERN =
+  /(?:\/\/\s*#\s*sourceMappingURL\s*=|\/\*\s*#\s*sourceMappingURL\s*=)/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -105,6 +124,7 @@ function createReleaseConsistencyState(): ReleaseConsistencyState {
     missingWorkspaceDependencies: [],
     packedManifestProblems: [],
     privateWorkspaceDependencies: [],
+    releaseHygieneProblems: [],
     registryMetadataCache: new Map<string, RegistryPackageMetadata | null>(),
     registryProblems: [],
     sourceLinkDependencies: [],
@@ -492,21 +512,109 @@ async function visitWorkspacePackageDependencies(options: {
   }
 }
 
-async function readPackedPackageJson(
-  tarball: Buffer,
-): Promise<PublishManifest> {
-  const unpacked = await unpack(tarball);
-  const packageJsonFile = unpacked.files.find(
-    (file) => file.name === `${unpacked.rootDir}/package.json`,
+async function unpackPackedPackage(tarball: Buffer): Promise<PackedPackage> {
+  return (await unpack(tarball)) as PackedPackage;
+}
+
+function getPackedContentFiles(
+  packedPackage: PackedPackage,
+): PackedPackageContentFile[] {
+  const rootPrefix = `${packedPackage.rootDir}/`;
+  const files: PackedPackageContentFile[] = [];
+
+  for (const file of packedPackage.files) {
+    if (!file.name.startsWith(rootPrefix)) {
+      continue;
+    }
+
+    files.push({
+      data: file.data,
+      relativePath: file.name.slice(rootPrefix.length).replaceAll('\\', '/'),
+    });
+  }
+
+  return files;
+}
+
+function readPackedPackageJson(options: {
+  contentFiles: PackedPackageContentFile[];
+  rootPackageName: string;
+  state: ReleaseConsistencyState;
+}): PublishManifest | null {
+  const packageJsonFile = options.contentFiles.find(
+    (file) => file.relativePath === 'package.json',
   );
 
   if (!packageJsonFile) {
-    throw new Error('packed tarball does not contain package.json');
+    options.state.releaseHygieneProblems.push({
+      importerName: options.rootPackageName,
+      message: 'tarball does not contain package.json',
+    });
+    return null;
   }
 
-  return JSON.parse(
-    Buffer.from(packageJsonFile.data).toString('utf8'),
-  ) as PublishManifest;
+  try {
+    return JSON.parse(
+      Buffer.from(packageJsonFile.data).toString('utf8'),
+    ) as PublishManifest;
+  } catch (error) {
+    options.state.releaseHygieneProblems.push({
+      importerName: options.rootPackageName,
+      message: `tarball package.json is not valid JSON: ${formatErrorMessage(
+        error,
+      )}`,
+    });
+    return null;
+  }
+}
+
+function isJavaScriptPackageFile(relativePath: string): boolean {
+  return /\.(?:cjs|mjs|js)$/u.test(relativePath);
+}
+
+function validateReleaseTarballHygiene(options: {
+  contentFiles: PackedPackageContentFile[];
+  rootPackageName: string;
+  state: ReleaseConsistencyState;
+}): void {
+  const filePaths = new Set(
+    options.contentFiles.map((file) => file.relativePath),
+  );
+  const missingReleaseFiles = REQUIRED_RELEASE_FILES.filter(
+    (fileName) => !filePaths.has(fileName),
+  );
+
+  if (missingReleaseFiles.length > 0) {
+    options.state.releaseHygieneProblems.push({
+      importerName: options.rootPackageName,
+      message: `tarball is missing required file(s): ${missingReleaseFiles.join(
+        ', ',
+      )}`,
+    });
+  }
+
+  for (const file of options.contentFiles) {
+    if (/\.map$/u.test(file.relativePath)) {
+      options.state.releaseHygieneProblems.push({
+        importerName: options.rootPackageName,
+        message: `tarball contains source map file: ${file.relativePath}`,
+      });
+      continue;
+    }
+
+    if (!isJavaScriptPackageFile(file.relativePath)) {
+      continue;
+    }
+
+    const source = Buffer.from(file.data).toString('utf8');
+
+    if (SOURCE_MAPPING_URL_PATTERN.test(source)) {
+      options.state.releaseHygieneProblems.push({
+        importerName: options.rootPackageName,
+        message: `tarball JavaScript file contains sourceMappingURL directive: ${file.relativePath}`,
+      });
+    }
+  }
 }
 
 function validatePackedManifest(options: {
@@ -620,6 +728,7 @@ function createReleaseConsistencyError(options: {
     state.privateWorkspaceDependencies.length +
     state.missingWorkspaceDependencies.length +
     state.registryProblems.length +
+    state.releaseHygieneProblems.length +
     state.packedManifestProblems.length;
 
   if (problemCount === 0) {
@@ -628,8 +737,12 @@ function createReleaseConsistencyError(options: {
 
   const publishOrder = createPublishOrder(rootPackageName, state);
   const lines = [
-    `package release dependency consistency failed for ${label}:`,
+    `package release check failed for ${label}:`,
     `  output: ${toRelativePath(config.rootDir, outDir)}`,
+    ...formatProblemLines(
+      'Release tarball is not publishable:',
+      state.releaseHygieneProblems,
+    ),
     ...formatProblemLines(
       'Source manifest contains local link: publish dependencies:',
       state.sourceLinkDependencies,
@@ -685,12 +798,28 @@ export async function assertPackageReleaseConsistency(
     });
   }
 
-  const packedManifest = await readPackedPackageJson(options.packedTarball);
-  validatePackedManifest({
-    manifest: packedManifest,
+  const packedPackage = await unpackPackedPackage(options.packedTarball);
+  const contentFiles = getPackedContentFiles(packedPackage);
+
+  validateReleaseTarballHygiene({
+    contentFiles,
     rootPackageName: options.outputManifest.name,
     state,
   });
+
+  const packedManifest = readPackedPackageJson({
+    contentFiles,
+    rootPackageName: options.outputManifest.name,
+    state,
+  });
+
+  if (packedManifest) {
+    validatePackedManifest({
+      manifest: packedManifest,
+      rootPackageName: options.outputManifest.name,
+      state,
+    });
+  }
 
   const error = createReleaseConsistencyError({
     config: options.config,

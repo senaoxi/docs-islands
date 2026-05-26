@@ -12,7 +12,7 @@ Limina configuration starts from `limina.config.mjs` inside the workspace. Read 
 - [Graph Rules](./options/graph-rules.md): `graph.rules.<label>`, `deny.refs`, and `deny.deps`.
 - [Paths](./options/paths.md): generated compatibility path settings.
 - [Proof Allowlist](./options/proof-allowlist.md): source coverage exceptions with `file` and `reason`.
-- [Package Checks](./options/package-checks.md): built output targets, tools, and runtime boundaries.
+- [Package Checks](./options/package-checks.md): built output entries, tools, and runtime boundaries.
 - [Pipelines](./options/pipelines.md): named workflows, built-in tasks, and external command steps.
 
 If you only want the first check running, start with [Config File](./options/config.md) and [Checker Entries](./options/checkers.md). If you are preparing to publish packages, add [Package Checks](./options/package-checks.md).
@@ -37,9 +37,11 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina checker build`                          | Run build execution for checker entries that support it.                                                                      |
 | `limina checker typecheck`                      | Run source-only checker entries such as `svelte-check`.                                                                       |
 | `limina package check`                          | Run configured package output checks.                                                                                         |
-| `limina package check --package <name>`         | Run one package target by configured name.                                                                                    |
+| `limina package check --package <name>`         | Run one package entry by configured name.                                                                                     |
 | `limina package check --tool <tool>`            | Run only `publint`, `attw`, `boundary`, or `all`.                                                                             |
 | `limina package check --attw-profile <profile>` | Override ATTW profile: `strict`, `node16`, or `esm-only`.                                                                     |
+| `limina release check`                          | Check release hygiene and dependency consistency for the cwd package entry.                                                   |
+| `limina release check --package <name>`         | Check release hygiene and dependency consistency for one or more package entries.                                             |
 
 ## Recommended Workflows
 
@@ -66,10 +68,11 @@ This proves graph, source ownership, coverage, first-class checker builds, and s
 ```sh
 pnpm build
 pnpm exec limina package check
+pnpm exec limina release check --package <name>
 pnpm exec limina check publish
 ```
 
-Build first so `packageChecks.targets[].outDir` contains the files consumers will install.
+Build first so `package.entries[].outDir` contains the files consumers will install.
 
 ## CI Example
 
@@ -100,7 +103,7 @@ jobs:
 - Keep `tsconfig.build.json` files as pure aggregators with `files: []` and `references`.
 - Keep declaration leaves close to local companions, and let declaration leaves add only declaration-output settings.
 - Prefer source-facing package exports over long-term generated paths.
-- Run source checks and package checks; they protect different layers.
+- Run source, package, and release checks; they protect different layers.
 - Keep allowlists small and explain why each exception is safe.
 
 ## FAQ
@@ -111,7 +114,7 @@ jobs:
 
 ### Why do package checks require a build first?
 
-They inspect the package output under `packageChecks.targets[].outDir`. That output must already contain the built `package.json`, exports, JavaScript, declarations, README, and license files.
+They inspect the package output under `package.entries[].outDir`. That output must already contain the built `package.json`, exports, JavaScript, and declarations. `release:check` additionally expects the packed output to contain README/license files and no source maps.
 
 ### Why do workspace exports pointing to dist cause graph problems?
 
@@ -133,4 +136,5 @@ Before publishing Limina itself or a package governed by Limina, check that:
 - `pnpm exec limina check` passes;
 - the package build has run;
 - `pnpm exec limina package check --package <name>` passes;
+- `pnpm exec limina release check --package <name>` passes;
 - generated paths are current with `pnpm exec limina paths check` when paths are used.

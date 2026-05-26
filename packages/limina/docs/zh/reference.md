@@ -37,9 +37,11 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina checker build`                          | 运行支持 build mode 的 checker entries。                                                               |
 | `limina checker typecheck`                      | 运行 `svelte-check` 这类 source-only checker entry。                                                   |
 | `limina package check`                          | 运行配置好的 package output checks。                                                                   |
-| `limina package check --package <name>`         | 按配置名运行单个 package target。                                                                      |
+| `limina package check --package <name>`         | 按配置名运行单个 package entry。                                                                       |
 | `limina package check --tool <tool>`            | 只运行 `publint`、`attw`、`boundary` 或 `all`。                                                        |
 | `limina package check --attw-profile <profile>` | 覆盖 ATTW profile：`strict`、`node16` 或 `esm-only`。                                                  |
+| `limina release check`                          | 按 cwd package entry 校验发布卫生和发布依赖一致性。                                                    |
+| `limina release check --package <name>`         | 校验一个或多个 package entry 的发布卫生和发布依赖一致性。                                              |
 
 ## 推荐工作流
 
@@ -66,10 +68,11 @@ pnpm exec limina check
 ```sh
 pnpm build
 pnpm exec limina package check
+pnpm exec limina release check --package <name>
 pnpm exec limina check publish
 ```
 
-先 build，确保 `packageChecks.targets[].outDir` 中已经有消费者会安装到的文件。
+先 build，确保 `package.entries[].outDir` 中已经有消费者会安装到的文件。
 
 ## CI 示例
 
@@ -100,7 +103,7 @@ jobs:
 - 保持 `tsconfig.build.json` 为只包含 `files: []` 和 `references` 的纯 aggregator。
 - Declaration leaf 应靠近 local companion，并只额外添加声明输出设置。
 - 优先修 source-facing package exports，不要长期依赖 generated paths。
-- Source checks 和 package checks 都要跑，它们保护的是不同层。
+- Source checks、package checks 和 release checks 都要跑，它们保护的是不同层。
 - Allowlist 保持少而清楚，并解释每个例外为什么安全。
 
 ## 常见问题
@@ -111,7 +114,7 @@ jobs:
 
 ### 为什么 package checks 需要先 build？
 
-它检查的是 `packageChecks.targets[].outDir` 下的 package output。这个 output 里必须已经有构建后的 `package.json`、exports、JavaScript、declarations、README 和 license 文件。
+它检查的是 `package.entries[].outDir` 下的 package output。这个 output 里必须已经有构建后的 `package.json`、exports、JavaScript 和 declarations。`release:check` 还会要求打包后的 output 包含 README/license，且不包含 source map。
 
 ### 为什么 workspace exports 指向 dist 会导致 graph 问题？
 
@@ -133,4 +136,5 @@ jobs:
 - `pnpm exec limina check` 通过；
 - package build 已经运行；
 - `pnpm exec limina package check --package <name>` 通过；
+- `pnpm exec limina release check --package <name>` 通过；
 - 使用 paths 时，`pnpm exec limina paths check` 确认 generated paths 未过期。

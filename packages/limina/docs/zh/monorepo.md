@@ -257,9 +257,9 @@ packages/core/dist/package.json  exports / types 写错
 
 这种问题不会被源码级 project graph 完整覆盖，因为消费者安装的是 `dist` 中的 package。
 
-limina 因此把 source graph checks 和 package artifact checks 分开。README 也明确说，source graph checks 不证明 installed package 对消费者可用；`limina package check` 会检查 built package outputs 下的 manifest、exports、type resolution 和 runtime imports。
+limina 因此把 source graph checks、package artifact checks 和 release hygiene checks 分开。README 也明确说，source graph checks 不证明 installed package 对消费者可用；`limina package check` 会检查 built package outputs 下的 manifest、exports、type resolution 和 runtime imports，而 `limina release check` 负责 npm tarball 卫生和发布依赖一致性。
 
-这就是为什么发布前需要 `package:check`，而不是只跑 `typecheck`。
+这就是为什么发布前需要 `package:check` 和 `release:check`，而不是只跑 `typecheck`。
 
 ---
 
@@ -924,8 +924,8 @@ dist/client.d.ts
 
 ```js
 export default defineConfig({
-  packageChecks: {
-    targets: [
+  package: {
+    entries: [
       {
         name: '@acme/core',
         outDir: 'packages/core/dist',

@@ -4,6 +4,7 @@ import { getCheckerAdapter } from './checkers';
 import { runGraphCheck } from './commands/graph';
 import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
+import { runReleaseCheck } from './commands/release';
 import { runSourceCheck } from './commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
 import type {
@@ -17,6 +18,7 @@ import type { LiminaFlowReporter } from './flow';
 interface RunPipelineOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
+  packageNames?: readonly string[];
 }
 
 type NormalizedPipelineStep = Exclude<PipelineStep, string>;
@@ -27,6 +29,7 @@ const builtInTaskNames = new Set<string>([
   'graph:check',
   'package:check',
   'proof:check',
+  'release:check',
   'source:check',
 ]);
 
@@ -121,6 +124,17 @@ export async function runBuiltinTask(
         cwd: options.cwd,
         flow: options.flow,
         flowDepth: 1,
+        packageNames: options.packageNames,
+      });
+    }
+    case 'release:check': {
+      return runReleaseCheck({
+        clearScreen: false,
+        config,
+        cwd: options.cwd,
+        flow: options.flow,
+        flowDepth: 1,
+        packageNames: options.packageNames,
       });
     }
     case 'checker:typecheck': {

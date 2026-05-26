@@ -28,8 +28,8 @@ describe('defineConfig', () => {
         package: ['package:check'],
         typecheck: ['graph:check'],
       },
-      packageChecks: {
-        targets: [
+      package: {
+        entries: [
           {
             attw: {
               profile: 'esm-only',
@@ -54,7 +54,7 @@ describe('defineConfig', () => {
     expect(config.config?.source?.include).toEqual(['src/**/*.ts']);
     expect(config.config?.source?.exclude).toEqual(['dist']);
     expect(config.pipelines?.package).toEqual(['package:check']);
-    expect(config.packageChecks?.targets?.[0]?.checks).toEqual([
+    expect(config.package?.entries?.[0]?.checks).toEqual([
       'publint',
       'attw',
       'boundary',

@@ -24,28 +24,22 @@ export default defineConfig(({ command, mode }) => ({
 
 ## `mode`
 
-Function configs are useful when local, CI, or release workflows need different checkers or package targets. The environment-specific differences stay in one reviewable config file.
+Function configs are useful when local, CI, or release workflows need different checkers, rules, or package entries. The environment-specific differences stay in one reviewable config file.
 
-For example, if built package output only needs to be checked before release, `--mode release` can return extra `packageChecks.targets`. Running:
-
-```sh
-pnpm exec limina --mode release package check
-```
-
-loads those release targets, while the normal local `limina check` can stay lighter.
+Prefer `command` branching for package output entries that only matter to package and release commands. Reserve `mode` for broader environment-level differences.
 
 ## `command`
 
-`command` is the command family currently loading the config, such as `check`, `graph`, `paths`, or `package`. Use it when expensive configuration only matters for one command family.
+`command` is the command family currently loading the config, such as `check`, `graph`, `paths`, `package`, or `release`. Use it when expensive configuration only matters for one command family.
 
-For example, declare package output targets only for package commands:
+For example, declare package output entries only for package-aware commands:
 
 ```js
 export default defineConfig(({ command }) => ({
-  packageChecks:
-    command === 'package'
+  package:
+    command === 'package' || command === 'release'
       ? {
-          targets: [
+          entries: [
             {
               name: '@acme/core',
               outDir: 'packages/core/dist',
@@ -56,7 +50,7 @@ export default defineConfig(({ command }) => ({
 }));
 ```
 
-Normal graph and proof checks then stay independent from release output configuration.
+Normal graph and proof checks then stay independent from package output configuration.
 
 In a fuller example, the directory can look like this:
 
@@ -67,10 +61,10 @@ packages/core/
   dist/package.json
 ```
 
-The config can declare package output only in release mode:
+The config can declare package output only for package-aware commands:
 
 ```js
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ command }) => ({
   config: {
     checkers: {
       typescript: {
@@ -79,10 +73,10 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-  packageChecks:
-    mode === 'release'
+  package:
+    command === 'package' || command === 'release'
       ? {
-          targets: [
+          entries: [
             {
               name: '@acme/core',
               outDir: 'packages/core/dist',
@@ -93,6 +87,6 @@ export default defineConfig(({ mode }) => ({
 }));
 ```
 
-When `pnpm exec limina check` runs, Limina loads the default mode and analyzes the pieces needed for graph, source, proof, checker build, and checker typecheck. When `pnpm exec limina --mode release package check` runs, Limina loads the config again in release mode and reads `packageChecks.targets`.
+When `pnpm exec limina check` runs, Limina loads the config for the `check` command and analyzes the pieces needed for graph, source, proof, checker build, and checker typecheck. When `pnpm exec limina package check` or `pnpm exec limina release check` runs, Limina loads the config for that command and reads `package.entries`.
 
-The result is that everyday local checks do not care whether `dist` exists, while release checks explicitly require `packages/core/dist` to be built and valid as package output.
+The result is that everyday local checks do not care whether `dist` exists, while package and release checks explicitly require `packages/core/dist` to be built and valid as package output.

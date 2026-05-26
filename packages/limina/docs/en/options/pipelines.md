@@ -14,6 +14,7 @@ export default defineConfig({
       'checker:build',
       'checker:typecheck',
       'package:check',
+      'release:check',
       {
         type: 'command',
         command: 'pnpm',
@@ -33,6 +34,7 @@ String steps can be built-in Limina tasks:
 - `graph:check`
 - `package:check`
 - `proof:check`
+- `release:check`
 - `source:check`
 
 They can also be simple external commands. Simple commands are split on whitespace; use object form when arguments contain spaces, or when the step needs `cwd` or environment variables.

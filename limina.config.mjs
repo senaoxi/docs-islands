@@ -98,9 +98,9 @@ export default defineConfig({
   },
   // Published package checks. These validate the actual dist output that
   // consumers install: package exports, type resolution, and import boundaries.
-  packageChecks: {
-    // Each target is one built package output to check.
-    targets: [
+  package: {
+    // Each entry is one built package output to check.
+    entries: [
       {
         name: 'logaria',
         outDir: 'packages/logaria/dist',
@@ -185,6 +185,12 @@ export default defineConfig({
     // Package artifact checks for dist output.
     package: ['package:check'],
     // Governance checks to run before publishing.
-    publish: ['graph:check', 'source:check', 'proof:check', 'package:check'],
+    publish: [
+      'graph:check',
+      'source:check',
+      'proof:check',
+      'package:check',
+      'release:check',
+    ],
   },
 });

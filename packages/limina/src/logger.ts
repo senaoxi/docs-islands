@@ -14,6 +14,8 @@ export const PackageLogger: ScopedLogger =
   logger.getLoggerByGroup('task.package');
 export const PathsLogger: ScopedLogger = logger.getLoggerByGroup('task.paths');
 export const ProofLogger: ScopedLogger = logger.getLoggerByGroup('task.proof');
+export const ReleaseLogger: ScopedLogger =
+  logger.getLoggerByGroup('task.release');
 export const SourceLogger: ScopedLogger =
   logger.getLoggerByGroup('task.source');
 export const TypecheckLogger: ScopedLogger =

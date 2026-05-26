@@ -6,8 +6,8 @@ Package checks 针对构建后的 output directory 运行。
 import { defineConfig } from 'limina';
 
 export default defineConfig({
-  packageChecks: {
-    targets: [
+  package: {
+    entries: [
       {
         name: '@acme/core',
         outDir: 'packages/core/dist',
@@ -27,17 +27,17 @@ export default defineConfig({
 
 ## `name`
 
-`name` 是这个 package check target 的友好名称。CLI 的 `--package <name>` 会用它筛选单个 target。
+`name` 是这个 package entry 的友好名称。CLI 的 `--package <name>` 和 release cwd 匹配都会用它。
 
 ## `outDir`
 
-`outDir` 指向消费者实际安装到的构建后 package 目录，通常是 `packages/*/dist`。这个目录里应该有发布用的 `package.json`、JavaScript、declarations、README 和 license 文件。
+`outDir` 指向消费者实际安装到的构建后 package 目录，通常是 `packages/*/dist`。这个目录里应该有发布用的 `package.json`、JavaScript 和 declarations。README/license 与 tarball 卫生由 `limina release check` 校验。
 
 ## `checks`
 
 `checks` 控制启用哪些工具：
 
-- `publint`：检查 package metadata 和发布问题；
+- `publint`：检查消费者视角的 package metadata 和 exports 问题；
 - `attw`：用 Are The Types Wrong 检查类型解析；
 - `boundary`：扫描构建后的 JavaScript imports，检查 runtime 和依赖边界。
 
@@ -73,7 +73,7 @@ export default defineConfig({
 import { readFileSync } from 'node:fs';
 ```
 
-`limina package check --package @acme/core` 会在 output 层检查 `types`、exports 和 runtime imports。若这个 target 的 `boundary.environment` 是 `browser`，残留的 `node:fs` 也会被当作浏览器产物边界问题报告出来。
+`limina package check --package @acme/core` 会在 output 层检查 `types`、exports 和 runtime imports。若这个 entry 的 `boundary.environment` 是 `browser`，残留的 `node:fs` 也会被当作浏览器产物边界问题报告出来。
 
 完整一点看，目录可以是：
 
@@ -84,6 +84,10 @@ packages/core/
   dist/index.js
 ```
 
-源码 `src/index.ts` 可能已经通过 checker build/source execution，但发布时消费者安装的是 `dist`。运行 `pnpm exec limina package check --package @acme/core` 时，Limina 会读取 `packageChecks.targets` 里 `name` 匹配的 target，然后在 `outDir` 指向的 `packages/core/dist` 中运行配置好的 `publint`、`attw` 和 `boundary`。
+源码 `src/index.ts` 可能已经通过 checker build/source execution，但发布时消费者安装的是 `dist`。运行 `pnpm exec limina package check --package @acme/core` 时，Limina 会读取 `package.entries` 里 `name` 匹配的 entry，然后在 `outDir` 指向的 `packages/core/dist` 中运行配置好的 `publint`、`attw` 和 `boundary`。
 
-结果可能是多个层面的失败：`attw` 发现 `types` 指向 `missing.d.ts`；`boundary` 在 browser target 中发现 `node:fs`；公开 package 还会被要求包含 README 和 license。这样发布前检查的是消费者实际拿到的产物，而不是开发态源码。
+结果可能是多个层面的失败：`attw` 发现 `types` 指向 `missing.d.ts`；`boundary` 在 browser entry 中发现 `node:fs`。Package checks 校验的是消费者实际拿到的 package 在 resolver 和 runtime 维度的行为，而不是开发态源码。
+
+## Release checks
+
+`limina release check` 独立于 `package check`。它使用同一组 `package.entries` 做选择，打包 npm tarball，然后校验发布卫生和基于 npm registry metadata 的 workspace 发布依赖一致性。它会拒绝 private output、缺失 README/license、source map 文件、JavaScript `sourceMappingURL` 注释、packed manifest 泄露 `workspace:`/`link:`，以及不覆盖本地 workspace 版本的发布依赖 range。没有 `--package` 时，它要求 cwd 最近的 `package.json#name` 必须命中配置 entry；传入一个或多个 `--package <name>` 时会跳过 cwd 匹配。

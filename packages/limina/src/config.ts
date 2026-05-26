@@ -76,6 +76,7 @@ export type BuiltinTaskName =
   | 'graph:check'
   | 'package:check'
   | 'proof:check'
+  | 'release:check'
   | 'source:check';
 
 export type BuiltinCheckerPreset = 'svelte-check' | 'tsc' | 'vue-tsc';
@@ -340,15 +341,19 @@ export interface PackageBoundaryCheckConfig {
 }
 
 /**
- * One published package output to check.
+ * One published package output entry.
  */
-export interface PackageCheckTarget {
+export interface PackageEntry {
+  /**
+   * Package name used by CLI filters, reports, and cwd release matching.
+   */
+  name: string;
   /**
    * Built package directory to scan, relative to the inferred workspace root.
    */
   outDir: string;
   /**
-   * Package check tools enabled for this target.
+   * Package check tools enabled for this entry.
    *
    * @default ["publint", "attw", "boundary"]
    */
@@ -365,22 +370,16 @@ export interface PackageCheckTarget {
    * Built package import boundary settings.
    */
   boundary?: PackageBoundaryCheckConfig;
-  /**
-   * Friendly target name used by CLI filters and reports.
-   *
-   * Defaults to the `outDir` path.
-   */
-  name?: string;
 }
 
 /**
- * Published package check settings.
+ * Published package settings.
  */
-export interface PackageChecksConfig {
+export interface PackageConfig {
   /**
    * Built package outputs to check.
    */
-  targets?: PackageCheckTarget[];
+  entries?: PackageEntry[];
 }
 
 /**
@@ -398,7 +397,7 @@ export interface LiminaConfig {
   /**
    * Rules for checking built package outputs before publishing.
    */
-  packageChecks?: PackageChecksConfig;
+  package?: PackageConfig;
   /**
    * Options for generating TypeScript source `paths` compatibility files.
    */
@@ -422,6 +421,7 @@ export type LiminaCommand =
   | 'package'
   | 'paths'
   | 'proof'
+  | 'release'
   | 'source'
   | (string & {});
 

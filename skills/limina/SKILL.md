@@ -56,20 +56,21 @@ export default defineConfig({
 
 ## CLI quick reference
 
-| Command                                                            | Purpose                                                        | Exit non-zero when                                                                                                    |
-| ------------------------------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `limina init [--yes]`                                              | Bootstrap declaration graph, aggregators, config, root script  | Reserved tsconfig names already exist, ambiguous `tsconfig.json` role, `workspace:*` import can't be mapped to a leaf |
-| `limina check`                                                     | Run built-in default pipeline                                  | Any of `graph:check`, `source:check`, `proof:check`, `checker:build`, `checker:typecheck` fails                       |
-| `limina check <pipeline>`                                          | Run a user pipeline from `pipelines`                           | Pipeline name missing, or any step fails                                                                              |
-| `limina graph check`                                               | Project refs match real imports; deny rules; dts option parity | Reference mismatch, denied dep/ref, missing project reference, cross-package relative import, etc.                    |
-| `limina source check`                                              | Package-owner boundary checks                                  | Relative import crosses package, bare import not in deps/devDeps, `#imports` outside owner scope                      |
-| `limina proof check`                                               | Declaration leaf ↔ companion alignment, source coverage       | Missing companion, drifted compilerOptions, uncovered source file, duplicate graph coverage                           |
-| `limina paths generate`                                            | Write `tsconfig.dts.paths.generated.json`                      | (Never fails on stale; use `paths check` for CI)                                                                      |
-| `limina paths apply`                                               | Alias for `paths generate`                                     | —                                                                                                                     |
-| `limina paths check`                                               | Fail if generated path files are stale                         | Any generated file is outdated or missing                                                                             |
-| `limina checker build`                                             | Build execution for first-class checkers (`tsc`, `vue-tsc`)    | Any checker exits non-zero                                                                                            |
-| `limina checker typecheck`                                         | Direct execution for source-only checkers (`svelte-check`)     | Any checker exits non-zero, or peer dep missing                                                                       |
-| `limina package check [--package N] [--tool T] [--attw-profile P]` | publint + attw + boundary on built outputs                     | Any check fails, or required `README.md`/`LICENSE.md` missing for public output                                       |
+| Command                                                            | Purpose                                                        | Exit non-zero when                                                                                                      |
+| ------------------------------------------------------------------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `limina init [--yes]`                                              | Bootstrap declaration graph, aggregators, config, root script  | Reserved tsconfig names already exist, ambiguous `tsconfig.json` role, `workspace:*` import can't be mapped to a leaf   |
+| `limina check`                                                     | Run built-in default pipeline                                  | Any of `graph:check`, `source:check`, `proof:check`, `checker:build`, `checker:typecheck` fails                         |
+| `limina check <pipeline>`                                          | Run a user pipeline from `pipelines`                           | Pipeline name missing, or any step fails                                                                                |
+| `limina graph check`                                               | Project refs match real imports; deny rules; dts option parity | Reference mismatch, denied dep/ref, missing project reference, cross-package relative import, etc.                      |
+| `limina source check`                                              | Package-owner boundary checks                                  | Relative import crosses package, bare import not in deps/devDeps, `#imports` outside owner scope                        |
+| `limina proof check`                                               | Declaration leaf ↔ companion alignment, source coverage       | Missing companion, drifted compilerOptions, uncovered source file, duplicate graph coverage                             |
+| `limina paths generate`                                            | Write `tsconfig.dts.paths.generated.json`                      | (Never fails on stale; use `paths check` for CI)                                                                        |
+| `limina paths apply`                                               | Alias for `paths generate`                                     | —                                                                                                                       |
+| `limina paths check`                                               | Fail if generated path files are stale                         | Any generated file is outdated or missing                                                                               |
+| `limina checker build`                                             | Build execution for first-class checkers (`tsc`, `vue-tsc`)    | Any checker exits non-zero                                                                                              |
+| `limina checker typecheck`                                         | Direct execution for source-only checkers (`svelte-check`)     | Any checker exits non-zero, or peer dep missing                                                                         |
+| `limina package check [--package N] [--tool T] [--attw-profile P]` | publint + attw + boundary on built outputs                     | Any configured package tool fails                                                                                       |
+| `limina release check [--package N]`                               | Release hygiene and dependency consistency for package entries | Cwd package name is not configured, package output is private/missing/dirty, or workspace publish deps are inconsistent |
 
 Global flags on every command: `--config <path>` (override config file), `--mode <mode>` (passed to function-style configs, defaults to `NODE_ENV` then `"default"`).
 
@@ -77,7 +78,7 @@ For complete flag tables and exit semantics: see [references/cli.md](references/
 
 ## Built-in task names (use inside `pipelines`)
 
-`graph:check`, `source:check`, `proof:check`, `checker:build`, `checker:typecheck`, `package:check`
+`graph:check`, `source:check`, `proof:check`, `checker:build`, `checker:typecheck`, `package:check`, `release:check`
 
 The default `limina check` pipeline (no name argument) runs `graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck` in that order. `limina check <name>` ONLY runs user pipelines — it does NOT fall back to the default if the name is missing.
 
@@ -106,6 +107,7 @@ pnpm exec limina check
 ```sh
 pnpm build
 pnpm exec limina package check
+pnpm exec limina release check --package <name>
 pnpm exec limina check publish    # only if a `publish` pipeline is defined
 ```
 
@@ -120,6 +122,7 @@ export default defineConfig({
       'proof:check',
       { type: 'command', command: 'pnpm', args: ['build'] },
       'package:check',
+      'release:check',
     ],
   },
 });
@@ -255,7 +258,7 @@ Load only what the current task needs:
 - [references/config-schema.md](references/config-schema.md) — Complete `LiminaConfig` schema, every field, defaults, and validation behavior.
 - [references/cli.md](references/cli.md) — Every command, flag, action, and exit-code rule.
 - [references/architecture.md](references/architecture.md) — Declaration leaf vs companion, project graph rules, source-vs-artifact dependency semantics, `tsconfig.json` role rules.
-- [references/package-checks.md](references/package-checks.md) — `publint`, `@arethetypeswrong/core`, and the runtime import-boundary auditor; ATTW profiles; `private` vs public outputs and required files.
+- [references/package-checks.md](references/package-checks.md) — `publint`, `@arethetypeswrong/core`, runtime import-boundary auditing, ATTW profiles, and the release-only tarball hygiene split.
 - [references/troubleshooting.md](references/troubleshooting.md) — Failure-by-failure cause/fix table for every error class Limina emits.
 
 ## Design principles (project-side guarantees Limina enforces)

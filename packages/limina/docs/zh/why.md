@@ -48,13 +48,13 @@ Limina 的 source check 把规则说清楚：
 
 源码图通过，只能说明源码层比较一致。消费者安装的是构建后的产物，不是你的源码 tsconfig。
 
-Limina package checks 会在构建后运行。它会 pack 产物，并检查 package metadata、类型解析、runtime import、依赖声明、self import、README 和 license 文件。这类问题通常不是 `tsc` 能单独发现的。
+Limina package checks 会在构建后运行。它会在需要时 pack 产物，并检查消费者视角的 package metadata、类型解析、runtime import、依赖声明和 self import。Release checks 随后校验 README/license、source map 禁令、packed manifest 一致性和基于 registry 的 workspace 发布顺序等发布卫生问题。这类问题通常不是 `tsc` 能单独发现的。
 
 例如：源码 typecheck 通过了，但 `dist/package.json` 的 `types` 指向不存在的文件，或者 browser output 里残留了 `node:fs`。`limina package check` 会在发布前失败。修完后，你确认的是消费者实际安装到的 package，而不只是仓库里的源码能不能通过类型检查。
 
 ## 设计目标
 
-Limina 希望规则保持可见。它不会把策略藏在 preset 里，而是把 checker entry、graph rules、package targets、allowlist、paths options 和 pipelines 都放在 `limina.config.mjs`。
+Limina 希望规则保持可见。它不会把策略藏在 preset 里，而是把 checker entry、graph rules、package entries、allowlist、paths options 和 pipelines 都放在 `limina.config.mjs`。
 
 这样架构变更就是代码审查可以读到的内容，而不是 merge 后才由 CI 报出来的惊喜。
 

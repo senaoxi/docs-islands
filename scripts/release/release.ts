@@ -75,6 +75,21 @@ function runPackageArtifactChecks(config: ResolvedReleasePackageConfig): void {
   );
 }
 
+function runPackageReleaseConsistencyChecks(
+  config: ResolvedReleasePackageConfig,
+): void {
+  ReleaseLogger.info(`Running release checks for ${config.packageName}`);
+  runCommand(
+    getPnpmCommand(),
+    ['exec', 'limina', 'release', 'check', '--package', config.packageName],
+    {
+      cwd: REPO_ROOT,
+      stdio: 'inherit',
+      logger: ReleaseLogger,
+    },
+  );
+}
+
 function getWorkspaceDependencies(manifest: ReleasePackageManifest): string[] {
   const dependencies: string[] = [];
   const candidates = [manifest.dependencies, manifest.devDependencies];
@@ -173,6 +188,7 @@ function runStandardPackageReleaseChecks(
     getPackageScriptRunner(config, 'build');
     verifyDistVersion(plan);
     runPackageArtifactChecks(config);
+    runPackageReleaseConsistencyChecks(config);
     runCommand(getNpmCommand(), ['pack', '--dry-run'], {
       cwd: config.publishDir,
       stdio: 'inherit',
@@ -207,6 +223,7 @@ function runPackageReleaseChecks(
     buildVitepressProject(config);
     verifyDistVersion(plan);
     runPackageArtifactChecks(config);
+    runPackageReleaseConsistencyChecks(config);
     runCommand(getNpmCommand(), ['pack', '--dry-run'], {
       cwd: config.publishDir,
       stdio: 'inherit',

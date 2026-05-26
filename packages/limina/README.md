@@ -34,6 +34,7 @@ Limina makes these rules reviewable, runnable, and suitable for CI.
 - **Compatibility path generation**: writes opt-in `tsconfig.dts.paths.generated.json` files for `workspace:*` dependencies whose package exports still point at build artifacts.
 - **Checker target runner**: runs configured TypeScript and UI-framework checker entries in `typecheck` or `build` execution mode.
 - **Published package checks**: validates built package outputs with `publint`, Are The Types Wrong, and a runtime import boundary audit.
+- **Release checks**: verifies npm tarball hygiene, source/packed manifest consistency, and registry-backed workspace publish order.
 - **Composable pipelines**: combines built-in checks and shell commands into named workflows such as `typecheck`, `package`, and `publish`.
 - **Typed configuration**: ships `defineConfig(...)` for editor hints and typed user configs.
 
@@ -95,8 +96,8 @@ export default defineConfig({
     ],
   },
 
-  packageChecks: {
-    targets: [
+  package: {
+    entries: [
       {
         name: '@acme/core',
         outDir: 'packages/core/dist',
@@ -106,7 +107,7 @@ export default defineConfig({
 
   pipelines: {
     package: ['package:check'],
-    publish: ['graph:check', 'proof:check', 'package:check'],
+    publish: ['graph:check', 'proof:check', 'package:check', 'release:check'],
   },
 });
 ```
@@ -151,7 +152,7 @@ A dependency declared as `link:`, `file:`, `catalog:`, or normal semver is treat
 
 ### Package checks
 
-Source graph checks do not prove that an installed package works for consumers. `limina package check` inspects built package outputs under `packageChecks.targets[].outDir` and checks the actual package manifest, exports, type resolution, and runtime imports. Publishable outputs whose `package.json` does not set `private: true` must also include root `README.md` and `LICENSE.md` files.
+Source graph checks do not prove that an installed package works for consumers. `limina package check` inspects built package outputs under `package.entries[].outDir` and checks the actual package manifest, exports, type resolution, and runtime imports with `publint`, `attw`, and `boundary`. `limina release check` owns npm publish hygiene: private-output rejection, required README/license files, source map bans, source/packed manifest consistency, and registry-backed workspace publish order.
 
 ## CLI
 
@@ -171,9 +172,11 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina checker build`                          | Run build execution for checker entries that support it.                              |
 | `limina checker typecheck`                      | Run source-only checker entries such as `svelte-check`.                               |
 | `limina package check`                          | Run configured package output checks.                                                 |
-| `limina package check --package <name>`         | Check one configured package target.                                                  |
+| `limina package check --package <name>`         | Check one configured package entry.                                                   |
 | `limina package check --tool <tool>`            | Run only `publint`, `attw`, or `boundary`.                                            |
 | `limina package check --attw-profile <profile>` | Override the ATTW profile: `strict`, `node16`, or `esm-only`.                         |
+| `limina release check`                          | Check release hygiene and dependency consistency for the cwd package entry.           |
+| `limina release check --package <name>`         | Check release hygiene and dependency consistency for one or more package entries.     |
 
 ## Configuration reference
 
@@ -269,11 +272,11 @@ proof: {
 
 Checker entries cover files validated by TypeScript or framework-aware tools. Allowlist entries are the final fallback after all configured checker entries fail to cover a source file; they should be rare and must include a reason.
 
-### `packageChecks`
+### `package`
 
 ```js
-packageChecks: {
-  targets: [
+package: {
+  entries: [
     {
       name: '@acme/core',
       outDir: 'packages/core/dist',
@@ -289,7 +292,7 @@ packageChecks: {
 }
 ```
 
-`outDir` must point at the built package directory that contains the publish-ready `package.json`. If that manifest does not set `private: true`, the same directory must also contain `README.md` and `LICENSE.md`.
+`outDir` must point at the built package directory that contains the publish-ready `package.json`. `package:check` uses this output for consumer-facing resolver and runtime checks; `release:check` packs the same output and verifies publish hygiene such as README/license files and source map bans.
 
 ### `pipelines`
 
@@ -356,7 +359,7 @@ Run the command from inside the workspace, or pass `--config ./limina.config.mjs
 
 Limina infers the workspace root from `pnpm-workspace.yaml`. Place the config inside the workspace or pass a config path located under the workspace root.
 
-### `packageChecks.targets[x].outDir` is invalid
+### `package.entries[x].outDir` is invalid
 
 Set `outDir` to the built package directory, not the source package directory, unless that directory is itself the publish-ready package output.
 

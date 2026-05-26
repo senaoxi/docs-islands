@@ -31,7 +31,7 @@ interface LiminaConfigEnv {
 interface LiminaConfig {
   config?: SharedLiminaConfig;
   graph?: GraphConfig;
-  packageChecks?: PackageChecksConfig;
+  package?: PackageConfig;
   paths?: PathsConfig;
   pipelines?: Record<string, PipelineStep[]>;
   proof?: ProofConfig;
@@ -189,14 +189,14 @@ Validation rules enforced by `proof:check`:
 - File must fall inside the configured source boundary — an allowlist for a file the boundary already excludes is an error.
 - File must NOT already be covered by a checker entry — redundant allowlists are an error.
 
-## `packageChecks.targets`
+## `package.entries`
 
-Each target describes one built package output that must be inspected before publish.
+Each entry describes one built package output that must be inspected before publish.
 
 ```ts
-interface PackageCheckTarget {
+interface PackageEntry {
+  name: string; // required; used by --package and release cwd matching
   outDir: string; // required
-  name?: string; // defaults to outDir relpath
   checks?: ('publint' | 'attw' | 'boundary')[]; // defaults to all three
   publint?: { strict?: boolean }; // default { strict: true }
   attw?: { profile?: 'strict' | 'node16' | 'esm-only' }; // default 'esm-only'
@@ -209,16 +209,23 @@ interface PackageCheckTarget {
 
 Behavior:
 
+- `name` is required and must match `package.json#name` for cwd-based `release:check`.
 - `outDir` is resolved relative to the workspace root and MUST be the publish-ready directory (the one containing the built `package.json`, JS files, and declarations).
-- If `<outDir>/package.json` does not set `private: true`, the same directory MUST also contain `README.md` and `LICENSE.md`, or `package:check` fails.
+- `package:check` runs only the configured consumer-facing tools: `publint`, `attw`, and `boundary`.
+- `release:check` uses the same entry selection, rejects `private: true`, packs the npm tarball, checks publish hygiene (`README.md`, `LICENSE.md`, no source maps), and runs npm registry-backed workspace publish dependency consistency.
 - `boundary.environment` defaults to a heuristic: paths starting with `node/` or `plugin/` are classified `node`, everything else is `browser`. Override with a string for whole-package environments, or a function for per-file rules.
 - `attw.profile = 'esm-only'` ignores `node16-cjs` resolutions; `node16` ignores none; `strict` ignores none.
 
 CLI overrides for `limina package check`:
 
-- `--package <name>` filters to one target by `name` (or runs all when the cwd's nearest `package.json#name` does not match a configured target).
+- `--package <name>` filters to one or more entries by `name` (or runs all when the cwd's nearest `package.json#name` does not match a configured entry).
 - `--tool <publint | attw | boundary | all>` runs only the listed tool (passing `all` is equivalent to omitting the flag).
 - `--attw-profile <strict | node16 | esm-only>` overrides the configured ATTW profile for this invocation.
+
+CLI overrides for `limina release check`:
+
+- `--package <name>` filters to one or more entries by `name` and skips cwd matching.
+- Without `--package`, the cwd's nearest `package.json#name` MUST match one configured entry.
 
 See [package-checks.md](package-checks.md) for the full check semantics.
 
@@ -244,6 +251,7 @@ type BuiltinTaskName =
   | 'graph:check'
   | 'package:check'
   | 'proof:check'
+  | 'release:check'
   | 'source:check';
 ```
 

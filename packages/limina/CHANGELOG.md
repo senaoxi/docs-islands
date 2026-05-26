@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 
-- feat(limina): release dependency consistency check for package check ([04749e4](https://github.com/XiSenao/docs-islands/commit/04749e4))
+- feat(limina): release dependency consistency check ([04749e4](https://github.com/XiSenao/docs-islands/commit/04749e4))
 - feat(limina): vue-tsc as a first-class citizen ([e640742](https://github.com/XiSenao/docs-islands/commit/e640742))
 
 ### Documentation

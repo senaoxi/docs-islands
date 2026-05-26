@@ -256,25 +256,32 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 - **Cause**: `outDir` does not exist or has no `package.json`.
 - **Fix**: Build the package first (`pnpm build`), and confirm `outDir` points at the publish-ready directory, not the source directory.
 
-### `publishable package output for <label> at <outDir> is missing required file(s): README.md, LICENSE.md.`
-
-- **Cause**: The output `package.json` is not `private: true` but the directory is missing `README.md` and/or `LICENSE.md`.
-- **Fix**: Add those files to the build output, OR set `private: true` in the OUTPUT manifest.
-
 ### `publint found N issue(s):` / `attw found N problem(s):` / `package boundary found N issue(s):`
 
 - **Cause**: Individual tool failures. Each issue is logged above the summary line with the exact rule that failed.
 - **Fix**: Read each issue line, address it in the build output (fix exports, fix types, remove an unauthorized import, add a missing dependency to the output manifest, add the package to `boundary.ignoredExternalPackages` if it's an intentional shim, etc.).
 
-### `No package check targets are configured.` / `No package check target named "..." is configured.`
+### `No package entries are configured.` / `No package entry named "..." is configured.`
 
-- **Cause**: `packageChecks.targets` is empty, or `--package <name>` does not match any configured target.
-- **Fix**: Add a target to the config, or remove/correct `--package`.
+- **Cause**: `package.entries` is empty, or `--package <name>` does not match any configured entry.
+- **Fix**: Add an entry to the config, or remove/correct `--package`.
 
-### `No package check targets have "<tool>" enabled.` / `No package checks are enabled.`
+### `No package entries have "<tool>" enabled.` / `No package checks are enabled.`
 
-- **Cause**: `--tool <name>` resolved to zero runnable targets across the selection.
-- **Fix**: Either add the tool to the target's `checks` array, or drop `--tool` from the command.
+- **Cause**: `--tool <name>` resolved to zero runnable entries across the selection.
+- **Fix**: Either add the tool to the entry's `checks` array, or drop `--tool` from the command.
+
+## Release check
+
+### `Release tarball is not publishable:`
+
+- **Cause**: The selected release output cannot be published cleanly. Common causes include `private: true`, missing `README.md`/`LICENSE.md`, packed `*.map` files, or JavaScript files with `sourceMappingURL` comments.
+- **Fix**: Remove `private: true` from publishable output manifests, copy README/license files into the packed output, exclude source map files from the package, and strip source map directives from emitted JavaScript.
+
+### `No package name was found from cwd up to the workspace root.`
+
+- **Cause**: `limina release check` was run without `--package` outside a configured package directory, or the nearest `package.json` has no `name`.
+- **Fix**: Run from a package directory whose `package.json#name` matches `package.entries[].name`, or pass `--package <name>`.
 
 ## Pipelines
 

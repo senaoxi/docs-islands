@@ -48,13 +48,13 @@ For example, `packages/app/src/main.ts` reaches into another package with `../co
 
 A source graph can pass while the published package is still broken. Consumers install the built output, not your source tsconfigs.
 
-Limina package checks run after your build. They pack the output and check package metadata, type resolution, runtime imports, dependency declarations, self imports, README, and license files. This catches a different class of release bugs than `tsc`.
+Limina package checks run after your build. They pack the output when needed and check consumer-facing package metadata, type resolution, runtime imports, dependency declarations, and self imports. Release checks then validate publish hygiene such as README/license files, source map bans, packed manifest consistency, and registry-backed workspace publish order. Together, they catch a different class of release bugs than `tsc`.
 
 For example, source typechecking passes, but `dist/package.json` points `types` at a missing declaration file, or browser output still imports `node:fs`. `limina package check` fails before release. The thing being validated is the package consumers install, not only the source tree in your repository.
 
 ## The Design Goal
 
-Limina tries to keep the rules visible. Instead of hiding policy in a preset, it keeps checker entries, graph rules, package targets, allowlists, paths options, and pipelines in `limina.config.mjs`.
+Limina tries to keep the rules visible. Instead of hiding policy in a preset, it keeps checker entries, graph rules, package entries, allowlists, paths options, and pipelines in `limina.config.mjs`.
 
 That makes architecture changes something reviewers can read, not something CI discovers only after the merge.
 

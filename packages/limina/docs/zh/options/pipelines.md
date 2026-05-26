@@ -14,6 +14,7 @@ export default defineConfig({
       'checker:build',
       'checker:typecheck',
       'package:check',
+      'release:check',
       {
         type: 'command',
         command: 'pnpm',
@@ -33,6 +34,7 @@ export default defineConfig({
 - `graph:check`
 - `package:check`
 - `proof:check`
+- `release:check`
 - `source:check`
 
 也可以是简单外部命令。简单命令会按空白拆分；当参数里有空格、需要 `cwd` 或环境变量时，用 object form 更清楚。

@@ -17,8 +17,13 @@ import {
   loggerSpecCases,
 } from './logger-test-cases';
 
+const ANSI_ESCAPE_RE = new RegExp(
+  `${String.fromCodePoint(27)}\\[[\\d;]*m`,
+  'g',
+);
+
 const normalizeConsoleMessage = (value: unknown): string =>
-  String(value).replaceAll('%c', '');
+  String(value).replaceAll(ANSI_ESCAPE_RE, '').replaceAll('%c', '');
 
 const captureConsoleOutput = (): string[] => {
   const output: string[] = [];

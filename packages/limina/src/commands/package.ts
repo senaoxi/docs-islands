@@ -15,22 +15,18 @@ import { publint } from 'publint';
 import { formatMessage } from 'publint/utils';
 import type {
   PackageAttwProfile,
-  PackageCheckTarget,
   PackageCheckTool,
   PackageCheckToolSelection,
+  PackageEntry,
   ResolvedLiminaConfig,
   RuntimeEnvironment,
 } from '../config';
 import type { LiminaFlowReporter } from '../flow';
 import { PackageLogger, clearCliScreen, formatErrorMessage } from '../logger';
-import {
-  PackageReleaseConsistencyError,
-  assertPackageReleaseConsistency,
-} from '../package-release-consistency';
 import { toRelativePath } from '../utils/path';
 import { getPackageRootSpecifier } from '../workspace';
 
-interface DistPackageJson {
+export interface DistPackageJson {
   dependencies?: Record<string, string>;
   exports?: Record<string, unknown>;
   name: string;
@@ -54,7 +50,7 @@ export interface PublishedPackageBoundaryViolation {
   specifier: string;
 }
 
-interface PackedPackageTarball {
+export interface PackedPackageTarball {
   cleanup: () => Promise<void>;
   tarball: Buffer;
 }
@@ -71,20 +67,21 @@ export interface RunPackageCheckOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
-  targetName?: string;
+  packageNames?: readonly string[];
   tool?: PackageCheckToolSelection;
 }
 
-interface PlannedPackageCheckTarget {
+export interface PlannedPackageEntry {
   checks: PackageCheckTool[];
+  entryIndex: number;
   label: string;
   outDir: string;
-  rawTarget: PackageCheckTarget;
+  rawEntry: PackageEntry;
 }
 
-interface PackageCheckPlan {
+export interface PackageEntrySelectionPlan {
   selectionReason: string;
-  targets: PlannedPackageCheckTarget[];
+  entries: PlannedPackageEntry[];
 }
 
 const DEFAULT_PACKAGE_CHECKS: PackageCheckTool[] = [
@@ -105,8 +102,6 @@ const nodeBuiltinSpecifiers = new Set(
       : [specifier, `node:${specifier}`],
   ),
 );
-const REQUIRED_PUBLIC_PACKAGE_FILES = ['README.md', 'LICENSE.md'] as const;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -336,8 +331,8 @@ function formatAttwProblem(problem: Problem): string {
   }
 }
 
-function normalizeTargetChecks(target: PackageCheckTarget): PackageCheckTool[] {
-  const checks = target.checks ?? DEFAULT_PACKAGE_CHECKS;
+function normalizeEntryChecks(entry: PackageEntry): PackageCheckTool[] {
+  const checks = entry.checks ?? DEFAULT_PACKAGE_CHECKS;
   const normalizedChecks: PackageCheckTool[] = [];
 
   for (const check of checks) {
@@ -355,11 +350,11 @@ function normalizeTargetChecks(target: PackageCheckTarget): PackageCheckTool[] {
   return normalizedChecks;
 }
 
-function selectTargetChecks(
-  target: PackageCheckTarget,
+function selectEntryChecks(
+  entry: PackageEntry,
   requestedTool: PackageCheckToolSelection | undefined,
 ): PackageCheckTool[] {
-  const configuredChecks = normalizeTargetChecks(target);
+  const configuredChecks = normalizeEntryChecks(entry);
 
   if (!requestedTool || requestedTool === 'all') {
     return configuredChecks;
@@ -368,7 +363,7 @@ function selectTargetChecks(
   return configuredChecks.includes(requestedTool) ? [requestedTool] : [];
 }
 
-function findNearestPackageJsonPath(
+export function findNearestPackageJsonPath(
   cwd: string,
   rootDir: string,
 ): string | undefined {
@@ -407,7 +402,10 @@ function findNearestPackageJsonPath(
   }
 }
 
-function readCwdPackageName(cwd: string, rootDir: string): string | undefined {
+export function readCwdPackageName(
+  cwd: string,
+  rootDir: string,
+): string | undefined {
   const packageJsonPath = findNearestPackageJsonPath(cwd, rootDir);
 
   if (!packageJsonPath) {
@@ -431,88 +429,127 @@ function readCwdPackageName(cwd: string, rootDir: string): string | undefined {
   }
 }
 
-function formatConfiguredTargetNames(targets: PackageCheckTarget[]): string {
-  const names = targets
-    .map((target) => target.name)
-    .filter((name): name is string => Boolean(name));
+export function formatConfiguredPackageEntryNames(
+  entries: PackageEntry[],
+): string {
+  const names = entries.map((entry) => entry.name).filter(Boolean);
 
   return names.length > 0 ? names.join(', ') : '(none)';
 }
 
-function resolveTargetOutDir(options: {
+export function getConfiguredPackageEntries(
+  config: ResolvedLiminaConfig,
+): PackageEntry[] {
+  return config.package?.entries ?? [];
+}
+
+function normalizePackageNameFilters(
+  packageNames: readonly string[] | undefined,
+): string[] {
+  const normalizedNames: string[] = [];
+
+  for (const packageName of packageNames ?? []) {
+    const normalizedName = packageName.trim();
+
+    if (normalizedName && !normalizedNames.includes(normalizedName)) {
+      normalizedNames.push(normalizedName);
+    }
+  }
+
+  return normalizedNames;
+}
+
+export function resolvePackageEntryOutDir(options: {
   config: ResolvedLiminaConfig;
-  target: PackageCheckTarget;
-  targetIndex: number;
+  entry: PackageEntry;
+  entryIndex: number;
 }): string {
-  const outDir = (options.target as { outDir?: unknown }).outDir;
+  const outDir = (options.entry as { outDir?: unknown }).outDir;
 
   if (typeof outDir !== 'string' || outDir.trim().length === 0) {
     throw new Error(
-      `Invalid package check target at packageChecks.targets[${options.targetIndex}].outDir. Expected a non-empty string.`,
+      `Invalid package entry at package.entries[${options.entryIndex}].outDir. Expected a non-empty string.`,
     );
   }
 
   return path.resolve(options.config.rootDir, outDir);
 }
 
-function getTargetLabel(
-  config: ResolvedLiminaConfig,
-  target: PackageCheckTarget,
-  outDir: string,
-): string {
-  return target.name ?? toRelativePath(config.rootDir, outDir);
+export function getPackageEntryLabel(options: {
+  entry: PackageEntry;
+  entryIndex: number;
+}): string {
+  const name = (options.entry as { name?: unknown }).name;
+
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error(
+      `Invalid package entry at package.entries[${options.entryIndex}].name. Expected a non-empty string.`,
+    );
+  }
+
+  return name.trim();
 }
 
-function createTargetPlan(options: {
+function createEntryPlan(options: {
   config: ResolvedLiminaConfig;
+  entry: PackageEntry;
+  entryIndex: number;
   requestedTool: PackageCheckToolSelection | undefined;
-  target: PackageCheckTarget;
-  targetIndex: number;
-}): PlannedPackageCheckTarget {
-  const outDir = resolveTargetOutDir({
+}): PlannedPackageEntry {
+  const outDir = resolvePackageEntryOutDir({
     config: options.config,
-    target: options.target,
-    targetIndex: options.targetIndex,
+    entry: options.entry,
+    entryIndex: options.entryIndex,
   });
 
   return {
-    checks: selectTargetChecks(options.target, options.requestedTool),
-    label: getTargetLabel(options.config, options.target, outDir),
+    checks: selectEntryChecks(options.entry, options.requestedTool),
+    entryIndex: options.entryIndex,
+    label: getPackageEntryLabel({
+      entry: options.entry,
+      entryIndex: options.entryIndex,
+    }),
     outDir,
-    rawTarget: options.target,
+    rawEntry: options.entry,
   };
 }
 
-function createPackageCheckPlan(options: {
+export function createPackageEntrySelectionPlan(options: {
   config: ResolvedLiminaConfig;
   cwd: string;
-  targetName?: string;
+  packageNames?: readonly string[];
+  strictCwd: boolean;
   tool?: PackageCheckToolSelection;
-}): PackageCheckPlan {
-  const targets = options.config.packageChecks?.targets ?? [];
+}): PackageEntrySelectionPlan {
+  const entries = getConfiguredPackageEntries(options.config);
 
-  if (targets.length === 0) {
-    throw new Error('No package check targets are configured.');
+  if (entries.length === 0) {
+    throw new Error('No package entries are configured.');
   }
 
-  let selectedTargets: PackageCheckTarget[];
+  let selectedEntries: PackageEntry[];
   let selectionReason: string;
+  const packageNames = normalizePackageNameFilters(options.packageNames);
 
-  if (options.targetName) {
-    selectedTargets = targets.filter(
-      (target) => target.name === options.targetName,
-    );
+  if (packageNames.length > 0) {
+    selectedEntries = packageNames.map((packageName) => {
+      const entry = entries.find((candidate) => candidate.name === packageName);
 
-    if (selectedTargets.length === 0) {
-      throw new Error(
-        [
-          `No package check target named "${options.targetName}" is configured.`,
-          `Configured target names: ${formatConfiguredTargetNames(targets)}.`,
-        ].join(' '),
-      );
-    }
+      if (!entry) {
+        throw new Error(
+          [
+            `No package entry named "${packageName}" is configured.`,
+            `Configured package entries: ${formatConfiguredPackageEntryNames(
+              entries,
+            )}.`,
+          ].join(' '),
+        );
+      }
 
-    selectionReason = `--package "${options.targetName}" matched configured target name.`;
+      return entry;
+    });
+
+    selectionReason = `--package matched configured package entry name(s): ${packageNames.join(', ')}.`;
   } else {
     const cwdPackageName = readCwdPackageName(
       options.cwd,
@@ -520,31 +557,47 @@ function createPackageCheckPlan(options: {
     );
 
     if (cwdPackageName) {
-      selectedTargets = targets.filter(
-        (target) => target.name === cwdPackageName,
+      selectedEntries = entries.filter(
+        (entry) => entry.name === cwdPackageName,
       );
 
-      if (selectedTargets.length > 0) {
-        selectionReason = `nearest package.json name "${cwdPackageName}" matched configured target name.`;
+      if (selectedEntries.length > 0) {
+        selectionReason = `nearest package.json name "${cwdPackageName}" matched configured package entry name.`;
+      } else if (options.strictCwd) {
+        throw new Error(
+          [
+            `Nearest package.json name "${cwdPackageName}" does not match a configured package entry.`,
+            `Configured package entries: ${formatConfiguredPackageEntryNames(
+              entries,
+            )}.`,
+          ].join(' '),
+        );
       } else {
-        selectedTargets = targets;
-        selectionReason = `nearest package.json name "${cwdPackageName}" did not match configured target names; running all configured targets.`;
+        selectedEntries = entries;
+        selectionReason = `nearest package.json name "${cwdPackageName}" did not match configured package entries; running all configured entries.`;
       }
+    } else if (options.strictCwd) {
+      throw new Error(
+        [
+          'No package name was found from cwd up to the workspace root.',
+          'Run from a configured package directory or pass --package <name>.',
+        ].join(' '),
+      );
     } else {
-      selectedTargets = targets;
+      selectedEntries = entries;
       selectionReason =
-        'No package name was found from cwd up to the workspace root; running all configured targets.';
+        'No package name was found from cwd up to the workspace root; running all configured entries.';
     }
   }
 
   return {
     selectionReason,
-    targets: selectedTargets.map((target) =>
-      createTargetPlan({
+    entries: selectedEntries.map((entry) =>
+      createEntryPlan({
         config: options.config,
+        entry,
+        entryIndex: entries.indexOf(entry),
         requestedTool: options.tool,
-        target,
-        targetIndex: targets.indexOf(target),
       }),
     ),
   };
@@ -553,7 +606,7 @@ function createPackageCheckPlan(options: {
 function logPackageCheckPlan(options: {
   config: ResolvedLiminaConfig;
   cwd: string;
-  plan: PackageCheckPlan;
+  plan: PackageEntrySelectionPlan;
 }): void {
   PackageLogger.info(
     [
@@ -564,13 +617,13 @@ function logPackageCheckPlan(options: {
       )}`,
       `  cwd: ${toRelativePath(options.config.rootDir, options.cwd)}`,
       `  selection: ${options.plan.selectionReason}`,
-      '  targets:',
-      ...options.plan.targets.map((target) =>
+      '  entries:',
+      ...options.plan.entries.map((entry) =>
         [
-          `    - ${target.label}`,
-          `      outDir: ${toRelativePath(options.config.rootDir, target.outDir)}`,
+          `    - ${entry.label}`,
+          `      outDir: ${toRelativePath(options.config.rootDir, entry.outDir)}`,
           `      checks: ${
-            target.checks.length > 0 ? target.checks.join(', ') : '(none)'
+            entry.checks.length > 0 ? entry.checks.join(', ') : '(none)'
           }`,
         ].join('\n'),
       ),
@@ -578,7 +631,7 @@ function logPackageCheckPlan(options: {
   );
 }
 
-async function packOutputTarball(
+export async function packOutputTarball(
   outDir: string,
 ): Promise<PackedPackageTarball> {
   const destination = await mkdtemp(path.join(tmpdir(), '__LIMINA_PACKAGE__'));
@@ -600,7 +653,7 @@ async function packOutputTarball(
   };
 }
 
-async function readDistPackageJson(options: {
+export async function readDistPackageJson(options: {
   config?: ResolvedLiminaConfig;
   label?: string;
   packageJsonPath: string;
@@ -620,40 +673,6 @@ async function readDistPackageJson(options: {
   return JSON.parse(
     await readFile(options.packageJsonPath, 'utf8'),
   ) as DistPackageJson;
-}
-
-async function assertPublicPackageMetadata(options: {
-  config: ResolvedLiminaConfig;
-  label: string;
-  outDir: string;
-  packageJsonPath: string;
-}): Promise<DistPackageJson> {
-  const manifest = await readDistPackageJson({
-    config: options.config,
-    label: options.label,
-    packageJsonPath: options.packageJsonPath,
-  });
-
-  if (manifest.private === true) {
-    return manifest;
-  }
-
-  const missingFiles = REQUIRED_PUBLIC_PACKAGE_FILES.filter(
-    (fileName) => !existsSync(path.join(options.outDir, fileName)),
-  );
-
-  if (missingFiles.length === 0) {
-    return manifest;
-  }
-
-  throw new Error(
-    `publishable package output for ${options.label} at ${toRelativePath(
-      options.config.rootDir,
-      options.outDir,
-    )} is missing required file(s): ${missingFiles.join(
-      ', ',
-    )}. Add them to the built output or set "private": true in the output package.json.`,
-  );
 }
 
 async function runPublintCheck(options: {
@@ -807,7 +826,7 @@ async function runBoundaryCheck(
   return false;
 }
 
-async function runPackageCheckTarget(options: {
+async function runPackageCheckEntry(options: {
   attwProfile?: PackageAttwProfile;
   checks: PackageCheckTool[];
   config: ResolvedLiminaConfig;
@@ -815,32 +834,29 @@ async function runPackageCheckTarget(options: {
   flowDepth?: number;
   label: string;
   outDir: string;
-  rawTarget: PackageCheckTarget;
+  rawEntry: PackageEntry;
 }): Promise<boolean> {
-  const target = {
-    ...options.rawTarget,
+  const entry = {
+    ...options.rawEntry,
     outDir: options.outDir,
   };
   const label = options.label;
-  const outputPackageJsonPath = path.join(target.outDir, 'package.json');
-  const task = options.flow?.start(`package target: ${label}`, {
+  const outputPackageJsonPath = path.join(entry.outDir, 'package.json');
+  const task = options.flow?.start(`package entry: ${label}`, {
     depth: options.flowDepth ?? 0,
   });
 
   let packedDist: PackedPackageTarball | undefined;
 
   try {
-    const outputManifest = await assertPublicPackageMetadata({
+    await readDistPackageJson({
       config: options.config,
       label,
-      outDir: target.outDir,
       packageJsonPath: outputPackageJsonPath,
     });
 
     const needsPackedTarball =
-      outputManifest.private !== true ||
-      options.checks.includes('publint') ||
-      options.checks.includes('attw');
+      options.checks.includes('publint') || options.checks.includes('attw');
 
     if (needsPackedTarball) {
       const packTask = options.flow?.start(`package tarball: ${label}`, {
@@ -849,7 +865,7 @@ async function runPackageCheckTarget(options: {
       PackageLogger.info(`package tarball packing started: ${label}`);
       const packElapsed = createElapsedTimer();
       try {
-        packedDist = await packOutputTarball(target.outDir);
+        packedDist = await packOutputTarball(entry.outDir);
       } catch (error) {
         PackageLogger.error(
           `package tarball failed: ${label}: ${formatErrorMessage(error)}`,
@@ -868,26 +884,6 @@ async function runPackageCheckTarget(options: {
       packTask?.pass();
     }
 
-    if (outputManifest.private !== true) {
-      try {
-        await assertPackageReleaseConsistency({
-          config: options.config,
-          label,
-          outDir: target.outDir,
-          outputManifest,
-          packedTarball: packedDist!.tarball,
-        });
-      } catch (error) {
-        if (!(error instanceof PackageReleaseConsistencyError)) {
-          throw error;
-        }
-
-        PackageLogger.error(formatErrorMessage(error));
-        task?.fail(`package checks failed: ${label}`);
-        return false;
-      }
-    }
-
     let passed = true;
 
     if (options.checks.includes('publint')) {
@@ -896,7 +892,7 @@ async function runPackageCheckTarget(options: {
           flow: options.flow,
           flowDepth: (options.flowDepth ?? 0) + 1,
           label,
-          strict: target.publint?.strict ?? true,
+          strict: entry.publint?.strict ?? true,
           tarball: packedDist!.tarball,
         })) && passed;
     }
@@ -907,7 +903,7 @@ async function runPackageCheckTarget(options: {
           flow: options.flow,
           flowDepth: (options.flowDepth ?? 0) + 1,
           label,
-          profile: options.attwProfile ?? target.attw?.profile ?? 'esm-only',
+          profile: options.attwProfile ?? entry.attw?.profile ?? 'esm-only',
           tarball: packedDist!.tarball,
         })) && passed;
     }
@@ -916,8 +912,8 @@ async function runPackageCheckTarget(options: {
       passed =
         (await runBoundaryCheck(
           {
-            ...target.boundary,
-            outDir: target.outDir,
+            ...entry.boundary,
+            outDir: entry.outDir,
           },
           label,
           {
@@ -1031,10 +1027,11 @@ export async function runPackageCheck(
   try {
     PackageLogger.info('package check started');
 
-    const plan = createPackageCheckPlan({
+    const plan = createPackageEntrySelectionPlan({
       config: options.config,
       cwd,
-      targetName: options.targetName,
+      packageNames: options.packageNames,
+      strictCwd: false,
       tool: options.tool,
     });
 
@@ -1044,31 +1041,31 @@ export async function runPackageCheck(
       plan,
     });
 
-    const runnableTargets = plan.targets.filter(
-      (target) => target.checks.length > 0,
+    const runnableEntries = plan.entries.filter(
+      (entry) => entry.checks.length > 0,
     );
 
-    if (runnableTargets.length === 0) {
+    if (runnableEntries.length === 0) {
       throw new Error(
         options.tool && options.tool !== 'all'
-          ? `No package check targets have "${options.tool}" enabled.`
+          ? `No package entries have "${options.tool}" enabled.`
           : 'No package checks are enabled.',
       );
     }
 
     let passed = true;
 
-    for (const target of runnableTargets) {
+    for (const entry of runnableEntries) {
       passed =
-        (await runPackageCheckTarget({
+        (await runPackageCheckEntry({
           attwProfile: options.attwProfile,
-          checks: target.checks,
+          checks: entry.checks,
           config: options.config,
           flow: options.flow,
           flowDepth: (options.flowDepth ?? 0) + 1,
-          label: target.label,
-          outDir: target.outDir,
-          rawTarget: target.rawTarget,
+          label: entry.label,
+          outDir: entry.outDir,
+          rawEntry: entry.rawEntry,
         })) && passed;
     }
 

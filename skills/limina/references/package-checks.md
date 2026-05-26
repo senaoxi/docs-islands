@@ -1,6 +1,6 @@
 # Limina Package Checks Reference
 
-Detail on `limina package check` — the three tools that run against a BUILT package output (the directory that will be published), the rules they enforce, and how to configure each.
+Detail on `limina package check` and `limina release check` — the consumer-facing package tools, release-only tarball hygiene, and how both commands select configured package entries.
 
 ## When to run
 
@@ -15,22 +15,35 @@ pipelines: {
     'proof:check',
     { type: 'command', command: 'pnpm', args: ['build'] },
     'package:check',
+    'release:check',
   ],
 },
 ```
 
-## What is checked per target
+## What is checked per entry
 
-For every target selected by the CLI plan:
+For every entry selected by the CLI plan:
 
 1. **Manifest presence** — `<outDir>/package.json` must exist.
-2. **Required public files** — if `package.json.private !== true`, the output directory must also contain `README.md` AND `LICENSE.md`. Missing files are a hard error.
-3. **Tarball pack** (only if `publint` or `attw` is enabled) — Limina runs `@publint/pack` against `outDir` (with `ignoreScripts: true` and `packageManager: 'pnpm'`) into a temporary directory and feeds the buffer to both tools.
-4. **publint** — runs `publint` in strict mode (overridable) against the tarball. Every error and warning is logged; any message of type `error` or `warning` fails the check.
-5. **attw (Are The Types Wrong)** — calls `@arethetypeswrong/core`'s `checkPackage` on the tarball. Problems are filtered by the active profile, then any remaining problem fails the check.
-6. **boundary** — extracts bare-package import specifiers from every `.js`/`.mjs`/`.cjs` in the output via `es-module-lexer` and validates each.
+2. **Tarball pack** (only if `publint` or `attw` is enabled) — Limina runs `@publint/pack` against `outDir` (with `ignoreScripts: true` and `packageManager: 'pnpm'`) into a temporary directory and feeds the buffer to both tools.
+3. **publint** — runs `publint` in strict mode (overridable) against the tarball. Every error and warning is logged; any message of type `error` or `warning` fails the check.
+4. **attw (Are The Types Wrong)** — calls `@arethetypeswrong/core`'s `checkPackage` on the tarball. Problems are filtered by the active profile, then any remaining problem fails the check.
+5. **boundary** — extracts bare-package import specifiers from every `.js`/`.mjs`/`.cjs` in the output via `es-module-lexer` and validates each.
 
-The temporary tarball directory is removed after the target completes (success or failure).
+The temporary tarball directory is removed after the entry completes (success or failure).
+
+`package:check` does not enforce publish-only hygiene such as README/license files, `private: true`, source maps, registry metadata, or workspace publish order. Those belong to `release:check`.
+
+## What release check owns
+
+For every selected release entry, Limina reads `<outDir>/package.json`, rejects `private: true`, packs the npm tarball, and validates the tarball itself:
+
+1. The tarball must contain root `package.json`, `README.md`, and `LICENSE.md`.
+2. The tarball must not contain any `*.map` file.
+3. Tarball JavaScript files (`*.js`, `*.mjs`, `*.cjs`) must not contain `sourceMappingURL` directives (`//# sourceMappingURL=` or `/*# sourceMappingURL=... */`).
+4. Source publish dependency sections must not use `link:`, must not depend on private workspace packages, and `workspace:` dependencies must name real workspace packages.
+5. Packed publish dependency sections must not expose `workspace:` or `link:` and must keep ranges compatible with the local workspace dependency versions.
+6. Workspace packages in the publish dependency chain must already exist in npm registry metadata with a usable `gitHead`, unless they are the root package currently being checked.
 
 ## publint configuration
 
@@ -116,16 +129,22 @@ Violations are sorted by file path then by specifier and reported one per line:
 
 If the output uses `package.json#exports` subpaths or wildcard subpaths and your runtime imports `<name>/foo/bar`, the boundary check will pass only when `foo/bar` is covered by one of those keys.
 
-## Target selection rules
+## Entry selection rules
 
-`packageChecks.targets` may contain multiple targets. The CLI selects which to run:
+`package.entries` may contain multiple entries. `limina package check` selects which to run:
 
 1. `--package <name>` — filters by exact `name` match. Missing match is a hard error listing the configured names.
 2. No `--package`:
    - Read the nearest `package.json` from cwd, walking up to the workspace root.
-   - If the package name matches a configured target name, run only that target.
-   - Otherwise run every configured target.
-3. `--tool <name>` further restricts the per-target check list. If the resulting list is empty for every selected target, the run fails.
+   - If the package name matches a configured entry name, run only that entry.
+   - Otherwise run every configured entry.
+3. `--tool <name>` further restricts the per-entry check list. If the resulting list is empty for every selected entry, the run fails.
+
+`limina release check` uses stricter selection:
+
+1. `--package <name>` may be repeated and skips cwd matching.
+2. Without `--package`, the nearest cwd `package.json#name` must match one configured entry.
+3. A missing cwd package name or unmatched package name is a hard error.
 
 The selection reason is logged at the top of the run:
 
@@ -133,8 +152,8 @@ The selection reason is logged at the top of the run:
 Package check plan:
   config: limina.config.mjs
   cwd: packages/limina
-  selection: nearest package.json name "limina" matched configured target name.
-  targets:
+  selection: nearest package.json name "limina" matched configured entry name.
+  entries:
     - limina
       outDir: packages/limina/dist
       checks: publint, attw, boundary
@@ -145,8 +164,8 @@ Package check plan:
 ### Single ESM-only library, browser output
 
 ```js
-packageChecks: {
-  targets: [{
+package: {
+  entries: [{
     name: '@acme/runtime',
     outDir: 'packages/runtime/dist',
     // checks defaults to ['publint', 'attw', 'boundary']
@@ -160,8 +179,8 @@ packageChecks: {
 ### Mixed runtime package with a node-only subfolder
 
 ```js
-packageChecks: {
-  targets: [{
+package: {
+  entries: [{
     name: '@acme/sdk',
     outDir: 'packages/sdk/dist',
     boundary: {
@@ -175,8 +194,8 @@ packageChecks: {
 ### Stricter ATTW for a CJS+ESM dual-export
 
 ```js
-packageChecks: {
-  targets: [{
+package: {
+  entries: [{
     name: '@acme/duo',
     outDir: 'packages/duo/dist',
     attw: { profile: 'node16' },
@@ -191,9 +210,9 @@ pnpm exec limina package check --package @acme/sdk --tool publint
 pnpm exec limina package check --tool boundary
 ```
 
-### Public package missing `README.md` / `LICENSE.md`
+### Release tarball is not publishable
 
-Either add them to the build output OR set `private: true` in the OUTPUT `package.json` (not the source one). Limina enforces this on the artifact, not the source.
+Run `limina release check --package <name>` and fix the reported tarball issue: remove `private: true`, add missing README/license files to the packed output, exclude `*.map` files, or strip `sourceMappingURL` comments from emitted JavaScript.
 
 ## Programmatic boundary auditor
 

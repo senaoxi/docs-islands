@@ -137,6 +137,106 @@ describe('limina CLI', () => {
     }
   }, 15000);
 
+  it('runs release check with repeated package filters from the public command', async () => {
+    const rootDir = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-release-')),
+    );
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+
+    async function writePackage(packageName: string): Promise<void> {
+      const packageDirName = packageName.split('/').at(-1) ?? packageName;
+      const packageDir = path.join(rootDir, 'packages', packageDirName);
+      const outDir = path.join(packageDir, 'dist');
+
+      await writeText(
+        path.join(packageDir, 'package.json'),
+        stringifyConfig({
+          name: packageName,
+          version: '1.0.0',
+        }),
+      );
+      await writeText(path.join(packageDir, 'src/index.ts'), 'export {};\n');
+      await writeText(
+        path.join(outDir, 'package.json'),
+        stringifyConfig({
+          exports: {
+            '.': './index.js',
+          },
+          name: packageName,
+          version: '1.0.0',
+        }),
+      );
+      await writeText(
+        path.join(outDir, 'index.js'),
+        'export const value = 1;\n',
+      );
+      await writeText(path.join(outDir, 'README.md'), '# Example package\n');
+      await writeText(path.join(outDir, 'LICENSE.md'), 'MIT\n');
+    }
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages:\n  - packages/*\n',
+      );
+      await writePackage('@example/a');
+      await writePackage('@example/b');
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `export default ${JSON.stringify(
+          {
+            package: {
+              entries: [
+                {
+                  name: '@example/a',
+                  outDir: 'packages/a/dist',
+                },
+                {
+                  name: '@example/b',
+                  outDir: 'packages/b/dist',
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )};\n`,
+      );
+
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'release',
+          'check',
+          '--package',
+          '@example/a',
+          '--package',
+          '@example/b',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+
+      expect(result.stdout).toContain('limina release check');
+      expect(result.stdout).toContain('limina release passed');
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  }, 30000);
+
   it('runs init from the public command', async () => {
     const rootDir = await realpath(
       await mkdtemp(path.join(tmpdir(), 'limina-cli-init-')),

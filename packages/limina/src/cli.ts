@@ -5,6 +5,7 @@ import { runInit } from './commands/init';
 import { runPackageCheck } from './commands/package';
 import { runPaths } from './commands/paths';
 import { runProofCheck } from './commands/proof';
+import { runReleaseCheck } from './commands/release';
 import { runSourceCheck } from './commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
 import {
@@ -23,9 +24,14 @@ interface GlobalFlags {
   mode?: string;
 }
 
-interface PackageFlags extends GlobalFlags {
+interface PackageSelectionFlags {
+  package?: string | string[];
+}
+
+interface CheckFlags extends GlobalFlags, PackageSelectionFlags {}
+
+interface PackageFlags extends GlobalFlags, PackageSelectionFlags {
   attwProfile?: string;
-  package?: string;
   tool?: string;
 }
 
@@ -84,6 +90,22 @@ function parsePackageAttwProfile(
   );
 }
 
+function parsePackageNames(
+  packageName: string | string[] | undefined,
+): string[] | undefined {
+  if (!packageName) {
+    return undefined;
+  }
+
+  const packageNames = (
+    Array.isArray(packageName) ? packageName : [packageName]
+  )
+    .map((name) => name.trim())
+    .filter(Boolean);
+
+  return packageNames.length > 0 ? packageNames : undefined;
+}
+
 function createCliFlow() {
   clearCliScreen();
 
@@ -117,7 +139,11 @@ async function main(): Promise<void> {
       'check [pipeline]',
       'Run the default check or a configured pipeline',
     )
-    .action(async (pipeline: string | undefined, flags: GlobalFlags) => {
+    .option(
+      '-p, --package <name>',
+      'Run package-aware pipeline tasks for one package entry',
+    )
+    .action(async (pipeline: string | undefined, flags: CheckFlags) => {
       const flow = createCliFlow();
       flow.intro('limina check');
       const config = await load(flags, 'check');
@@ -125,6 +151,7 @@ async function main(): Promise<void> {
         ? await runPipeline(config, pipeline, {
             cwd: process.cwd(),
             flow,
+            packageNames: parsePackageNames(flags.package),
           })
         : await runDefaultCheck(config, {
             cwd: process.cwd(),
@@ -286,7 +313,7 @@ async function main(): Promise<void> {
 
   cli
     .command('package <action>', 'Check configured published package outputs')
-    .option('-p, --package <name>', 'Run a single package check target')
+    .option('-p, --package <name>', 'Run one package check entry')
     .option('--tool <tool>', 'Run one package check tool')
     .option('--attw-profile <profile>', 'Override the configured ATTW profile')
     .action(async (action: string, flags: PackageFlags) => {
@@ -302,7 +329,7 @@ async function main(): Promise<void> {
         config,
         cwd: process.cwd(),
         flow,
-        targetName: flags.package,
+        packageNames: parsePackageNames(flags.package),
         tool: parsePackageTool(flags.tool),
       });
 
@@ -311,6 +338,31 @@ async function main(): Promise<void> {
       }
 
       flow.outro(passed ? 'limina package passed' : 'limina package failed');
+    });
+
+  cli
+    .command('release <action>', 'Check package release readiness')
+    .option('-p, --package <name>', 'Run one release check package entry')
+    .action(async (action: string, flags: CheckFlags) => {
+      if (action !== 'check') {
+        throw new Error(`Unknown release action "${action}". Expected check.`);
+      }
+      const flow = createCliFlow();
+      flow.intro('limina release check');
+      const config = await load(flags, 'release');
+      const passed = await runReleaseCheck({
+        clearScreen: false,
+        config,
+        cwd: process.cwd(),
+        flow,
+        packageNames: parsePackageNames(flags.package),
+      });
+
+      if (!passed) {
+        process.exitCode = 1;
+      }
+
+      flow.outro(passed ? 'limina release passed' : 'limina release failed');
     });
 
   cli.parse(process.argv, { run: false });
