@@ -53,11 +53,3 @@ After adoption, Limina gives you checks that can live in local development, pull
 - before publishing, you can validate the actual `dist` output consumers install, including metadata, type entries, README, license, and runtime import boundaries.
 
 For a first-time user, the practical benefit is that you do not need to already be a monorepo expert to read the failure. The report usually points you toward the right category of fix: add a reference, declare a dependency, fix package exports, or repair package output.
-
-## Documentation Map
-
-- Read [Why Limina](./why.md) to understand the problem it solves.
-- Follow [Getting Started](./getting-started.md) to install Limina and run the first check.
-- Learn the terms in [Core Concepts](./concepts.md).
-- See what each command does in [Checks & Workflows](./checks-and-workflows.md).
-- Use the options pages for individual config fields, and [Reference](./reference.md) for CLI commands, FAQ, and maintainer release notes.

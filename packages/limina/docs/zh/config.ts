@@ -21,8 +21,8 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/zh/concepts',
       },
       {
-        text: 'limina 眼中的 pnpm monorepo',
-        link: '/zh/checks-and-workflows',
+        text: 'Monorepo',
+        link: '/zh/monorepo',
       },
       {
         text: '配置项',

@@ -21,8 +21,8 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/concepts',
       },
       {
-        text: 'Checks & Workflows',
-        link: '/checks-and-workflows',
+        text: 'Monorepo',
+        link: '/monorepo',
       },
       {
         text: 'Options',

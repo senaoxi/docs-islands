@@ -134,7 +134,3 @@ Before publishing Limina itself or a package governed by Limina, check that:
 - the package build has run;
 - `pnpm exec limina package check --package <name>` passes;
 - generated paths are current with `pnpm exec limina paths check` when paths are used.
-
-## License
-
-MIT

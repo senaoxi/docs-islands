@@ -1106,25 +1106,3 @@ built package outputs consumed by users
 | browser runtime import `node:fs`           | 运行时边界被破坏                         |
 | dist manifest exports/types 错误           | 源码健康但发布产物不健康                 |
 | dist import 未声明依赖                     | 消费者安装后可能缺依赖                   |
-
-<!--
-# 推荐文档组织方式
-
-用户侧文档建议不要一开始讲抽象概念，而是这样组织：
-
-```text
-1. limina 和 Nx/Turborepo 的区别
-2. 为什么 monorepo 需要 architecture conformance
-3. 用例一：workspace:* 却解析到 dist
-4. 用例二：跨包相对路径 import
-5. 用例三：dts leaf 没有严格 companion
-6. 用例四：tsconfig.json 职责混乱
-7. 用例五：client runtime 误用 Node API
-8. 用例六：源码文件没被 checker 覆盖
-9. 用例七：源码 import 未被 package.json 授权
-10. 用例八：源码检查通过但发布产物坏掉
-11. limina 的健康 monorepo 模型
-12. 推荐迁移路径
-```
-
-这种写法对用户更友好。用户会先看到“我确实遇到过这个问题”，然后才理解 limina 为什么要引入 graph、proof、source boundary、package checks 这些概念。 -->

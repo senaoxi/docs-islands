@@ -134,7 +134,3 @@ jobs:
 - package build 已经运行；
 - `pnpm exec limina package check --package <name>` 通过；
 - 使用 paths 时，`pnpm exec limina paths check` 确认 generated paths 未过期。
-
-## License
-
-MIT

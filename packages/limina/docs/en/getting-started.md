@@ -139,10 +139,3 @@ export default defineConfig({
 ```
 
 Built-in presets are `tsc`, `vue-tsc`, and `svelte-check`. Install the matching package when you enable a checker; `vue-tsc` entries also require `@vue/compiler-sfc` so Limina can parse SFC imports.
-
-## Next Steps
-
-- Read [Why Limina](./why.md) if you are still deciding what problem Limina solves.
-- Learn the model in [Core Concepts](./concepts.md).
-- See each command in [Checks & Workflows](./checks-and-workflows.md).
-- Add package output validation with [`packageChecks.targets`](./options/package-checks.md).
