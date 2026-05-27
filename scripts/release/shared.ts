@@ -132,7 +132,6 @@ export interface ReleaseCliOptions {
   skipChangelog: boolean;
   skipNpmPublish: boolean;
   skipPush: boolean;
-  skipGithubRelease: boolean;
   fromTag?: string;
   registry?: string;
   npmTag?: string;
@@ -273,10 +272,6 @@ export function getNpmCommand(): string {
 
 export function getGitCommand(): string {
   return process.platform === 'win32' ? 'git.exe' : 'git';
-}
-
-export function getGhCommand(): string {
-  return process.platform === 'win32' ? 'gh.exe' : 'gh';
 }
 
 export function readJsonFile<T>(filePath: string): T {
@@ -614,18 +609,6 @@ export function runCommand(
   }
 }
 
-export function commandExists(command: string): boolean {
-  try {
-    execFileSync(command, ['--version'], {
-      cwd: REPO_ROOT,
-      stdio: 'pipe',
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function readGitTags(): string[] {
   const output = runCommand(getGitCommand(), ['tag', '--list'], {
     logger: ReleaseLogger,
@@ -820,6 +803,60 @@ export async function promptForExecutionMode(): Promise<{
     return { dryRun, confirmed };
   } finally {
     rl.close();
+  }
+}
+
+export async function promptForChangelogReview(
+  plans: ReleasePlan[],
+): Promise<void> {
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      'Changelog generation requires manual review in an interactive terminal. Run release in a TTY, or update the changelog first and pass --skip-changelog.',
+    );
+  }
+
+  const changelogPaths = [
+    ...new Set(
+      plans.map((plan) => path.relative(REPO_ROOT, plan.config.changelogPath)),
+    ),
+  ];
+
+  ReleaseLogger.warn(
+    [
+      'Generated changelog entries need a human review before release continues.',
+      'Please edit these file(s) now if needed:',
+      ...changelogPaths.map((changelogPath) => `  - ${changelogPath}`),
+    ].join('\n'),
+  );
+
+  const { action } = await prompts(
+    {
+      type: 'select',
+      name: 'action',
+      message: 'Continue after changelog review?',
+      choices: [
+        {
+          title: 'Continue release',
+          value: 'continue',
+        },
+        {
+          title: 'Abort release',
+          value: 'abort',
+        },
+      ],
+      initial: 0,
+    },
+    {
+      onCancel() {
+        throw new Error('Release cancelled after changelog review');
+      },
+    },
+  );
+
+  process.stdout.write('\n');
+
+  if (action !== 'continue') {
+    throw new Error('Release cancelled after changelog review');
   }
 }
 

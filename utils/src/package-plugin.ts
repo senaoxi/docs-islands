@@ -1,3 +1,9 @@
+import type { Catalogs } from '@pnpm/catalogs.types';
+import { createExportableManifest } from '@pnpm/exportable-manifest';
+import {
+  readWorkspaceManifest,
+  type WorkspaceManifest,
+} from '@pnpm/workspace.read-manifest';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'rolldown';
@@ -79,10 +85,6 @@ export interface CreatePackageJsonPluginOptions {
   ) => void;
 }
 
-const RESOLVABLE_VERSION_PROTOCOL_PREFIXES = [
-  'workspace:',
-  'catalog:',
-] as const;
 const NON_PUBLISHABLE_VERSION_PROTOCOL_PREFIXES = [
   'link:',
   'file:',
@@ -99,247 +101,214 @@ const DEFAULT_DEPENDENCY_FIELDS = {
 } as const satisfies Partial<
   Record<DependencyFieldName, DependencyResolutionOptions | false>
 >;
+const DEPENDENCY_FIELD_NAMES = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+] as const satisfies readonly DependencyFieldName[];
 
-const installedPackageVersionCache = new Map<string, string>();
-const workspaceCatalogCache = new Map<string, CatalogMap>();
+type PnpmProjectManifest = Parameters<typeof createExportableManifest>[1];
 
-function stripYamlQuotes(value: string): string {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-    (trimmed.startsWith('"') && trimmed.endsWith('"'))
-  ) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-
-function parseCatalogs(source: string): CatalogMap {
-  const catalogs: CatalogMap = {};
-  const lines = source.split(/\r?\n/u);
-  let isInsideCatalogsSection = false;
-  let currentCatalogName: string | undefined;
-
-  for (const rawLine of lines) {
-    const line = rawLine.replaceAll('\t', '    ');
-    const trimmedLine = line.trim();
-
-    if (!isInsideCatalogsSection) {
-      if (trimmedLine === 'catalogs:') {
-        isInsideCatalogsSection = true;
-      }
-      continue;
-    }
-
-    if (trimmedLine.length === 0 || trimmedLine.startsWith('#')) {
-      continue;
-    }
-
-    const indent = line.length - line.trimStart().length;
-    if (indent === 0) {
-      break;
-    }
-
-    if (indent === 2 && trimmedLine.endsWith(':')) {
-      currentCatalogName = trimmedLine.slice(0, -1);
-      catalogs[currentCatalogName] = {};
-      continue;
-    }
-
-    if (indent !== 4 || !currentCatalogName) {
-      continue;
-    }
-
-    const separatorIndex = trimmedLine.indexOf(':');
-    if (separatorIndex === -1) {
-      continue;
-    }
-
-    const packageName = stripYamlQuotes(
-      trimmedLine.slice(0, separatorIndex).trim(),
-    );
-    const versionRange = stripYamlQuotes(
-      trimmedLine.slice(separatorIndex + 1).trim(),
-    );
-
-    if (packageName.length > 0 && versionRange.length > 0) {
-      catalogs[currentCatalogName][packageName] = versionRange;
-    }
-  }
-
-  return catalogs;
-}
-
-function loadWorkspaceCatalogs(workspaceConfigPath: string): CatalogMap {
-  const cachedCatalogs = workspaceCatalogCache.get(workspaceConfigPath);
-  if (cachedCatalogs) {
-    return cachedCatalogs;
-  }
-
-  const catalogs = parseCatalogs(readFileSync(workspaceConfigPath, 'utf8'));
-  workspaceCatalogCache.set(workspaceConfigPath, catalogs);
-  return catalogs;
-}
-
-function resolveInstalledPackageVersion(
-  packageRootDir: string,
+function createDependencyResolutionKey(
   packageName: string,
+  versionRange: string,
 ): string {
-  const cacheKey = `${packageRootDir}\0${packageName}`;
-  const cachedVersion = installedPackageVersionCache.get(cacheKey);
-  if (cachedVersion) {
-    return cachedVersion;
+  return `${packageName}\0${versionRange}`;
+}
+
+function createWorkspaceCatalogs(
+  workspaceManifest: WorkspaceManifest | undefined,
+): Catalogs {
+  const catalogs: CatalogMap = {};
+
+  if (workspaceManifest?.catalog) {
+    catalogs.default = { ...workspaceManifest.catalog };
   }
 
-  const manifestPath = path.resolve(
-    packageRootDir,
-    'node_modules',
-    ...packageName.split('/'),
-    'package.json',
+  for (const [catalogName, catalog] of Object.entries(
+    workspaceManifest?.catalogs ?? {},
+  )) {
+    catalogs[catalogName] = { ...catalog };
+  }
+
+  return catalogs as Catalogs;
+}
+
+function filterDependencyMapForPnpmExport(
+  dependencies: DependencyMap | undefined,
+  options: DependencyResolutionOptions,
+): DependencyMap | undefined {
+  if (!dependencies || typeof dependencies !== 'object') {
+    return undefined;
+  }
+
+  const { allowInternal = true, internalScopes = INTERNAL_SCOPES } = options;
+  if (allowInternal) {
+    return dependencies;
+  }
+
+  const resolvedEntries = Object.entries(dependencies).filter(
+    ([packageName]) =>
+      !internalScopes.some((scope) => packageName.startsWith(scope)),
   );
 
-  if (!existsSync(manifestPath)) {
-    throw new Error(
-      `Unable to resolve installed version for "${packageName}" from ${manifestPath}`,
-    );
+  if (resolvedEntries.length === 0) {
+    return undefined;
   }
 
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
-    version?: string;
+  return Object.fromEntries(resolvedEntries);
+}
+
+function createPnpmExportInputPackageJson(
+  packageJson: PackageJsonObject,
+  dependencyFields: Partial<
+    Record<DependencyFieldName, DependencyResolutionOptions | false>
+  >,
+): PackageJsonObject {
+  const pnpmExportInputPackageJson: PackageJsonObject = {
+    ...packageJson,
   };
-  if (!manifest.version) {
-    throw new Error(
-      `Installed manifest for "${packageName}" is missing a version field`,
+
+  for (const [fieldName, options] of Object.entries(dependencyFields) as [
+    DependencyFieldName,
+    DependencyResolutionOptions | false,
+  ][]) {
+    if (options === false) {
+      delete pnpmExportInputPackageJson[fieldName];
+      continue;
+    }
+
+    const filteredDependencies = filterDependencyMapForPnpmExport(
+      packageJson[fieldName],
+      options,
     );
+    if (filteredDependencies) {
+      pnpmExportInputPackageJson[fieldName] = filteredDependencies;
+    } else {
+      delete pnpmExportInputPackageJson[fieldName];
+    }
   }
 
-  installedPackageVersionCache.set(cacheKey, manifest.version);
-  return manifest.version;
+  return pnpmExportInputPackageJson;
+}
+
+async function createPnpmExportablePackageJson(
+  packageRootDir: string,
+  packageJson: PackageJsonObject,
+  workspaceRootDir: string,
+  dependencyFields: Partial<
+    Record<DependencyFieldName, DependencyResolutionOptions | false>
+  >,
+): Promise<PackageJsonObject> {
+  const workspaceManifest = await readWorkspaceManifest(workspaceRootDir);
+
+  return (await createExportableManifest(
+    packageRootDir,
+    createPnpmExportInputPackageJson(
+      packageJson,
+      dependencyFields,
+    ) as PnpmProjectManifest,
+    {
+      catalogs: createWorkspaceCatalogs(workspaceManifest),
+    },
+  )) as PackageJsonObject;
+}
+
+function createResolvedVersionRangeMap(
+  originalPackageJson: PackageJsonObject,
+  resolvedPackageJson: PackageJsonObject,
+): Map<string, string> {
+  const resolvedVersionRanges = new Map<string, string>();
+
+  for (const fieldName of DEPENDENCY_FIELD_NAMES) {
+    const originalDependencies = originalPackageJson[fieldName];
+    const resolvedDependencies = resolvedPackageJson[fieldName];
+    if (!originalDependencies || !resolvedDependencies) {
+      continue;
+    }
+
+    for (const [packageName, versionRange] of Object.entries(
+      originalDependencies,
+    )) {
+      const resolvedVersionRange = resolvedDependencies[packageName];
+      if (!resolvedVersionRange) {
+        continue;
+      }
+
+      resolvedVersionRanges.set(
+        createDependencyResolutionKey(packageName, versionRange),
+        resolvedVersionRange,
+      );
+    }
+  }
+
+  return resolvedVersionRanges;
+}
+
+function sanitizeDependencyMap(
+  dependencies: DependencyMap | undefined,
+  options: DependencyResolutionOptions = {},
+): DependencyMap | undefined {
+  if (!dependencies || typeof dependencies !== 'object') {
+    return undefined;
+  }
+
+  const {
+    allowInternal = true,
+    dropUnsupportedProtocols = false,
+    internalScopes = INTERNAL_SCOPES,
+  } = options;
+  const resolvedEntries = Object.entries(dependencies).flatMap(
+    ([packageName, versionRange]) => {
+      const isInternal = internalScopes.some((scope) =>
+        packageName.startsWith(scope),
+      );
+
+      if (!allowInternal && isInternal) {
+        return [];
+      }
+
+      const hasNonPublishableProtocol =
+        NON_PUBLISHABLE_VERSION_PROTOCOL_PREFIXES.some((prefix) =>
+          versionRange.startsWith(prefix),
+        );
+
+      if (hasNonPublishableProtocol) {
+        if (dropUnsupportedProtocols) {
+          return [];
+        }
+
+        throw new Error(
+          `Unsupported dependency protocol in published manifest: ${packageName}@${versionRange}`,
+        );
+      }
+
+      return [[packageName, versionRange]];
+    },
+  );
+
+  if (resolvedEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(resolvedEntries);
 }
 
 function createPluginContext(
   packageRootDir: string,
   workspaceConfigPath: string,
+  resolvedVersionRanges: ReadonlyMap<string, string>,
 ): PackageJsonPluginContext {
-  const resolveWorkspaceProtocolVersion = (
-    packageName: string,
-    versionRange: string,
-  ): string => {
-    const publishedVersion = resolveInstalledPackageVersion(
-      packageRootDir,
-      packageName,
-    );
-    const workspaceRange = versionRange.slice('workspace:'.length);
-
-    if (
-      workspaceRange.length === 0 ||
-      workspaceRange === '*' ||
-      workspaceRange.startsWith('./') ||
-      workspaceRange.startsWith('../') ||
-      workspaceRange.startsWith('/')
-    ) {
-      return publishedVersion;
-    }
-
-    if (workspaceRange === '^' || workspaceRange === '~') {
-      return `${workspaceRange}${publishedVersion}`;
-    }
-
-    return workspaceRange;
-  };
-
-  const resolveCatalogProtocolVersion = (
-    packageName: string,
-    versionRange: string,
-  ): string => {
-    const catalogName = versionRange.slice('catalog:'.length);
-    const catalog = loadWorkspaceCatalogs(workspaceConfigPath)[catalogName];
-    const resolvedVersion = catalog?.[packageName];
-
-    if (!resolvedVersion) {
-      throw new Error(
-        `Unable to resolve catalog version for "${packageName}" from catalog "${catalogName}"`,
-      );
-    }
-
-    return resolvedVersion;
-  };
-
   const resolvePublishedVersionRange = (
     packageName: string,
     versionRange: string,
   ): string => {
-    if (versionRange.startsWith('workspace:')) {
-      return resolveWorkspaceProtocolVersion(packageName, versionRange);
-    }
-
-    if (versionRange.startsWith('catalog:')) {
-      return resolveCatalogProtocolVersion(packageName, versionRange);
-    }
-
-    return versionRange;
-  };
-
-  const sanitizeDependencyMap = (
-    dependencies: DependencyMap | undefined,
-    options: DependencyResolutionOptions = {},
-  ): DependencyMap | undefined => {
-    if (!dependencies || typeof dependencies !== 'object') {
-      return undefined;
-    }
-
-    const {
-      allowInternal = true,
-      dropUnsupportedProtocols = false,
-      internalScopes = INTERNAL_SCOPES,
-    } = options;
-    const resolvedEntries = Object.entries(dependencies).flatMap(
-      ([packageName, versionRange]) => {
-        const isInternal = internalScopes.some((scope) =>
-          packageName.startsWith(scope),
-        );
-
-        if (!allowInternal && isInternal) {
-          return [];
-        }
-
-        const hasNonPublishableProtocol =
-          NON_PUBLISHABLE_VERSION_PROTOCOL_PREFIXES.some((prefix) =>
-            versionRange.startsWith(prefix),
-          );
-
-        if (hasNonPublishableProtocol) {
-          if (dropUnsupportedProtocols) {
-            return [];
-          }
-
-          throw new Error(
-            `Unsupported dependency protocol in published manifest: ${packageName}@${versionRange}`,
-          );
-        }
-
-        const hasResolvableProtocol = RESOLVABLE_VERSION_PROTOCOL_PREFIXES.some(
-          (prefix) => versionRange.startsWith(prefix),
-        );
-
-        if (!hasResolvableProtocol) {
-          return [[packageName, versionRange]];
-        }
-
-        return [
-          [
-            packageName,
-            resolvePublishedVersionRange(packageName, versionRange),
-          ],
-        ];
-      },
+    return (
+      resolvedVersionRanges.get(
+        createDependencyResolutionKey(packageName, versionRange),
+      ) ?? versionRange
     );
-
-    if (resolvedEntries.length === 0) {
-      return undefined;
-    }
-
-    return Object.fromEntries(resolvedEntries);
   };
 
   return {
@@ -498,15 +467,25 @@ export function createPackageJsonPlugin(
     );
   }
 
-  const context = createPluginContext(packageRootDir, workspaceConfigPath);
-
   return {
     name: pluginName,
     generateBundle: {
       order: 'post',
-      handler() {
+      async handler() {
+        const resolvedPackageJson = await createPnpmExportablePackageJson(
+          packageRootDir,
+          packageJson,
+          workspaceRootDir,
+          dependencyFields,
+        );
+        debugger;
+        const context = createPluginContext(
+          packageRootDir,
+          workspaceConfigPath,
+          createResolvedVersionRangeMap(packageJson, resolvedPackageJson),
+        );
         const packageJsonObject: PackageJsonObject = {
-          ...packageJson,
+          ...resolvedPackageJson,
         };
 
         for (const fieldName of DEFAULT_REMOVE_FIELDS) {
@@ -523,7 +502,7 @@ export function createPackageJsonPlugin(
         if (packageExportsRewriter !== false) {
           packageJsonObject.exports = packageExportsRewriter({
             context,
-            exportsField: packageJson.exports,
+            exportsField: packageJsonObject.exports,
             rewriteExportPath: defaultRewriteExportPath,
           });
         }

@@ -21,11 +21,15 @@
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },
   "dependencies": {
+    "@pnpm/exportable-manifest": "catalog:prod",
+    "@pnpm/workspace.read-manifest": "catalog:prod",
     "logaria": "catalog:prod",
     "tinyglobby": "catalog:prod"
   },
   "devDependencies": {
     "eslint": "catalog:lint",
+    "@pnpm/catalogs.types": "catalog:dev",
+    "@pnpm/pnpmfile": "catalog:dev",
     "@types/picomatch": "catalog:dev",
     "@docs-islands/eslint-config": "workspace:*",
     "limina": "workspace:*",

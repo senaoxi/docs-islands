@@ -9,15 +9,14 @@ import {
 import {
   REPO_ROOT,
   ReleaseLogger,
-  commandExists,
   createGitTag,
   discoverReleasePackages,
   formatReleasePlans,
-  getGhCommand,
   getGitCommand,
   getNpmCommand,
   getPnpmCommand,
   isValidVersion,
+  promptForChangelogReview,
   promptForExecutionMode,
   promptForPackageSelections,
   promptForVersionSelection,
@@ -534,6 +533,18 @@ function createGitTags(context: ReleaseRunContext): void {
   }
 }
 
+function ensureChangelogReviewPromptIsAvailable(
+  context: ReleaseRunContext,
+): void {
+  if (context.options.skipChangelog || process.stdin.isTTY) {
+    return;
+  }
+
+  throw new Error(
+    'Changelog generation requires manual review in an interactive terminal. Run release in a TTY, or update the changelog first and pass --skip-changelog.',
+  );
+}
+
 function readCurrentGitHead(): string {
   const gitHead = runCommand(getGitCommand(), ['rev-parse', 'HEAD'], {
     cwd: REPO_ROOT,
@@ -654,40 +665,6 @@ function pushRelease(context: ReleaseRunContext): void {
   });
 }
 
-function createGithubReleases(context: ReleaseRunContext): void {
-  if (context.options.skipGithubRelease) {
-    ReleaseLogger.info('Skipping GitHub release creation as requested');
-    return;
-  }
-  if (context.options.skipPush) {
-    ReleaseLogger.warn('Skipping GitHub releases because --skip-push was used');
-    return;
-  }
-  if (!commandExists(getGhCommand())) {
-    ReleaseLogger.warn(
-      'GitHub CLI not found, skipping GitHub release creation',
-    );
-    return;
-  }
-
-  for (const plan of context.plans) {
-    try {
-      runCommand(
-        getGhCommand(),
-        ['release', 'create', plan.gitTag, '--generate-notes'],
-        {
-          cwd: REPO_ROOT,
-          logger: ReleaseLogger,
-        },
-      );
-    } catch {
-      ReleaseLogger.warn(
-        `Failed to create GitHub release for ${plan.gitTag}. The release commit and tag were already pushed; rerun "gh release create ${plan.gitTag} --generate-notes" when GitHub is reachable.`,
-      );
-    }
-  }
-}
-
 async function resolveReleasePlans(options: ReleaseCliOptions): Promise<{
   plans: ReleasePlan[];
   options: ReleaseCliOptions;
@@ -792,6 +769,9 @@ function previewReleasePlan(context: ReleaseRunContext): void {
         ? 'current process with provenance'
         : 'current process without provenance'
       : 'deferred to the GitHub Actions tag workflow for provenance';
+  const githubReleaseMode = context.options.skipPush
+    ? 'not triggered because --skip-push is set'
+    : 'created by the GitHub Actions tag workflow';
 
   ReleaseLogger.info(
     [
@@ -801,6 +781,7 @@ function previewReleasePlan(context: ReleaseRunContext): void {
       formatReleasePlans(context.plans),
       '',
       `npm publish: ${npmPublishMode}`,
+      `GitHub release: ${githubReleaseMode}`,
       context.options.dryRun
         ? 'Dry-run mode only previews the plan. No files will be changed and no publish steps will run.'
         : 'The steps above will now be executed in order.',
@@ -808,15 +789,26 @@ function previewReleasePlan(context: ReleaseRunContext): void {
   );
 }
 
-function prepareReleaseFiles(context: ReleaseRunContext): void {
+function prepareReleaseFiles(context: ReleaseRunContext): {
+  changelogReviewPlans: ReleasePlan[];
+} {
+  const changelogReviewPlans: ReleasePlan[] = [];
+
   for (const plan of context.plans) {
     applyPackageVersion(plan.config, plan.newVersion);
     if (!context.options.skipChangelog) {
-      writeChangelogForPlan(plan, {
+      const changelogResult = writeChangelogForPlan(plan, {
         fromTag: context.options.fromTag,
       });
+      if (changelogResult.changed) {
+        changelogReviewPlans.push(plan);
+      }
     }
   }
+
+  return {
+    changelogReviewPlans,
+  };
 }
 
 function performPreflightChecks(context: ReleaseRunContext): void {
@@ -896,8 +888,13 @@ export async function runReleaseCommand(
 
   ReleaseLogger.info('release started');
   const releaseElapsed = createElapsedTimer();
+  ensureChangelogReviewPromptIsAvailable(context);
   performPreflightChecks(context);
-  prepareReleaseFiles(context);
+  const { changelogReviewPlans } = prepareReleaseFiles(context);
+
+  if (changelogReviewPlans.length > 0) {
+    await promptForChangelogReview(changelogReviewPlans);
+  }
 
   for (const plan of context.plans) {
     runPackageReleaseChecks(plan, context.options);
@@ -917,7 +914,6 @@ export async function runReleaseCommand(
   }
 
   pushRelease(context);
-  createGithubReleases(context);
 
   ReleaseLogger.success(
     `Release completed: ${context.plans
