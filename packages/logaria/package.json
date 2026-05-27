@@ -6,7 +6,9 @@
   "author": "Senao Xi",
   "description": "Shared runtime logger and compile-time pruning plugin for docs-islands packages",
   "files": [
-    "dist"
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE.md"
   ],
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

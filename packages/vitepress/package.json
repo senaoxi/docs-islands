@@ -6,7 +6,9 @@
   "author": "Senao Xi",
   "description": "Cross-framework Islands Architecture for VitePress with multi-UI framework component rendering",
   "files": [
-    "dist"
+    "LICENSE.md",
+    "README.md",
+    "README.zh-CN.md"
   ],
   "keywords": [
     "vitepress",
