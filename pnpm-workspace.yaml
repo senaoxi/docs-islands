@@ -26,6 +26,8 @@ catalogs:
     '@babel/traverse': ^7.29.0
     '@babel/types': ^7.29.0
     '@farmfe/core': 2.0.0-beta.10
+    '@pnpm/catalogs.types': 1000.0.0
+    '@pnpm/pnpmfile': 1002.1.13
     '@rollup/plugin-replace': ^6.0.3
     '@rspack/core': ^1.6.0
     '@types/babel__generator': ^7.27.0
@@ -106,6 +108,8 @@ catalogs:
     vue-eslint-parser: ^10.2.0
     yaml-eslint-parser: ^1.3.0
   prod:
+    '@pnpm/exportable-manifest': 1000.4.2
+    '@pnpm/workspace.read-manifest': 1000.3.1
     cheerio: ^1.2.0
     logaria: 0.0.2
     picomatch: ^4.0.4
@@ -145,6 +149,10 @@ overrides:
   picomatch@^2.0.0: 2.3.2
   picomatch@^4.0.0: 4.0.4
   undici-types: ^6.24.0
+packageExtensions:
+  '@pnpm/manifest-utils@*':
+    dependencies:
+      '@pnpm/logger': 1001.0.1
 patchedDependencies:
   '@vueuse/core': patches/@vueuse__core@12.8.2.patch
   minimatch@3.1.5: patches/minimatch@3.1.5.patch

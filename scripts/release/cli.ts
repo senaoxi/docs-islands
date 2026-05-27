@@ -34,7 +34,6 @@ interface ReleaseCommandFlags extends BaseCliFlags {
   skipChangelog?: boolean;
   skipNpmPublish?: boolean;
   skipPush?: boolean;
-  skipGithubRelease?: boolean;
   fromTag?: string;
   registry?: string;
   npmTag?: string;
@@ -139,7 +138,6 @@ function createReleaseCliOptions(
     skipChangelog: Boolean(flags.skipChangelog),
     skipNpmPublish: Boolean(flags.skipNpmPublish),
     skipPush: Boolean(flags.skipPush),
-    skipGithubRelease: Boolean(flags.skipGithubRelease),
     fromTag: normalizeOptionalString('--from-tag', flags.fromTag),
     registry: normalizeOptionalString('--registry', flags.registry),
     npmTag: normalizeOptionalString('--npm-tag', flags.npmTag),
@@ -226,7 +224,7 @@ function createReleaseCli() {
     .option('--version <version>', 'Specific version to release')
     .option('--preid <id>', 'Prerelease identifier (alpha|beta|rc)')
     .option('--dry-run', 'Preview the release plan without modifying files')
-    .option('-y, --yes', 'Skip interactive confirmation prompts')
+    .option('-y, --yes', 'Skip initial interactive confirmation prompts')
     .option('--skip-tests', 'Skip package test steps')
     .option('--skip-build', 'Skip package build and verification steps')
     .option('--skip-changelog', 'Skip changelog generation')
@@ -235,7 +233,6 @@ function createReleaseCli() {
       'Skip npm publishing after creating the release commit and tags',
     )
     .option('--skip-push', 'Skip pushing commits and tags')
-    .option('--skip-github-release', 'Skip GitHub release creation')
     .option(
       '--from-tag <tag>',
       'Override the starting git tag for changelog collection',
