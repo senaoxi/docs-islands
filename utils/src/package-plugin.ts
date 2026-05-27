@@ -129,7 +129,7 @@ interface OutputOptionsLike {
 const GENERATED_ASSET_FILE_NAMES = new Set(['package.json']);
 
 function toPosixPath(value: string): string {
-  return value.replace(/\\/gu, '/');
+  return value.replaceAll('\\', '/');
 }
 
 function isSubPath(ancestorDir: string, targetPath: string): boolean {
@@ -265,10 +265,12 @@ async function collectPackageFiles(
     onlyFiles: true,
   });
 
-  return [...new Set(fileNames.map(toPosixPath))].sort().map((fileName) => ({
-    fileName,
-    sourcePath: path.join(packageRootDir, fileName),
-  }));
+  return [...new Set(fileNames.map((fileName) => toPosixPath(fileName)))]
+    .toSorted()
+    .map((fileName) => ({
+      fileName,
+      sourcePath: path.join(packageRootDir, fileName),
+    }));
 }
 
 function createDependencyResolutionKey(

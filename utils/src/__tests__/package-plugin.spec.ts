@@ -222,7 +222,7 @@ describe('createPackageJsonPlugin', () => {
         { dir: 'dist' },
       );
 
-      expect(emittedAssets.map((asset) => asset.fileName).sort()).toEqual([
+      expect(emittedAssets.map((asset) => asset.fileName).toSorted()).toEqual([
         'LICENSE.md',
         'README.md',
         'README.zh-CN.md',

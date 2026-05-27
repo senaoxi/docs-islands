@@ -56,7 +56,7 @@ jobs:
         if: steps.tag.outputs.changelog_path
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           CHANGELOG_PATH: ${{ steps.tag.outputs.changelog_path }}
           PRERELEASE: ${{ steps.tag.outputs.prerelease }}
         run: |
@@ -73,4 +73,4 @@ jobs:
             args+=(--prerelease)
           fi
 
-          gh release create "${args[@]}"
+          gh release create --repo "${GITHUB_REPOSITORY}" "${args[@]}"
