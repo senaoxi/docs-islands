@@ -80,7 +80,7 @@ jobs:
           echo "PACKAGE_SELECTOR=${package_selector}" >> "$GITHUB_ENV"
 
       - name: Disallow installation scripts
-        run: yq '.onlyBuiltDependencies = []' -i pnpm-workspace.yaml
+        run: yq '.allowBuilds[]=false' -i pnpm-workspace.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
