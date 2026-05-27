@@ -165,25 +165,10 @@ const nodePlugins: RolldownOptions['plugins'] = [
     },
   },
   {
-    name: 'rolldown-plugin-copy-readme',
+    name: 'rolldown-plugin-copy-types',
     generateBundle: {
       order: 'post',
       async handler() {
-        this.emitFile({
-          type: 'asset',
-          source: await readFile(resolve(__dirname, 'README.md'), 'utf8'),
-          fileName: 'README.md',
-        });
-        this.emitFile({
-          type: 'asset',
-          source: await readFile(resolve(__dirname, 'README.zh-CN.md'), 'utf8'),
-          fileName: 'README.zh-CN.md',
-        });
-        this.emitFile({
-          type: 'asset',
-          source: await readFile(resolve(__dirname, 'LICENSE.md'), 'utf8'),
-          fileName: 'LICENSE.md',
-        });
         for (const copyDir of ['types']) {
           await scanFiles(
             resolve(__dirname, copyDir),

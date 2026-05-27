@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 interface EmittedAsset {
   fileName: string;
-  source: string;
+  source: string | Uint8Array;
   type: 'asset';
 }
 
@@ -14,7 +14,10 @@ interface EmitFileContext {
 }
 
 interface GenerateBundleHook {
-  handler(this: EmitFileContext): Promise<void> | void;
+  handler(
+    this: EmitFileContext,
+    outputOptions?: { dir?: string; file?: string },
+  ): Promise<void> | void;
 }
 
 async function writeJson(
@@ -22,6 +25,12 @@ async function writeJson(
   value: Record<string, unknown>,
 ): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function assetSourceToString(source: string | Uint8Array): string {
+  return typeof source === 'string'
+    ? source
+    : Buffer.from(source).toString('utf8');
 }
 
 describe('createPackageJsonPlugin', () => {
@@ -116,10 +125,11 @@ describe('createPackageJsonPlugin', () => {
         (asset) => asset.fileName === 'package.json',
       );
       expect(packageAsset).toBeDefined();
-      expect(packageAsset!.source).not.toContain('catalog:');
-      expect(packageAsset!.source).not.toContain('workspace:');
+      const packageAssetSource = assetSourceToString(packageAsset!.source);
+      expect(packageAssetSource).not.toContain('catalog:');
+      expect(packageAssetSource).not.toContain('workspace:');
 
-      const emittedPackageJson = JSON.parse(packageAsset!.source) as {
+      const emittedPackageJson = JSON.parse(packageAssetSource) as {
         dependencies?: Record<string, string>;
         devDependencies?: Record<string, string>;
         exports?: Record<string, string>;
@@ -143,6 +153,98 @@ describe('createPackageJsonPlugin', () => {
         '.': './index.js',
       });
       expect(emittedPackageJson.types).toBe('./index.d.ts');
+    } finally {
+      await rm(workspaceRootDir, { force: true, recursive: true });
+      vi.resetModules();
+    }
+  });
+
+  it('emits assets declared by the package files field', async () => {
+    const workspaceRootDir = await mkdtemp(
+      path.join(tmpdir(), 'docs-islands-package-plugin-'),
+    );
+
+    try {
+      const packageRootDir = path.join(workspaceRootDir, 'packages/main');
+      await mkdir(path.join(packageRootDir, 'assets/nested'), {
+        recursive: true,
+      });
+
+      await writeFile(
+        path.join(workspaceRootDir, 'pnpm-workspace.yaml'),
+        ['packages:', '  - packages/*', ''].join('\n'),
+      );
+
+      await writeFile(path.join(packageRootDir, 'README.md'), 'English readme');
+      await writeFile(
+        path.join(packageRootDir, 'README.zh-CN.md'),
+        'Chinese readme',
+      );
+      await writeFile(path.join(packageRootDir, 'LICENSE.md'), 'MIT');
+      await writeFile(
+        path.join(packageRootDir, 'assets/nested/info.txt'),
+        'asset info',
+      );
+      await writeFile(path.join(packageRootDir, 'ignored.md'), 'ignored');
+
+      const packageJsonPath = path.join(packageRootDir, 'package.json');
+      await writeJson(packageJsonPath, {
+        name: '@fixture/main',
+        version: '1.0.0',
+        type: 'module',
+        files: [
+          'README.md',
+          'README.zh-CN.md',
+          'LICENSE.md',
+          'assets',
+          'ignored.md',
+          '!ignored.md',
+        ],
+        exports: {
+          '.': './src/index.ts',
+        },
+      });
+
+      const { createPackageJsonPlugin } = await import('../package-plugin');
+      const plugin = createPackageJsonPlugin({
+        packageJsonPath,
+      });
+      const emittedAssets: EmittedAsset[] = [];
+      const generateBundle = plugin.generateBundle as GenerateBundleHook;
+
+      await generateBundle.handler.call(
+        {
+          emitFile(asset) {
+            emittedAssets.push(asset);
+            return asset.fileName;
+          },
+        },
+        { dir: 'dist' },
+      );
+
+      expect(emittedAssets.map((asset) => asset.fileName).sort()).toEqual([
+        'LICENSE.md',
+        'README.md',
+        'README.zh-CN.md',
+        'assets/nested/info.txt',
+        'package.json',
+      ]);
+      expect(
+        assetSourceToString(
+          emittedAssets.find((asset) => asset.fileName === 'README.md')!.source,
+        ),
+      ).toBe('English readme');
+
+      const packageAsset = emittedAssets.find(
+        (asset) => asset.fileName === 'package.json',
+      );
+      expect(packageAsset).toBeDefined();
+      const emittedPackageJson = JSON.parse(
+        assetSourceToString(packageAsset!.source),
+      ) as {
+        files?: string[];
+      };
+      expect(emittedPackageJson.files).toBeUndefined();
     } finally {
       await rm(workspaceRootDir, { force: true, recursive: true });
       vi.resetModules();

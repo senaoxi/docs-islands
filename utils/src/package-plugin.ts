@@ -7,6 +7,7 @@ import {
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'rolldown';
+import { escapePath, glob, isDynamicPattern } from 'tinyglobby';
 import { findMonorepoRoot } from './path';
 
 export type DependencyMap = Record<string, string>;
@@ -93,6 +94,11 @@ const NON_PUBLISHABLE_VERSION_PROTOCOL_PREFIXES = [
 ] as const;
 const INTERNAL_SCOPES = ['@docs-islands/'] as const;
 const DEFAULT_REMOVE_FIELDS = ['scripts', 'files', 'imports'] as const;
+const DEFAULT_OUTPUT_DIR = 'dist';
+const DEFAULT_PACKAGE_FILE_IGNORE_PATTERNS = [
+  '**/.git/**',
+  '**/node_modules/**',
+] as const;
 const DEFAULT_DEPENDENCY_FIELDS = {
   dependencies: {},
   devDependencies: false,
@@ -109,6 +115,161 @@ const DEPENDENCY_FIELD_NAMES = [
 ] as const satisfies readonly DependencyFieldName[];
 
 type PnpmProjectManifest = Parameters<typeof createExportableManifest>[1];
+
+interface PackageFilesEntry {
+  isNegated: boolean;
+  path: string;
+}
+
+interface OutputOptionsLike {
+  dir?: string;
+  file?: string;
+}
+
+const GENERATED_ASSET_FILE_NAMES = new Set(['package.json']);
+
+function toPosixPath(value: string): string {
+  return value.replace(/\\/gu, '/');
+}
+
+function isSubPath(ancestorDir: string, targetPath: string): boolean {
+  const relativePath = path.relative(ancestorDir, targetPath);
+  return (
+    relativePath !== '' &&
+    !relativePath.startsWith('..') &&
+    !path.isAbsolute(relativePath)
+  );
+}
+
+function normalizePackageFilesEntry(
+  entry: string,
+): PackageFilesEntry | undefined {
+  const trimmedEntry = entry.trim();
+  if (!trimmedEntry) {
+    return undefined;
+  }
+
+  const isNegated = trimmedEntry.startsWith('!');
+  const rawPath = isNegated ? trimmedEntry.slice(1).trim() : trimmedEntry;
+  if (!rawPath) {
+    return undefined;
+  }
+
+  const posixPath = toPosixPath(rawPath);
+  if (path.isAbsolute(rawPath) || path.posix.isAbsolute(posixPath)) {
+    throw new Error(
+      `Absolute paths are not supported in package files entries: ${entry}`,
+    );
+  }
+
+  const normalizedPath = path.posix.normalize(posixPath);
+  if (normalizedPath === '..' || normalizedPath.startsWith('../')) {
+    throw new Error(
+      `Parent paths are not supported in package files entries: ${entry}`,
+    );
+  }
+
+  return {
+    isNegated,
+    path: normalizedPath === '.' ? '**' : normalizedPath,
+  };
+}
+
+function createPackageFilesGlobPattern(relativePath: string): string {
+  if (relativePath === '**') {
+    return relativePath;
+  }
+
+  if (isDynamicPattern(relativePath, { caseSensitiveMatch: true })) {
+    return relativePath;
+  }
+
+  return escapePath(relativePath);
+}
+
+function resolveOutputDir(
+  packageRootDir: string,
+  outputOptions: OutputOptionsLike | undefined,
+): string {
+  const outputPath =
+    outputOptions?.dir ??
+    (outputOptions?.file
+      ? path.dirname(outputOptions.file)
+      : DEFAULT_OUTPUT_DIR);
+
+  return path.resolve(packageRootDir, outputPath);
+}
+
+function createOutputDirIgnorePatterns(
+  packageRootDir: string,
+  outputOptions: OutputOptionsLike | undefined,
+): string[] {
+  const outputDir = resolveOutputDir(packageRootDir, outputOptions);
+
+  if (!isSubPath(packageRootDir, outputDir)) {
+    return [];
+  }
+
+  const relativeOutputDir = toPosixPath(
+    path.relative(packageRootDir, outputDir),
+  );
+  const escapedOutputDir = escapePath(relativeOutputDir);
+  return [escapedOutputDir, `${escapedOutputDir}/**`];
+}
+
+async function collectPackageFiles(
+  packageRootDir: string,
+  files: readonly string[] | undefined,
+  outputOptions: OutputOptionsLike | undefined,
+): Promise<EmittedPackageAsset[]> {
+  if (!files || files.length === 0) {
+    return [];
+  }
+
+  const includePatterns: string[] = [];
+  const ignorePatterns = new Set<string>([
+    ...DEFAULT_PACKAGE_FILE_IGNORE_PATTERNS,
+    ...createOutputDirIgnorePatterns(packageRootDir, outputOptions),
+  ]);
+
+  for (const entry of files) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+
+    const normalizedEntry = normalizePackageFilesEntry(entry);
+    if (!normalizedEntry) {
+      continue;
+    }
+
+    const globPattern = createPackageFilesGlobPattern(normalizedEntry.path);
+    if (normalizedEntry.isNegated) {
+      ignorePatterns.add(globPattern);
+      ignorePatterns.add(`${globPattern}/**`);
+    } else {
+      includePatterns.push(globPattern);
+    }
+  }
+
+  if (includePatterns.length === 0) {
+    return [];
+  }
+
+  const fileNames = await glob(includePatterns, {
+    absolute: false,
+    cwd: packageRootDir,
+    dot: true,
+    expandDirectories: true,
+    followSymbolicLinks: false,
+    ignore: [...ignorePatterns],
+    onlyFiles: true,
+  });
+
+  return [...new Set(fileNames.map(toPosixPath))].sort().map((fileName) => ({
+    fileName,
+    sourcePath: path.join(packageRootDir, fileName),
+  }));
+}
 
 function createDependencyResolutionKey(
   packageName: string,
@@ -471,14 +632,13 @@ export function createPackageJsonPlugin(
     name: pluginName,
     generateBundle: {
       order: 'post',
-      async handler() {
+      async handler(outputOptions: OutputOptionsLike | undefined) {
         const resolvedPackageJson = await createPnpmExportablePackageJson(
           packageRootDir,
           packageJson,
           workspaceRootDir,
           dependencyFields,
         );
-        debugger;
         const context = createPluginContext(
           packageRootDir,
           workspaceConfigPath,
@@ -515,6 +675,29 @@ export function createPackageJsonPlugin(
           source: JSON.stringify(packageJsonObject, null, 2),
           fileName: 'package.json',
         });
+
+        const configuredAssetFileNames = new Set(
+          emitAssets.map((asset) => asset.fileName),
+        );
+        const packageFileAssets = await collectPackageFiles(
+          packageRootDir,
+          packageJson.files,
+          outputOptions,
+        );
+        for (const asset of packageFileAssets) {
+          if (
+            GENERATED_ASSET_FILE_NAMES.has(asset.fileName) ||
+            configuredAssetFileNames.has(asset.fileName)
+          ) {
+            continue;
+          }
+
+          this.emitFile({
+            type: 'asset',
+            source: readFileSync(asset.sourcePath),
+            fileName: asset.fileName,
+          });
+        }
 
         for (const asset of emitAssets) {
           const source = readFileSync(asset.sourcePath, 'utf8');

@@ -733,6 +733,9 @@ importers:
       npm-package-json-lint:
         specifier: catalog:lint
         version: 9.1.0(typescript@5.9.3)
+      picomatch:
+        specifier: catalog:prod
+        version: 4.0.4
       publint:
         specifier: catalog:lint
         version: 0.3.17
@@ -752,6 +755,9 @@ importers:
       '@docs-islands/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
+      '@docs-islands/plugin-license':
+        specifier: link:../plugins/license/dist
+        version: link:../plugins/license/dist
       '@docs-islands/utils':
         specifier: link:../../utils/dist
         version: link:../../utils/dist

@@ -118,6 +118,14 @@ export default defineConfig({
       },
     ],
   },
+
+  release: {
+    contentHash: {
+      baselineTag: 'latest',
+      builtinIgnore: true,
+    },
+  },
+
   // Reusable command pipelines. Run them with `limina check <name>`.
   pipelines: {
     // Main typecheck pipeline: run graph checks, source authority checks,
