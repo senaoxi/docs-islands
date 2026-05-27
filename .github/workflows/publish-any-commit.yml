@@ -14,13 +14,29 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        # actions/checkout@v5.0.0.
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
-      - run: corepack enable
-      - uses: actions/setup-node@v4
+      - name: Set node version to 20
+        # actions/setup-node@v5.0.0.
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 20
-          cache: "pnpm"
+          registry-url: https://registry.npmjs.org/
+          # Security: Disable cache to avoid cache poisoning attacks
+          # Reference: https://docs.zizmor.sh/audits/#cache-poisoning
+          package-manager-cache: false
+
+      - name: Setup pnpm via Corepack
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare "$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).packageManager")" --activate
+          pnpm --version
+
+      - name: Disallow installation scripts
+        run: yq '.allowBuilds[]=false' -i pnpm-workspace.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -28,5 +44,121 @@ jobs:
       - name: Build
         run: DOCS_ISLANDS_MODE="production" DOCS_ISLANDS_RELEASE="1" pnpm build
 
-      - name: Publish @docs-islands/vitepress preview package
-        run: pnpm dlx pkg-pr-new@0.0 publish --compact --pnpm ./packages/vitepress/dist
+      - name: Collect public workspace packages
+        shell: bash
+        run: |
+          node <<'NODE' > publish-targets.txt
+          const fs = require('node:fs')
+          const path = require('node:path')
+          const { execFileSync } = require('node:child_process')
+
+          const repoRoot = process.cwd()
+
+          const raw = execFileSync(
+            'pnpm',
+            ['list', '--recursive', '--depth', '-1', '--json'],
+            { encoding: 'utf8' }
+          )
+
+          const workspaces = JSON.parse(raw)
+          const targets = []
+          let hasError = false
+
+          for (const workspace of workspaces) {
+            if (!workspace.path) {
+              continue
+            }
+
+            const workspaceDir = path.resolve(workspace.path)
+            const workspacePkgJsonPath = path.join(workspaceDir, 'package.json')
+
+            if (!fs.existsSync(workspacePkgJsonPath)) {
+              continue
+            }
+
+            const workspacePkg = JSON.parse(
+              fs.readFileSync(workspacePkgJsonPath, 'utf8')
+            )
+
+            const workspaceName =
+              workspacePkg.name || path.relative(repoRoot, workspaceDir)
+
+            if (workspacePkg.private === true) {
+              console.error(`[skip] ${workspaceName}: private workspace package`)
+              continue
+            }
+
+            const distDir = path.join(workspaceDir, 'dist')
+            const distPkgJsonPath = path.join(distDir, 'package.json')
+
+            if (!fs.existsSync(distPkgJsonPath)) {
+              console.error(
+                `[error] ${workspaceName}: missing dist/package.json at ${path.relative(repoRoot, distPkgJsonPath)}`
+              )
+              hasError = true
+              continue
+            }
+
+            const distPkg = JSON.parse(fs.readFileSync(distPkgJsonPath, 'utf8'))
+
+            if (!distPkg.name) {
+              console.error(
+                `[error] ${workspaceName}: dist/package.json is missing "name"`
+              )
+              hasError = true
+              continue
+            }
+
+            if (distPkg.private === true) {
+              console.error(`[skip] ${workspaceName}: dist package is private`)
+              continue
+            }
+
+            targets.push(
+              path.relative(repoRoot, distDir).split(path.sep).join('/')
+            )
+          }
+
+          if (hasError) {
+            process.exit(1)
+          }
+
+          for (const target of targets) {
+            console.log(target)
+          }
+          NODE
+
+          echo "Publish targets:"
+          sed 's/^/  - /' publish-targets.txt
+
+      # pkg.pr.new: Temporary package hosting service by StackBlitz
+      # Generates a unique URL like: https://pkg.pr.new/@docs-islands/vitepress@abc123
+      # Users can install with: pnpm add https://pkg.pr.new/@docs-islands/vitepress@abc123
+      #
+      # IMPORTANT:
+      #
+      # 1. Only public packages support publishing.
+      # 2. Publish from dist/ directory (not package root) because:
+      #   1. dist/package.json has been cleaned by packagePlugin.ts during build
+      #     - scripts field removed (no build/release scripts)
+      #     - imports field removed (internal path mappings)
+      #     - devDependencies filtered (workspace: and catalog: protocols removed)
+      #   2. Matches production release behavior
+      #   3. Users get a clean package.json without development artifacts
+      #
+      # If published from package root, the uncleaned package.json would be included
+      # in the tarball with unnecessary fields (scripts, imports, etc.)
+      - name: Publish public workspace packages
+        shell: bash
+        run: |
+          mapfile -t targets < publish-targets.txt
+
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No public workspace dist packages found. Skip publishing."
+            exit 0
+          fi
+
+          pnpm dlx pkg-pr-new@0.0 publish \
+            --compact \
+            --pnpm \
+            "${targets[@]}"
