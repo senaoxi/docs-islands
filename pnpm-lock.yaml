@@ -282,8 +282,8 @@ catalogs:
       specifier: ^1.2.0
       version: 1.2.0
     logaria:
-      specifier: 0.0.2
-      version: 0.0.2
+      specifier: 0.0.3
+      version: 0.0.3
     picomatch:
       specifier: ^4.0.4
       version: 4.0.4
@@ -516,7 +516,7 @@ importers:
         version: link:../../utils/dist
       logaria:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
       del-cli:
         specifier: catalog:dev
@@ -541,7 +541,7 @@ importers:
         version: 10.1.0
       logaria:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       magic-string:
         specifier: catalog:dev
         version: 0.30.21
@@ -729,7 +729,7 @@ importers:
         version: 2.0.0
       logaria:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       npm-package-json-lint:
         specifier: catalog:lint
         version: 9.1.0(typescript@5.9.3)
@@ -953,7 +953,7 @@ importers:
     dependencies:
       logaria:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
       '@docs-islands/eslint-config':
         specifier: workspace:*
@@ -1129,7 +1129,7 @@ importers:
     dependencies:
       logaria:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -1269,7 +1269,7 @@ importers:
         version: 1.2.0
       logaria:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       vue:
         specifier: catalog:prod
         version: 3.5.28(typescript@5.9.3)
@@ -1327,7 +1327,7 @@ importers:
         version: 1000.3.1
       logaria:
         specifier: catalog:prod
-        version: 0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       tinyglobby:
         specifier: catalog:prod
         version: 0.2.15
@@ -7332,10 +7332,10 @@ packages:
       }
     engines: { node: '>=18' }
 
-  logaria@0.0.2:
+  logaria@0.0.3:
     resolution:
       {
-        integrity: sha512-Jn1A2aBG70JDYJM94uZvsxiJLByTyC4fGkcq6RWntFkm71DD39gwbnB3fs1CVKRsY0/8k4diebNc3HcUVK80Aw==,
+        integrity: sha512-tIHRdmGhJ5hHbOOIe5KvKCSRTKSw+aiXn9gSf2WtMn9hsp88P6RLZxETB7a/mwOxWsVud+HLXWJRQ3MtEq/WRQ==,
       }
     engines: { node: ^20.19.0 || >=22.12.0 }
     peerDependencies:
@@ -14064,7 +14064,7 @@ snapshots:
       strip-ansi: 7.1.2
       wrap-ansi: 9.0.2
 
-  logaria@0.0.2(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4):
+  logaria@0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4):
     dependencies:
       '@babel/parser': 7.29.0
       '@babel/traverse': 7.29.0

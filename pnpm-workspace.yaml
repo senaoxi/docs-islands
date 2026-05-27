@@ -123,7 +123,7 @@ catalogs:
     '@pnpm/exportable-manifest': 1000.4.2
     '@pnpm/workspace.read-manifest': 1000.3.1
     cheerio: ^1.2.0
-    logaria: 0.0.2
+    logaria: 0.0.3
     picomatch: ^4.0.4
     tinyglobby: ^0.2.15
     unplugin: ^3.0.0
