@@ -31,7 +31,7 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 
 ### `Invalid Limina checker config: ... reason: extensions may only be omitted for built-in presets.`
 
-- **Cause**: A non-built-in preset name (anything other than `tsc` / `vue-tsc` / `svelte-check`) does not declare `extensions`.
+- **Cause**: A non-built-in preset name (anything other than `tsc` / `tsgo` / `vue-tsc` / `vue-tsgo` / `svelte-check`) does not declare `extensions`.
 - **Fix**: Either switch to a built-in preset OR declare `extensions: ['.foo']`. Custom presets also need a registered adapter — without one, Limina rejects the preset.
 
 ### `Invalid Limina checker config: ... reason: checker routes are not supported; move routes.build to entry and migrate routes.typecheck targets to tsconfig*.dts.json leaves reachable from that entry with local companions.`
@@ -42,7 +42,7 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 ### `Unsupported Limina checker preset:`
 
 - **Cause**: The preset name has no registered adapter.
-- **Fix**: Use `tsc`, `vue-tsc`, or `svelte-check`.
+- **Fix**: Use `tsc`, `tsgo`, `vue-tsc`, `vue-tsgo`, or `svelte-check`.
 
 ## Graph check
 
@@ -209,7 +209,7 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 
 ### `Missing checker peer dependencies:`
 
-- **Cause**: A configured preset's required peer (`typescript` for `tsc`, `vue-tsc`, `svelte-check`) is not installed.
+- **Cause**: A configured preset's required peer (`typescript` for `tsc`, `@typescript/native-preview` for `tsgo`, `vue-tsc`, `vue-tsgo`, or `svelte-check`) is not installed.
 - **Fix**: Run the `pnpm add -D <packages>` command Limina prints at the bottom of the error.
 
 ### `Checker entry references a missing tsconfig:`
@@ -227,10 +227,10 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 - **Cause**: A reachable leaf has no paired companion file.
 - **Fix**: Create the companion (`tsconfig.<scope>.json`).
 
-### `Checker "<name>" uses svelte-check, which does not support checker:build.`
+### `No source-only checker entries configured.`
 
-- **Cause**: `limina checker build` was called with a `svelte-check` checker configured.
-- **Fix**: Use `limina checker typecheck` for svelte-check entries; only `tsc` and `vue-tsc` support build execution.
+- **Cause**: `limina checker typecheck` found no configured `vue-tsgo` or `svelte-check` entries.
+- **Fix**: This is OK if all configured checkers are first-class build checkers. Add a source-only checker only when you need direct framework checker execution outside `checker build`; prefer `vue-tsc` when Vue checks need TypeScript project-reference boundaries or incremental build behavior.
 
 ### `Typecheck failed for N config(s):`
 

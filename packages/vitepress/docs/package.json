@@ -31,8 +31,10 @@
     "logaria": "catalog:prod"
   },
   "devDependencies": {
+    "@rollup/plugin-replace": "catalog:dev",
     "eslint": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
+    "@types/node": "catalog:dev",
     "typescript": "catalog:dev",
     "vue-tsc": "catalog:dev",
     "vitepress": "catalog:frameworks",
@@ -47,6 +49,9 @@
     "vue-json-pretty": "catalog:dev",
     "tsx": "catalog:dev",
     "pathe": "catalog:dev",
+    "rolldown": "catalog:dev",
+    "rollup": "catalog:dev",
+    "unplugin": "catalog:prod",
     "wait-on": "catalog:dev",
     "del-cli": "catalog:dev",
     "is-in-ci": "catalog:dev"

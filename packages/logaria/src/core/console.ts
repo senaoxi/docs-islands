@@ -26,8 +26,19 @@ const formatRuleLabelPrefix = (labels: string[]): string => {
   return `${labels.map((label) => `[${label}]`).join('')} `;
 };
 
-const isNodeRuntime = (): boolean =>
-  typeof process !== 'undefined' && Boolean(process.versions?.node);
+const isNodeRuntime = (): boolean => {
+  const maybeProcess = (
+    globalThis as {
+      process?: {
+        versions?: {
+          node?: string;
+        };
+      };
+    }
+  ).process;
+
+  return maybeProcess !== undefined && Boolean(maybeProcess.versions?.node);
+};
 
 const isBrowserConsole = (): boolean =>
   !isNodeRuntime() &&

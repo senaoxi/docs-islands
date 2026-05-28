@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "^20.19.0 || >=22.12.0",
+    "node": " >=22.12.0",
     "pnpm": ">=10.26.0"
   },
   "workspaces": [
@@ -70,6 +70,7 @@
   "devDependencies": {
     "@types/node": "catalog:dev",
     "@types/prompts": "catalog:dev",
+    "@typescript/native-preview": "catalog:dev",
     "@vue/compiler-sfc": "catalog:dev",
     "eslint": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
@@ -81,6 +82,7 @@
     "typescript": "catalog:dev",
     "lint-staged": "catalog:dev",
     "vue-tsc": "catalog:dev",
+    "vue-tsgo": "catalog:dev",
     "tsx": "catalog:dev",
     "cac": "catalog:dev",
     "prompts": "catalog:dev",

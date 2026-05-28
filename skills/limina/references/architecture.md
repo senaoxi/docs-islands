@@ -207,4 +207,6 @@ Each label can have a single rule. `deny.refs[].path` MUST resolve to a `tsconfi
 
 ## Checker tiers
 
-`tsc` and `vue-tsc` are first-class checkers: graph/source/proof collect their entries, and `checker:build` runs `tsc -b` / `vue-tsc -b`. `svelte-check` is source-only: Limina proves `.svelte` coverage and `checker:typecheck` runs `svelte-check --tsconfig <entry>`, but Limina does not parse `.svelte` import graphs yet.
+`tsc`, `tsgo`, and `vue-tsc` are first-class build checkers: graph/source/proof collect their entries, and `checker:build` runs `tsc -b` / `tsgo -b` / `vue-tsc -b`. `vue-tsgo` is graph-aware for Limina coverage proof but source-only for execution, so `checker:typecheck` runs `vue-tsgo --project <entry>`. `svelte-check` is source-only and runs `svelte-check --tsconfig <entry>`.
+
+Prefer `vue-tsc` for first-class Vue project-reference builds. Current `vue-tsgo --build` expands source imports into a transient virtual TypeScript workspace, does not preserve TypeScript project-reference boundaries, and does not provide incremental build semantics, so Limina treats it as a built-in second-class/source-only execution checker.

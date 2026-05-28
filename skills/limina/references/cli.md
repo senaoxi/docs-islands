@@ -132,10 +132,10 @@ Exit code: 1 only for `paths check` when files are stale.
 
 Action must be `typecheck` or `build`.
 
-- `typecheck` — for every configured checker entry, walks reachable `tsconfig*.dts.json` leaves, finds their paired local companions, and runs the checker against each companion in no-emit mode. Run in parallel up to `--concurrency` (default = `availableParallelism()` reported by Node).
-- `build` — runs the checker's build execution for every entry whose preset supports build (currently `tsc -b` and `vue-tsc -b`). `svelte-check` does NOT support build and is filtered out.
+- `typecheck` — runs source-only checker entries directly, currently `vue-tsgo --project <entry>` and `svelte-check --tsconfig <entry>`. Run in parallel up to `--concurrency` (default = `availableParallelism()` reported by Node).
+- `build` — runs the checker's build execution for every entry whose preset supports build (currently `tsc -b`, `tsgo -b`, and `vue-tsc -b`). `vue-tsgo` and `svelte-check` do NOT support first-class build execution and are filtered out.
 
-Both actions fail fast on missing peer dependencies (`typescript`, `vue-tsc`, `svelte-check`) and print a one-line `pnpm add -D <packages>` fix.
+Both actions fail fast on missing peer dependencies (`typescript`, `@typescript/native-preview`, `vue-tsc`, `vue-tsgo`, `svelte-check`, and related framework peers) and print a one-line `pnpm add -D <packages>` fix.
 
 `--concurrency` accepts a positive integer; anything else is rejected.
 

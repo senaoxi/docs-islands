@@ -1,5 +1,5 @@
 import {
-  createPackageJsonPlugin,
+  createPackagePlugin,
   type ExportPathRewriteArgs,
   type ExportValue,
   type PackageExportsRewriteArgs,
@@ -178,8 +178,8 @@ const rewritePackageExports = ({
   );
 };
 
-export default function generatePackageJson(): Plugin {
-  return createPackageJsonPlugin({
+export default function generatePackage(): Plugin {
+  return createPackagePlugin({
     dependencyFields: {
       dependencies: {},
       devDependencies: {

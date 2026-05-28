@@ -3,6 +3,12 @@ import { defineConfig } from 'limina';
 export default defineConfig({
   // Shared checker entries used by graph, proof, paths, and typecheck checks.
   config: {
+    /**
+     * Note: The two reference trees built by tsconfig.build.json and
+     * tsconfig.vue.build.json have common tsconfig*.dts.json leaf nodes.
+     * Using tsgo may cause cache hit failure,
+     * so the unified underlying implementation is maintained at the total entry point.
+     */
     checkers: {
       typescript: {
         preset: 'tsc',
@@ -142,7 +148,7 @@ export default defineConfig({
       'graph:check',
       {
         type: 'command',
-        command: 'tsc',
+        command: 'tsgo',
         args: ['-b', 'tsconfig.build.json', '--pretty', 'false'],
       },
     ],
@@ -150,11 +156,13 @@ export default defineConfig({
     lib: [
       {
         type: 'command',
-        command: 'tsc',
+        command: 'tsgo',
         args: ['-b', 'tsconfig.lib.build.json', '--pretty', 'false'],
       },
     ],
     // Source-owned Vue SFC checks that are intentionally outside native tsc -b.
+    // Prefer vue-tsc here: current vue-tsgo --build does not preserve
+    // TypeScript project-reference boundaries or support incremental builds.
     vue: [
       {
         type: 'command',

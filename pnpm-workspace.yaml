@@ -46,6 +46,7 @@ catalogs:
     '@types/prompts': ^2.4.9
     '@types/react': ^18.2.0
     '@types/react-dom': ^18.2.0
+    '@typescript/native-preview': 7.0.0-dev.20260527.1
     '@vitejs/plugin-react-swc': ^4.2.3
     '@vitejs/plugin-vue': ^6.0.5
     '@vue/compiler-sfc': ^3.5.28
@@ -77,6 +78,7 @@ catalogs:
     vue-json-pretty: ^2.6.0
     vue-router: 4.6.4
     vue-tsc: ~3.2.4
+    vue-tsgo: 0.2.2
     wait-on: ^9.0.3
     webpack: ^5.102.1
     yaml: ^2.8.3
@@ -154,7 +156,7 @@ loglevel: info
 
 managePackageManagerVersions: true
 
-nodeVersion: 20.19.0
+nodeVersion: 22.13.0
 
 overrides:
   '@eslint/eslintrc>js-yaml': 4.1.1

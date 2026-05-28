@@ -71,7 +71,7 @@ export interface EmittedPackageAsset {
   transform?: (source: string) => string;
 }
 
-export interface CreatePackageJsonPluginOptions {
+export interface CreatePackagePluginOptions {
   dependencyFields?: Partial<
     Record<DependencyFieldName, DependencyResolutionOptions | false>
   >;
@@ -596,8 +596,8 @@ function sanitizeDependencyFields(
   }
 }
 
-export function createPackageJsonPlugin(
-  options: CreatePackageJsonPluginOptions,
+export function createPackagePlugin(
+  options: CreatePackagePluginOptions,
 ): Plugin {
   const {
     dependencyFields = DEFAULT_DEPENDENCY_FIELDS,

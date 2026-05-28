@@ -5,9 +5,9 @@ description: Use when configuring or operating the `limina` CLI in a TypeScript 
 
 # Limina
 
-Configurable governance CLI for TypeScript pnpm monorepos. Coordinates `tsc`/`vue-tsc`/`svelte-check`, validates the project-reference graph, enforces architecture rules, generates compatibility paths for `workspace:*` artifact exports, and audits built package outputs before publish.
+Configurable governance CLI for TypeScript pnpm monorepos. Coordinates `tsc`/`tsgo`/`vue-tsc`/`vue-tsgo`/`svelte-check`, validates the project-reference graph, enforces architecture rules, generates compatibility paths for `workspace:*` artifact exports, and audits built package outputs before publish.
 
-Limina is not a bundler and does not replace `tsc`, `vue-tsc`, tests, or release tooling. It coordinates them.
+Limina is not a bundler and does not replace `tsc`, `tsgo`, `vue-tsc`, `vue-tsgo`, tests, or release tooling. It coordinates them.
 
 ## Mental model
 
@@ -56,21 +56,21 @@ export default defineConfig({
 
 ## CLI quick reference
 
-| Command                                                            | Purpose                                                        | Exit non-zero when                                                                                                      |
-| ------------------------------------------------------------------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `limina init [--yes]`                                              | Bootstrap declaration graph, aggregators, config, root script  | Reserved tsconfig names already exist, ambiguous `tsconfig.json` role, `workspace:*` import can't be mapped to a leaf   |
-| `limina check`                                                     | Run built-in default pipeline                                  | Any of `graph:check`, `source:check`, `proof:check`, `checker:build`, `checker:typecheck` fails                         |
-| `limina check <pipeline>`                                          | Run a user pipeline from `pipelines`                           | Pipeline name missing, or any step fails                                                                                |
-| `limina graph check`                                               | Project refs match real imports; deny rules; dts option parity | Reference mismatch, denied dep/ref, missing project reference, cross-package relative import, etc.                      |
-| `limina source check`                                              | Package-owner boundary checks                                  | Relative import crosses package, bare import not in deps/devDeps, `#imports` outside owner scope                        |
-| `limina proof check`                                               | Declaration leaf ↔ companion alignment, source coverage       | Missing companion, drifted compilerOptions, uncovered source file, duplicate graph coverage                             |
-| `limina paths generate`                                            | Write `tsconfig.dts.paths.generated.json`                      | (Never fails on stale; use `paths check` for CI)                                                                        |
-| `limina paths apply`                                               | Alias for `paths generate`                                     | —                                                                                                                       |
-| `limina paths check`                                               | Fail if generated path files are stale                         | Any generated file is outdated or missing                                                                               |
-| `limina checker build`                                             | Build execution for first-class checkers (`tsc`, `vue-tsc`)    | Any checker exits non-zero                                                                                              |
-| `limina checker typecheck`                                         | Direct execution for source-only checkers (`svelte-check`)     | Any checker exits non-zero, or peer dep missing                                                                         |
-| `limina package check [--package N] [--tool T] [--attw-profile P]` | publint + attw + boundary on built outputs                     | Any configured package tool fails                                                                                       |
-| `limina release check [--package N]`                               | Release hygiene and dependency consistency for package entries | Cwd package name is not configured, package output is private/missing/dirty, or workspace publish deps are inconsistent |
+| Command                                                            | Purpose                                                                | Exit non-zero when                                                                                                      |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `limina init [--yes]`                                              | Bootstrap declaration graph, aggregators, config, root script          | Reserved tsconfig names already exist, ambiguous `tsconfig.json` role, `workspace:*` import can't be mapped to a leaf   |
+| `limina check`                                                     | Run built-in default pipeline                                          | Any of `graph:check`, `source:check`, `proof:check`, `checker:build`, `checker:typecheck` fails                         |
+| `limina check <pipeline>`                                          | Run a user pipeline from `pipelines`                                   | Pipeline name missing, or any step fails                                                                                |
+| `limina graph check`                                               | Project refs match real imports; deny rules; dts option parity         | Reference mismatch, denied dep/ref, missing project reference, cross-package relative import, etc.                      |
+| `limina source check`                                              | Package-owner boundary checks                                          | Relative import crosses package, bare import not in deps/devDeps, `#imports` outside owner scope                        |
+| `limina proof check`                                               | Declaration leaf ↔ companion alignment, source coverage               | Missing companion, drifted compilerOptions, uncovered source file, duplicate graph coverage                             |
+| `limina paths generate`                                            | Write `tsconfig.dts.paths.generated.json`                              | (Never fails on stale; use `paths check` for CI)                                                                        |
+| `limina paths apply`                                               | Alias for `paths generate`                                             | —                                                                                                                       |
+| `limina paths check`                                               | Fail if generated path files are stale                                 | Any generated file is outdated or missing                                                                               |
+| `limina checker build`                                             | Build execution for first-class checkers (`tsc`, `tsgo`, `vue-tsc`)    | Any checker exits non-zero                                                                                              |
+| `limina checker typecheck`                                         | Direct execution for source-only checkers (`vue-tsgo`, `svelte-check`) | Any checker exits non-zero, or peer dep missing                                                                         |
+| `limina package check [--package N] [--tool T] [--attw-profile P]` | publint + attw + boundary on built outputs                             | Any configured package tool fails                                                                                       |
+| `limina release check [--package N]`                               | Release hygiene and dependency consistency for package entries         | Cwd package name is not configured, package output is private/missing/dirty, or workspace publish deps are inconsistent |
 
 Global flags on every command: `--config <path>` (override config file), `--mode <mode>` (passed to function-style configs, defaults to `NODE_ENV` then `"default"`).
 
@@ -84,13 +84,17 @@ The default `limina check` pipeline (no name argument) runs `graph:check` → `s
 
 ## Checker presets
 
-| Preset         | Default extensions                             | Graph-capable | Execution | Required peer dep              |
-| -------------- | ---------------------------------------------- | ------------- | --------- | ------------------------------ |
-| `tsc`          | `.ts .tsx .cts .mts .d.ts .d.cts .d.mts .json` | first-class   | build     | `typescript`                   |
-| `vue-tsc`      | `.vue`                                         | first-class   | build     | `vue-tsc`, `@vue/compiler-sfc` |
-| `svelte-check` | `.svelte`                                      | source-only   | typecheck | `svelte-check`                 |
+| Preset         | Default extensions                             | Graph-capable | Execution | Required peer dep                        |
+| -------------- | ---------------------------------------------- | ------------- | --------- | ---------------------------------------- |
+| `tsc`          | `.ts .tsx .cts .mts .d.ts .d.cts .d.mts .json` | first-class   | build     | `typescript`                             |
+| `tsgo`         | `.ts .tsx .cts .mts .d.ts .d.cts .d.mts .json` | first-class   | build     | `@typescript/native-preview`             |
+| `vue-tsc`      | `.vue`                                         | first-class   | build     | `vue-tsc`, `@vue/compiler-sfc`           |
+| `vue-tsgo`     | `.vue`                                         | graph-aware   | typecheck | `vue-tsgo`, `@typescript/native-preview` |
+| `svelte-check` | `.svelte`                                      | source-only   | typecheck | `svelte-check`                           |
 
-Only graph-capable checkers (currently `tsc`) drive the declaration leaf graph that `graph:check` validates. Other checkers still need a `tsconfig*.build.json` entry and `tsconfig*.dts.json` leaves so `proof:check` can prove coverage.
+Graph-capable checkers drive the declaration leaf graph that `graph:check` validates. Source-only execution checkers still need a `tsconfig*.build.json` entry and `tsconfig*.dts.json` leaves so `proof:check` can prove coverage; `vue-tsgo` keeps that graph/proof coverage even though execution is direct typecheck.
+
+Prefer `vue-tsc` for first-class Vue project-reference builds. Current `vue-tsgo --build` expands source imports into a transient virtual TypeScript workspace, does not preserve TypeScript project-reference boundaries, and does not provide incremental build semantics, so Limina treats `vue-tsgo` as a built-in second-class/source-only execution checker.
 
 A configured checker entry omitting `extensions` uses the preset defaults. Custom (non-built-in) preset strings MUST declare `extensions`.
 
@@ -233,7 +237,7 @@ Other named exports from the `limina` entry: `validateLiminaConfig`, `getActiveC
 - Node `^20.19.0 || >=22.12.0`
 - pnpm workspace with `pnpm-workspace.yaml` at the workspace root
 - `typescript` installed locally (declared as an optional peerDep; `getActiveCheckers` needs it)
-- `vue-tsc` / `svelte-check` only required if the corresponding preset is configured
+- `vue-tsc` / `vue-tsgo` / `svelte-check` only required if the corresponding preset is configured
 - Config file must be ESM: `limina.config.mjs`
 
 ## Common mistakes

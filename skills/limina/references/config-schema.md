@@ -44,7 +44,7 @@ Each entry registers one checker capability.
 
 ```ts
 interface CheckerConfig {
-  preset: 'tsc' | 'vue-tsc' | 'svelte-check' | string;
+  preset: 'tsc' | 'tsgo' | 'vue-tsc' | 'vue-tsgo' | 'svelte-check' | string;
   entry: string; // required, non-empty
   extensions?: string[]; // each must start with '.'
 }
@@ -53,8 +53,12 @@ interface CheckerConfig {
 | Preset         | Default `extensions`                                  | Graph-capable | Build execution |
 | -------------- | ----------------------------------------------------- | ------------- | --------------- |
 | `tsc`          | `.ts, .tsx, .cts, .mts, .d.ts, .d.cts, .d.mts, .json` | yes           | yes             |
-| `vue-tsc`      | `.vue`                                                | no            | yes             |
+| `tsgo`         | `.ts, .tsx, .cts, .mts, .d.ts, .d.cts, .d.mts, .json` | yes           | yes             |
+| `vue-tsc`      | `.vue`                                                | yes           | yes             |
+| `vue-tsgo`     | `.vue`                                                | yes           | **no**          |
 | `svelte-check` | `.svelte`                                             | no            | **no**          |
+
+`vue-tsgo` is intentionally source-only for execution but remains graph-aware for Limina coverage proof. Current `vue-tsgo --build` does not preserve TypeScript project-reference boundaries and does not provide incremental build semantics; prefer `vue-tsc` for first-class Vue build checks.
 
 Validation:
 
