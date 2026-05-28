@@ -3,7 +3,6 @@ import { createDocsIslands } from '@docs-islands/vitepress';
 import { react } from '@docs-islands/vitepress/adapters/react';
 import { vitepress as vitepressLogger } from '@docs-islands/vitepress/logger/presets';
 import { claude, doubao } from '@docs-islands/vitepress/models';
-import vitepressRenderingStrategiesPackageJson from '@docs-islands/vitepress/package.json' with { type: 'json' };
 import isInCi from 'is-in-ci';
 import { join } from 'pathe';
 import { type DefaultTheme, defineConfig, type UserConfig } from 'vitepress';
@@ -18,7 +17,8 @@ import zhConfig from '../zh/config';
 const { release, siteDevtools } = loadEnv();
 const { DOUBAO_BASE_URL, DOUBAO_API_KEY, CLAUDE_BASE_URL, CLAUDE_API_KEY } =
   siteDevtools;
-const base = `/${vitepressRenderingStrategiesPackageJson.name.replace('@', '')}/`;
+const vitepressPackageName = '@docs-islands/vitepress';
+const base = `/${vitepressPackageName.replace('@', '')}/`;
 const claudeUS = claude.provider({
   label: 'Claude US',
   baseUrl: CLAUDE_BASE_URL,

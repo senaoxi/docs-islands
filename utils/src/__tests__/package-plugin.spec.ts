@@ -33,7 +33,7 @@ function assetSourceToString(source: string | Uint8Array): string {
     : Buffer.from(source).toString('utf8');
 }
 
-describe('createPackageJsonPlugin', () => {
+describe('createPackagePlugin', () => {
   it('delegates catalog and workspace protocol resolution to pnpm', async () => {
     const workspaceRootDir = await mkdtemp(
       path.join(tmpdir(), 'docs-islands-package-plugin-'),
@@ -106,8 +106,8 @@ describe('createPackageJsonPlugin', () => {
         },
       });
 
-      const { createPackageJsonPlugin } = await import('../package-plugin');
-      const plugin = createPackageJsonPlugin({
+      const { createPackagePlugin } = await import('../package-plugin');
+      const plugin = createPackagePlugin({
         packageJsonPath,
         rewriteTypes: true,
       });
@@ -205,8 +205,8 @@ describe('createPackageJsonPlugin', () => {
         },
       });
 
-      const { createPackageJsonPlugin } = await import('../package-plugin');
-      const plugin = createPackageJsonPlugin({
+      const { createPackagePlugin } = await import('../package-plugin');
+      const plugin = createPackagePlugin({
         packageJsonPath,
       });
       const emittedAssets: EmittedAsset[] = [];

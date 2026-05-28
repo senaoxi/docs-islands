@@ -8,6 +8,7 @@ import type {
   DocsRuntimeManagerLike,
 } from '@docs-islands/core/types/client';
 
+import type * as ReactRuntime from 'react';
 import type * as ReactDOMClient from 'react-dom/client';
 import type { DefaultTheme, SiteConfig } from 'vitepress';
 
@@ -42,7 +43,7 @@ declare global {
       base?: string;
       cleanUrls?: boolean;
     };
-    React?: typeof React;
+    React?: typeof ReactRuntime;
     ReactDOM?: typeof ReactDOMClient;
 
     [RENDER_STRATEGY_CONSTANTS.pageMetafile]: Record<string, PageMetafile>;

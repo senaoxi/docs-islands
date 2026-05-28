@@ -490,6 +490,20 @@ const currentCapability = computed(
 const selectedProviderLabel = computed(() =>
   getSiteDevToolsAiProviderLabel(selectedProvider.value),
 );
+const getProviderCapability = (provider: SiteDevToolsAiProvider) =>
+  capabilities.value?.[provider] ?? null;
+const isProviderUnavailable = (provider: SiteDevToolsAiProvider) =>
+  getProviderCapability(provider)?.available === false;
+const formatProviderAvailability = (provider: SiteDevToolsAiProvider) => {
+  const providerCapability = getProviderCapability(provider);
+
+  return providerCapability?.available
+    ? providerCapability.model || 'Available'
+    : 'Unavailable';
+};
+const selectProvider = (provider: SiteDevToolsAiProvider) => {
+  selectedProvider.value = provider;
+};
 const analysisProviderLabel = computed(() =>
   analysisProvider.value
     ? getSiteDevToolsAiProviderLabel(analysisProvider.value)
@@ -1273,18 +1287,12 @@ watch(
         class="site-devtools-ai-panel__provider"
         :class="{
           'is-selected': provider === selectedProvider,
-          'is-unavailable': capabilities?.[provider]?.available === false,
+          'is-unavailable': isProviderUnavailable(provider),
         }"
-        @click="selectedProvider = provider"
+        @click="selectProvider(provider)"
       >
         <strong>{{ getSiteDevToolsAiProviderLabel(provider) }}</strong>
-        <span>
-          {{
-            capabilities?.[provider]?.available
-              ? capabilities?.[provider]?.model || 'Available'
-              : 'Unavailable'
-          }}
-        </span>
+        <span>{{ formatProviderAvailability(provider) }}</span>
       </button>
     </div>
 
