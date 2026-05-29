@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "@docs-islands/eslint-config",
+  "targets": {
+    "build": {
+      "dependsOn": [
+        {
+          "projects": ["@docs-islands/utils"],
+          "target": "build"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "limina": {
+      "generated": true
+    }
+  }
+}

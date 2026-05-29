@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "@docs-islands/vitepress-playground",
+  "targets": {
+    "docs:build": {
+      "dependsOn": [
+        {
+          "projects": ["@docs-islands/utils", "@docs-islands/vitepress"],
+          "target": "build"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "limina": {
+      "generated": true
+    }
+  }
+}

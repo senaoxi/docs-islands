@@ -1,0 +1,14 @@
+{
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "name": "@docs-islands/utils",
+  "targets": {
+    "build": {
+      "dependsOn": []
+    }
+  },
+  "metadata": {
+    "limina": {
+      "generated": true
+    }
+  }
+}

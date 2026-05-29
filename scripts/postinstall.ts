@@ -81,11 +81,13 @@ async function main(): Promise<void> {
 
   // The first install can run before link:*/dist package manifests exist, so
   // pnpm cannot create their .bin shims. Re-run install without lifecycle
-  // scripts after the dist builds so commands like `limina` are linked.
+  // scripts after the dist builds so commands like `limina` are linked. This
+  // shim-refresh pass intentionally ignores dependency build scripts.
   await runPnpm([
     'install',
     '--offline',
     '--ignore-scripts',
+    '--config.strict-dep-builds=false',
     '--frozen-lockfile',
   ]);
 

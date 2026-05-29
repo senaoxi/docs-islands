@@ -12,7 +12,7 @@
     "link:dev:exec": "del-cli ../dist --force && npm pkg set devDependencies.@docs-islands/vitepress='link:../' && pnpm install",
     "link:prod": "link-guard link:prod:exec",
     "link:prod:exec": "del-cli ../dist --force && npm pkg set devDependencies.@docs-islands/vitepress='link:../dist' && pnpm --filter @docs-islands/vitepress build && pnpm install",
-    "clean": "pnpm clean:remaining && del-cli .vitepress/dist .vitepress/cache .eslintcache node_modules",
+    "clean": "pnpm clean:remaining && del-cli .vitepress/dist .vitepress/cache .tsbuild .eslintcache node_modules",
     "clean:dist": "del-cli .vitepress/dist",
     "clean:remaining": "del-cli .vitepress/config.ts.timestamp-*.mjs || true"
   },
