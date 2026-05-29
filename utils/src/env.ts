@@ -48,9 +48,6 @@ const managedProcessEnvSchema = z.object({
   WS_ENDPOINT: z.string().optional(),
   PORT: z.string().optional(),
 
-  // build
-  DOCS_ISLANDS_BUILD_SKIP_PACKAGES: z.string().default(''),
-
   // site devtools
   DOCS_ISLANDS_CLAUDE_BASE_URL: z.string().default(''),
   DOCS_ISLANDS_CLAUDE_API_KEY: z.string().default(''),
@@ -77,9 +74,6 @@ export interface EnvConfig {
     CLAUDE_API_KEY: string;
     DOUBAO_BASE_URL: string;
     DOUBAO_API_KEY: string;
-  };
-  build: {
-    skipPackages: string;
   };
   test: {
     ws_endpoint: string | undefined;
@@ -149,9 +143,6 @@ function createEnvDebugSummary(
 ): Record<string, unknown> {
   return {
     appliedEnvFileKeys: metadata.appliedEnvFileKeys,
-    build: {
-      skipPackages: env.build.skipPackages || null,
-    },
     ci: env.ci,
     ciAdjustedKeys: metadata.ciAdjustedKeys,
     config: env.config,
@@ -464,9 +455,6 @@ export function loadEnv(options: LoadEnvOptions = defaultOptions): EnvConfig {
       DOUBAO_BASE_URL: finalEnv.DOCS_ISLANDS_DOUBAO_BASE_URL,
       DOUBAO_API_KEY: finalEnv.DOCS_ISLANDS_ARK_API_KEY,
     },
-    build: {
-      skipPackages: finalEnv.DOCS_ISLANDS_BUILD_SKIP_PACKAGES,
-    },
     test: {
       ws_endpoint: finalEnv.WS_ENDPOINT,
       port: finalEnv.PORT,
@@ -537,8 +525,7 @@ type ProcessEnvKey =
   | 'DOCS_ISLANDS_DOUBAO_BASE_URL'
   | 'DOCS_ISLANDS_ARK_API_KEY'
   | 'WS_ENDPOINT'
-  | 'PORT'
-  | 'DOCS_ISLANDS_BUILD_SKIP_PACKAGES';
+  | 'PORT';
 
 const injectKeySchema: z.ZodType<'DOCS_ISLANDS_MODE' | ProcessEnvKey> = z.union(
   [z.literal('DOCS_ISLANDS_MODE'), managedProcessEnvSchema.keyof()],

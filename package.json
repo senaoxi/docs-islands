@@ -32,7 +32,7 @@
     "frontend"
   ],
   "scripts": {
-    "build": "tsx scripts/build.ts",
+    "build": "nx run-many -t build docs:build --nxBail",
     "docs:dev": "sh -c 'pnpm --filter \"@docs-islands/${1:-monorepo}-docs\" docs:dev' --",
     "docs:build": "pnpm run _run docs:build && tsx scripts/merge-docs.ts",
     "docs:preview": "pnpm --filter @docs-islands/monorepo-docs docs:preview",
@@ -81,6 +81,7 @@
     "prettier-plugin-organize-imports": "catalog:format",
     "typescript": "catalog:dev",
     "lint-staged": "catalog:dev",
+    "nx": "catalog:dev",
     "vue-tsc": "catalog:dev",
     "vue-tsgo": "catalog:dev",
     "tsx": "catalog:dev",

@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "logaria-plugin-test",
+  "targets": {
+    "build": {
+      "dependsOn": [
+        {
+          "projects": ["logaria"],
+          "target": "build"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "limina": {
+      "generated": true
+    }
+  }
+}
