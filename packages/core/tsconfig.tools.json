@@ -4,7 +4,7 @@
   "compilerOptions": {
     "isolatedDeclarations": false,
     "declaration": true,
-    "lib": ["ES2023"],
+    "lib": ["ESNext"],
     "types": ["node"]
   },
   "include": ["package.json", "packagePlugin.ts", "rolldown.config.ts"]
