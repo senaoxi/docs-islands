@@ -568,8 +568,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/utils':
-        specifier: workspace:*
-        version: link:../../utils
+        specifier: link:../../utils/dist
+        version: link:../../utils/dist
       '@types/babel__generator':
         specifier: catalog:dev
         version: 7.27.0

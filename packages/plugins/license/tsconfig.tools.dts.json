@@ -10,9 +10,4 @@
     "outDir": "./.tsbuild",
     "tsBuildInfoFile": "./.tsbuild/tools.tsbuildinfo",
   },
-  "references": [
-    {
-      "path": "./tsconfig.lib.dts.json",
-    },
-  ],
 }

@@ -6,10 +6,5 @@
     "rootDir": ".",
     "outDir": "./.tsbuild",
     "tsBuildInfoFile": "./.tsbuild/tools.tsbuildinfo"
-  },
-  "references": [
-    {
-      "path": "../../packages/logaria/tsconfig.lib.dts.json"
-    }
-  ]
+  }
 }

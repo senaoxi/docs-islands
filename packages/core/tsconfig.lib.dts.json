@@ -6,10 +6,5 @@
     "rootDir": "src",
     "outDir": "./.tsbuild",
     "tsBuildInfoFile": "./.tsbuild/lib.tsbuildinfo"
-  },
-  "references": [
-    {
-      "path": "../../utils/tsconfig.lib.dts.json"
-    }
-  ]
+  }
 }

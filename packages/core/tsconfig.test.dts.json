@@ -10,9 +10,6 @@
   "references": [
     {
       "path": "./tsconfig.lib.dts.json"
-    },
-    {
-      "path": "../../utils/tsconfig.lib.dts.json"
     }
   ]
 }

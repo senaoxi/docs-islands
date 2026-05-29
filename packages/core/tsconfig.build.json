@@ -7,6 +7,9 @@
       "path": "./tsconfig.lib.dts.json"
     },
     {
+      "path": "./tsconfig.tools.dts.json"
+    },
+    {
       "path": "./tsconfig.test.dts.json"
     }
   ]
