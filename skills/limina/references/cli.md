@@ -128,6 +128,35 @@ Files are not injected automatically — the user must add `"./tsconfig.dts.path
 
 Exit code: 1 only for `paths check` when files are stale.
 
+## `limina nx <action> [target...]`
+
+Action must be `sync` or `check`. When no targets are passed, Limina uses `build`. Repeated target names are ignored in first-seen order.
+
+- `sync` — sync each selected `targets.<target>.dependsOn` from link-based artifact dependencies. Existing `project.json` files are updated only when the target already exists; missing targets are skipped. Missing `project.json` files are created from the Limina template and include every selected target.
+- `check` — compare each existing selected target's `dependsOn` project-name set with Limina's expected set, ignoring order and duplicates. Existing files that lack the target are skipped. Missing `project.json` files are stale and fail the check.
+
+Synced `dependsOn` values always use upstream project names with `target: "build"`:
+
+```json
+{
+  "dependsOn": [
+    {
+      "projects": ["@scope/dependency"],
+      "target": "build"
+    }
+  ]
+}
+```
+
+Use multiple targets when separate Nx targets share the same artifact prerequisite graph:
+
+```sh
+limina nx sync build docs:build test:build
+limina nx check build docs:build test:build
+```
+
+Exit code: 1 only for `nx check` when synced target state is stale, or for invalid link artifact dependencies.
+
 ## `limina checker <action> [--concurrency N]`
 
 Action must be `typecheck` or `build`.
