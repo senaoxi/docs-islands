@@ -62,23 +62,6 @@ function runPnpm(
 }
 
 async function main(): Promise<void> {
-  for (const packageDir of [
-    'utils',
-    'packages/plugins/license',
-    'packages/limina',
-  ]) {
-    // These local packages are consumed through link: deps whose exports point at dist.
-    // Build them before refreshing pnpm's generated bin shims below.
-    await runPnpm([
-      '--dir',
-      packageDir,
-      'exec',
-      'rolldown',
-      '--config',
-      'rolldown.config.ts',
-    ]);
-  }
-
   // The first install can run before link:*/dist package manifests exist, so
   // pnpm cannot create their .bin shims. Re-run install without lifecycle
   // scripts after the dist builds so commands like `limina` are linked. This

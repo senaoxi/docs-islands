@@ -529,16 +529,31 @@ importers:
 
   packages/agents:
     dependencies:
-      '@docs-islands/utils':
-        specifier: link:../../utils/dist
-        version: link:../../utils/dist
       logaria:
         specifier: catalog:prod
         version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
+      '@docs-islands/utils':
+        specifier: link:../../utils/dist
+        version: link:../../utils/dist
+      '@types/node':
+        specifier: 20.19.0
+        version: 20.19.0
       del-cli:
         specifier: catalog:dev
         version: 7.0.0
+      rolldown:
+        specifier: catalog:dev
+        version: 1.0.0-rc.4
+      rolldown-plugin-dts:
+        specifier: catalog:dev
+        version: 0.23.1(@typescript/native-preview@7.0.0-dev.20260527.1)(oxc-resolver@11.19.1)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+      tsx:
+        specifier: catalog:dev
+        version: 4.21.0
+      typescript:
+        specifier: catalog:dev
+        version: 5.9.3
 
   packages/core:
     dependencies:
