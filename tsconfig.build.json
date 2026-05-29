@@ -15,6 +15,9 @@
       "path": "./packages/core/tsconfig.build.json"
     },
     {
+      "path": "./packages/agents/tsconfig.build.json"
+    },
+    {
       "path": "./packages/plugins/license/tsconfig.build.json"
     },
     {

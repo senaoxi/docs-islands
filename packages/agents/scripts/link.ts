@@ -19,7 +19,9 @@ const logger = createLogger({
 }).getLoggerByGroup('task.link');
 const scriptElapsed = createElapsedTimer();
 
-function findProjectRoot() {
+type LinkResult = 'created' | 'error' | 'exists' | 'skipped';
+
+function findProjectRoot(): string {
   try {
     return execSync('git rev-parse --show-toplevel', {
       encoding: 'utf-8',
@@ -30,7 +32,7 @@ function findProjectRoot() {
   }
 }
 
-function ensureDir(dir) {
+function ensureDir(dir: string): void {
   if (!existsSync(dir)) {
     logger.info(`creating directory: ${dir}`);
     mkdirSync(dir, { recursive: true });
@@ -38,18 +40,22 @@ function ensureDir(dir) {
   }
 }
 
-function createSkillSymlink(source, target) {
+function createSkillSymlink(source: string, target: string): LinkResult {
   if (existsSync(target)) {
     const stats = lstatSync(target);
     if (stats.isSymbolicLink()) {
       const current = readlinkSync(target);
       const expected = relative(dirname(target), source);
-      if (current === expected || current === source) return 'exists';
+      if (current === expected || current === source) {
+        return 'exists';
+      }
+
       rmSync(target);
     } else {
       return 'skipped';
     }
   }
+
   try {
     const rel = relative(dirname(target), source);
     symlinkSync(
@@ -63,49 +69,65 @@ function createSkillSymlink(source, target) {
   }
 }
 
-function getSkillDirs(basePath) {
-  if (!existsSync(basePath)) return [];
+function getSkillDirs(basePath: string): string[] {
+  if (!existsSync(basePath)) {
+    return [];
+  }
+
   return readdirSync(basePath, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
+    .filter((dirent) => dirent.isDirectory())
+    .map((dirent) => dirent.name);
 }
 
-function linkSkillsForTool(projectRoot, skillsBase, toolDir, toolName) {
+function linkSkillsForTool(
+  projectRoot: string,
+  skillsBase: string,
+  toolDir: string,
+  toolName: string,
+): void {
   logger.info(`${toolName} symlink setup started`);
   const linkElapsed = createElapsedTimer();
   const targetDir = join(projectRoot, toolDir, 'skills');
   const generalSkills = join(skillsBase, 'general');
-  const specificSkills = join(skillsBase, toolDir.replace(/^\./, ''));
+  const specificSkills = join(skillsBase, toolDir.replace(/^\./u, ''));
 
   ensureDir(targetDir);
-  let created = 0,
-    existed = 0;
+  let created = 0;
+  let existed = 0;
 
   for (const skill of getSkillDirs(generalSkills)) {
-    const r = createSkillSymlink(
+    const result = createSkillSymlink(
       join(generalSkills, skill),
       join(targetDir, skill),
-      skill,
     );
-    if (r === 'created') created++;
-    if (r === 'exists') existed++;
+    if (result === 'created') {
+      created++;
+    }
+    if (result === 'exists') {
+      existed++;
+    }
   }
+
   for (const skill of getSkillDirs(specificSkills)) {
-    const r = createSkillSymlink(
+    const result = createSkillSymlink(
       join(specificSkills, skill),
       join(targetDir, skill),
-      skill,
     );
-    if (r === 'created') created++;
-    if (r === 'exists') existed++;
+    if (result === 'created') {
+      created++;
+    }
+    if (result === 'exists') {
+      existed++;
+    }
   }
+
   logger.success(
     `${toolName}: ${created} created, ${existed} exist`,
     linkElapsed(),
   );
 }
 
-function main() {
+function main(): void {
   logger.info('AI tool symlink setup started');
   const mainElapsed = createElapsedTimer();
   const projectRoot = findProjectRoot();

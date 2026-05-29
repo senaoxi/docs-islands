@@ -1,0 +1,16 @@
+{
+  // Package-local tool/source check. Declaration leaf: tsconfig.dts.json.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "isolatedDeclarations": false,
+    "declaration": true,
+    "lib": ["ES2023"],
+    "types": ["node"],
+  },
+  "include": [
+    "package.json",
+    "packagePlugin.ts",
+    "rolldown.config.ts",
+    "scripts/link.ts",
+  ],
+}

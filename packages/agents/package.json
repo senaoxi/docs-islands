@@ -3,15 +3,26 @@
   "private": true,
   "type": "module",
   "description": "Shared AI assistant instructions and skills for Claude Code, Cursor, GitHub Copilot, and other AI coding tools",
+  "files": [
+    "dist",
+    "skills"
+  ],
   "scripts": {
-    "link": "FORCE_COLOR=1 node scripts/link.js",
-    "clean": "del-cli node_modules"
+    "link": "FORCE_COLOR=1 tsx scripts/link.ts",
+    "build": "rolldown --config rolldown.config.ts",
+    "build:watch": "rolldown --config rolldown.config.ts --watch",
+    "clean": "del-cli .tsbuild dist node_modules"
   },
   "dependencies": {
-    "logaria": "catalog:prod",
-    "@docs-islands/utils": "link:../../utils/dist"
+    "logaria": "catalog:prod"
   },
   "devDependencies": {
-    "del-cli": "catalog:dev"
+    "@types/node": "catalog:dev",
+    "@docs-islands/utils": "link:../../utils/dist",
+    "del-cli": "catalog:dev",
+    "rolldown": "catalog:dev",
+    "rolldown-plugin-dts": "catalog:dev",
+    "tsx": "catalog:dev",
+    "typescript": "catalog:dev"
   }
 }
