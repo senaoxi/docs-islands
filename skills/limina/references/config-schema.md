@@ -69,17 +69,28 @@ Validation:
 
 ## `config.source`
 
-Controls which files `proof:check` requires coverage for.
+Controls Limina's global source boundary and source-owned dependency usage checks. `source:check` and `proof:check` both use this boundary; individual source checks do not define their own `include` / `exclude`.
 
 ```ts
 interface SourceBoundaryConfig {
   include?: string[];
   exclude?: string[];
+  unusedDependencies?: SourceUnusedDependenciesConfig;
+}
+
+interface SourceUnusedDependenciesConfig {
+  ignore?: SourceUnusedDependencyIgnoreEntry[];
+}
+
+interface SourceUnusedDependencyIgnoreEntry {
+  importer: string;
+  dependency: string;
+  reason: string;
 }
 ```
 
-- If `include` is omitted, the effective source boundary is derived from the union of all configured checker `extensions` (built-in or explicit).
-- If `include` is provided, it is the COMPLETE boundary — checker extensions are NOT merged in.
+- If `include` is omitted, the effective global source boundary is derived from the union of all configured checker `extensions` (built-in or explicit).
+- If `include` is provided, it is the COMPLETE global source boundary — checker extensions are NOT merged in.
 - `exclude` always filters the effective boundary.
 
 Default `exclude` (used when not specified):
@@ -105,9 +116,17 @@ Default `exclude` (used when not specified):
 - Directory shorthands (`node_modules` expands to both `node_modules/**` and `**/node_modules/**`)
 - Plain non-glob strings without `/` expand to both the bare entry and `**/<entry>`
 
+`unusedDependencies.ignore` configures exceptions for `source:check` unused workspace dependency analysis:
+
+- Only workspace package dependencies are checked; third-party npm dependencies are ignored.
+- Usage is counted from files matched by the global `config.source.include` / `config.source.exclude` boundary.
+- `importer` and `dependency` must name existing workspace packages.
+- The dependency pair must still be declared in the importer's `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies`.
+- `reason` must be a non-empty explanation for why static source import analysis cannot see the usage.
+
 ## `graph.rules`
 
-Label-based deny lists. A declaration leaf opts in by declaring `"limina": "<label>"` at the top level of its `tsconfig*.dts.json`.
+Label-based graph rules. A declaration leaf opts in by declaring labels under `liminaOptions.graphRules` in its `tsconfig*.dts.json`.
 
 ```ts
 interface GraphConfig {
@@ -116,6 +135,7 @@ interface GraphConfig {
 
 interface GraphRule {
   deny?: GraphRuleDenyConfig;
+  allow?: GraphRuleAllowConfig;
 }
 
 interface GraphRuleDenyConfig {
@@ -123,7 +143,15 @@ interface GraphRuleDenyConfig {
   deps?: GraphRuleDepDenyEntry[]; // forbidden package / package-import / node-builtin names
 }
 
+interface GraphRuleAllowConfig {
+  refs?: GraphRuleRefAllowEntry[]; // extra declared refs allowed when static imports cannot prove them
+}
+
 interface GraphRuleRefDenyEntry {
+  path: string;
+  reason: string;
+}
+interface GraphRuleRefAllowEntry {
   path: string;
   reason: string;
 }
@@ -314,6 +342,7 @@ Issue codes covered by built-in validation:
 - Empty or non-dot-prefixed `extensions`
 - Unsupported preset name (no adapter registered)
 - Presence of removed `routes` field
+- Presence of removed `graph.unusedWorkspaceDependencies` field
 - Custom preset without explicit `extensions`
 
-Pipeline / graph rule / package check / paths / proof.allowlist deeper-shape validation happens inside each command rather than at `validateLiminaConfig` — those errors surface at runtime with the same field/value/reason format.
+Pipeline / graph rule / package check / paths / proof.allowlist / source.unusedDependencies deeper-shape validation happens inside each command rather than at `validateLiminaConfig` — those errors surface at runtime with the same field/value/reason format.

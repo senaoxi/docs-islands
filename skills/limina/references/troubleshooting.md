@@ -130,13 +130,13 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 
 ### `Unauthorized bare package import:`
 
-- **Cause**: An imported package is not listed in `dependencies` or `devDependencies` of the importing package. (Limina also tells you if it found the package in `peerDependencies` or `optionalDependencies` — those are NOT authorizing.)
+- **Cause**: An imported package is not listed in `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies` of the importing package. Limina checks TypeScript's resolved entry package first and falls back to the raw package root when the import is unresolved.
 - **Fix**: Add the package to the appropriate authorized section in the importing package's manifest.
 
-### `Unauthorized package import specifier:` / `Unresolved package import specifier:` / `Package import escapes package owner scope:`
+### `Unauthorized package import specifier:` / `Package import resolves to another package owner:` / `Unresolved package import specifier:` / `Package import resolves outside package ownership:`
 
-- **Cause**: A `#xxx` package-import specifier (1) does not match any `package.json#imports` key, (2) cannot be resolved, OR (3) resolves outside the owner package's directory.
-- **Fix**: Add the corresponding key to `package.json#imports` and ensure the target file is inside the same package.
+- **Cause**: A `#xxx` package-import specifier (1) does not match any `package.json#imports` key, (2) resolves to another workspace/package owner, (3) cannot be resolved, OR (4) resolves outside package ownership instead of the current owner or a named artifact package.
+- **Fix**: Add the corresponding key to `package.json#imports`, keep owner-local aliases inside the same package, import other workspace packages by package name, or declare the resolved artifact package dependency.
 
 ## Proof check
 

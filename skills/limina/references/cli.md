@@ -63,9 +63,9 @@ Run the user-defined pipeline at `pipelines[<name>]`. ONLY runs pipelines from `
 
 Exit code: 1 if the name is missing OR any step fails.
 
-## `limina graph <check>`
+## `limina graph <check|sync> [path]`
 
-Action must be `check` (only valid action).
+Action must be `check` or `sync`.
 
 Validates:
 
@@ -79,6 +79,8 @@ Validates:
 
 Exit code: 1 on any violation.
 
+`limina graph sync [path]` rewrites declaration-leaf `references` from TypeScript-resolved source imports. With no path, it uses all configured checker entries. A `tsconfig*.build.json` path syncs all reachable declaration leaves, and a `tsconfig*.dts.json` path syncs only that leaf. Relative paths resolve from cwd.
+
 ## `limina source <check>`
 
 Action must be `check`.
@@ -88,8 +90,9 @@ Validates package-owner boundary rules:
 - A non-aggregator `tsconfig*.dts.json` (or its companion) must stay within ONE nearest-`package.json` owner. Mixing owners is an error.
 - Every source file must have a package owner.
 - A relative source import must not cross the nearest package.json owner boundary.
-- A bare package import must be authorized by the nearest package.json `dependencies` or `devDependencies` (`peerDependencies` / `optionalDependencies` alone are NOT authorizing).
-- `#xxx` package imports must match the nearest package.json `imports` field AND resolve inside the owner scope.
+- A bare package import is checked from TypeScript's resolved entry first. Current-owner targets are allowed, other workspace owners require a manifest dependency, strict mode requires `workspace:`, artifact-package targets require a manifest dependency, and unresolved imports fall back to the raw package root.
+- Dependency authorization accepts `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`.
+- `#xxx` package imports must match the nearest package.json `imports` field, may resolve within the current owner, must not resolve to another workspace owner, and may resolve to a named artifact package only when the owner declares that dependency.
 
 Exit code: 1 on any violation.
 
