@@ -1,6 +1,7 @@
 import { defineConfig } from 'limina';
 
 export default defineConfig({
+  strict: true,
   // Shared checker entries used by graph, proof, paths, and typecheck checks.
   config: {
     /**
@@ -20,6 +21,21 @@ export default defineConfig({
       },
     },
     source: {
+      include: [
+        '**/*.d.cts',
+        '**/*.d.mts',
+        '**/*.d.ts',
+        '**/*.json',
+        '**/*.cts',
+        '**/*.mts',
+        '**/*.tsx',
+        '**/*.vue',
+        '**/*.ts',
+        '**/eslint.config.mjs',
+        '**/.vitepress/**/*.ts',
+        '**/.vitepress/**/*.vue',
+        '**/.vitepress/**/*.tsx',
+      ],
       exclude: [
         'node_modules',
         'dist',
@@ -30,155 +46,90 @@ export default defineConfig({
         '**/tsconfig*.json',
         '**/package.json',
         '**/project.json',
+        '**/.vitepress/dist',
         '.prettierrc.json',
         '.markdownlint.json',
         'nx.json',
         'vercel.json',
       ],
+      // Workspace dependencies used by configs, package scripts, operational JS,
+      // or documentation examples that are outside tsconfig-owned source imports.
+      unusedDependencies: {
+        ignore: [
+          {
+            importer: '@docs-islands/vitepress-docs',
+            dependency: 'logaria',
+            reason:
+              '@docs-islands/vitepress does not yet support TypeScript Language Service.',
+          },
+          {
+            importer: '@docs-islands/core',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for package checks outside static source imports.',
+          },
+          {
+            importer: '@docs-islands/limina-docs',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for docs typechecks outside static source imports.',
+          },
+          {
+            importer: '@docs-islands/plugin-license',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for package checks outside static source imports.',
+          },
+          {
+            importer: '@docs-islands/utils',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for package checks outside static source imports.',
+          },
+          {
+            importer: '@docs-islands/vitepress',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for package checks outside static source imports.',
+          },
+          {
+            importer: '@docs-islands/eslint-config',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for package checks outside static source imports.',
+          },
+          {
+            importer: '@docs-islands/vitepress-playground',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for playground typechecks outside static source imports.',
+          },
+          {
+            importer: '@docs-islands/vitepress-smoke',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for smoke typechecks outside static source imports.',
+          },
+          {
+            importer: 'docs-islands-monorepo',
+            dependency: 'limina',
+            reason:
+              'Imported by limina.config.mjs and invoked by root package.json scripts outside static source imports.',
+          },
+          {
+            importer: 'logaria',
+            dependency: 'limina',
+            reason:
+              'Invoked by package.json scripts for package checks outside static source imports.',
+          },
+        ],
+      },
     },
   },
   // TypeScript project graph policy. This checks project references,
   // cross-project imports, workspace source dependencies, and label-based graph
   // boundaries.
   graph: {
-    // Workspace dependencies used by configs, package scripts, operational JS,
-    // or documentation examples that are outside tsconfig-owned source imports.
-    unusedWorkspaceDependencies: {
-      allowlist: [
-        {
-          importer: '@docs-islands/core',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by the package-local eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: '@docs-islands/core',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for package checks outside static source imports.',
-        },
-        {
-          importer: '@docs-islands/eslint-config',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for package checks outside static source imports.',
-        },
-        {
-          importer: '@docs-islands/limina-docs',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for docs typechecks outside static source imports.',
-        },
-        {
-          importer: '@docs-islands/monorepo-docs',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by docs/eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: '@docs-islands/plugin-license',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by the package-local eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: '@docs-islands/plugin-license',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for package checks outside static source imports.',
-        },
-        {
-          importer: '@docs-islands/utils',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by utils/eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: '@docs-islands/utils',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for package checks outside static source imports.',
-        },
-        {
-          importer: '@docs-islands/vitepress',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by the package-local eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: '@docs-islands/vitepress',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for package checks outside static source imports.',
-        },
-        {
-          importer: '@docs-islands/vitepress-docs',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by packages/vitepress/docs/eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: '@docs-islands/vitepress-docs',
-          dependency: 'logaria',
-          reason:
-            'Kept for documentation examples that reference the logger package outside static source imports.',
-        },
-        {
-          importer: '@docs-islands/vitepress-playground',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by packages/vitepress/playground/eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: '@docs-islands/vitepress-playground',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for playground typechecks outside static source imports.',
-        },
-        {
-          importer: '@docs-islands/vitepress-smoke',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by packages/vitepress/smoke/eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: '@docs-islands/vitepress-smoke',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for smoke typechecks outside static source imports.',
-        },
-        {
-          importer: 'docs-islands-monorepo',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by the root eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: 'docs-islands-monorepo',
-          dependency: 'limina',
-          reason:
-            'Imported by limina.config.mjs and invoked by root package.json scripts outside static source imports.',
-        },
-        {
-          importer: 'limina',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by the package-local eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: 'logaria',
-          dependency: '@docs-islands/eslint-config',
-          reason:
-            'Imported by the package-local eslint.config.mjs outside tsconfig-owned source file sets.',
-        },
-        {
-          importer: 'logaria',
-          dependency: 'limina',
-          reason:
-            'Invoked by package.json scripts for package checks outside static source imports.',
-        },
-      ],
-    },
     // Label-based package and declaration boundary rules. Labels are declared
     // inside tsconfig*.dts.json with "limina": "<label>".
     rules: {
