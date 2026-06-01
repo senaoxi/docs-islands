@@ -1,0 +1,40 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg" aria-label="docs-islands vitepress variant" role="img">
+ <defs>
+  <!-- Soft ambient shadow for elements -->
+  <!-- Card shadow -->
+  <!-- Abstract bolt gradient (neutral, non-official) -->
+  <!-- Card border gradient -->
+  <!-- Badge slot frame gradient -->
+  <!-- Clip path to keep content within card -->
+  <clipPath id="cardClip">
+   <rect id="svg_1" ry="40" rx="40" height="480" width="416" y="16" x="48"/>
+  </clipPath>
+  <linearGradient y2="100%" x2="0%" y1="0%" x1="0%" id="boltGrad">
+   <stop stop-color="#ffd166" offset="0%"/>
+   <stop stop-color="#f59e0b" offset="100%"/>
+  </linearGradient>
+  <linearGradient y2="100%" x2="100%" y1="0%" x1="0%" id="cardStrokeGrad">
+   <stop stop-color="#60a5fa" offset="0%"/>
+   <stop stop-color="#a78bfa" offset="50%"/>
+   <stop stop-color="#22d3ee" offset="100%"/>
+  </linearGradient>
+ </defs>
+ <!-- Elevated card with gradient border (no shadow) -->
+ <!-- Core islands mark grouped and scaled to leave inner padding -->
+ <g>
+  <title>Layer 1</title>
+  <g transform="rotate(-13.9342 261.152 246.766)" stroke="null" id="svg_2">
+   <rect stroke="null" id="svg_3" fill="#ffffff" ry="40" rx="40" height="415.1977" width="313.68903" y="39.16742" x="104.30776"/>
+   <rect stroke="url(#cardStrokeGrad)" id="svg_4" stroke-width="10" fill="none" ry="40" rx="40" height="415.1977" width="313.68903" y="39.16742" x="104.30776"/>
+  </g>
+  <g stroke="null" id="svg_5" clip-path="url(#cardClip)">
+   <g stroke="null" id="svg_6">
+    <circle stroke="null" transform="rotate(-15 242.852 181.154) matrix(0.418573 0.58485 -0.5311 0.460935 240.516 -19.9096)" id="svg_7" fill="#42b883" r="138" cy="164.41921" cx="214.20258"/>
+    <circle stroke="null" transform="rotate(-15 276.714 302.777) matrix(0.403375 0.570522 -0.511816 0.449643 300.434 -40.0886)" id="svg_8" fill="#61dafb" r="138" cy="320.74992" cx="348.17612"/>
+   </g>
+   <g stroke="null" transform="matrix(0.849343 -0.250006 0.220296 0.963889 -46.6272 71.9906)" id="svg_9">
+    <path stroke="null" id="svg_10" fill="url(#boltGrad)" d="m287.28473,169.17117l47.72727,-18.83084l-26.03306,80.03108l52.06612,0l-93.28512,145.93903l23.86364,-84.73879l-56.40496,0l52.06612,-122.40048z"/>
+   </g>
+  </g>
+ </g>
+</svg>
