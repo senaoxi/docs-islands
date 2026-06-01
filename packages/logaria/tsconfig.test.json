@@ -10,5 +10,5 @@
     "**/types/**/*.d.ts",
     "vitest.config.ts"
   ],
-  "exclude": ["src/plugin/__tests__/**"]
+  "exclude": ["src/plugin/__tests__/**", "**/dist/**"]
 }
