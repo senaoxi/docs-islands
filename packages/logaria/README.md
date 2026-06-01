@@ -1,6 +1,11 @@
 # logaria
 
 <p align="center">
+  <a href="https://docs.senao.me/docs-islands/logaria" target="_blank" rel="noopener noreferrer">
+    <img width="180" src="https://docs.senao.me/docs-islands/logaria/logo.svg" alt="logaria logo">
+  </a>
+</p>
+<p align="center">
   <a href="https://npmjs.com/package/logaria"><img src="https://img.shields.io/npm/v/logaria.svg" alt="npm package"></a>
   <a href="https://nodejs.org/en/about/previous-releases"><img src="https://img.shields.io/node/v/logaria.svg" alt="node compatibility"></a>
   <a href="https://github.com/XiSenao/docs-islands/actions/workflows/ci.yml"><img src="https://github.com/XiSenao/docs-islands/actions/workflows/ci.yml/badge.svg?branch=main" alt="build status"></a>

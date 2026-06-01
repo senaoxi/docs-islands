@@ -138,18 +138,10 @@ const links = computed(() =>
           <div class="package-showcase">
             <div class="product-main-copy">
               <div class="islands-icon product-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 96 96"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <circle cx="37" cy="49" r="25" fill="#42B883" />
-                  <circle cx="59" cy="49" r="25" fill="#61DAFB" />
-                  <path
-                    d="M48 30L54 43L68 44L58 54L61 68L48 61L35 68L38 54L28 44L42 43L48 30Z"
-                    fill="#6D5BD0"
-                  />
-                </svg>
+                <img
+                  :src="withBase('/vitepress.svg')"
+                  :alt="copy.vitepressTitle"
+                />
               </div>
 
               <div>
