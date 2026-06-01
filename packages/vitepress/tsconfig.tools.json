@@ -4,10 +4,12 @@
   "compilerOptions": {
     "isolatedDeclarations": false,
     "declaration": false,
+    "allowJs": true,
     "lib": ["ESNext", "DOM"],
     "types": ["node"]
   },
   "include": [
+    "eslint.config.mjs",
     "package.json",
     "packagePlugin.ts",
     "rolldown.config.ts",

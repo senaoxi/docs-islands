@@ -31,6 +31,7 @@
     "logaria": "catalog:prod"
   },
   "devDependencies": {
+    "@types/react": "catalog:dev",
     "@rollup/plugin-replace": "catalog:dev",
     "eslint": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",

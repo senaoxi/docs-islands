@@ -1191,6 +1191,9 @@ importers:
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
+      '@types/react':
+        specifier: catalog:dev
+        version: 18.3.26
       '@vercel/analytics':
         specifier: catalog:docs-dev
         version: 1.6.1(react@18.3.1)(vue-router@4.6.4(vue@3.5.28(typescript@5.9.3)))(vue@3.5.28(typescript@5.9.3))
@@ -1270,6 +1273,9 @@ importers:
       '@playwright/test':
         specifier: catalog:test
         version: 1.58.2
+      '@types/react':
+        specifier: catalog:dev
+        version: 18.3.26
       '@typescript-eslint/parser':
         specifier: catalog:lint
         version: 8.55.0(eslint@9.39.2)(typescript@5.9.3)

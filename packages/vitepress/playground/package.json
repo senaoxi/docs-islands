@@ -20,6 +20,7 @@
     "logaria": "workspace:*"
   },
   "devDependencies": {
+    "@types/react": "catalog:dev",
     "eslint": "catalog:lint",
     "@typescript-eslint/parser": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",

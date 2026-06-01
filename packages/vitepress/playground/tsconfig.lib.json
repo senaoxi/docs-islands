@@ -4,8 +4,9 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["node"],
     "jsx": "preserve",
+    "allowJs": true,
     "isolatedDeclarations": false,
     "declaration": false
   },
-  "include": [".vitepress/**/*.ts", "components/**/*.tsx"]
+  "include": ["eslint.config.mjs", ".vitepress/**/*.ts", "components/**/*.tsx"]
 }

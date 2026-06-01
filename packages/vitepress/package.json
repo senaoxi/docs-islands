@@ -168,14 +168,14 @@
     "./package.json": "./package.json",
     "./internal/devtools": "./src/shared/internal/devtools.ts",
     "./internal/client-runtime": "./src/shared/internal/client-runtime.ts",
-    "./internal-helper/client-runtime": "./dist/shared/internal/client-runtime.js",
+    "./internal-helper/client-runtime": "./src/shared/internal/client-runtime.ts",
     "./internal-helper/imports/types/*": "./types/*.d.ts",
     "./internal-helper/imports/dep-types/*": "./src/types/*.d.ts",
     "./internal-helper/imports/shared/constants/*": "./src/shared/constants/*.ts",
     "./internal-helper/imports/shared/constants/log-groups/*": "./src/shared/constants/log-groups/*.ts",
     "./internal-helper/imports/shared/*": "./src/shared/*.ts",
     "./types/*": {
-      "types": "./types/*"
+      "types": "./src/types/*.d.ts"
     }
   },
   "types": "./node/index.d.ts",
