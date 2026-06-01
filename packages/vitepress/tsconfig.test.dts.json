@@ -9,28 +9,25 @@
   },
   "references": [
     {
-      "path": "./src/types/tsconfig.dts.json"
+      "path": "../core/tsconfig.lib.dts.json"
     },
     {
-      "path": "./src/shared/tsconfig.dts.json"
-    },
-    {
-      "path": "./src/node/tsconfig.dts.json"
+      "path": "../logaria/tsconfig.lib.dts.json"
     },
     {
       "path": "./src/client/tsconfig.dts.json"
     },
     {
+      "path": "./src/node/tsconfig.dts.json"
+    },
+    {
+      "path": "./src/shared/tsconfig.dts.json"
+    },
+    {
+      "path": "./src/types/tsconfig.dts.json"
+    },
+    {
       "path": "./theme/tsconfig.dts.json"
-    },
-    {
-      "path": "./tsconfig.tools.dts.json"
-    },
-    {
-      "path": "../../packages/logaria/tsconfig.lib.dts.json"
-    },
-    {
-      "path": "../../packages/core/tsconfig.lib.dts.json"
     }
   ]
 }

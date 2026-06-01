@@ -9,12 +9,6 @@
   "references": [
     {
       "path": "../src/shared/tsconfig.dts.json"
-    },
-    {
-      "path": "../../logaria/tsconfig.lib.dts.json"
-    },
-    {
-      "path": "../../core/tsconfig.lib.dts.json"
     }
   ]
 }

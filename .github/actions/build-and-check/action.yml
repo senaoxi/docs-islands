@@ -1,5 +1,5 @@
 name: "Build and Quality Check"
-description: "Build packages and run quality checks (format, lint, typecheck, publint)"
+description: "Build packages and run quality checks (format, lint, check, publint)"
 
 inputs:
   skip-build:
@@ -14,7 +14,7 @@ inputs:
     description: "Run lint check"
     required: false
     default: "true"
-  run-typecheck:
+  run-check:
     description: "Run type check"
     required: false
     default: "true"
@@ -44,9 +44,9 @@ runs:
       run: pnpm lint
 
     - name: Type Check
-      if: inputs.run-typecheck == 'true'
+      if: inputs.run-check == 'true'
       shell: bash
-      run: pnpm typecheck
+      run: pnpm check
 
     - name: Lint Packages
       if: inputs.run-lint-packages == 'true'

@@ -95,7 +95,7 @@ When reporting bugs or requesting features, please:
   ```sh
   pnpm format
   pnpm lint
-  pnpm typecheck
+  pnpm check
   pnpm test
   ```
 
