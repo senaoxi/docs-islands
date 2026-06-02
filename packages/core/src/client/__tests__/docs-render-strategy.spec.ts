@@ -3,8 +3,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RENDER_STRATEGY_CONSTANTS } from '../../shared/constants/render-strategy';
+import type { DocsRendererAdapter } from '../../types/client';
 import type { RenderDirective } from '../../types/render';
-import { DocsRenderStrategy } from '../docs-render-strategy';
+import {
+  DocsRenderStrategy,
+  type DocsRenderStrategyOptions,
+} from '../docs-render-strategy';
 
 vi.mock('@docs-islands/utils/logger', async (importOriginal) => {
   const actual =
@@ -30,49 +34,49 @@ interface TestComponent {
   name: string;
 }
 
+type TestComponentManager =
+  DocsRenderStrategyOptions<TestComponent>['componentManager'];
+type TestRenderer = DocsRendererAdapter<TestComponent>;
+
 describe('DocsRenderStrategy', () => {
   let strategy: DocsRenderStrategy<TestComponent>;
-  let componentManager: {
-    getComponent: ReturnType<typeof vi.fn>;
-    getPageComponentInfo: ReturnType<typeof vi.fn>;
-    loadPageComponents: ReturnType<typeof vi.fn>;
-    subscribeComponent: ReturnType<typeof vi.fn>;
-  };
-  let renderer: {
-    ensureRuntime: ReturnType<typeof vi.fn>;
-    executeSsrInjectScript: ReturnType<typeof vi.fn>;
-    framework: 'test';
-    hydrate: ReturnType<typeof vi.fn>;
-    isRuntimeAvailable: ReturnType<typeof vi.fn>;
-    render: ReturnType<typeof vi.fn>;
-  };
+  let componentManager: TestComponentManager;
+  let renderer: TestRenderer;
 
   beforeEach(() => {
     document.body.innerHTML = '';
 
     componentManager = {
-      getComponent: vi.fn(() => ({
+      getComponent: vi.fn<TestComponentManager['getComponent']>(() => ({
         name: 'TestComponent',
       })),
-      getPageComponentInfo: vi.fn(() => ({
-        cssBundlePaths: [],
-        loaderScript: '/assets/runtime.js',
-        modulePreloads: [],
-        pathname: '/test-page',
-        ssrInjectScript: '/assets/ssr-inject.js',
-      })),
-      loadPageComponents: vi.fn(async () => true),
-      subscribeComponent: vi.fn(async () => true),
+      getPageComponentInfo: vi.fn<TestComponentManager['getPageComponentInfo']>(
+        () => ({
+          cssBundlePaths: [],
+          loaderScript: '/assets/runtime.js',
+          modulePreloads: [],
+          pathname: '/test-page',
+          ssrInjectScript: '/assets/ssr-inject.js',
+        }),
+      ),
+      loadPageComponents: vi.fn<TestComponentManager['loadPageComponents']>(
+        async () => true,
+      ),
+      subscribeComponent: vi.fn<TestComponentManager['subscribeComponent']>(
+        async () => true,
+      ),
     };
     renderer = {
-      ensureRuntime: vi.fn(async () => true),
-      executeSsrInjectScript: vi.fn(async () => true),
+      ensureRuntime: vi.fn<TestRenderer['ensureRuntime']>(async () => true),
+      executeSsrInjectScript: vi.fn<
+        NonNullable<TestRenderer['executeSsrInjectScript']>
+      >(async () => true),
       framework: 'test',
-      hydrate: vi.fn(async () => ({
+      hydrate: vi.fn<TestRenderer['hydrate']>(async () => ({
         renderMode: 'hydrate',
       })),
-      isRuntimeAvailable: vi.fn(() => true),
-      render: vi.fn(async () => {}),
+      isRuntimeAvailable: vi.fn<TestRenderer['isRuntimeAvailable']>(() => true),
+      render: vi.fn<TestRenderer['render']>(async () => {}),
     };
 
     strategy = new DocsRenderStrategy<TestComponent>({
@@ -135,17 +139,26 @@ describe('DocsRenderStrategy', () => {
       callback: null as
         | ((entries: { isIntersecting: boolean; target: Element }[]) => void)
         | null,
-      disconnect: vi.fn(),
-      observe: vi.fn(),
-      unobserve: vi.fn(),
+      disconnect: vi.fn<IntersectionObserver['disconnect']>(),
+      observe: vi.fn<IntersectionObserver['observe']>(),
+      unobserve: vi.fn<IntersectionObserver['unobserve']>(),
     };
 
     vi.stubGlobal(
       'IntersectionObserver',
-      vi.fn().mockImplementation((callback) => {
-        observer.callback = callback;
-        return observer;
-      }),
+      class {
+        public constructor(
+          callback: (
+            entries: { isIntersecting: boolean; target: Element }[],
+          ) => void,
+        ) {
+          observer.callback = callback;
+        }
+
+        public disconnect = observer.disconnect;
+        public observe = observer.observe;
+        public unobserve = observer.unobserve;
+      },
     );
 
     await strategy.executeRuntime({

@@ -81,11 +81,6 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 - **Cause**: A labeled dts leaf references or imports a target that matches the rule's `deny.refs` or `deny.deps`.
 - **Fix**: Either remove the offending reference/import, OR remove the label, OR (rarely) relax the deny rule. The reason printed in the error is the rule's `reason` field — it tells the human what the rule is trying to prevent.
 
-### `Cross-package relative import:`
-
-- **Cause**: A file uses a `../../<other-package>/...` relative import to reach another workspace package.
-- **Fix**: Replace the relative import with the package specifier (e.g. `@acme/other`). Workspace packages must depend through their package exports.
-
 ### `Workspace source dependency resolved outside the source graph:` / `Referenced workspace dependency resolves through package exports to a build artifact:`
 
 - **Cause**: A `workspace:*` import resolved to a file that the source graph does not own — typically because the dep's `package.json#exports` points at `dist`.

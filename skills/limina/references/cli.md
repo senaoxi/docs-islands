@@ -75,7 +75,6 @@ Validates:
 - A cross-package dts reference implies a `workspace:*` dep in the importing package manifest.
 - Labels declared on dts leaves match `graph.rules.<label>`; denied refs and denied deps are flagged.
 - `workspace:*` source dependencies resolve to files owned by the source graph, not to artifacts under `dist`.
-- Cross-package relative imports are rejected (use the package name).
 
 Exit code: 1 on any violation.
 

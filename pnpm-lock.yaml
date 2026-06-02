@@ -514,12 +514,15 @@ importers:
       unplugin:
         specifier: catalog:prod
         version: 3.0.0
+      vite:
+        specifier: catalog:prod
+        version: 5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(lightningcss@1.32.0)(terser@5.46.2)
       vitepress:
         specifier: catalog:frameworks
         version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(lightningcss@1.32.0)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
       vitepress-plugin-group-icons:
         specifier: catalog:docs-dev
-        version: 1.7.1(vite@8.0.16(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(esbuild@0.27.3)(jiti@2.7.0)(less@4.4.2)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0))
+        version: 1.7.1(vite@5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(lightningcss@1.32.0)(terser@5.46.2))
       vitepress-plugin-llms:
         specifier: catalog:docs-dev
         version: 1.11.0
@@ -1205,7 +1208,7 @@ importers:
         version: 1.6.1(react@18.3.1)(vue-router@4.6.4(vue@3.5.28(typescript@5.9.3)))(vue@3.5.28(typescript@5.9.3))
       '@vitejs/plugin-react-swc':
         specifier: catalog:dev
-        version: 4.3.1(@swc/helpers@0.5.17)(vite@8.0.16(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(esbuild@0.27.3)(jiti@2.7.0)(less@4.4.2)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.3.1(@swc/helpers@0.5.17)(vite@5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(lightningcss@1.32.0)(terser@5.46.2))
       del-cli:
         specifier: catalog:dev
         version: 7.0.0
@@ -1233,12 +1236,15 @@ importers:
       unplugin:
         specifier: catalog:prod
         version: 3.0.0
+      vite:
+        specifier: catalog:prod
+        version: 5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(lightningcss@1.32.0)(terser@5.46.2)
       vitepress:
         specifier: catalog:frameworks
         version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(lightningcss@1.32.0)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3)
       vitepress-plugin-group-icons:
         specifier: catalog:docs-dev
-        version: 1.7.1(vite@8.0.16(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(esbuild@0.27.3)(jiti@2.7.0)(less@4.4.2)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0))
+        version: 1.7.1(vite@5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(lightningcss@1.32.0)(terser@5.46.2))
       vitepress-plugin-llms:
         specifier: catalog:docs-dev
         version: 1.11.0
@@ -18769,14 +18775,14 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.9.0
 
-  vitepress-plugin-group-icons@1.7.1(vite@8.0.16(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(esbuild@0.27.3)(jiti@2.7.0)(less@4.4.2)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0)):
+  vitepress-plugin-group-icons@1.7.1(vite@5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(lightningcss@1.32.0)(terser@5.46.2)):
     dependencies:
       '@iconify-json/logos': 1.2.10
       '@iconify-json/vscode-icons': 1.2.41
       '@iconify/utils': 3.1.0
       search-insights: 2.17.3
     optionalDependencies:
-      vite: 8.0.16(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(esbuild@0.27.3)(jiti@2.7.0)(less@4.4.2)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0)
+      vite: 5.4.21(patch_hash=81ba500186ae82f86c658c8d9dc564b4a0f0445774e36538ee197ea92b9ee78a)(@types/node@20.19.0)(less@4.4.2)(lightningcss@1.32.0)(terser@5.46.2)
 
   vitepress-plugin-llms@1.11.0:
     dependencies:

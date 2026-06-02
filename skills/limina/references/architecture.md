@@ -205,7 +205,6 @@ Each label can have a single rule. `deny.refs[].path` MUST resolve to a `tsconfi
 - Every source import resolves to either:
   - A file owned by the graph (no further check), OR
   - A workspace package the importing leaf has a project reference to (otherwise: missing reference, unresolved import, or resolved-to-artifact).
-- Cross-package relative imports (`../../other-pkg/src/x`) are rejected.
 - Label-based deny rules are applied to both references and imported specifiers.
 
 ## Checker tiers

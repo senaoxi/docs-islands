@@ -27,11 +27,6 @@ export default defineConfig({
     },
     maxConcurrency: 1,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
   },
   esbuild: {
     target: 'node20',
