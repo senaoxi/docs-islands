@@ -22,6 +22,7 @@ export default defineConfig({
       },
     },
     globals: true,
+    fileParallelism: false,
     sequence: {
       concurrent: false,
     },

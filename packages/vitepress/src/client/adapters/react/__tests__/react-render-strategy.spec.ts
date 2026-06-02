@@ -188,7 +188,20 @@ describe('ReactRenderStrategy', () => {
   });
 
   describe('client:visible intersection observer', () => {
-    let mockIntersectionObserver: any;
+    let intersectionObserverConstructor: ReturnType<
+      typeof vi.fn<
+        (
+          callback: IntersectionObserverCallback,
+          options?: IntersectionObserverInit,
+        ) => void
+      >
+    >;
+    let mockIntersectionObserver: {
+      callback?: IntersectionObserverCallback;
+      disconnect: ReturnType<typeof vi.fn<IntersectionObserver['disconnect']>>;
+      observe: ReturnType<typeof vi.fn<IntersectionObserver['observe']>>;
+      unobserve: ReturnType<typeof vi.fn<IntersectionObserver['unobserve']>>;
+    };
     let mockElement: HTMLElement;
 
     beforeEach(() => {
@@ -201,17 +214,33 @@ describe('ReactRenderStrategy', () => {
       document.body.append(mockElement);
 
       mockIntersectionObserver = {
-        observe: vi.fn(),
-        unobserve: vi.fn(),
-        disconnect: vi.fn(),
+        disconnect: vi.fn<IntersectionObserver['disconnect']>(),
+        observe: vi.fn<IntersectionObserver['observe']>(),
+        unobserve: vi.fn<IntersectionObserver['unobserve']>(),
       };
+      intersectionObserverConstructor =
+        vi.fn<
+          (
+            callback: IntersectionObserverCallback,
+            options?: IntersectionObserverInit,
+          ) => void
+        >();
 
       vi.stubGlobal(
         'IntersectionObserver',
-        vi.fn().mockImplementation((callback: any) => {
-          mockIntersectionObserver.callback = callback;
-          return mockIntersectionObserver;
-        }),
+        class {
+          public constructor(
+            callback: IntersectionObserverCallback,
+            options?: IntersectionObserverInit,
+          ) {
+            intersectionObserverConstructor(callback, options);
+            mockIntersectionObserver.callback = callback;
+          }
+
+          public disconnect = mockIntersectionObserver.disconnect;
+          public observe = mockIntersectionObserver.observe;
+          public unobserve = mockIntersectionObserver.unobserve;
+        },
       );
     });
 
@@ -221,7 +250,7 @@ describe('ReactRenderStrategy', () => {
         isInitialLoad: true,
       });
 
-      expect(globalThis.IntersectionObserver).toHaveBeenCalled();
+      expect(intersectionObserverConstructor).toHaveBeenCalled();
       expect(mockIntersectionObserver.observe).toHaveBeenCalledWith(
         mockElement,
       );
@@ -233,12 +262,20 @@ describe('ReactRenderStrategy', () => {
         isInitialLoad: true,
       });
 
-      mockIntersectionObserver.callback([
-        {
-          isIntersecting: true,
-          target: mockElement,
-        },
-      ]);
+      mockIntersectionObserver.callback?.(
+        [
+          {
+            boundingClientRect: mockElement.getBoundingClientRect(),
+            intersectionRatio: 1,
+            intersectionRect: mockElement.getBoundingClientRect(),
+            isIntersecting: true,
+            rootBounds: null,
+            target: mockElement,
+            time: 0,
+          },
+        ],
+        mockIntersectionObserver as unknown as IntersectionObserver,
+      );
 
       await new Promise((resolve) => setTimeout(resolve, 0));
 

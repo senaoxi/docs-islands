@@ -102,6 +102,15 @@ export async function setup(): Promise<void> {
   });
   server = await createServer(root, { port });
   await server.listen();
+
+  const address = (server as ViteDevServer).httpServer?.address();
+  const actualPort =
+    typeof address === 'object' && address !== null ? address.port : port;
+
+  injectEnvs({
+    WS_ENDPOINT: browserServer.wsEndpoint(),
+    PORT: actualPort.toString(),
+  });
 }
 
 export async function teardown(): Promise<void> {

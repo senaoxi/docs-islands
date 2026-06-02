@@ -37,7 +37,6 @@ beforeAll(async () => {
     force: true,
   });
   browser = await chromium.connect(env.test.ws_endpoint!);
-  globalThis.page = await browser.newPage();
   globalThis.goto = async (path: string) => {
     await globalThis.page.goto(`http://localhost:${env.test.port}${path}`);
     await globalThis.page.waitForSelector('#app .Layout', { timeout: 10_000 });
@@ -47,31 +46,34 @@ beforeAll(async () => {
   };
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   allowRuntimeFailures = false;
   pageErrors = [];
   requestFailures = [];
   responseFailures = [];
 
+  globalThis.page = await browser.newPage();
   globalThis.page.on('pageerror', handlePageError);
   globalThis.page.on('requestfailed', handleRequestFailed);
   globalThis.page.on('response', handleBadResponse);
 });
 
 afterEach(async () => {
-  globalThis.page.off('pageerror', handlePageError);
-  globalThis.page.off('requestfailed', handleRequestFailed);
-  globalThis.page.off('response', handleBadResponse);
+  const currentPage = globalThis.page;
 
-  if (allowRuntimeFailures) {
-    return;
-  }
+  currentPage.off('pageerror', handlePageError);
+  currentPage.off('requestfailed', handleRequestFailed);
+  currentPage.off('response', handleBadResponse);
 
-  if (
-    pageErrors.length === 0 &&
-    requestFailures.length === 0 &&
-    responseFailures.length === 0
-  ) {
+  const shouldThrow =
+    !allowRuntimeFailures &&
+    (pageErrors.length > 0 ||
+      requestFailures.length > 0 ||
+      responseFailures.length > 0);
+
+  await currentPage.close();
+
+  if (!shouldThrow) {
     return;
   }
 
@@ -91,8 +93,11 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
-  globalThis.page.removeAllListeners();
-  await globalThis.page.close();
+  const currentPage = (globalThis as Partial<typeof globalThis>).page;
+  if (currentPage && !currentPage.isClosed()) {
+    currentPage.removeAllListeners();
+    await currentPage.close();
+  }
   await browser.close();
 
   delete (globalThis as Partial<typeof globalThis>).page;
