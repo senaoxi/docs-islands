@@ -419,7 +419,7 @@ const registerClientVisibleContainerTests = () => {
       expect(hasFirstLazyHydrationMessage).toBe(false);
 
       // Verify the first component is visible and interactive.
-      const firstComponent = page.locator('[data-testid="first-component"]');
+      const firstComponent = page.locator('[data-unique-id="first-component"]');
       await expect(firstComponent).toBeVisible();
 
       const firstButton = firstComponent.locator(
@@ -460,7 +460,9 @@ const registerClientVisibleContainerTests = () => {
       expect(hasSecondLazyHydrationMessage).toBe(false);
 
       // Verify the second component is visible and interactive.
-      const secondComponent = page.locator('[data-testid="second-component"]');
+      const secondComponent = page.locator(
+        '[data-unique-id="second-component"]',
+      );
       await expect(secondComponent).toBeVisible();
 
       const secondButton = secondComponent.locator(
@@ -507,8 +509,10 @@ const registerClientVisibleContainerTests = () => {
       expect(totalLazyHydrationMessages).toBe(0);
 
       // Verify both components can interact normally.
-      const firstComponent = page.locator('[data-testid="first-component"]');
-      const secondComponent = page.locator('[data-testid="second-component"]');
+      const firstComponent = page.locator('[data-unique-id="first-component"]');
+      const secondComponent = page.locator(
+        '[data-unique-id="second-component"]',
+      );
 
       await expect(firstComponent).toBeVisible();
       await expect(secondComponent).toBeVisible();

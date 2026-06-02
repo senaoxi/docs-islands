@@ -6,15 +6,15 @@ This page tests mixed render directives for the same component.
   import HelloWorld from '../components/react/HelloWorld.tsx';
 </script>
 
-<HelloWorld client:only uniqueId="client-only" />
+<HelloWorld client:only uniqueid="client-only" />
 
 ---
 
-<HelloWorld ssr:only uniqueId="ssr-only" />
+<HelloWorld ssr:only uniqueid="ssr-only" />
 
 ---
 
-<HelloWorld client:load uniqueId="client-load" />
+<HelloWorld client:load uniqueid="client-load" />
 
 ---
 
@@ -48,4 +48,4 @@ This page tests mixed render directives for the same component.
 <br />
 <br />
 
-<HelloWorld client:visible uniqueId="client-visible" />
+<HelloWorld client:visible uniqueid="client-visible" />

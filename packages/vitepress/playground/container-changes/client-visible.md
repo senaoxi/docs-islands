@@ -18,7 +18,7 @@ This is the top of the page. The components below will only hydrate when they be
 
 ## First Component (client:visible)
 
-<HelloWorld client:visible data-testid="first-component" />
+<HelloWorld client:visible uniqueid="first-component" />
 
 <div style="height: 800px; padding: 20px; background: #e8f4f8; margin: 20px 0;">
   <h3>Another Spacer Section</h3>
@@ -28,7 +28,7 @@ This is the top of the page. The components below will only hydrate when they be
 
 ## Second Component (client:visible)
 
-<HelloWorld client:visible data-testid="second-component" />
+<HelloWorld client:visible uniqueid="second-component" />
 
 <div style="height: 400px; padding: 20px; background: #f0f8f0; margin: 20px 0;">
   <h3>End Section</h3>
