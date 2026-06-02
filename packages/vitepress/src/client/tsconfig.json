@@ -5,7 +5,7 @@
     "isolatedDeclarations": true,
     "declaration": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": [],
+    "types": ["../types/client.d.ts"],
     "jsx": "preserve",
   },
   "include": ["./"],

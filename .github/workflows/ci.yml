@@ -120,10 +120,9 @@ jobs:
         with:
           name: packages-build-artifacts
           path: |
-            packages/**
-            packages/vitepress/docs/.vitepress
-            !packages/vitepress/docs/.vitepress/cache
-            !packages/*/coverage
+            packages/*/dist/**
+            packages/plugins/*/dist/**
+            utils/dist/**
           retention-days: 1
 
   quality:
@@ -152,7 +151,7 @@ jobs:
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce04
         with:
           name: packages-build-artifacts
-          path: packages/
+          path: .
 
       # Build and run quality checks
       - name: Build and Quality Check
@@ -215,7 +214,7 @@ jobs:
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce04
         with:
           name: packages-build-artifacts
-          path: packages/
+          path: .
 
       # Build and run quality checks
       - name: Build and Quality Check
@@ -279,7 +278,7 @@ jobs:
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce04
         with:
           name: packages-build-artifacts
-          path: packages/
+          path: .
 
       - name: Build and Quality Check
         uses: ./.github/actions/build-and-check
@@ -321,7 +320,7 @@ jobs:
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce04
         with:
           name: packages-build-artifacts
-          path: packages/
+          path: .
 
       - name: Build Docs
         run: pnpm docs:build
