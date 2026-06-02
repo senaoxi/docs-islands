@@ -35,6 +35,7 @@ interface LiminaConfig {
   paths?: PathsConfig;
   pipelines?: Record<string, PipelineStep[]>;
   proof?: ProofConfig;
+  source?: SourceCheckConfig;
 }
 ```
 
@@ -69,23 +70,12 @@ Validation:
 
 ## `config.source`
 
-Controls Limina's global source boundary and source-owned dependency usage checks. `source:check` and `proof:check` both use this boundary; individual source checks do not define their own `include` / `exclude`.
+Controls Limina's global source boundary for `proof:check`. `source:check` handles package authority and ordinary typecheck ownership separately, and its unused workspace dependency analysis is Knip-backed from package entries rather than this boundary.
 
 ```ts
 interface SourceBoundaryConfig {
   include?: string[];
   exclude?: string[];
-  unusedDependencies?: SourceUnusedDependenciesConfig;
-}
-
-interface SourceUnusedDependenciesConfig {
-  ignore?: SourceUnusedDependencyIgnoreEntry[];
-}
-
-interface SourceUnusedDependencyIgnoreEntry {
-  importer: string;
-  dependency: string;
-  reason: string;
 }
 ```
 
@@ -116,13 +106,63 @@ Default `exclude` (used when not specified):
 - Directory shorthands (`node_modules` expands to both `node_modules/**` and `**/node_modules/**`)
 - Plain non-glob strings without `/` expand to both the bare entry and `**/<entry>`
 
-`unusedDependencies.ignore` configures exceptions for `source:check` unused workspace dependency analysis:
+## `source`
+
+Controls source-owned dependency usage checks.
+
+```ts
+interface SourceCheckConfig {
+  unusedDependencies?: SourceUnusedDependenciesConfig;
+  unusedModules?: SourceUnusedModulesConfig;
+}
+
+interface SourceUnusedDependenciesConfig {
+  ignore?: SourceUnusedDependencyIgnoreEntry[];
+}
+
+interface SourceUnusedDependencyIgnoreEntry {
+  importer: string;
+  dependency: string;
+  reason: string;
+}
+
+interface SourceUnusedModulesConfig {
+  entries?: SourceUnusedModuleEntryConfig[];
+  ignore?: SourceUnusedModuleIgnoreEntry[];
+}
+
+interface SourceUnusedModuleEntryConfig {
+  owner: string;
+  files: string[];
+  reason: string;
+}
+
+interface SourceUnusedModuleIgnoreEntry {
+  owner: string;
+  file: string;
+  reason: string;
+}
+```
+
+`source.unusedDependencies.ignore` configures exceptions for `source:check` unused workspace dependency analysis:
 
 - Only workspace package dependencies are checked; third-party npm dependencies are ignored.
-- Usage is counted from files matched by the global `config.source.include` / `config.source.exclude` boundary.
+- Usage is delegated to Knip and counted from source-facing package entries, binaries, scripts, and Knip-supported tool entries.
 - `importer` and `dependency` must name existing workspace packages.
 - The dependency pair must still be declared in the importer's `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies`.
-- `reason` must be a non-empty explanation for why static source import analysis cannot see the usage.
+- `reason` must be a non-empty explanation for why Knip cannot see the usage.
+
+`source.unusedModules.ignore` configures exceptions for strict-mode unused source module analysis:
+
+- There is no `enabled` switch; `strict: true` enables unused source module checks automatically.
+- Limina provides Knip with each named package owner's known source module set.
+- Knip counts modules reachable from source-facing package entries, binaries, scripts, and Knip-supported plugin entries.
+- Package owners without `package.json#exports` are treated as application-style owners: Limina generates a temporary Knip entry that imports the full owner source module set for dependency analysis and skips unused-file coverage for that owner.
+- `entries` adds owner-scoped Knip entry globs for test runners or local tooling that should not be package exports.
+- Entry `files` must be positive workspace-root-relative glob patterns inside that owner package directory.
+- `owner` must name an existing package owner with a package.json name.
+- `file` must be a workspace-root-relative path inside the repository and must belong to that owner's source module set.
+- `reason` must be a non-empty explanation for why Knip cannot see the usage.
 
 ## `graph.rules`
 
@@ -343,6 +383,8 @@ Issue codes covered by built-in validation:
 - Unsupported preset name (no adapter registered)
 - Presence of removed `routes` field
 - Presence of removed `graph.unusedWorkspaceDependencies` field
+- Presence of removed `config.source.unusedDependencies` field
+- Presence of removed `config.source.unusedModules` field
 - Custom preset without explicit `extensions`
 
-Pipeline / graph rule / package check / paths / proof.allowlist / source.unusedDependencies deeper-shape validation happens inside each command rather than at `validateLiminaConfig` — those errors surface at runtime with the same field/value/reason format.
+Pipeline / graph rule / package check / paths / proof.allowlist / source.unusedDependencies / source.unusedModules deeper-shape validation happens inside each command rather than at `validateLiminaConfig` — those errors surface at runtime with the same field/value/reason format.

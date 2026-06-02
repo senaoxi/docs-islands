@@ -59,78 +59,60 @@ export default defineConfig({
         'nx.json',
         'vercel.json',
       ],
-      // Workspace dependencies used by configs, package scripts, operational JS,
-      // or documentation examples that are outside tsconfig-owned source imports.
-      unusedDependencies: {
-        ignore: [
-          {
-            importer: '@docs-islands/vitepress-docs',
-            dependency: 'logaria',
-            reason:
-              '@docs-islands/vitepress does not yet support TypeScript Language Service.',
-          },
-          {
-            importer: '@docs-islands/core',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for package checks outside static source imports.',
-          },
-          {
-            importer: '@docs-islands/limina-docs',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for docs typechecks outside static source imports.',
-          },
-          {
-            importer: '@docs-islands/plugin-license',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for package checks outside static source imports.',
-          },
-          {
-            importer: '@docs-islands/utils',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for package checks outside static source imports.',
-          },
-          {
-            importer: '@docs-islands/vitepress',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for package checks outside static source imports.',
-          },
-          {
-            importer: '@docs-islands/eslint-config',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for package checks outside static source imports.',
-          },
-          {
-            importer: '@docs-islands/vitepress-playground',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for playground typechecks outside static source imports.',
-          },
-          {
-            importer: '@docs-islands/vitepress-smoke',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for smoke typechecks outside static source imports.',
-          },
-          {
-            importer: 'docs-islands-monorepo',
-            dependency: 'limina',
-            reason:
-              'Imported by limina.config.mjs and invoked by root package.json scripts outside static source imports.',
-          },
-          {
-            importer: 'logaria',
-            dependency: 'limina',
-            reason:
-              'Invoked by package.json scripts for package checks outside static source imports.',
-          },
-        ],
-      },
+    },
+  },
+  // Workspace dependency usages that static source and package script analysis
+  // cannot see.
+  source: {
+    unusedDependencies: {
+      ignore: [
+        {
+          importer: '@docs-islands/vitepress-docs',
+          dependency: 'logaria',
+          reason:
+            '@docs-islands/vitepress does not yet support TypeScript Language Service.',
+        },
+        {
+          importer: '@docs-islands/logaria-docs',
+          dependency: 'logaria',
+          reason:
+            'The docs package keeps the workspace package installed for VitePress Markdown examples; those fenced examples are not executable Knip entries.',
+        },
+      ],
+    },
+    unusedModules: {
+      entries: [
+        {
+          owner: '@docs-islands/vitepress',
+          files: ['packages/vitepress/src/**/__tests__/**'],
+          reason:
+            'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+        },
+        {
+          owner: '@docs-islands/core',
+          files: ['packages/core/src/**/__tests__/**'],
+          reason:
+            'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+        },
+        {
+          owner: 'logaria-plugin-test',
+          files: ['packages/logaria/src/plugin/__tests__/**'],
+          reason:
+            'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+        },
+        // TODO: Needs optimization
+        {
+          owner: '@docs-islands/vitepress',
+          files: ['packages/vitepress/theme/**'],
+          reason:
+            'Components will temporarily follow the build process and expose build artifacts.',
+        },
+        {
+          owner: '@docs-islands/vitepress',
+          files: ['packages/vitepress/rolldown*.config.ts'],
+          reason: 'Build configuration items need to be entry modules.',
+        },
+      ],
     },
   },
   // TypeScript project graph policy. This checks project references,

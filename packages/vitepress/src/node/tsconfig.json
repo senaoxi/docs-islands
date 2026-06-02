@@ -7,7 +7,7 @@
     "stripInternal": true,
     // https://github.com/microsoft/TypeScript/wiki/Node-Target-Mapping#node-20
     "lib": ["ES2023"],
-    "types": ["node"],
+    "types": ["node", "../types/client.d.ts"],
   },
   "include": ["./"],
 }
