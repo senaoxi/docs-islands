@@ -28,6 +28,7 @@
     "vue-tsc": "catalog:dev",
     "http-proxy": "catalog:docs-dev",
     "magic-string": "catalog:dev",
+    "vite": "catalog:prod",
     "@docs-islands/utils": "link:../utils/dist",
     "picocolors": "catalog:dev",
     "picomatch": "catalog:prod",

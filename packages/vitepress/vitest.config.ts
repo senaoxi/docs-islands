@@ -25,7 +25,6 @@ const config: ViteUserConfig = defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
       reportOnFailure: true,
-      all: true,
       include: ['src/**/*.{js,ts,tsx}'],
       exclude: ['**/__tests__/**', '**/types/**'],
       thresholds: {
@@ -38,13 +37,7 @@ const config: ViteUserConfig = defineConfig({
       },
     },
     pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: false,
-        minThreads: 1,
-        maxThreads: 4,
-      },
-    },
+    maxWorkers: 4,
     reporters: ['default', 'json'],
     outputFile: {
       json: './coverage/test-results.json',
