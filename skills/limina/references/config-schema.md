@@ -78,24 +78,24 @@ interface SourceBoundaryConfig {
 }
 ```
 
-- If `include` is omitted, the effective global source boundary is derived from the union of all configured checker `extensions` (built-in or explicit).
+- If `include` is omitted, the effective global source boundary starts with `**/*.ts`, `**/*.d.ts`, `**/*.tsx`, `**/*.cts`, `**/*.d.cts`, `**/*.mts`, `**/*.d.mts`, `**/*.mjs`, and `**/*.json`, then adds non-base checker extensions such as `**/*.vue` or `**/*.svelte`.
 - If `include` is provided, it is the COMPLETE global source boundary — checker extensions are NOT merged in.
 - `exclude` always filters the effective boundary.
 
-Default `exclude` (used when not specified):
+Default `exclude` (used when not specified) reads the workspace root `.gitignore` and always also applies:
 
 ```js
 [
-  'node_modules',
+  'nx.json',
+  'project.json',
+  'tsconfig.json',
+  '**/tsconfig.*.json',
   'dist',
+  '.nx',
   '.git',
   '.tsbuild',
   'coverage',
-  '**/tsconfig*.json',
-  '**/package.json',
-  '.prettierrc.json',
-  '.markdownlint.json',
-  'vercel.json',
+  'node_modules',
 ];
 ```
 
@@ -111,6 +111,7 @@ Controls source-owned dependency usage checks.
 
 ```ts
 interface SourceCheckConfig {
+  additionalEntries?: SourceAdditionalEntryConfig[];
   unusedDependencies?: SourceUnusedDependenciesConfig;
   unusedModules?: SourceUnusedModulesConfig;
 }
@@ -126,11 +127,10 @@ interface SourceUnusedDependencyIgnoreEntry {
 }
 
 interface SourceUnusedModulesConfig {
-  entries?: SourceUnusedModuleEntryConfig[];
   ignore?: SourceUnusedModuleIgnoreEntry[];
 }
 
-interface SourceUnusedModuleEntryConfig {
+interface SourceAdditionalEntryConfig {
   owner: string;
   files: string[];
   reason: string;
@@ -151,15 +151,20 @@ interface SourceUnusedModuleIgnoreEntry {
 - The dependency pair must still be declared in the importer's `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies`.
 - `reason` must be a non-empty explanation for why Knip cannot see the usage.
 
-`source.unusedModules.ignore` configures exceptions for strict-mode unused source module analysis:
+`source.additionalEntries` configures extra owner-scoped source entries on top of Limina's default entry surface:
 
-- There is no `enabled` switch; `strict: true` enables unused source module checks automatically.
-- Limina provides Knip with each named package owner's known source module set.
-- Knip counts modules reachable from source-facing package entries, binaries, scripts, and Knip-supported plugin entries.
+- Owners with `package.json#exports` use package exports, package binaries, package scripts, and Knip-supported plugin entries as default entries.
 - Package owners without `package.json#exports` are treated as application-style owners: Limina generates a temporary Knip entry that imports the full owner source module set for dependency analysis and skips unused-file coverage for that owner.
-- `entries` adds owner-scoped Knip entry globs for test runners or local tooling that should not be package exports.
+- Additional entries are for test runners, local tooling, or build steps that should not be package exports.
 - Entry `files` must be positive workspace-root-relative glob patterns inside that owner package directory.
 - `owner` must name an existing package owner with a package.json name.
+- `reason` must be a non-empty explanation for why these modules are legitimate entries.
+
+`source.unusedModules.ignore` configures exceptions for strict-mode unused source module analysis:
+
+- `strict: true` enables unused source module checks automatically.
+- Limina provides Knip with each named package owner's known source module set.
+- Knip counts modules reachable from source-facing package entries, binaries, scripts, Knip-supported plugin entries, and `source.additionalEntries`.
 - `file` must be a workspace-root-relative path inside the repository and must belong to that owner's source module set.
 - `reason` must be a non-empty explanation for why Knip cannot see the usage.
 
@@ -361,4 +366,4 @@ Issue codes covered by built-in validation:
 - Presence of removed `config.source.unusedModules` field
 - Custom preset without explicit `extensions`
 
-Pipeline / graph rule / package check / proof.allowlist / source.unusedDependencies / source.unusedModules deeper-shape validation happens inside each command rather than at `validateLiminaConfig` — those errors surface at runtime with the same field/value/reason format.
+Pipeline / graph rule / package check / proof.allowlist / source.additionalEntries / source.unusedDependencies / source.unusedModules deeper-shape validation happens inside each command rather than at `validateLiminaConfig` — those errors surface at runtime with the same field/value/reason format.

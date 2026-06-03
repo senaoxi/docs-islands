@@ -22,49 +22,72 @@ export default defineConfig({
     },
     source: {
       include: [
-        '**/*.d.cts',
-        '**/*.d.mts',
-        '**/*.d.ts',
-        '**/*.cts',
-        '**/*.mts',
-        '**/*.tsx',
-        '**/*.vue',
-        '**/*.mjs',
         '**/*.ts',
+        '**/*.d.ts',
+        '**/*.tsx',
+        '**/*.mjs',
+        '**/*.json',
+        '**/*.vue',
         '**/eslint.config.mjs',
         '**/.vitepress/**/*.ts',
-        '**/.vitepress/**/*.vue',
+        '**/.vitepress/**/*.d.ts',
         '**/.vitepress/**/*.tsx',
-        'packages/agents/package.json',
-        'packages/core/package.json',
-        'packages/limina/package.json',
-        'packages/limina/schemas/*.json',
-        'packages/logaria/package.json',
-        'packages/vitepress/package.json',
-        'utils/package.json',
-        '**/local-data.json',
+        '**/.vitepress/**/*.vue',
       ],
       exclude: [
-        'node_modules',
+        'nx.json',
+        'project.json',
+        'tsconfig.json',
+        '**/tsconfig.*.json',
+        'vercel.json',
+        '**/.vitepress/dist',
+        '.prettierrc.json',
+        '.markdownlint.json',
         'dist',
         '.nx',
         '.git',
         '.tsbuild',
         'coverage',
-        '**/tsconfig.json',
-        '**/tsconfig.*.json',
-        '**/project.json',
-        '**/.vitepress/dist',
-        '.prettierrc.json',
-        '.markdownlint.json',
-        'nx.json',
-        'vercel.json',
+        'node_modules',
       ],
     },
   },
+
   // Workspace dependency usages that static source and package script analysis
   // cannot see.
   source: {
+    additionalEntries: [
+      {
+        owner: '@docs-islands/vitepress',
+        files: ['packages/vitepress/src/**/__tests__/**'],
+        reason:
+          'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+      },
+      {
+        owner: '@docs-islands/core',
+        files: ['packages/core/src/**/__tests__/**'],
+        reason:
+          'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+      },
+      {
+        owner: 'logaria-plugin-test',
+        files: ['packages/logaria/src/plugin/__tests__/**'],
+        reason:
+          'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+      },
+      // TODO: Needs optimization
+      {
+        owner: '@docs-islands/vitepress',
+        files: ['packages/vitepress/theme/**'],
+        reason:
+          'Components will temporarily follow the build process and expose build artifacts.',
+      },
+      {
+        owner: '@docs-islands/vitepress',
+        files: ['packages/vitepress/rolldown.theme.config.ts'],
+        reason: 'Build configuration items need to be entry modules.',
+      },
+    ],
     unusedDependencies: {
       ignore: [
         {
@@ -81,41 +104,8 @@ export default defineConfig({
         },
       ],
     },
-    unusedModules: {
-      entries: [
-        {
-          owner: '@docs-islands/vitepress',
-          files: ['packages/vitepress/src/**/__tests__/**'],
-          reason:
-            'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
-        },
-        {
-          owner: '@docs-islands/core',
-          files: ['packages/core/src/**/__tests__/**'],
-          reason:
-            'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
-        },
-        {
-          owner: 'logaria-plugin-test',
-          files: ['packages/logaria/src/plugin/__tests__/**'],
-          reason:
-            'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
-        },
-        // TODO: Needs optimization
-        {
-          owner: '@docs-islands/vitepress',
-          files: ['packages/vitepress/theme/**'],
-          reason:
-            'Components will temporarily follow the build process and expose build artifacts.',
-        },
-        {
-          owner: '@docs-islands/vitepress',
-          files: ['packages/vitepress/rolldown.theme.config.ts'],
-          reason: 'Build configuration items need to be entry modules.',
-        },
-      ],
-    },
   },
+
   // TypeScript project graph policy. This checks project references,
   // cross-project imports, workspace source dependencies, and label-based graph
   // boundaries.
@@ -162,6 +152,7 @@ export default defineConfig({
       },
     },
   },
+
   // Typecheck coverage proof. Source files must be covered by checker entries
   // or an explicit allowlist entry.
   proof: {
@@ -169,18 +160,11 @@ export default defineConfig({
     allowlist: [
       {
         file: 'packages/vitepress/src/shared/internal/client-runtime.d.ts',
-        reason:
-          'Declaration-only stub copied into dist for the injected client runtime; the matching runtime source is covered by the shared runtime declaration leaf.',
-      },
-      {
-        file: 'packages/vitepress/docs/en/guide/rendering-strategy-comps/react/local-data.json',
-        reason:
-          'Docs example runtime data is read through fs in the covered React component; TypeScript does not include standalone JSON files in the project file set.',
-      },
-      {
-        file: 'packages/vitepress/docs/zh/guide/rendering-strategy-comps/react/local-data.json',
-        reason:
-          'Docs example runtime data is read through fs in the covered React component; TypeScript does not include standalone JSON files in the project file set.',
+        reason: `
+          This is a non-user-facing module that will be copied into the artifacts during the build process. 
+          Since TypeScript follows the single source file principle and cannot govern it, 
+          it is treated as a known reachable module here.
+        `,
       },
     ],
   },

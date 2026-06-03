@@ -9,6 +9,7 @@
   },
   "include": [
     "./",
+    "./package.json",
     "./client.d.ts",
     "./.vitepress/**/*.ts",
     "./.vitepress/theme/**/*.vue",

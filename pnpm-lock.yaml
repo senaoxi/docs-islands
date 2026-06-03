@@ -293,6 +293,9 @@ catalogs:
     cheerio:
       specifier: ^1.2.0
       version: 1.2.0
+    ignore:
+      specifier: ^7.0.5
+      version: 7.0.5
     logaria:
       specifier: 0.0.3
       version: 0.0.3
@@ -772,6 +775,9 @@ importers:
       es-module-lexer:
         specifier: catalog:dev
         version: 2.0.0
+      ignore:
+        specifier: catalog:prod
+        version: 7.0.5
       knip:
         specifier: catalog:lint
         version: 6.15.0
