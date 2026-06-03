@@ -27,7 +27,7 @@ The map key (`custom:metrics`) is the rule label. In debug mode, visible rule-ba
 
 ::: info Rule mode vs. level mode
 A config with no resolved rules is **level mode** — `levels` is the only filter.
-A config with at least one resolved rule is **rule mode** — `levels` becomes the default for rules that say `'inherit'`, and unmatched logs are dropped.
+A config with at least one resolved rule is **rule mode** — `levels` becomes the default for rules that say `'inherit'`, unmatched logs are dropped, and `logger.debug()` is always suppressed (even with `debug: true`). See [Runtime Config — Debug Mode](./runtime-config.md#debug-mode).
 :::
 
 ## Rule Fields
@@ -111,10 +111,17 @@ Config resolves in this order:
 
 Preset rule settings support:
 
-| Setting | Meaning                                                                                               |
-| ------- | ----------------------------------------------------------------------------------------------------- |
-| `'off'` | Delete the preset rule after expansion.                                                               |
-| object  | Enable or override the rule; provided `main`, `group`, `message`, and `levels` override the template. |
+| Setting | Meaning                                                                   |
+| ------- | ------------------------------------------------------------------------- |
+| `'off'` | Removes the preset rule during resolution — it produces no resolved rule. |
+| object  | Enables and tunes the rule (see the override scope below).                |
+
+How much an object override may change depends on how the preset rule was activated:
+
+- **Activated via `extends`, then overridden in `rules`** — you may tune only `message` and `levels`. The template's `main` and `group` are locked; changing either throws `The user rule cannot override "<plugin>/<rule>" plugin rule's main and group fields.`. A preset author owns _what_ a rule targets; consumers decide only _how loud_ it is.
+- **Referenced directly in `rules` (not in `extends`)** — the object may override any template field: `main`, `group`, `message`, and `levels`.
+
+Either way, `levels` is required on an object setting — use an explicit array or `'inherit'`.
 
 Use custom labels such as `custom:api-timeout` for project-owned rules that aren't tied to a preset plugin. The `namespace/name` form (e.g. `vite/hmr`) is reserved for references to a registered preset plugin.
 

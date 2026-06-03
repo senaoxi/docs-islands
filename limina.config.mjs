@@ -29,6 +29,7 @@ export default defineConfig({
         '**/*.mts',
         '**/*.tsx',
         '**/*.vue',
+        '**/*.mjs',
         '**/*.ts',
         '**/eslint.config.mjs',
         '**/.vitepress/**/*.ts',
@@ -109,7 +110,7 @@ export default defineConfig({
         },
         {
           owner: '@docs-islands/vitepress',
-          files: ['packages/vitepress/rolldown*.config.ts'],
+          files: ['packages/vitepress/rolldown.theme.config.ts'],
           reason: 'Build configuration items need to be entry modules.',
         },
       ],

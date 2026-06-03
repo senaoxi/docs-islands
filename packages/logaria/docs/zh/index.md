@@ -17,7 +17,7 @@ hero:
       link: /zh/api-reference
     - theme: alt
       text: GitHub
-      link: https://github.com/SenaoXi/docs-islands
+      link: https://github.com/XiSenao/docs-islands
 
 features:
   - title: 精简的框架无关 API

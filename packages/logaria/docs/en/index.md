@@ -17,7 +17,7 @@ hero:
       link: /api-reference
     - theme: alt
       text: View on GitHub
-      link: https://github.com/SenaoXi/docs-islands
+      link: https://github.com/XiSenao/docs-islands
 
 features:
   - title: Tiny, framework-agnostic API
