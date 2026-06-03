@@ -20,7 +20,7 @@ Function form receives `env`:
 
 ```ts
 interface LiminaConfigEnv {
-  command: 'check' | 'graph' | 'package' | 'paths' | 'proof' | 'source' | string;
+  command: 'check' | 'graph' | 'package' | 'proof' | 'source' | string;
   mode: string; // --mode flag, or process.env.NODE_ENV, or 'default'
 }
 ```
@@ -32,7 +32,6 @@ interface LiminaConfig {
   config?: SharedLiminaConfig;
   graph?: GraphConfig;
   package?: PackageConfig;
-  paths?: PathsConfig;
   pipelines?: Record<string, PipelineStep[]>;
   proof?: ProofConfig;
   source?: SourceCheckConfig;
@@ -218,32 +217,6 @@ Rejected forms (cause config error): relative specifiers (`.`, `./`, `../`), abs
 
 Removed legacy fields with explicit error messages: `deny.workspaceDeps`, `deny.nodeBuiltins`. Migrate everything to `deny.deps`.
 
-## `paths`
-
-Controls generation of `tsconfig.dts.paths.generated.json` files for `workspace:*` source dependencies whose package exports still resolve to build artifacts.
-
-```ts
-interface PathsConfig {
-  generatedFileName?: string; // default: 'tsconfig.dts.paths.generated.json'
-  generatedFileMarker?: string; // default: 'GENERATED FILE - DO NOT EDIT BY HAND.'
-  conditionPriority?: string[]; // export-condition priority during resolution
-  artifactDirectories?: string[]; // dirs treated as build artifacts
-  sourceExtensions?: string[]; // extensions tried when remapping artifact exports
-}
-```
-
-Common values shown in upstream docs:
-
-```js
-{
-  generatedFileName: 'tsconfig.dts.paths.generated.json',
-  conditionPriority: ['source', 'development', 'types'],
-  artifactDirectories: ['dist', 'build', 'lib', 'esm', 'cjs', 'out'],
-}
-```
-
-The generated file is identified by its content marker, NOT by name — `limina paths` will refuse to rewrite a file at the configured name if the marker is absent. Generated files are NOT injected into `extends` arrays automatically; the user must add the relative path as the FIRST entry of the declaration leaf's `extends`.
-
 ## `proof.allowlist`
 
 Per-file exceptions for source coverage proof.
@@ -382,9 +355,10 @@ Issue codes covered by built-in validation:
 - Empty or non-dot-prefixed `extensions`
 - Unsupported preset name (no adapter registered)
 - Presence of removed `routes` field
+- Presence of removed `paths` field
 - Presence of removed `graph.unusedWorkspaceDependencies` field
 - Presence of removed `config.source.unusedDependencies` field
 - Presence of removed `config.source.unusedModules` field
 - Custom preset without explicit `extensions`
 
-Pipeline / graph rule / package check / paths / proof.allowlist / source.unusedDependencies / source.unusedModules deeper-shape validation happens inside each command rather than at `validateLiminaConfig` — those errors surface at runtime with the same field/value/reason format.
+Pipeline / graph rule / package check / proof.allowlist / source.unusedDependencies / source.unusedModules deeper-shape validation happens inside each command rather than at `validateLiminaConfig` — those errors surface at runtime with the same field/value/reason format.

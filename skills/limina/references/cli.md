@@ -112,24 +112,6 @@ Validates source coverage proof:
 
 Exit code: 1 on any violation.
 
-## `limina paths <action>`
-
-Action must be `generate`, `apply`, or `check`.
-
-- `generate` / `apply` (aliases) — write `tsconfig.dts.paths.generated.json` next to each affected declaration leaf. Stale generated files (recognized by their content marker) at unexpected paths are removed. Prints the list of leaves that must extend the generated file as the first `extends` entry.
-- `check` — runs the same analysis without writing. Exits non-zero if any generated file would change.
-
-Generation criteria:
-
-- Source import resolves a `workspace:*` source dep through package exports.
-- The resolved file is NOT owned by the source graph.
-- A declaration leaf imports it AND has a project reference to a leaf in the target package's directory whose name ends with `/tsconfig.lib.dts.json`.
-- The dep's package exports list an alias matching the specifier.
-
-Files are not injected automatically — the user must add `"./tsconfig.dts.paths.generated.json"` (or whatever `paths.generatedFileName` resolves to) as the FIRST entry of the affected `extends` array.
-
-Exit code: 1 only for `paths check` when files are stale.
-
 ## `limina nx <action> [target...]`
 
 Action must be `sync` or `check`. When no targets are passed, Limina uses `build`. Repeated target names are ignored in first-seen order.

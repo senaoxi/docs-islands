@@ -84,7 +84,7 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 ### `Workspace source dependency resolved outside the source graph:` / `Referenced workspace dependency resolves through package exports to a build artifact:`
 
 - **Cause**: A `workspace:*` import resolved to a file that the source graph does not own — typically because the dep's `package.json#exports` points at `dist`.
-- **Fix**: Either change the dep's exports to point at source files (long-term), OR run `limina paths generate` and add the generated file as the first `extends` entry of the importing leaf (transitional bridge).
+- **Fix**: Either change the source manifest exports to point at source files, or switch the dependency to `link:`, `file:`, `catalog:`, or semver and remove the cross-package project reference.
 
 ### `Workspace source import resolved outside the workspace graph:`
 
@@ -231,18 +231,6 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 
 - **Cause**: One or more no-emit typecheck runs returned non-zero. Each failing config is printed below the summary.
 - **Fix**: Open each file and fix the type errors reported by the underlying checker. Limina forwards the checker's stdio so the actual TypeScript errors are above the summary line.
-
-## Paths
-
-### `TypeScript graph path state is stale; run \`limina paths generate\`, ...`
-
-- **Cause**: `limina paths check` found a difference between expected and on-disk generated files.
-- **Fix**: Run `limina paths generate`, commit the changes, and ensure each affected leaf extends the generated file as the FIRST entry.
-
-### Generated file content is re-emitted on every run
-
-- **Cause**: The leaf does not `extends` the generated file first. Limina re-resolves imports without the generated `paths`, which yields a different result.
-- **Fix**: Add the generated file as `extends[0]` in the affected leaves.
 
 ## Package check
 

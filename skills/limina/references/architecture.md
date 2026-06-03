@@ -127,13 +127,13 @@ Limina derives semantics from the package-manifest specifier on the importing si
 Implications:
 
 - The importing package's declaration leaves MUST express the relationship as a `tsc -b` project reference.
-- The source dep's `package.json#exports` SHOULD point at source files (not `dist`).
+- The source dep's source manifest `package.json#exports` SHOULD point at source files (not `dist`).
 - The resolved import target must be a file owned by the source graph.
 
 If exports still point at `dist`, two options:
 
-1. Fix the source dep's exports (preferred long-term).
-2. Use a generated compatibility paths config (`limina paths generate`).
+1. Fix the source dep's source manifest exports to point at source.
+2. Treat it as an artifact dependency with `link:`, `file:`, `catalog:`, or semver, and remove the project reference.
 
 ### `link:`, `file:`, `catalog:`, semver = artifact dependency
 
