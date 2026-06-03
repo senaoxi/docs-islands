@@ -61,6 +61,26 @@ function getPackageScriptRunner(
   });
 }
 
+function runWorkspaceBuildTarget(
+  projectName: string,
+  env?: NodeJS.ProcessEnv,
+): void {
+  ReleaseLogger.info(`Running ${projectName}:build`);
+  runCommand(getPnpmCommand(), ['nx', 'run', `${projectName}:build`], {
+    cwd: REPO_ROOT,
+    env,
+    stdio: 'inherit',
+    logger: ReleaseLogger,
+  });
+}
+
+function runPackageBuildTarget(
+  config: ResolvedReleasePackageConfig,
+  env?: NodeJS.ProcessEnv,
+): void {
+  runWorkspaceBuildTarget(config.packageName, env);
+}
+
 function runPackageArtifactChecks(config: ResolvedReleasePackageConfig): void {
   ReleaseLogger.info(`Running package checks for ${config.packageName}`);
   runCommand(
@@ -135,19 +155,13 @@ function buildVitepressProject(
   cleanDirectory('dist', config.packageDir);
 
   for (const dependencyName of workspaceDependencies) {
-    ReleaseLogger.info(`Building workspace dependency ${dependencyName}`);
-    runCommand(getPnpmCommand(), ['--filter', dependencyName, 'build'], {
-      cwd: REPO_ROOT,
-      env: {
-        DOCS_ISLANDS_MODE: 'production',
-        DOCS_ISLANDS_TEST: localTest ? '1' : '0',
-      },
-      stdio: 'inherit',
-      logger: ReleaseLogger,
+    runWorkspaceBuildTarget(dependencyName, {
+      DOCS_ISLANDS_MODE: 'production',
+      DOCS_ISLANDS_TEST: localTest ? '1' : '0',
     });
   }
 
-  getPackageScriptRunner(config, 'build', {
+  runPackageBuildTarget(config, {
     DOCS_ISLANDS_MODE: 'production',
     DOCS_ISLANDS_TEST: localTest ? '1' : '0',
   });
@@ -184,7 +198,7 @@ function runStandardPackageReleaseChecks(
     getPackageScriptRunner(config, 'test');
   }
   if (!options.skipBuild) {
-    getPackageScriptRunner(config, 'build');
+    runPackageBuildTarget(config);
     verifyDistVersion(plan);
     runPackageArtifactChecks(config);
     runPackageReleaseConsistencyChecks(config);
