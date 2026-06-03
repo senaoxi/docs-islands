@@ -7,5 +7,10 @@
     "lib": ["ES2023"],
     "types": ["node"],
   },
-  "include": ["limina.config.mjs", "eslint.config.mjs", "scripts/**/*.ts"],
+  "include": [
+    "limina.config.mjs",
+    "package.json",
+    "eslint.config.mjs",
+    "scripts/**/*.ts",
+  ],
 }

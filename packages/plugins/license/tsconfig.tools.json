@@ -8,7 +8,7 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["rolldown.config.ts", "eslint.config.mjs", "packagePlugin.ts"],
+  "include": ["rolldown.config.ts", "package.json", "eslint.config.mjs", "packagePlugin.ts"],
   "exclude": [
     "dist",
     "cache",

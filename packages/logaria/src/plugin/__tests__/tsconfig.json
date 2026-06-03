@@ -5,5 +5,5 @@
     "lib": ["ES2023"],
     "types": ["node", "vitest/globals"],
   },
-  "include": ["*.ts", "fixtures/**/*.ts"],
+  "include": ["*.ts", "package.json", "fixtures/**/*.ts"],
 }

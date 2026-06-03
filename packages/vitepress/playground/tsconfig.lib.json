@@ -8,5 +8,10 @@
     "isolatedDeclarations": false,
     "declaration": false
   },
-  "include": ["eslint.config.mjs", ".vitepress/**/*.ts", "components/**/*.tsx"]
+  "include": [
+    "eslint.config.mjs",
+    "package.json",
+    ".vitepress/**/*.ts",
+    "components/**/*.tsx"
+  ]
 }
