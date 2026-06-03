@@ -62,7 +62,7 @@ setLoggerConfig({
 });
 ```
 
-In rule mode (see [Rules & Presets](./rules-and-presets.md)), `debug: true` additionally tags visible rule-based logs with the matching rule label, which is useful for tracing why a log surfaced.
+In rule mode (see [Rules & Presets](./rules-and-presets.md)), `debug: true` instead tags each visible rule-based log with the matching rule label, which is useful for tracing why a log surfaced. One behavior catches people out: **once any rule resolves, `logger.debug()` output is always suppressed — even with `debug: true`.** The flag reveals `debug()` calls only in level mode (no rules); in rule mode it just adds labels and elapsed metadata to the non-debug logs that rules let through.
 
 ## Resetting Config
 

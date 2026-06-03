@@ -98,9 +98,12 @@ setLoggerConfig({
 
 **现象** — `info` 能正常显示，但 `debug` 完全沉默。
 
-**原因** — `debug` 由 `debug` 标志控制，不在 `levels` 列表里。默认 `debug: false`，debug 输出会被隐藏。
+**原因** — 有两个相互独立的原因，任意一个都会隐藏 `debug()`：
 
-**解决** — 设置 `debug: true`：
+- `debug` 由 `debug` 标志控制，不在 `levels` 列表里。默认 `debug: false`，debug 输出会被隐藏。
+- 你处于**规则模式**。只要解析出任意一条规则，`logger.debug()` 就*始终*被屏蔽——即便 `debug: true` 也一样。debug 调用只有在 Level 模式（没有配置任何规则）下才会输出。
+
+**解决** — 在 Level 模式下设置 `debug: true`：
 
 ```ts
 setLoggerConfig({
@@ -109,7 +112,7 @@ setLoggerConfig({
 });
 ```
 
-插件控制下，在 `loggerPlugin({ config: { debug: true } })` 中设置同一标志。
+如果你需要 `debug()` 输出，请确保没有配置任何规则——规则模式下 debug 调用永远不打印。插件控制下，请通过对应适配器设置同一标志，例如 `loggerPlugin.vite({ config: { debug: true } })`。
 
 ## 构建期未裁掉某条日志
 

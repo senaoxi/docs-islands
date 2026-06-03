@@ -3,11 +3,12 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "isolatedDeclarations": false,
+    "allowJs": true,
     "declaration": true,
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["rolldown.config.ts", "packagePlugin.ts"],
+  "include": ["rolldown.config.ts", "eslint.config.mjs", "packagePlugin.ts"],
   "exclude": [
     "dist",
     "cache",
@@ -15,7 +16,6 @@
     "coverage",
     "node_modules",
     ".eslintcache",
-    "eslint.config.mjs",
     "vitest.config.ts",
     "**/__tests__/**",
     "**/*.spec.ts",

@@ -98,9 +98,12 @@ See [Rules & Presets](./rules-and-presets.md) for full semantics.
 
 **Symptom** — `debug` calls are completely silent even though `info` works.
 
-**Why** — `debug` is controlled by the `debug` flag, not the `levels` list. By default, `debug: false` and debug output is hidden.
+**Why** — Two independent reasons, either of which hides `debug()`:
 
-**Fix** — Set `debug: true`:
+- `debug` is controlled by the `debug` flag, not the `levels` list. By default `debug: false`, so debug output is hidden.
+- You are in **rule mode**. Once any rule resolves, `logger.debug()` is _always_ suppressed — even with `debug: true`. Debug calls print only in level mode (no rules configured).
+
+**Fix** — In level mode, set `debug: true`:
 
 ```ts
 setLoggerConfig({
@@ -109,7 +112,7 @@ setLoggerConfig({
 });
 ```
 
-Under plugin control, set the same flag in `loggerPlugin({ config: { debug: true } })`.
+If you need `debug()` output, make sure no rules are configured — in rule mode, debug calls never print. Under plugin control, set the same flag through your adapter, e.g. `loggerPlugin.vite({ config: { debug: true } })`.
 
 ## Tree-Shaking Did Not Remove a Call
 

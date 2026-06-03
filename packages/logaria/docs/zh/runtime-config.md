@@ -62,7 +62,7 @@ setLoggerConfig({
 });
 ```
 
-进入规则模式后（参见 [规则与 Preset](./rules-and-presets.md)），`debug: true` 还会给可见的规则匹配日志附上命中的规则标签，方便追踪日志为什么会出现。
+进入规则模式后（参见 [规则与 Preset](./rules-and-presets.md)），`debug: true` 改为给每条可见的规则匹配日志附上命中的规则标签，方便追踪日志为什么会出现。有一点容易踩坑：**只要解析出任意一条规则，`logger.debug()` 的输出就始终被屏蔽——即便 `debug: true` 也一样。** 该标志只有在 Level 模式（没有任何规则）下才会显示 `debug()` 调用；在规则模式下，它只是给规则放行的非 debug 日志加上标签和耗时信息。
 
 ## 重置配置
 
