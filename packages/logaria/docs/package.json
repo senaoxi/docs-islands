@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:dev",
+    "@docs-islands/utils": "link:../../../utils/dist",
     "del-cli": "catalog:dev",
     "typescript": "catalog:dev",
     "vitepress": "catalog:frameworks",

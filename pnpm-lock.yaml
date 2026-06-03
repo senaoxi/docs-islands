@@ -852,6 +852,9 @@ importers:
         specifier: catalog:prod
         version: 3.5.28(typescript@5.9.3)
     devDependencies:
+      '@docs-islands/utils':
+        specifier: link:../../../utils/dist
+        version: link:../../../utils/dist
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
@@ -959,6 +962,9 @@ importers:
         specifier: catalog:prod
         version: 3.5.28(typescript@5.9.3)
     devDependencies:
+      '@docs-islands/utils':
+        specifier: link:../../../utils/dist
+        version: link:../../../utils/dist
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
