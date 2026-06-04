@@ -39,6 +39,16 @@ const isUsableChromiumExecutable = (executablePath: string): boolean => {
 };
 
 const resolveChromiumExecutablePath = () => {
+  const override = runtime.chromiumExecutablePath?.trim();
+
+  if (override) {
+    return override;
+  }
+
+  if (ci && !debug) {
+    return undefined;
+  }
+
   const bundledExecutablePath = chromium.executablePath();
 
   if (
@@ -46,12 +56,6 @@ const resolveChromiumExecutablePath = () => {
     isUsableChromiumExecutable(bundledExecutablePath)
   ) {
     return bundledExecutablePath;
-  }
-
-  const override = runtime.chromiumExecutablePath?.trim();
-
-  if (override) {
-    return override;
   }
 
   const candidatePaths = [
