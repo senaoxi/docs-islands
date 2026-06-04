@@ -157,12 +157,12 @@
     "./logger": "./src/shared/logger.ts",
     "./logger/presets": "./src/shared/logger/presets.ts",
     "./devtools/client": {
-      "types": "./types/devtools-client.d.ts",
-      "default": "./theme/devtools.mjs"
+      "types": "./dist/types/devtools-client.d.ts",
+      "default": "./dist/theme/devtools.mjs"
     },
     "./devtools/client/style.css": {
-      "types": "./types/theme.css.d.ts",
-      "default": "./theme/devtools.css"
+      "types": "./dist/types/theme.css.d.ts",
+      "default": "./dist/theme/devtools.css"
     },
     "./devtools/mcp": "./src/node/site-devtools/mcp.ts",
     "./package.json": "./package.json",

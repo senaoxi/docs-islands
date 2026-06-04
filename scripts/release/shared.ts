@@ -227,6 +227,7 @@ const RELEASE_PACKAGE_CONFIGS: readonly ReleasePackageConfig[] = [
     tagPrefix: 'limina',
     previewChecks: [
       'test',
+      'smoke',
       'build package',
       'verify dist/package.json version',
       'limina package check',

@@ -13,7 +13,7 @@ export default defineConfig({
   },
   forbidOnly: isCi,
   fullyParallel: false,
-  outputDir: path.join(repoRoot, 'test-results', 'vitepress-smoke'),
+  outputDir: path.join(repoRoot, '.smoke/test-results', 'vitepress-smoke'),
   projects: [
     {
       name: 'chromium',
@@ -30,7 +30,7 @@ export default defineConfig({
         open: 'never',
         outputFolder: path.join(
           repoRoot,
-          'playwright-report',
+          '.smoke/playwright-report',
           'vitepress-smoke',
         ),
       },

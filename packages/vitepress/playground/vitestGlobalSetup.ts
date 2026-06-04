@@ -45,38 +45,40 @@ const resolveChromiumExecutablePath = () => {
     return override;
   }
 
-  if (ci && !debug) {
-    return undefined;
+  let executablePath: string | undefined;
+
+  if (!ci || debug) {
+    const bundledExecutablePath = chromium.executablePath();
+
+    if (
+      bundledExecutablePath &&
+      isUsableChromiumExecutable(bundledExecutablePath)
+    ) {
+      executablePath = bundledExecutablePath;
+    } else {
+      const candidatePaths = [
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        '/Applications/Chromium.app/Contents/MacOS/Chromium',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium',
+        '/usr/bin/chromium-browser',
+        path.join(
+          runtime.programFiles || 'C:/Program Files',
+          'Google/Chrome/Application/chrome.exe',
+        ),
+        path.join(
+          runtime.programFilesX86 || 'C:/Program Files (x86)',
+          'Google/Chrome/Application/chrome.exe',
+        ),
+      ];
+
+      executablePath = candidatePaths.find((candidatePath) =>
+        isUsableChromiumExecutable(candidatePath),
+      );
+    }
   }
 
-  const bundledExecutablePath = chromium.executablePath();
-
-  if (
-    bundledExecutablePath &&
-    isUsableChromiumExecutable(bundledExecutablePath)
-  ) {
-    return bundledExecutablePath;
-  }
-
-  const candidatePaths = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    path.join(
-      runtime.programFiles || 'C:/Program Files',
-      'Google/Chrome/Application/chrome.exe',
-    ),
-    path.join(
-      runtime.programFilesX86 || 'C:/Program Files (x86)',
-      'Google/Chrome/Application/chrome.exe',
-    ),
-  ];
-
-  return candidatePaths.find((candidatePath) =>
-    isUsableChromiumExecutable(candidatePath),
-  );
+  return executablePath;
 };
 
 function materializeMarkdownFixtures(): void {
