@@ -25,9 +25,8 @@ setLoggerConfig({
 
 The map key (`custom:metrics`) is the rule label. In debug mode, visible rule-based logs include the matching label so you can see which rule let them through.
 
-::: info Rule mode vs. level mode
-A config with no resolved rules is **level mode** — `levels` is the only filter.
-A config with at least one resolved rule is **rule mode** — `levels` becomes the default for rules that say `'inherit'`, unmatched logs are dropped, and `logger.debug()` is always suppressed (even with `debug: true`). See [Runtime Config — Debug Mode](./runtime-config.md#debug-mode).
+::: info Two modes
+Adding any rule switches Logaria from **level mode** to **rule mode**, which changes how `levels`, unmatched logs, and `logger.debug()` behave. See [Core Concepts — Level mode vs rule mode](./concepts.md#level-mode-vs-rule-mode).
 :::
 
 ## Rule Fields
@@ -41,6 +40,12 @@ A config with at least one resolved rule is **rule mode** — `levels` becomes t
 | `levels`  | Required. Use explicit levels or `'inherit'` to inherit root `levels`.  |
 
 `group` and `message` upgrade to glob matching automatically when the string contains glob syntax — `*`, `?`, `[a-z]`, or `{a,b}`.
+
+`levels` is required on every rule object. Omitting it throws:
+
+```
+logger.rules["<label>"] rule objects must declare "levels".
+```
 
 ::: tip Pick exact when you can
 Exact matches are faster and easier to reason about. Use globs when you genuinely need to span multiple groups (`api.*`) or messages (`*timeout*`).
@@ -116,10 +121,21 @@ Preset rule settings support:
 | `'off'` | Removes the preset rule during resolution — it produces no resolved rule. |
 | object  | Enables and tunes the rule (see the override scope below).                |
 
+Setting a rule to `'off'` **deletes** it during resolution — it is a removal, not a deny rule. If every rule ends up `'off'`, the config has no rules left and falls back to [level mode](./concepts.md#level-mode-vs-rule-mode).
+
 How much an object override may change depends on how the preset rule was activated:
 
-- **Activated via `extends`, then overridden in `rules`** — you may tune only `message` and `levels`. The template's `main` and `group` are locked; changing either throws `The user rule cannot override "<plugin>/<rule>" plugin rule's main and group fields.`. A preset author owns _what_ a rule targets; consumers decide only _how loud_ it is.
+- **Activated via `extends`, then overridden in `rules`** — you may tune only `message` and `levels`. The template's `main` and `group` are locked. A preset author owns _what_ a rule targets; consumers decide only _how loud_ it is.
 - **Referenced directly in `rules` (not in `extends`)** — the object may override any template field: `main`, `group`, `message`, and `levels`.
+
+::: warning Overriding a frozen field throws
+Changing `main` or `group` on a rule activated via `extends` throws:
+
+```
+The user rule cannot override "<plugin>/<rule>" plugin rule's main and group fields.
+```
+
+:::
 
 Either way, `levels` is required on an object setting — use an explicit array or `'inherit'`.
 
@@ -135,6 +151,7 @@ A few conventions that have worked well in practice:
 
 ## What to Read Next
 
+- [Core Concepts](./concepts.md#how-a-log-is-decided) — how rules resolve and a log is decided.
 - [Runtime Config](./runtime-config.md) — how `levels` and `debug` interact with rules.
 - [Bundler Plugin](./bundler-plugin.md) — how rules are honoured by static pruning.
 - [API Reference](./api-reference.md#logaria-types) — the `LoggerPresetPlugin` type used to author presets.

@@ -13,23 +13,26 @@ hero:
       text: Get Started
       link: /getting-started
     - theme: alt
-      text: API Reference
-      link: /api-reference
+      text: Features
+      link: /features
+    - theme: alt
+      text: Why Logaria
+      link: /why
     - theme: alt
       text: View on GitHub
       link: https://github.com/XiSenao/docs-islands
 
 features:
   - title: Tiny, framework-agnostic API
-    details: A handful of functions to create loggers and configure visibility — no framework lock-in, no bundler coupling, no global state to fight.
-  - title: Rule-based visibility
-    details: Combine levels, debug mode, glob matching, and preset-backed allowlists to make every log intentional in dev, CI, and production.
-  - title: Vanishes at build time
-    details: An optional unplugin adapter statically proves and removes suppressed log calls, so silenced logs leave nothing behind in your production bundle.
-  - title: Works with every major bundler
-    details: One plugin, seven adapters — Vite, Rollup, Rolldown, esbuild, webpack, Rspack, and Farm — all backed by the same runtime semantics.
+    details: Three root functions create loggers and own the default scope — no framework, no bundler, and no global state to fight.
+  - title: Level mode, in one knob
+    details: The `levels` allowlist decides which of `info`/`success`/`warn`/`error` print; `debug` is a separate opt-in flag.
+  - title: Rule mode for focused output
+    details: Add `rules` and Logaria switches to a focused allowlist matched by `main`, `group`, message, and level.
   - title: Composable presets
-    details: Ship reusable rule templates as preset plugins, enable them through `extends`, and override per project when a team needs something tighter.
+    details: Ship reusable rule templates as preset plugins, activate them via `extends`, and override per project in `rules`.
+  - title: Vanishes at build time
+    details: The optional unplugin adapter statically proves and deletes suppressed log calls — the runtime stays canonical.
   - title: Scoped for host integrations
-    details: Frameworks and build tools register isolated logger scopes that never mutate application-owned runtime config — safe for libraries to depend on.
+    details: Frameworks register isolated scopes through `logaria/core` that never mutate application-owned runtime config.
 ---

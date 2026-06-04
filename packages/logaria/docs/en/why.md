@@ -24,21 +24,21 @@ In practice, this means a debug-rich library can ship to production without leav
 
 ## Why Framework-Agnostic
 
-Logaria deliberately does not target one framework or one bundler.
+Logaria deliberately does not target one framework or one bundler. There is no preferred framework, no preferred bundler, and no special path for "the popular one".
 
 - The **runtime** is a handful of pure functions. It runs in Node.js, in browsers, in workers, in CLIs — anywhere ESM is supported. No DOM, no Node-only globals, no peer dependency on a meta-framework.
 - The **bundler plugin** is built on [unplugin](https://github.com/unjs/unplugin), so the same plugin object exposes Vite, Rollup, Rolldown, esbuild, webpack, Rspack, and Farm adapters.
 - The **integration story** is designed so framework authors and tooling vendors can register their own scope without colliding with the application — see [Scoped Integrations](./scoped-integrations.md).
 
-This is what lets the same Logaria call site travel from a CLI tool to a Vite plugin to a browser app without rewriting.
+The same `createLogger` you call in a CLI is the one a Vite plugin uses. We resist features that would only make sense in one framework: if a capability can be expressed as a generic Logaria primitive, it belongs in the core; if it can't, it belongs in a preset plugin contributed by that ecosystem.
 
 ## Why Explicit Ownership
 
 Most logger libraries assume there is one global config and let everyone write to it. That works until two packages disagree about what should print, and the last one to call `configure()` wins.
 
-Logaria draws a hard line: **the runtime has one default scope, and only one owner**. That owner is either the application (calling `setLoggerConfig` / `resetLoggerConfig` directly) or the bundler plugin (injecting the config as build constants). When the plugin is installed, the runtime APIs throw if you also try to mutate the default scope at runtime — there is no quiet drift between what the plugin pruned and what the runtime allows.
+Logaria draws a hard line: **the runtime has one default scope, and only one owner**. That owner is either the application (calling `setLoggerConfig` / `resetLoggerConfig` directly) or the bundler plugin (injecting the config as build constants). When the plugin is installed, the runtime APIs that mutate the default scope throw — there is no quiet drift between what the plugin pruned and what the runtime allows.
 
-Host integrations that need their own visibility policy use [`logaria/core`](./scoped-integrations.md) to register an explicit scope, with its own config, that never touches the default one.
+This is the rule that keeps Logaria safe to depend on from a library: a transitive dependency cannot quietly redirect or silence your logs. Host integrations that need their own visibility policy use [`logaria/core`](./scoped-integrations.md) to register an explicit scope, with its own config, that never touches the default one.
 
 ## Why Conservative Pruning
 
@@ -50,11 +50,28 @@ The bundler plugin removes a log call only when it can prove **every** static fa
 - The log call is a standalone expression.
 - The plugin is running in a build context with `treeshake: true`.
 
-Anything dynamic — computed messages, aliased imports, destructured methods — stays in the bundle and falls back to runtime filtering. This is on purpose. The cost of a wrong removal is a silently missing log in production; the cost of a missed removal is a few bytes. Logaria optimises for the former.
+Anything dynamic — computed messages, aliased imports, destructured methods — stays in the bundle and falls back to runtime filtering. This is on purpose, and the trade is asymmetric: a missed removal costs you a few bytes, while a wrong removal costs you a missing log on a real incident. Logaria optimizes against the second risk and trades the first away.
+
+## Why a Small, Predictable Runtime
+
+Adding more to the runtime would have been easy; the discipline is in not doing it.
+
+- One default scope, plus an optional set of explicit scopes.
+- Five log methods on every logger (`info`, `success`, `warn`, `error`, `debug`) — no levels invented just to add variety.
+- No transports, no runtime-configured formatters, no async sinks. Logaria writes to `console`; if your app needs more, wrap it.
+- Helpers (`createElapsedTimer`, `formatErrorMessage`, `formatDebugMessage`) live in a separate `logaria/helper` entry, so the root entry stays minimal.
+
+It is also type-safe by default: public types ship from `logaria/types`, and preset plugins are typed so that `extends` and `rules` references autocomplete and reject misspelled labels. The result is an API surface you can read in five minutes and re-derive without the docs.
+
+## Evolving the Ecosystem, Not the Library
+
+Most interesting visibility decisions in real projects are not "show errors" — they're "show this subsystem when it's slow", or "show this rule when CI is rerunning the dev build". The way to scale that without bloating the core is **preset plugins**: small, shareable bundles of rule templates and configs that projects enable via `extends` and override per project.
+
+Logaria's job is to keep the primitives sharp; the ecosystem's job is to assemble them into the shapes individual projects need.
 
 ## Where Logaria Is Heading
 
-Logaria is still small and intentionally so. The runtime stays minimal, the plugin stays conservative, and new features are added only when they preserve those properties. The roadmap focuses on:
+Logaria is still small, and intentionally so. The runtime stays minimal, the plugin stays conservative, and new features are added only when they preserve those properties. The roadmap focuses on:
 
 - Better introspection of resolved rules and pruning decisions for tooling.
 - More preset templates contributed by ecosystem packages.

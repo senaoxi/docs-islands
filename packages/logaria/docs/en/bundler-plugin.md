@@ -140,7 +140,7 @@ The plugin keeps any call shape that it cannot statically verify. Runtime filter
 - Non-standalone expressions, such as assigning the result of a log call.
 
 ::: info Why conservative
-A missed removal costs you a few bytes. A wrong removal costs you a missing log on a real incident. Logaria trades the second risk away on purpose. See [Project Philosophy — Conservative by Default](./philosophy.md#conservative-by-default).
+A missed removal costs you a few bytes. A wrong removal costs you a missing log on a real incident. Logaria trades the second risk away on purpose. See [Why Logaria — Why Conservative Pruning](./why.md#why-conservative-pruning).
 :::
 
 ## What to Read Next

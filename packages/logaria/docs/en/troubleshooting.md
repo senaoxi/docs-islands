@@ -161,6 +161,32 @@ afterEach(() => {
 
 For tests that need their own visibility policy without touching the default scope, use a [scoped integration](./scoped-integrations.md) and a generated `scopeId`.
 
+## `rules` Must Be an Object Map
+
+**Symptom**
+
+```
+Error: logger.rules must be an object map, not an array.
+```
+
+**Why** — `rules` is keyed by label, not a list. It is easy to reach for an array — the test spec describes rules as a numbered list of resolved shapes — but the public config is an object map.
+
+**Fix** — Key each rule by its label:
+
+```ts
+setLoggerConfig({
+  levels: ['warn', 'error'],
+  rules: {
+    'custom:metrics': {
+      group: 'userland.metrics',
+      levels: ['info', 'warn'],
+    },
+  },
+});
+```
+
+Each value is `'off'` or a rule object, and every rule object must declare `levels`. See [Rules & Presets](./rules-and-presets.md).
+
 ## Still Stuck?
 
 If a behaviour does not match anything on this page, please open an issue with:

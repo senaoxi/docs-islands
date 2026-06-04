@@ -89,5 +89,5 @@ This catches malformed rules, unknown levels, and conflicting `extends` referenc
 ## What to Read Next
 
 - [API Reference — `logaria/core`](./api-reference.md#logaria-core) — full signature list.
-- [Project Philosophy — Explicit Ownership](./philosophy.md#explicit-ownership) — why scopes exist.
+- [Core Concepts — Ownership and Scopes](./concepts.md#ownership-and-scopes) — why scopes exist.
 - [Troubleshooting — Missing scope id](./troubleshooting.md#missing-scope-id) — common pitfalls when registering scopes.

@@ -1,16 +1,6 @@
 # Getting Started
 
-## Overview
-
-Logaria is a small, framework-agnostic logger for TypeScript packages, scripts, CLIs, and browser code. It gives application code a tiny logging API while keeping configuration ownership explicit — and pairs with an optional bundler plugin that prunes statically suppressed log calls at build time.
-
-It consists of three parts you can opt in to:
-
-- **A tiny runtime API** ([`logaria`](./api-reference.md#logaria)) for creating loggers and configuring visibility.
-- **A bundler plugin** ([`logaria/plugin`](./bundler-plugin.md)) that injects runtime config and optionally removes suppressed calls from production bundles.
-- **A scoped core** ([`logaria/core`](./scoped-integrations.md)) for host integrations that need their own logger scope without touching the default one.
-
-If you are new here, read [Why Logaria](./why.md) to understand the problem it solves, or jump straight into the quick start below.
+This page installs Logaria and walks you through your first logger. For what Logaria is and the three parts you can opt in to, see [Introduction](./introduction.md); for the problem it solves, see [Why Logaria](./why.md).
 
 ## Runtime Support
 
@@ -100,7 +90,7 @@ Good `group` values: `runtime.react`, `build.pipeline`, `dev.hmr`, `userland.met
 
 ## Configuration Ownership
 
-Logaria has one default scope behind the root entry and optional explicit scopes for host integrations. Choose the owner before creating loggers:
+Logaria has one default scope behind the root entry and optional explicit scopes for host integrations. Choose the owner before creating loggers — see [Core Concepts — Ownership and Scopes](./concepts.md#ownership-and-scopes) for the full model:
 
 | Situation                               | Entry                        | Config owner                                                                |
 | --------------------------------------- | ---------------------------- | --------------------------------------------------------------------------- |
@@ -116,11 +106,13 @@ Reusable libraries should **not** call `setLoggerConfig()` or `resetLoggerConfig
 
 ## Next Steps
 
-- Tune which logs print: [Runtime Config](./runtime-config.md)
-- Match logs by `main`, `group`, message: [Rules & Presets](./rules-and-presets.md)
-- Strip suppressed calls from production: [Bundler Plugin](./bundler-plugin.md)
-- Own a private scope from a host package: [Scoped Integrations](./scoped-integrations.md)
-- Look up every export: [API Reference](./api-reference.md)
+- Tour the capabilities with examples — [Features](./features.md)
+- Learn the model behind it — [Core Concepts](./concepts.md)
+- Tune which logs print — [Runtime Config](./runtime-config.md)
+- Match logs by `main`, `group`, message — [Rules & Presets](./rules-and-presets.md)
+- Strip suppressed calls from production — [Bundler Plugin](./bundler-plugin.md)
+- Own a private scope from a host package — [Scoped Integrations](./scoped-integrations.md)
+- Look up every export — [API Reference](./api-reference.md)
 
 ## Runtime Demo
 
