@@ -66,30 +66,35 @@ runs:
       if: inputs.playwright == 'true' && runner.os != 'Windows'
       shell: bash
       run: |
-        echo "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/playwright-bin" >> $GITHUB_ENV
-        PLAYWRIGHT_VERSION="$(pnpm ls --depth 0 --json -w playwright-chromium | jq --raw-output '.[0].devDependencies["playwright-chromium"].version')"
-        echo "PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION" >> $GITHUB_ENV
+        echo "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/playwright-bin" >> "$GITHUB_ENV"
+        PLAYWRIGHT_VERSION="$(node -p "require('./node_modules/@playwright/test/package.json').version")"
+        if [[ -z "$PLAYWRIGHT_VERSION" || "$PLAYWRIGHT_VERSION" == "null" ]]; then
+          echo "Failed to resolve Playwright version" >&2
+          exit 1
+        fi
+        echo "PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION" >> "$GITHUB_ENV"
 
     - name: (windows) Set Playwright path and Get playwright version
       if: inputs.playwright == 'true' && runner.os == 'Windows'
       shell: pwsh
       run: |
         echo "PLAYWRIGHT_BROWSERS_PATH=$HOME\.cache\playwright-bin" >> $env:GITHUB_ENV
-        $env:PLAYWRIGHT_VERSION="$(pnpm ls --depth 0 --json -w playwright-chromium | jq --raw-output '.[0].devDependencies["playwright-chromium"].version')"
-        echo "PLAYWRIGHT_VERSION=$env:PLAYWRIGHT_VERSION" >> $env:GITHUB_ENV
+        $playwrightVersion = node -p "require('./node_modules/@playwright/test/package.json').version"
+        if ([string]::IsNullOrWhiteSpace($playwrightVersion) -or $playwrightVersion -eq "null") {
+          throw "Failed to resolve Playwright version"
+        }
+        echo "PLAYWRIGHT_VERSION=$playwrightVersion" >> $env:GITHUB_ENV
 
     - name: Cache Playwright's binary
       if: inputs.playwright == 'true'
       # actions/cache@v5.0.0.
       uses: actions/cache@a7833574556fa59680c1b7cb190c1735db73ebf0
       with:
-        key: ${{ runner.os }}-playwright-bin-v1-${{ env.PLAYWRIGHT_VERSION }}
+        key: ${{ runner.os }}-playwright-bin-v3-shell-${{ env.PLAYWRIGHT_VERSION }}
         path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-        restore-keys: |
-          ${{ runner.os }}-playwright-bin-v1-
 
     - name: Install Playwright
       if: inputs.playwright == 'true'
       shell: bash
-      # does not need to explicitly set chromium after https://github.com/microsoft/playwright/issues/14862 is solved
-      run: pnpm playwright install chromium
+      # CI runs Chromium headlessly, so only the headless shell is required.
+      run: pnpm playwright install --only-shell chromium
