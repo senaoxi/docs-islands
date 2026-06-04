@@ -141,11 +141,11 @@ import type {
 
 The `types` entry exposes public runtime config, rule, logger, plugin, and transform result types for TypeScript consumers. Notable exports:
 
-| Type                      | Use case                                                                    |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `LoggerConfig`            | The shape accepted by `setLoggerConfig`, `loggerPlugin`, and scoped APIs.   |
-| `LoggerPresetPlugin`      | Preset author entry point — see [Rules & Presets](./rules-and-presets.md).  |
-| `LoggerVisibilityLevel`   | Union of allowed level strings: `'error' \| 'warn' \| 'info' \| 'success'`. |
-| `LogKind`                 | Union of all log kinds: visibility levels plus `'debug'`.                   |
-| `DebugMessageOptions`     | Argument shape for `formatDebugMessage`.                                    |
-| `Logger` / `ScopedLogger` | Logger object shapes returned by `createLogger` / `.getLoggerByGroup`.      |
+| Type                      | Use case                                                                                                       |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `LoggerConfig`            | The shape accepted by `setLoggerConfig`, `loggerPlugin`, and scoped APIs — see [Core Concepts](./concepts.md). |
+| `LoggerPresetPlugin`      | Preset author entry point — see [Rules & Presets](./rules-and-presets.md).                                     |
+| `LoggerVisibilityLevel`   | Union of allowed level strings: `'error' \| 'warn' \| 'info' \| 'success'`.                                    |
+| `LogKind`                 | Union of all log kinds: visibility levels plus `'debug'`.                                                      |
+| `DebugMessageOptions`     | Argument shape for `formatDebugMessage`.                                                                       |
+| `Logger` / `ScopedLogger` | Logger object shapes returned by `createLogger` / `.getLoggerByGroup`.                                         |

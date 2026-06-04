@@ -28,29 +28,33 @@ const footerMessage = commitId
 
 const sidebar: DefaultTheme.SidebarItem[] = [
   {
-    text: 'Introduction',
+    text: 'Guide',
     items: [
       {
-        text: 'Overview',
-        link: '/',
+        text: 'Introduction',
+        link: '/introduction',
       },
       {
         text: 'Why Logaria',
         link: '/why',
       },
       {
-        text: 'Project Philosophy',
-        link: '/philosophy',
-      },
-      {
         text: 'Getting Started',
         link: '/getting-started',
+      },
+      {
+        text: 'Features',
+        link: '/features',
       },
     ],
   },
   {
-    text: 'Guide',
+    text: 'Deep Dive',
     items: [
+      {
+        text: 'Core Concepts',
+        link: '/concepts',
+      },
       {
         text: 'Runtime Config',
         link: '/runtime-config',
@@ -67,10 +71,6 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         text: 'Scoped Integrations',
         link: '/scoped-integrations',
       },
-      {
-        text: 'Troubleshooting',
-        link: '/troubleshooting',
-      },
     ],
   },
   {
@@ -79,6 +79,10 @@ const sidebar: DefaultTheme.SidebarItem[] = [
       {
         text: 'API Reference',
         link: '/api-reference',
+      },
+      {
+        text: 'Troubleshooting',
+        link: '/troubleshooting',
       },
     ],
   },
@@ -96,14 +100,19 @@ const config: LocaleSpecificConfig<DefaultTheme.Config> & {
     nav: [
       {
         text: 'Guide',
-        link: '/getting-started',
-        activeMatch:
-          '^/(getting-started|why|philosophy|runtime-config|rules-and-presets|bundler-plugin|scoped-integrations|troubleshooting)',
+        link: '/introduction',
+        activeMatch: '^/(introduction|why|getting-started|features)',
       },
       {
-        text: 'API',
+        text: 'Deep Dive',
+        link: '/concepts',
+        activeMatch:
+          '^/(concepts|runtime-config|rules-and-presets|bundler-plugin|scoped-integrations)',
+      },
+      {
+        text: 'Reference',
         link: '/api-reference',
-        activeMatch: '^/api-reference',
+        activeMatch: '^/(api-reference|troubleshooting)',
       },
       {
         text: pkg.version,

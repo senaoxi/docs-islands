@@ -28,35 +28,39 @@ const footerMessage = commitId
 
 const sidebar: DefaultTheme.SidebarItem[] = [
   {
-    text: '介绍',
+    text: '指南',
     items: [
       {
-        text: '概览',
-        link: '/zh/',
+        text: '介绍',
+        link: '/zh/introduction',
       },
       {
         text: '为什么是 Logaria',
         link: '/zh/why',
       },
       {
-        text: '项目理念',
-        link: '/zh/philosophy',
-      },
-      {
         text: '快速开始',
         link: '/zh/getting-started',
+      },
+      {
+        text: '特性一览',
+        link: '/zh/features',
       },
     ],
   },
   {
-    text: '指南',
+    text: '深入',
     items: [
       {
-        text: 'Runtime 配置',
+        text: '核心概念',
+        link: '/zh/concepts',
+      },
+      {
+        text: '运行时配置',
         link: '/zh/runtime-config',
       },
       {
-        text: '规则与 Preset',
+        text: '规则与预设',
         link: '/zh/rules-and-presets',
       },
       {
@@ -64,12 +68,8 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/zh/bundler-plugin',
       },
       {
-        text: 'Scoped 集成',
+        text: '作用域集成',
         link: '/zh/scoped-integrations',
-      },
-      {
-        text: '常见问题',
-        link: '/zh/troubleshooting',
       },
     ],
   },
@@ -79,6 +79,10 @@ const sidebar: DefaultTheme.SidebarItem[] = [
       {
         text: 'API 参考',
         link: '/zh/api-reference',
+      },
+      {
+        text: '常见问题',
+        link: '/zh/troubleshooting',
       },
     ],
   },
@@ -93,19 +97,24 @@ const config: LocaleSpecificConfig<DefaultTheme.Config> & {
   link: '/zh/',
   title: 'Logaria',
   description:
-    '框架无关的 TypeScript Logger，结合规则化 runtime 过滤与构建期裁剪——开发时尽情记录，生产构建保持干净。',
+    '框架无关的 TypeScript 日志器，结合规则化运行时过滤与构建期裁剪——开发时尽情记录，生产构建保持干净。',
   themeConfig: {
     nav: [
       {
         text: '指南',
-        link: '/zh/getting-started',
-        activeMatch:
-          '^/zh/(getting-started|why|philosophy|runtime-config|rules-and-presets|bundler-plugin|scoped-integrations|troubleshooting)',
+        link: '/zh/introduction',
+        activeMatch: '^/zh/(introduction|why|getting-started|features)',
       },
       {
-        text: 'API',
+        text: '深入',
+        link: '/zh/concepts',
+        activeMatch:
+          '^/zh/(concepts|runtime-config|rules-and-presets|bundler-plugin|scoped-integrations)',
+      },
+      {
+        text: '参考',
         link: '/zh/api-reference',
-        activeMatch: '^/zh/api-reference',
+        activeMatch: '^/zh/(api-reference|troubleshooting)',
       },
       {
         text: pkg.version,
