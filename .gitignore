@@ -27,3 +27,5 @@ cache
 
 .claude/worktrees
 .claude/settings.local.json
+
+.smoke

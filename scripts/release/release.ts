@@ -196,6 +196,9 @@ function runStandardPackageReleaseChecks(
 
   if (!options.skipTests) {
     getPackageScriptRunner(config, 'test');
+    if (config.previewChecks.includes('smoke')) {
+      getPackageScriptRunner(config, 'smoke');
+    }
   }
   if (!options.skipBuild) {
     runPackageBuildTarget(config);

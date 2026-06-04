@@ -143,7 +143,9 @@ describe('Markdown Content Changes', () => {
       await expect(hello).toBeVisible();
     });
   });
+});
 
+describe('Markdown Content Changes HMR', () => {
   // HMR tests - render container content changes.
   describe('Render Container Content Changes', () => {
     const hmrTestFilePath = path.join(__dirname, 'hmr-test.md');

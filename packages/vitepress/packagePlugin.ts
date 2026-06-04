@@ -91,6 +91,9 @@ const rewriteExportPath = ({
     const targetExt = isClientExportKey(key) ? '.d.mts' : '.d.ts';
     return value.replace('src/', '').replace('.ts', targetExt);
   }
+  if (value.includes('dist/')) {
+    return value.replace('dist/', '');
+  }
   if (
     value.includes('src/') &&
     (value.endsWith('.d.mts') || value.endsWith('.d.ts'))
