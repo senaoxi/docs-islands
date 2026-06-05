@@ -88,6 +88,16 @@ export default defineConfig({
         reason: 'Build configuration items need to be entry modules.',
       },
     ],
+    tsconfigOwnership: {
+      ignore: [
+        {
+          owner: '@docs-islands/vitepress',
+          files: ['packages/vitepress/src/**/__tests__/**'],
+          reason:
+            'Vitest loads package test modules through the package-level test tsconfig; nearby runtime tsconfig.json files intentionally do not reference tests.',
+        },
+      ],
+    },
     unusedDependencies: {
       ignore: [
         {
