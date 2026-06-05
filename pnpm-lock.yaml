@@ -827,6 +827,9 @@ importers:
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
+      '@types/picomatch':
+        specifier: catalog:dev
+        version: 4.0.3
       '@vue/compiler-sfc':
         specifier: catalog:dev
         version: 3.5.28

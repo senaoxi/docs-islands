@@ -50,7 +50,6 @@
     "check:lib": "limina check lib",
     "check:vue": "limina check vue",
     "check:consumer": "limina check consumer",
-    "tsconfig:graph:paths": "limina paths generate",
     "release": "tsx scripts/release.ts",
     "changelog": "tsx scripts/changelog.ts",
     "changelog:preview": "tsx scripts/changelog.ts --dry-run",

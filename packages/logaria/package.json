@@ -21,7 +21,7 @@
   "bugs": {
     "url": "https://github.com/XiSenao/docs-islands/issues"
   },
-  "homepage": "https://docs.senao.me/docs-islands/logaria/",
+  "homepage": "https://docs.senao.me/docs-islands/logaria",
   "publishConfig": {
     "access": "public"
   },
