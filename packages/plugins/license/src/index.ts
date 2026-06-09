@@ -21,6 +21,7 @@ const ALLOWED_LICENSES = new Set([
   'Apache-2.0',
   'BSD-2-Clause',
   'BSD-3-Clause',
+  'BlueOak-1.0.0',
   'ISC',
 ]);
 
@@ -102,7 +103,7 @@ export default function licensePlugin(
             .trim()
             .replaceAll(/\r\n|\r/g, '\n')
             .split('\n')
-            .map((line) => `> ${line}`)
+            .map((line) => (line.length > 0 ? `> ${line}` : '>'))
             .join('\n')}\n`;
         }
 
@@ -117,7 +118,7 @@ export default function licensePlugin(
         licenses.length > 0 ? `\n${licenses.join(', ')}\n` : '';
       const bundledDependenciesText =
         dependencyLicenseTexts.length > 0 ? `\n${dependencyLicenseTexts}` : '';
-      const licenseText = `<!-- markdownlint-disable MD003 MD009 MD025 MD035 MD026 -->
+      const licenseText = normalizeGeneratedLicenseText(`<!-- markdownlint-disable MD003 MD009 MD025 MD035 MD026 -->
 # ${licenseTitle}
 
 ${packageName} is released under the MIT license:
@@ -128,7 +129,7 @@ ${coreLicense}
 The published ${packageName} artifact additionally contains code with the following licenses:
 ${bundledLicensesText}
 # Bundled dependencies:${bundledDependenciesText}
-`;
+`);
 
       const existingLicenseText = fs.readFileSync(licenseFilePath, 'utf8');
       if (existingLicenseText !== licenseText) {
@@ -241,4 +242,8 @@ function formatDependencyInfosText(depInfos: DependencyInfo[]): string {
     if (j !== depInfos.length - 1) text += '\n';
   }
   return text;
+}
+
+function normalizeGeneratedLicenseText(text: string): string {
+  return `${text.replaceAll(/[ \t]+$/gm, '').replace(/\n+$/u, '')}\n`;
 }

@@ -56,38 +56,65 @@ export default defineConfig({
   // Workspace dependency usages that static source and package script analysis
   // cannot see.
   source: {
-    additionalEntries: [
-      {
-        owner: '@docs-islands/vitepress',
-        files: ['packages/vitepress/src/**/__tests__/**'],
-        reason:
-          'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+    knip: {
+      workspaces: {
+        '@docs-islands/vitepress': {
+          entry: [
+            {
+              files: ['packages/vitepress/src/**/__tests__/**'],
+              reason:
+                'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+            },
+            // TODO: Needs optimization
+            {
+              files: ['packages/vitepress/theme/**'],
+              reason:
+                'Components will temporarily follow the build process and expose build artifacts.',
+            },
+            {
+              files: ['packages/vitepress/rolldown.theme.config.ts'],
+              reason: 'Build configuration items need to be entry modules.',
+            },
+          ],
+        },
+        '@docs-islands/core': {
+          entry: [
+            {
+              files: ['packages/core/src/**/__tests__/**'],
+              reason:
+                'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+            },
+          ],
+        },
+        'logaria-plugin-test': {
+          entry: [
+            {
+              files: ['packages/logaria/src/plugin/__tests__/**'],
+              reason:
+                'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
+            },
+          ],
+        },
+        '@docs-islands/vitepress-docs': {
+          ignoreDependencies: [
+            {
+              dep: 'logaria',
+              reason:
+                '@docs-islands/vitepress does not yet support TypeScript Language Service.',
+            },
+          ],
+        },
+        '@docs-islands/logaria-docs': {
+          ignoreDependencies: [
+            {
+              dep: 'logaria',
+              reason:
+                'The docs package keeps the workspace package installed for VitePress Markdown examples; those fenced examples are not executable Knip entries.',
+            },
+          ],
+        },
       },
-      {
-        owner: '@docs-islands/core',
-        files: ['packages/core/src/**/__tests__/**'],
-        reason:
-          'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
-      },
-      {
-        owner: 'logaria-plugin-test',
-        files: ['packages/logaria/src/plugin/__tests__/**'],
-        reason:
-          'All test modules are used as entry modules for actual usage coverage analysis and unused dependency entry sources.',
-      },
-      // TODO: Needs optimization
-      {
-        owner: '@docs-islands/vitepress',
-        files: ['packages/vitepress/theme/**'],
-        reason:
-          'Components will temporarily follow the build process and expose build artifacts.',
-      },
-      {
-        owner: '@docs-islands/vitepress',
-        files: ['packages/vitepress/rolldown.theme.config.ts'],
-        reason: 'Build configuration items need to be entry modules.',
-      },
-    ],
+    },
     tsconfigOwnership: {
       ignore: [
         {
@@ -95,22 +122,6 @@ export default defineConfig({
           files: ['packages/vitepress/src/**/__tests__/**'],
           reason:
             'Vitest loads package test modules through the package-level test tsconfig; nearby runtime tsconfig.json files intentionally do not reference tests.',
-        },
-      ],
-    },
-    unusedDependencies: {
-      ignore: [
-        {
-          importer: '@docs-islands/vitepress-docs',
-          dependency: 'logaria',
-          reason:
-            '@docs-islands/vitepress does not yet support TypeScript Language Service.',
-        },
-        {
-          importer: '@docs-islands/logaria-docs',
-          dependency: 'logaria',
-          reason:
-            'The docs package keeps the workspace package installed for VitePress Markdown examples; those fenced examples are not executable Knip entries.',
         },
       ],
     },

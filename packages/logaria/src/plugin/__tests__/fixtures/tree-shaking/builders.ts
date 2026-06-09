@@ -8,7 +8,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rolldown } from 'rolldown';
 import { rollup, type RollupOutput } from 'rollup';
-import { build as viteBuild } from 'vite';
+import {
+  build as viteBuild,
+  type PluginOption as VitePluginOption,
+} from 'vite';
 import { webpack } from 'webpack';
 import {
   LOGGER_TREE_SHAKING_BOUNDARIES_EXPECTED,
@@ -69,6 +72,19 @@ const resolveFixturePluginOptions = (
   treeshake: true,
   ...fixture.options,
 });
+
+const createViteLoggerPlugins = (
+  fixture: LoggerTreeShakingFixture,
+): VitePluginOption[] => {
+  // The built logaria/plugin declarations bundle Vite's Plugin type, so clean
+  // installs can compare two Vite type instances even though the runtime plugin
+  // object is compatible with this fixture's Vite dependency.
+  const plugin = loggerPlugin.vite(
+    resolveFixturePluginOptions(fixture),
+  ) as unknown as VitePluginOption | VitePluginOption[];
+
+  return Array.isArray(plugin) ? plugin : [plugin];
+};
 
 const LOGGER_TREE_SHAKING_FIXTURES: LoggerTreeShakingFixture[] = [
   {
@@ -260,7 +276,7 @@ const buildViteFixture = async (
     },
     configFile: false,
     logLevel: 'silent',
-    plugins: [loggerPlugin.vite(resolveFixturePluginOptions(fixture))],
+    plugins: createViteLoggerPlugins(fixture),
   })) as RollupOutput[];
 
   const outputs = Array.isArray(output) ? output : [output];
