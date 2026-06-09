@@ -760,21 +760,58 @@ importers:
 
   packages/limina:
     dependencies:
+      oxc-parser:
+        specifier: catalog:prod
+        version: 0.133.0
+      oxc-resolver:
+        specifier: catalog:prod
+        version: 11.20.0
+      picomatch:
+        specifier: catalog:prod
+        version: 4.0.4
+      tinyglobby:
+        specifier: catalog:prod
+        version: 0.2.15
+    devDependencies:
       '@arethetypeswrong/core':
         specifier: catalog:lint
         version: 0.18.2
       '@clack/prompts':
         specifier: catalog:dev
         version: 1.4.0
+      '@docs-islands/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@docs-islands/plugin-license':
+        specifier: link:../plugins/license/dist
+        version: link:../plugins/license/dist
+      '@docs-islands/utils':
+        specifier: link:../../utils/dist
+        version: link:../../utils/dist
       '@publint/pack':
         specifier: catalog:lint
         version: 0.1.4
+      '@types/node':
+        specifier: 20.19.0
+        version: 20.19.0
+      '@types/picomatch':
+        specifier: catalog:dev
+        version: 4.0.3
+      '@vue/compiler-sfc':
+        specifier: catalog:dev
+        version: 3.5.28
       cac:
         specifier: catalog:dev
         version: 6.7.14
+      del-cli:
+        specifier: catalog:dev
+        version: 7.0.0
       es-module-lexer:
         specifier: catalog:dev
         version: 2.0.0
+      eslint:
+        specifier: catalog:lint
+        version: 9.39.2(jiti@2.7.0)
       ignore:
         specifier: catalog:prod
         version: 7.0.5
@@ -787,64 +824,21 @@ importers:
       npm-package-json-lint:
         specifier: catalog:lint
         version: 9.1.0(typescript@5.9.3)
-      oxc-parser:
-        specifier: catalog:prod
-        version: 0.133.0
-      oxc-resolver:
-        specifier: catalog:prod
-        version: 11.20.0
       pathe:
         specifier: catalog:dev
         version: 2.0.3
-      picomatch:
-        specifier: catalog:prod
-        version: 4.0.4
       publint:
         specifier: catalog:lint
         version: 0.3.17
-      semver:
-        specifier: catalog:dev
-        version: 7.8.1
-      tinyglobby:
-        specifier: catalog:prod
-        version: 0.2.15
-      yaml:
-        specifier: catalog:dev
-        version: 2.8.3
-      zod:
-        specifier: catalog:dev
-        version: 4.3.6
-    devDependencies:
-      '@docs-islands/eslint-config':
-        specifier: workspace:*
-        version: link:../eslint-config
-      '@docs-islands/plugin-license':
-        specifier: link:../plugins/license/dist
-        version: link:../plugins/license/dist
-      '@docs-islands/utils':
-        specifier: link:../../utils/dist
-        version: link:../../utils/dist
-      '@types/node':
-        specifier: 20.19.0
-        version: 20.19.0
-      '@types/picomatch':
-        specifier: catalog:dev
-        version: 4.0.3
-      '@vue/compiler-sfc':
-        specifier: catalog:dev
-        version: 3.5.28
-      del-cli:
-        specifier: catalog:dev
-        version: 7.0.0
-      eslint:
-        specifier: catalog:lint
-        version: 9.39.2(jiti@2.7.0)
       rolldown:
         specifier: catalog:dev
         version: 1.0.0-rc.4
       rolldown-plugin-dts:
         specifier: catalog:dev
         version: 0.23.1(@typescript/native-preview@7.0.0-dev.20260527.1)(oxc-resolver@11.20.0)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
+      semver:
+        specifier: catalog:dev
+        version: 7.8.1
       tsx:
         specifier: catalog:dev
         version: 4.21.0
@@ -854,6 +848,12 @@ importers:
       vitest:
         specifier: catalog:test
         version: 4.1.7(@types/node@20.19.0)(esbuild@0.27.3)(jiti@2.7.0)(jsdom@28.0.0)(less@4.4.2)(terser@5.46.2)(tsx@4.21.0)(yaml@2.8.3)
+      yaml:
+        specifier: catalog:dev
+        version: 2.8.3
+      zod:
+        specifier: catalog:dev
+        version: 4.3.6
 
   packages/limina/docs:
     dependencies:
@@ -912,6 +912,13 @@ importers:
 
   packages/logaria:
     dependencies:
+      picocolors:
+        specifier: catalog:dev
+        version: 1.1.1
+      picomatch:
+        specifier: catalog:prod
+        version: 4.0.4
+    devDependencies:
       '@babel/parser':
         specifier: catalog:dev
         version: 7.29.0
@@ -921,16 +928,6 @@ importers:
       '@babel/types':
         specifier: catalog:dev
         version: 7.29.0
-      picocolors:
-        specifier: catalog:dev
-        version: 1.1.1
-      picomatch:
-        specifier: catalog:prod
-        version: 4.0.4
-      unplugin:
-        specifier: catalog:prod
-        version: 3.0.0
-    devDependencies:
       '@docs-islands/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
@@ -988,6 +985,9 @@ importers:
       typescript:
         specifier: catalog:dev
         version: 5.9.3
+      unplugin:
+        specifier: catalog:prod
+        version: 3.0.0
       vitest:
         specifier: catalog:test
         version: 4.1.7(@types/node@20.19.0)(esbuild@0.27.3)(jiti@2.7.0)(jsdom@28.0.0)(less@4.4.2)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0)

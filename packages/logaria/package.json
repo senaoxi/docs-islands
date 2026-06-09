@@ -38,12 +38,8 @@
     "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"
   },
   "dependencies": {
-    "@babel/parser": "catalog:dev",
-    "@babel/traverse": "catalog:dev",
-    "@babel/types": "catalog:dev",
     "picocolors": "catalog:dev",
-    "picomatch": "catalog:prod",
-    "unplugin": "catalog:prod"
+    "picomatch": "catalog:prod"
   },
   "devDependencies": {
     "@docs-islands/eslint-config": "workspace:*",
@@ -52,6 +48,9 @@
     "@types/node": "catalog:dev",
     "@typescript-eslint/parser": "catalog:lint",
     "@docs-islands/utils": "link:../../utils/dist",
+    "@babel/parser": "catalog:dev",
+    "@babel/traverse": "catalog:dev",
+    "@babel/types": "catalog:dev",
     "limina": "workspace:*",
     "@docs-islands/plugin-license": "link:../plugins/license/dist",
     "es-module-lexer": "catalog:dev",
@@ -61,6 +60,7 @@
     "eslint": "catalog:lint",
     "jsdom": "catalog:test",
     "rollup": "catalog:dev",
+    "unplugin": "catalog:prod",
     "rolldown": "catalog:dev",
     "rolldown-plugin-dts": "catalog:dev",
     "tsx": "catalog:dev",
@@ -68,7 +68,7 @@
     "vitest": "catalog:test"
   },
   "peerDependencies": {
-    "@rollup/plugin-replace": "catalog:dev",
+    "@rollup/plugin-replace": "^6.0.3",
     "rolldown": "^1.0.0"
   },
   "peerDependenciesMeta": {
