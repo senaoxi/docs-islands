@@ -42,38 +42,14 @@
     "vitest": "catalog:test"
   },
   "exports": {
-    "./builtin": {
-      "source": "./src/builtin.ts",
-      "default": "./dist/src/builtin.js"
-    },
-    "./dom-iterable": {
-      "source": "./src/dom-iterable.ts",
-      "default": "./dist/src/dom-iterable.js"
-    },
-    "./env": {
-      "source": "./src/env.ts",
-      "default": "./dist/src/env.js"
-    },
-    "./fs-utils": {
-      "source": "./src/fs-utils.ts",
-      "default": "./dist/src/fs-utils.js"
-    },
-    "./general": {
-      "source": "./src/general.ts",
-      "default": "./dist/src/general.js"
-    },
-    "./logger": {
-      "source": "./src/logger.ts",
-      "default": "./dist/src/logger.js"
-    },
-    "./package-plugin": {
-      "source": "./src/package-plugin.ts",
-      "default": "./dist/src/package-plugin.js"
-    },
-    "./path": {
-      "source": "./src/path.ts",
-      "default": "./dist/src/path.js"
-    },
+    "./builtin": "./dist/src/builtin.js",
+    "./dom-iterable": "./dist/src/dom-iterable.js",
+    "./env": "./dist/src/env.js",
+    "./fs-utils": "./dist/src/fs-utils.js",
+    "./general": "./dist/src/general.js",
+    "./logger": "./dist/src/logger.js",
+    "./package-plugin": "./dist/src/package-plugin.js",
+    "./path": "./dist/src/path.js",
     "./package.json": "./package.json"
   },
   "sideEffects": false
