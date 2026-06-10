@@ -1,15 +1,12 @@
 {
+  // Package-local tooling check. Declaration leaf: tsconfig.tools.dts.json.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "isolatedDeclarations": false,
     "allowJs": true,
-    "lib": ["ES2023"],
+    "declaration": true,
+    "lib": ["ESNext"],
     "types": ["node"]
   },
-  "include": [
-    "eslint.config.mjs",
-    "rolldown.config.ts",
-    "packagePlugin.ts",
-    "package.json"
-  ]
+  "include": ["eslint.config.mjs", "package.json"]
 }

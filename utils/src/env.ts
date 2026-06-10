@@ -7,8 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnv as viteLoadEnv } from 'vite';
 import { z } from 'zod';
-import { createLogger } from './logger';
-import { findMonorepoRoot, isSubpath } from './path';
+import { createLogger } from './logger.js';
+import { findMonorepoRoot, isSubpath } from './path.js';
 
 let cachedEnv: EnvConfig | null = null;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

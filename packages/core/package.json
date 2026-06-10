@@ -56,7 +56,7 @@
     "@types/babel__generator": "catalog:dev",
     "@types/babel__traverse": "catalog:dev",
     "@docs-islands/eslint-config": "workspace:*",
-    "@docs-islands/utils": "link:../../utils/dist",
+    "@docs-islands/utils": "workspace:*",
     "limina": "workspace:*",
     "@types/node": "catalog:dev",
     "@types/markdown-it": "catalog:dev",

@@ -29,7 +29,7 @@
     "http-proxy": "catalog:docs-dev",
     "magic-string": "catalog:dev",
     "vite": "catalog:prod",
-    "@docs-islands/utils": "link:../utils/dist",
+    "@docs-islands/utils": "workspace:*",
     "picocolors": "catalog:dev",
     "picomatch": "catalog:prod",
     "unplugin": "catalog:prod",

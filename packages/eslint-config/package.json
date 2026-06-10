@@ -40,7 +40,7 @@
     "@typescript-eslint/parser": "catalog:lint",
     "typescript-eslint": "catalog:lint",
     "typescript": "catalog:dev",
-    "@docs-islands/utils": "link:../../utils/dist",
+    "@docs-islands/utils": "workspace:*",
     "limina": "workspace:*",
     "rolldown": "catalog:dev",
     "rolldown-plugin-dts": "catalog:dev",

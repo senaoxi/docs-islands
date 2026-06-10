@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:dev",
-    "@docs-islands/utils": "link:../../utils/dist",
+    "@docs-islands/utils": "workspace:*",
     "del-cli": "catalog:dev",
     "rolldown": "catalog:dev",
     "rolldown-plugin-dts": "catalog:dev",

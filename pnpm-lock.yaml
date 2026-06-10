@@ -482,8 +482,8 @@ importers:
         specifier: workspace:*
         version: link:../packages/eslint-config
       '@docs-islands/utils':
-        specifier: link:../utils/dist
-        version: link:../utils/dist
+        specifier: workspace:*
+        version: link:../utils
       '@nolebase/vitepress-plugin-enhanced-mark':
         specifier: catalog:docs-dev
         version: 2.18.2(vitepress@1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@20.19.0)(@types/react@18.3.26)(axios@1.16.0)(change-case@5.4.4)(less@4.4.2)(lightningcss@1.32.0)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@5.9.3))
@@ -549,8 +549,8 @@ importers:
         version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
       '@docs-islands/utils':
-        specifier: link:../../utils/dist
-        version: link:../../utils/dist
+        specifier: workspace:*
+        version: link:../../utils
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
@@ -604,8 +604,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/utils':
-        specifier: link:../../utils/dist
-        version: link:../../utils/dist
+        specifier: workspace:*
+        version: link:../../utils
       '@types/babel__generator':
         specifier: catalog:dev
         version: 7.27.0
@@ -662,8 +662,8 @@ importers:
         version: 0.2.15
     devDependencies:
       '@docs-islands/utils':
-        specifier: link:../../utils/dist
-        version: link:../../utils/dist
+        specifier: workspace:*
+        version: link:../../utils
       '@eslint/js':
         specifier: catalog:lint
         version: 9.39.2
@@ -786,8 +786,8 @@ importers:
         specifier: link:../plugins/license/dist
         version: link:../plugins/license/dist
       '@docs-islands/utils':
-        specifier: link:../../utils/dist
-        version: link:../../utils/dist
+        specifier: workspace:*
+        version: link:../../utils
       '@publint/pack':
         specifier: catalog:lint
         version: 0.1.4
@@ -862,8 +862,8 @@ importers:
         version: 3.5.28(typescript@5.9.3)
     devDependencies:
       '@docs-islands/utils':
-        specifier: link:../../../utils/dist
-        version: link:../../../utils/dist
+        specifier: workspace:*
+        version: link:../../../utils
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
@@ -935,8 +935,8 @@ importers:
         specifier: link:../plugins/license/dist
         version: link:../plugins/license/dist
       '@docs-islands/utils':
-        specifier: link:../../utils/dist
-        version: link:../../utils/dist
+        specifier: workspace:*
+        version: link:../../utils
       '@rollup/plugin-replace':
         specifier: catalog:dev
         version: 6.0.3(rollup@4.59.0)
@@ -1002,8 +1002,8 @@ importers:
         version: 3.5.28(typescript@5.9.3)
     devDependencies:
       '@docs-islands/utils':
-        specifier: link:../../../utils/dist
-        version: link:../../../utils/dist
+        specifier: workspace:*
+        version: link:../../../utils
       '@types/node':
         specifier: 20.19.0
         version: 20.19.0
@@ -1061,8 +1061,8 @@ importers:
         specifier: workspace:*
         version: link:../../eslint-config
       '@docs-islands/utils':
-        specifier: link:../../../utils/dist
-        version: link:../../../utils/dist
+        specifier: workspace:*
+        version: link:../../../utils
       del-cli:
         specifier: catalog:dev
         version: 7.0.0
@@ -1119,8 +1119,8 @@ importers:
         specifier: link:../plugins/license/dist
         version: link:../plugins/license/dist
       '@docs-islands/utils':
-        specifier: link:../../utils/dist
-        version: link:../../utils/dist
+        specifier: workspace:*
+        version: link:../../utils
       '@types/babel__generator':
         specifier: catalog:dev
         version: 7.27.0
@@ -1246,8 +1246,8 @@ importers:
         specifier: workspace:*
         version: link:../../eslint-config
       '@docs-islands/utils':
-        specifier: link:../../../utils/dist
-        version: link:../../../utils/dist
+        specifier: workspace:*
+        version: link:../../../utils
       '@docs-islands/vitepress':
         specifier: link:../dist
         version: link:../dist
@@ -1337,8 +1337,8 @@ importers:
         specifier: workspace:*
         version: link:../../eslint-config
       '@docs-islands/utils':
-        specifier: link:../../../utils/dist
-        version: link:../../../utils/dist
+        specifier: workspace:*
+        version: link:../../../utils
       '@docs-islands/vitepress':
         specifier: link:../dist
         version: link:../dist
@@ -1404,8 +1404,8 @@ importers:
         specifier: workspace:*
         version: link:../../eslint-config
       '@docs-islands/utils':
-        specifier: link:../../../utils/dist
-        version: link:../../../utils/dist
+        specifier: workspace:*
+        version: link:../../../utils
       '@playwright/test':
         specifier: catalog:test
         version: 1.58.2
@@ -1453,7 +1453,7 @@ importers:
         version: 1000.3.1
       logaria:
         specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.3)
       tinyglobby:
         specifier: catalog:prod
         version: 0.2.15
@@ -1485,12 +1485,6 @@ importers:
       pathe:
         specifier: catalog:dev
         version: 2.0.3
-      rolldown:
-        specifier: catalog:dev
-        version: 1.0.0-rc.4
-      rolldown-plugin-dts:
-        specifier: catalog:dev
-        version: 0.23.1(@typescript/native-preview@7.0.0-dev.20260527.1)(oxc-resolver@11.20.0)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       typescript:
         specifier: catalog:dev
         version: 5.9.3

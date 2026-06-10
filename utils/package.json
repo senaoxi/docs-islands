@@ -13,8 +13,8 @@
     "link-guard": "./bin/link-guard.js"
   },
   "scripts": {
-    "build": "rolldown --config rolldown.config.ts",
-    "build:watch": "rolldown --config rolldown.config.ts --watch",
+    "build": "del-cli dist && tsc -b ./tsconfig.lib.dts.json",
+    "build:watch": "tsc --watch",
     "test": "vitest run",
     "typecheck": "limina checker build",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
@@ -39,19 +39,41 @@
     "zod": "catalog:dev",
     "del-cli": "catalog:dev",
     "vite": "catalog:prod",
-    "rolldown": "catalog:dev",
-    "rolldown-plugin-dts": "catalog:dev",
     "vitest": "catalog:test"
   },
   "exports": {
-    "./builtin": "./src/builtin.ts",
-    "./dom-iterable": "./src/dom-iterable.ts",
-    "./env": "./src/env.ts",
-    "./fs-utils": "./src/fs-utils.ts",
-    "./general": "./src/general.ts",
-    "./logger": "./src/logger.ts",
-    "./package-plugin": "./src/package-plugin.ts",
-    "./path": "./src/path.ts",
+    "./builtin": {
+      "source": "./src/builtin.ts",
+      "default": "./dist/src/builtin.js"
+    },
+    "./dom-iterable": {
+      "source": "./src/dom-iterable.ts",
+      "default": "./dist/src/dom-iterable.js"
+    },
+    "./env": {
+      "source": "./src/env.ts",
+      "default": "./dist/src/env.js"
+    },
+    "./fs-utils": {
+      "source": "./src/fs-utils.ts",
+      "default": "./dist/src/fs-utils.js"
+    },
+    "./general": {
+      "source": "./src/general.ts",
+      "default": "./dist/src/general.js"
+    },
+    "./logger": {
+      "source": "./src/logger.ts",
+      "default": "./dist/src/logger.js"
+    },
+    "./package-plugin": {
+      "source": "./src/package-plugin.ts",
+      "default": "./dist/src/package-plugin.js"
+    },
+    "./path": {
+      "source": "./src/path.ts",
+      "default": "./dist/src/path.js"
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false

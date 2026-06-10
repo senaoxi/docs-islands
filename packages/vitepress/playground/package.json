@@ -24,7 +24,7 @@
     "eslint": "catalog:lint",
     "@typescript-eslint/parser": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
-    "@docs-islands/utils": "link:../../../utils/dist",
+    "@docs-islands/utils": "workspace:*",
     "limina": "workspace:*",
     "typescript": "catalog:dev",
     "react": "catalog:dev",

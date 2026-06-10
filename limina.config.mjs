@@ -25,6 +25,7 @@ export default defineConfig({
         '**/*.ts',
         '**/*.d.ts',
         '**/*.tsx',
+        '**/*.js',
         '**/*.mjs',
         '**/*.json',
         '**/*.vue',
