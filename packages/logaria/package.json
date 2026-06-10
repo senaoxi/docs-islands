@@ -47,7 +47,7 @@
     "@types/babel__traverse": "catalog:dev",
     "@types/node": "catalog:dev",
     "@typescript-eslint/parser": "catalog:lint",
-    "@docs-islands/utils": "link:../../utils/dist",
+    "@docs-islands/utils": "workspace:*",
     "@babel/parser": "catalog:dev",
     "@babel/traverse": "catalog:dev",
     "@babel/types": "catalog:dev",

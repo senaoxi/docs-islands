@@ -9,9 +9,6 @@
   "references": [
     {
       "path": "./packages/logaria/tsconfig.lib.dts.json"
-    },
-    {
-      "path": "./utils/tsconfig.lib.dts.json"
     }
   ]
 }

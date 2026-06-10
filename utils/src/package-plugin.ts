@@ -6,9 +6,8 @@ import {
 } from '@pnpm/workspace.read-manifest';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import type { Plugin } from 'rolldown';
 import { escapePath, glob, isDynamicPattern } from 'tinyglobby';
-import { findMonorepoRoot } from './path';
+import { findMonorepoRoot } from './path.js';
 
 export type DependencyMap = Record<string, string>;
 export type CatalogMap = Record<string, DependencyMap>;
@@ -84,6 +83,27 @@ export interface CreatePackagePluginOptions {
     packageJson: PackageJsonObject,
     context: PackageJsonPluginContext,
   ) => void;
+}
+
+export interface EmittedAssetFile {
+  fileName: string;
+  source: string | Uint8Array;
+  type: 'asset';
+}
+
+export interface PackagePluginContextLike {
+  emitFile(asset: EmittedAssetFile): unknown;
+}
+
+export interface PackagePluginLike {
+  generateBundle: {
+    handler(
+      this: PackagePluginContextLike,
+      outputOptions: OutputOptionsLike | undefined,
+    ): Promise<void>;
+    order: 'post';
+  };
+  name: string;
 }
 
 const NON_PUBLISHABLE_VERSION_PROTOCOL_PREFIXES = [
@@ -598,13 +618,13 @@ function sanitizeDependencyFields(
 
 export function createPackagePlugin(
   options: CreatePackagePluginOptions,
-): Plugin {
+): PackagePluginLike {
   const {
     dependencyFields = DEFAULT_DEPENDENCY_FIELDS,
     emitAssets = [],
     exports: packageExportsRewriter = defaultRewritePackageExports,
     packageJsonPath,
-    pluginName = 'rolldown-plugin-generate-package-json',
+    pluginName = 'generate-package-json',
     rewriteTypes: shouldRewriteTypes = false,
     transformPackageJson,
   } = options;

@@ -62,6 +62,12 @@ function runPnpm(
 }
 
 async function main(): Promise<void> {
+  await runPnpm(['nx', 'run', '@docs-islands/agents:build'], {
+    env: {
+      ...process.env,
+      FORCE_COLOR: '1',
+    },
+  });
   // The first install can run before link:*/dist package manifests exist, so
   // pnpm cannot create their .bin shims. Re-run install without lifecycle
   // scripts after the dist builds so commands like `limina` are linked. This

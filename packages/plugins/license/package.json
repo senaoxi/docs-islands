@@ -16,7 +16,7 @@
   "devDependencies": {
     "eslint": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
-    "@docs-islands/utils": "link:../../../utils/dist",
+    "@docs-islands/utils": "workspace:*",
     "rolldown": "catalog:dev",
     "rolldown-plugin-dts": "catalog:dev",
     "rollup-plugin-license": "catalog:dev",

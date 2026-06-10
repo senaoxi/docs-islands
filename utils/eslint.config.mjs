@@ -11,9 +11,17 @@ export default defineConfig([
     },
   },
   {
-    files: ['./bin/*.ts', './bin/*.mjs'],
+    files: ['./bin/*.js', './bin/*.ts', './bin/*.mjs'],
     rules: {
       'n/hashbang': 'off',
+    },
+  },
+  {
+    files: ['./src/__tests__/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+      },
     },
   },
   {

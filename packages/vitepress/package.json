@@ -71,7 +71,7 @@
     "@docs-islands/core": "workspace:*",
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/plugin-license": "link:../plugins/license/dist",
-    "@docs-islands/utils": "link:../../utils/dist",
+    "@docs-islands/utils": "workspace:*",
     "@types/babel__generator": "catalog:dev",
     "@types/babel__traverse": "catalog:dev",
     "@types/estree": "catalog:dev",
