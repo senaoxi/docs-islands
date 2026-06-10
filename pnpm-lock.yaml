@@ -63,6 +63,9 @@ catalogs:
     '@types/react-dom':
       specifier: ^18.2.0
       version: 18.3.7
+    '@types/semver':
+      specifier: ^7.7.1
+      version: 7.7.1
     '@typescript/native-preview':
       specifier: 7.0.0-dev.20260527.1
       version: 7.0.0-dev.20260527.1
@@ -79,8 +82,8 @@ catalogs:
       specifier: ^6.7.14
       version: 6.7.14
     concurrently:
-      specifier: ^9.2.1
-      version: 9.2.1
+      specifier: ^10.0.3
+      version: 10.0.3
     del-cli:
       specifier: ^7.0.0
       version: 7.0.0
@@ -416,7 +419,7 @@ importers:
         version: 6.7.14
       concurrently:
         specifier: catalog:dev
-        version: 9.2.1
+        version: 10.0.3
       del-cli:
         specifier: catalog:dev
         version: 7.0.0
@@ -797,6 +800,9 @@ importers:
       '@types/picomatch':
         specifier: catalog:dev
         version: 4.0.3
+      '@types/semver':
+        specifier: catalog:dev
+        version: 7.7.1
       '@vue/compiler-sfc':
         specifier: catalog:dev
         version: 3.5.28
@@ -4993,6 +4999,12 @@ packages:
         integrity: sha512-RFA/bURkcKzx/X9oumPG9Vp3D3JUgus/d0b67KB0t5S/raciymilkOa66olh78MUI92QLbEJevO7rvqU/kjwKA==,
       }
 
+  '@types/semver@7.7.1':
+    resolution:
+      {
+        integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==,
+      }
+
   '@types/ssri@7.1.5':
     resolution:
       {
@@ -6255,6 +6267,13 @@ packages:
       }
     engines: { node: '>=10' }
 
+  chalk@5.6.2:
+    resolution:
+      {
+        integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==,
+      }
+    engines: { node: ^12.17.0 || ^14.13 || >=16.0.0 }
+
   change-case@5.4.4:
     resolution:
       {
@@ -6367,6 +6386,13 @@ packages:
       }
     engines: { node: '>=12' }
 
+  cliui@9.0.1:
+    resolution:
+      {
+        integrity: sha512-k7ndgKhwoQveBL+/1tqGJYNz097I7WOvwbmmU2AR5+magtbjPWQTS1C5vzGkBC8Ym8UWRzfKUzUUqFLypY4Q+w==,
+      }
+    engines: { node: '>=20' }
+
   clone@1.0.4:
     resolution:
       {
@@ -6432,12 +6458,12 @@ packages:
         integrity: sha512-YeNK4tavZwtH7jEgK1ZINXzLKm6DZdEMfsaaieOsCAN0S8vsY7UeuO3Q7d/M018EFgE+IeUAuBOKkFccBZsUZA==,
       }
 
-  concurrently@9.2.1:
+  concurrently@10.0.3:
     resolution:
       {
-        integrity: sha512-fsfrO0MxV64Znoy8/l1vVIjjHa29SZyyqPgQBwhiDcaW8wJc2W3XWVOGx4M3oJBnv/zdUZIIp1gDeS98GzP8Ng==,
+        integrity: sha512-hc3LH4UaKWd/bbyDK/IGVa4RB6PtQ3CUYwtrkzqHn+wIG3Hr5fhpRlk0L/gCa8ZE1L/Ufj50Zho69cI5w8SQBA==,
       }
-    engines: { node: '>=18' }
+    engines: { node: '>=22' }
     hasBin: true
 
   confbox@0.1.8:
@@ -10604,10 +10630,10 @@ packages:
       }
     engines: { node: '>=8' }
 
-  shell-quote@1.8.3:
+  shell-quote@1.8.4:
     resolution:
       {
-        integrity: sha512-ObmnIF4hXNg1BqhnHmgbDETF8dLPCggZWBjkQfhZpbszZnYur5DUljTcCHii5LC3J5E0yeO/1LIMyH+UvHQgyw==,
+        integrity: sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==,
       }
     engines: { node: '>= 0.4' }
 
@@ -10995,6 +11021,13 @@ packages:
         integrity: sha512-zWPTX96LVsA/eVYnqOM2+ofcdPqdS1dAF1LN4TS2/MWuUpfitd9ctTa87wt4xrYnZnkLtS69xpBdSxVBP5Rm6w==,
       }
     engines: { node: '>=16' }
+
+  supports-color@10.2.2:
+    resolution:
+      {
+        integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==,
+      }
+    engines: { node: '>=18' }
 
   supports-color@7.2.0:
     resolution:
@@ -12057,12 +12090,26 @@ packages:
       }
     engines: { node: '>=12' }
 
+  yargs-parser@22.0.0:
+    resolution:
+      {
+        integrity: sha512-rwu/ClNdSMpkSrUb+d6BRsSkLUq1fmfsY6TOpYzTwvwkg1/NRG85KBy3kq++A8LKQwX6lsu+aWad+2khvuXrqw==,
+      }
+    engines: { node: ^20.19.0 || ^22.12.0 || >=23 }
+
   yargs@17.7.2:
     resolution:
       {
         integrity: sha512-7dSzzRQ++CKnNI/krKnYRV7JKKPUXMEh61soaHKg9mrWEhzFWhFnxPxGl+69cD1Ou63C13NUPCnmIcrvqCuM6w==,
       }
     engines: { node: '>=12' }
+
+  yargs@18.0.0:
+    resolution:
+      {
+        integrity: sha512-4UEqdc2RYGHZc7Doyqkrqiln3p9X2DZVxaGbwhn2pi7MrRagKaOcIKe8L3OxYcbhXLgLFUS3zAYuQjKBQgmuNg==,
+      }
+    engines: { node: ^20.19.0 || ^22.12.0 || >=23 }
 
   yocto-queue@0.1.0:
     resolution:
@@ -13942,6 +13989,8 @@ snapshots:
       '@types/prop-types': 15.7.15
       csstype: 3.2.3
 
+  '@types/semver@7.7.1': {}
+
   '@types/ssri@7.1.5':
     dependencies:
       '@types/node': 20.19.0
@@ -14836,6 +14885,8 @@ snapshots:
       ansi-styles: 4.3.0
       supports-color: 7.2.0
 
+  chalk@5.6.2: {}
+
   change-case@5.4.4: {}
 
   character-entities-html4@2.1.0: {}
@@ -14921,6 +14972,12 @@ snapshots:
       strip-ansi: 6.0.1
       wrap-ansi: 7.0.0
 
+  cliui@9.0.1:
+    dependencies:
+      string-width: 7.2.0
+      strip-ansi: 7.1.2
+      wrap-ansi: 9.0.2
+
   clone@1.0.4: {}
 
   color-convert@2.0.1:
@@ -14945,14 +15002,14 @@ snapshots:
 
   commenting@1.1.0: {}
 
-  concurrently@9.2.1:
+  concurrently@10.0.3:
     dependencies:
-      chalk: 4.1.2
+      chalk: 5.6.2
       rxjs: 7.8.2
-      shell-quote: 1.8.3
-      supports-color: 8.1.1
+      shell-quote: 1.8.4
+      supports-color: 10.2.2
       tree-kill: 1.2.2
-      yargs: 17.7.2
+      yargs: 18.0.0
 
   confbox@0.1.8: {}
 
@@ -17970,7 +18027,7 @@ snapshots:
 
   shebang-regex@3.0.0: {}
 
-  shell-quote@1.8.3: {}
+  shell-quote@1.8.4: {}
 
   shiki@2.5.0:
     dependencies:
@@ -18209,6 +18266,8 @@ snapshots:
   superjson@2.2.5:
     dependencies:
       copy-anything: 4.0.5
+
+  supports-color@10.2.2: {}
 
   supports-color@7.2.0:
     dependencies:
@@ -18967,6 +19026,8 @@ snapshots:
 
   yargs-parser@21.1.1: {}
 
+  yargs-parser@22.0.0: {}
+
   yargs@17.7.2:
     dependencies:
       cliui: 8.0.1
@@ -18976,6 +19037,15 @@ snapshots:
       string-width: 4.2.3
       y18n: 5.0.8
       yargs-parser: 21.1.1
+
+  yargs@18.0.0:
+    dependencies:
+      cliui: 9.0.1
+      escalade: 3.2.0
+      get-caller-file: 2.0.5
+      string-width: 7.2.0
+      y18n: 5.0.8
+      yargs-parser: 22.0.0
 
   yocto-queue@0.1.0: {}
 

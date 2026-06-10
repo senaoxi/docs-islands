@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "del-cli dist && tsc -b ./tsconfig.lib.dts.json",
-    "build:watch": "tsc --watch",
+    "build:watch": "tsc -b ./tsconfig.lib.dts.json -w",
     "test": "vitest run",
     "typecheck": "limina checker build",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
