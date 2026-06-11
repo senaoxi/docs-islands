@@ -1,11 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "allowJs": true,
-    "isolatedDeclarations": false,
-    "emitDeclarationOnly": false,
+    "isolatedDeclarations": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
-  "include": ["./src", "./bin/link-guard.js"]
+  "include": ["./src"]
 }

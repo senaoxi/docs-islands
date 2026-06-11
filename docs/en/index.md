@@ -17,7 +17,7 @@ hero:
       link: '#core-package'
     - theme: alt
       text: View on GitHub
-      link: https://github.com/XiSenao/docs-islands
+      link: https://github.com/senaoxi/docs-islands
 ---
 
 <script setup>

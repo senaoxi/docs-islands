@@ -75,7 +75,7 @@ export const WORKSPACE_CONFIG_PATH = path.join(
   REPO_ROOT,
   'pnpm-workspace.yaml',
 );
-export const REPOSITORY_URL = 'https://github.com/XiSenao/docs-islands';
+export const REPOSITORY_URL = 'https://github.com/senaoxi/docs-islands';
 
 export type ReleaseType = 'patch' | 'minor' | 'major' | 'prerelease';
 export type VersionSelectionMode = ReleaseType | 'custom';

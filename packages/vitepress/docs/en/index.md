@@ -14,7 +14,7 @@ hero:
       link: /guide/
     - theme: alt
       text: View on GitHub
-      link: https://github.com/XiSenao/docs-islands/tree/main/packages/vitepress
+      link: https://github.com/senaoxi/docs-islands/tree/main/packages/vitepress
 
 features:
   - title: Use React in Markdown

@@ -133,7 +133,7 @@ const vitepressConfig: UserConfig<DefaultTheme.Config> = defineConfig({
     socialLinks: [
       {
         icon: 'github',
-        link: 'https://github.com/XiSenao/docs-islands/tree/main/packages/vitepress',
+        link: 'https://github.com/senaoxi/docs-islands/tree/main/packages/vitepress',
       },
     ],
   },

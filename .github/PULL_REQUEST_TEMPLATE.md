@@ -5,7 +5,7 @@
 <!----------------------------------------------------------------------
 Before creating the pull request, please make sure you do the following:
 
-- Read the Contributing Guidelines at https://github.com/XiSenao/docs-islands/blob/main/.github/CONTRIBUTING.md.
+- Read the Contributing Guidelines at https://github.com/senaoxi/docs-islands/blob/main/.github/CONTRIBUTING.md.
 - Check that there isn't already a PR that solves the problem the same way. If you find a duplicate, please help us review it.
 - Update the corresponding documentation if needed.
 - Include relevant tests that fail without this PR but pass with it.

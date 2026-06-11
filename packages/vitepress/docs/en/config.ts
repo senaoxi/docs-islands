@@ -58,11 +58,11 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
         items: [
           {
             text: 'Changelog',
-            link: 'https://github.com/XiSenao/docs-islands/blob/main/packages/vitepress/CHANGELOG.md',
+            link: 'https://github.com/senaoxi/docs-islands/blob/main/packages/vitepress/CHANGELOG.md',
           },
           {
             text: 'Contributing',
-            link: 'https://github.com/XiSenao/docs-islands/blob/main/.github/CONTRIBUTING.md',
+            link: 'https://github.com/senaoxi/docs-islands/blob/main/.github/CONTRIBUTING.md',
           },
         ],
       },

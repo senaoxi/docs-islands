@@ -23,7 +23,7 @@ updates:
           - "minor"
           - "patch"
     reviewers:
-      - "XiSenao"
+      - "senaoxi"
     labels:
       - "dependencies"
       - "automated"
@@ -73,4 +73,4 @@ updates:
       prefix: "ci"
       include: "scope"
     reviewers:
-      - "XiSenao"
+      - "senaoxi"

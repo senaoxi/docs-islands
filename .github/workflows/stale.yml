@@ -6,7 +6,7 @@ on:
 
 jobs:
   stale:
-    if: github.repository == 'XiSenao/docs-islands'
+    if: github.repository == 'senaoxi/docs-islands'
     runs-on: ubuntu-latest
     steps:
       # actions/stale@v10.1.0.
