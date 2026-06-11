@@ -20,7 +20,7 @@ hero:
       link: /zh/why
     - theme: alt
       text: GitHub
-      link: https://github.com/XiSenao/docs-islands
+      link: https://github.com/senaoxi/docs-islands
 
 features:
   - title: 精简的框架无关 API

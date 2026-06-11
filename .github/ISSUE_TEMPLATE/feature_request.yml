@@ -39,9 +39,9 @@ body:
       label: Validations
       description: Before submitting the issue, please make sure you do the following
       options:
-        - label: Follow our [Code of Conduct](https://github.com/XiSenao/docs-islands/blob/main/.github/CODE_OF_CONDUCT.md).
+        - label: Follow our [Code of Conduct](https://github.com/senaoxi/docs-islands/blob/main/.github/CODE_OF_CONDUCT.md).
           required: true
-        - label: Read the [Contributing Guidelines](https://github.com/XiSenao/docs-islands/blob/main/.github/CONTRIBUTING.md).
+        - label: Read the [Contributing Guidelines](https://github.com/senaoxi/docs-islands/blob/main/.github/CONTRIBUTING.md).
           required: true
         - label: Read the [docs](https://docs.senao.me/docs-islands/).
           required: true

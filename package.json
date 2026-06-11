@@ -18,7 +18,7 @@
   "homepage": "https://docs.senao.me/docs-islands",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/XiSenao/docs-islands.git"
+    "url": "git+https://github.com/senaoxi/docs-islands.git"
   },
   "description": "Cross-framework Islands Architecture for documentation sites",
   "keywords": [

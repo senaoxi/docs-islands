@@ -16,7 +16,7 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
       },
       {
         text: 'Contributing',
-        link: 'https://github.com/XiSenao/docs-islands/blob/main/.github/CONTRIBUTING.md',
+        link: 'https://github.com/senaoxi/docs-islands/blob/main/.github/CONTRIBUTING.md',
       },
     ],
     footer: {

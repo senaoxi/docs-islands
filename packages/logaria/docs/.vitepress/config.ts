@@ -60,7 +60,7 @@ export default defineConfig({
     socialLinks: [
       {
         icon: 'github',
-        link: 'https://github.com/XiSenao/docs-islands/tree/main/packages/logaria',
+        link: 'https://github.com/senaoxi/docs-islands/tree/main/packages/logaria',
       },
       { icon: 'npm', link: 'https://npmjs.com/package/logaria' },
     ],

@@ -8,8 +8,8 @@
 <br/>
 <p align="center">
   <a href="https://nodejs.org/en/about/previous-releases"><img src="https://img.shields.io/node/v/@docs-islands/vitepress.svg" alt="node compatibility"></a>
-  <a href="https://github.com/XiSenao/docs-islands/actions/workflows/ci.yml"><img src="https://github.com/XiSenao/docs-islands/actions/workflows/ci.yml/badge.svg?branch=main" alt="build status"></a>
-  <a href="https://pr.new/XiSenao/docs-islands/tree/stackblitz?file=docs/en/index.md"><img src="https://developer.stackblitz.com/img/start_pr_dark_small.svg" alt="Start new PR in StackBlitz Codeflow"></a>
+  <a href="https://github.com/senaoxi/docs-islands/actions/workflows/ci.yml"><img src="https://github.com/senaoxi/docs-islands/actions/workflows/ci.yml/badge.svg?branch=main" alt="build status"></a>
+  <a href="https://pr.new/senaoxi/docs-islands/tree/stackblitz?file=docs/en/index.md"><img src="https://developer.stackblitz.com/img/start_pr_dark_small.svg" alt="Start new PR in StackBlitz Codeflow"></a>
 </p>
 <br/>
 
@@ -45,8 +45,8 @@ Brings the performance benefits of Islands Architecture to documentation framewo
 
 ## Contributing
 
-Community contributions are welcome! Please see the [Contributing Guide](https://github.com/XiSenao/docs-islands/blob/main/.github/CONTRIBUTING.md) for details.
+Community contributions are welcome! Please see the [Contributing Guide](https://github.com/senaoxi/docs-islands/blob/main/.github/CONTRIBUTING.md) for details.
 
 ## License
 
-MIT © [XiSenao](https://github.com/XiSenao)
+MIT © [senaoxi](https://github.com/senaoxi)

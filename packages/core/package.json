@@ -22,11 +22,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/XiSenao/docs-islands.git",
+    "url": "git+https://github.com/senaoxi/docs-islands.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/XiSenao/docs-islands/issues"
+    "url": "https://github.com/senaoxi/docs-islands/issues"
   },
   "homepage": "https://docs.senao.me/docs-islands",
   "publishConfig": {

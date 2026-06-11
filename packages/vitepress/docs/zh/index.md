@@ -14,7 +14,7 @@ hero:
       link: /zh/guide/
     - theme: alt
       text: GitHub 仓库
-      link: https://github.com/XiSenao/docs-islands/tree/main/packages/vitepress
+      link: https://github.com/senaoxi/docs-islands/tree/main/packages/vitepress
 
 features:
   - title: 在 Markdown 中使用 React

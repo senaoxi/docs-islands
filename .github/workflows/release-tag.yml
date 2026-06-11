@@ -9,7 +9,7 @@ on:
 
 jobs:
   release:
-    if: github.repository == 'XiSenao/docs-islands'
+    if: github.repository == 'senaoxi/docs-islands'
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -15,7 +15,7 @@ const LicenseLogger = createLogger({
   main: '@docs-islands/plugin-license',
 }).getLoggerByGroup('plugin.license');
 
-// Keep in sync with github ci workflow: https://github.com/XiSenao/docs-islands/blob/main/.github/workflows/dependency-review.yml
+// Keep in sync with github ci workflow: https://github.com/senaoxi/docs-islands/blob/main/.github/workflows/dependency-review.yml
 const ALLOWED_LICENSES = new Set([
   'MIT',
   'Apache-2.0',

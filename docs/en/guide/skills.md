@@ -7,31 +7,31 @@ Docs Islands publishes optional agent skills for using its packages with AI codi
 List the available skills first:
 
 ```bash
-npx skills add XiSenao/docs-islands --list
+npx skills add senaoxi/docs-islands --list
 ```
 
 Install the VitePress skill:
 
 ```bash
-npx skills add XiSenao/docs-islands --skill docs-islands-vitepress
+npx skills add senaoxi/docs-islands --skill docs-islands-vitepress
 ```
 
 Install the limina skill:
 
 ```bash
-npx skills add XiSenao/docs-islands --skill limina
+npx skills add senaoxi/docs-islands --skill limina
 ```
 
 Install the logaria skill:
 
 ```bash
-npx skills add XiSenao/docs-islands --skill logaria
+npx skills add senaoxi/docs-islands --skill logaria
 ```
 
 Install both skills globally for Codex:
 
 ```bash
-npx skills add XiSenao/docs-islands --global --agent codex --skill logaria --skill logaria --skill docs-islands-vitepress
+npx skills add senaoxi/docs-islands --global --agent codex --skill logaria --skill logaria --skill docs-islands-vitepress
 ```
 
 Restart the target agent after installing global skills so it can load the new skill metadata.

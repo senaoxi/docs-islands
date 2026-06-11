@@ -8,5 +8,5 @@
     "lib": ["ESNext"],
     "types": ["node"]
   },
-  "include": ["eslint.config.mjs", "package.json"]
+  "include": ["./bin/link-guard.js", "eslint.config.mjs", "package.json"]
 }

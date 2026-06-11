@@ -132,7 +132,7 @@
 克隆仓库：
 
 ```sh
-git clone git@github.com:XiSenao/docs-islands.git
+git clone git@github.com:senaoxi/docs-islands.git
 ```
 
 进入仓库目录：
@@ -250,7 +250,7 @@ pnpm docs:link:prod
 
 ## 许可证
 
-通过为 Docs Islands 做出贡献，你同意你的贡献将在 [MIT 许可证](https://github.com/XiSenao/docs-islands/blob/main/LICENSE) 下许可。
+通过为 Docs Islands 做出贡献，你同意你的贡献将在 [MIT 许可证](https://github.com/senaoxi/docs-islands/blob/main/LICENSE) 下许可。
 
 这意味着：
 

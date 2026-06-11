@@ -20,7 +20,7 @@ hero:
       link: /why
     - theme: alt
       text: View on GitHub
-      link: https://github.com/XiSenao/docs-islands
+      link: https://github.com/senaoxi/docs-islands
 
 features:
   - title: Tiny, framework-agnostic API

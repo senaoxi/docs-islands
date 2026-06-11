@@ -101,7 +101,7 @@ When reporting bugs or requesting features, please:
 
 - No need to worry about code style as long as you have installed the dev dependencies. Modified files are automatically formatted with Prettier on commit and checked by ESLint.
 
-- PR title must follow the [commit message convention](https://github.com/XiSenao/docs-islands/blob/main/.github/commit-convention.md) so that changelogs can be automatically generated.
+- PR title must follow the [commit message convention](https://github.com/senaoxi/docs-islands/blob/main/.github/commit-convention.md) so that changelogs can be automatically generated.
 
 ### DevDependencies Sorting Order
 
@@ -132,7 +132,7 @@ You will need [Node.js](https://nodejs.org) v20.19.0+ or v22.12.0+ and [pnpm](ht
 Clone the repository:
 
 ```sh
-git clone git@github.com:XiSenao/docs-islands.git
+git clone git@github.com:senaoxi/docs-islands.git
 ```
 
 Enter the repository directory:
@@ -266,7 +266,7 @@ repository workflow, using the `Release` environment.
 
 ## License
 
-By contributing to Docs Islands, you agree that your contributions will be licensed under the [MIT License](https://github.com/XiSenao/docs-islands/blob/main/LICENSE).
+By contributing to Docs Islands, you agree that your contributions will be licensed under the [MIT License](https://github.com/senaoxi/docs-islands/blob/main/LICENSE).
 
 This means:
 
