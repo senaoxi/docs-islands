@@ -12,20 +12,20 @@ For what each task detects, with examples, see [Built-in Tasks](./built-in-tasks
 
 ## Setup and Default Pipeline
 
-| Command                   | Description                                                                                                                   |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `limina init [--yes]`     | Generate declaration leaves, build aggregators, root config, and a `limina:check` script for an uninitialized pnpm workspace. |
-| `limina check`            | Run the default pipeline: graph, source, Nx project sync, proof, checker build, and checker typecheck.                        |
-| `limina check <pipeline>` | Run a named user pipeline from `pipelines`.                                                                                   |
+| Command                   | Description                                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `limina init [--yes]`     | Generate `limina.config.mjs`, ensure `.limina/` is ignored, and add a `limina:check` script for a pnpm workspace. |
+| `limina check`            | Run the default pipeline: graph, source, Nx project sync, proof, checker build, and checker typecheck.            |
+| `limina check <pipeline>` | Run a named user pipeline from `pipelines`.                                                                       |
 
 ## Graph and Source
 
-| Command                    | Description                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `limina graph check`       | Validate project references, workspace imports, graph rules, and source/artifact dependency semantics.  |
-| `limina graph sync [path]` | Rewrite declaration-leaf references from TypeScript-resolved source imports.                            |
-| `limina source check`      | Validate package ownership, relative import boundaries, bare dependency declarations, and `#imports`.   |
-| `limina proof check`       | Validate declaration leaves, local companions, checker coverage, pure aggregators, and source coverage. |
+| Command                | Description                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `limina graph prepare` | Generate `.limina/manifest.json` and checker-scoped declaration/build tsconfig graphs.                                       |
+| `limina graph check`   | Prepare and validate generated project references, workspace imports, graph rules, and source/artifact dependency semantics. |
+| `limina source check`  | Validate package ownership, relative import boundaries, bare dependency declarations, and `#imports`.                        |
+| `limina proof check`   | Validate declaration leaves, local companions, checker coverage, pure aggregators, and source coverage.                      |
 
 ## Nx Sync
 

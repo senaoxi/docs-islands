@@ -1,18 +1,13 @@
 import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
 import path from 'pathe';
 import ts from 'typescript';
-import {
-  type CheckerProjectParseContext,
-  normalizeExtensions,
-} from '../checkers';
-import {
-  getActiveCheckerExtensions,
-  getActiveCheckers,
-  type ResolvedLiminaConfig,
-} from '../config';
+import type { ResolvedLiminaConfig } from '../config';
 import type { LiminaFlowReporter } from '../flow';
+import {
+  type GeneratedTsconfigGraphResult,
+  prepareGeneratedTsconfigGraph,
+} from '../generated-graph';
 import {
   collectImportsFromFile,
   createFileOwnerLookup,
@@ -44,17 +39,12 @@ import {
 } from '../graph-rules';
 import { clearCliScreen, formatErrorMessage, GraphLogger } from '../logger';
 import {
-  collectGraphProjectRouteFromRoot,
   collectSourceGraphProjectExtensions,
-  type CollectSourceGraphProjectExtensionsResult,
   formatReferences,
-  isBuildGraphConfigPath,
-  isDtsConfigPath,
 } from '../tsconfig';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
-  toPosixPath,
   toRelativePath,
 } from '../utils/path';
 import {
@@ -76,17 +66,10 @@ export interface RunGraphCheckOptions {
   flowDepth?: number;
 }
 
-export interface RunGraphSyncOptions {
+export interface RunGraphPrepareOptions {
   clearScreen?: boolean;
-  cwd?: string;
-  entryPath?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
-}
-
-export interface RunGraphSyncResult {
-  changed: boolean;
-  projectCount: number;
 }
 
 const requiredDtsCompilerOptions: [keyof ts.CompilerOptions, unknown][] = [
@@ -137,8 +120,6 @@ const comparableTypecheckOptions: (keyof ts.CompilerOptions)[] = [
   'strictNullChecks',
   'strictPropertyInitialization',
   'target',
-  'typeRoots',
-  'types',
   'useDefineForClassFields',
   'verbatimModuleSyntax',
 ];
@@ -153,6 +134,30 @@ function formatCompilerOptionValue(value: unknown): string {
 
 function compilerOptionEquals(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function getGeneratedCheckerNamespace(configPath: string): string | null {
+  const marker = '/.limina/tsconfig/checkers/';
+  const markerIndex = configPath.indexOf(marker);
+
+  if (markerIndex === -1) {
+    return null;
+  }
+
+  const rest = configPath.slice(markerIndex + marker.length);
+  const separatorIndex = rest.indexOf('/');
+
+  return separatorIndex === -1 ? null : rest.slice(0, separatorIndex);
+}
+
+function isSameGeneratedCheckerNamespace(
+  leftConfigPath: string,
+  rightConfigPath: string,
+): boolean {
+  const leftChecker = getGeneratedCheckerNamespace(leftConfigPath);
+  const rightChecker = getGeneratedCheckerNamespace(rightConfigPath);
+
+  return !leftChecker || !rightChecker || leftChecker === rightChecker;
 }
 
 interface ReferenceExpectation {
@@ -409,7 +414,7 @@ function parseConditionDomainEntry(options: {
       field: `${field}.entry`,
       problems: options.problems,
       reason:
-        'condition domain entry must be a non-empty workspace-root-relative tsconfig*.dts.json path.',
+        'condition domain entry must be a non-empty workspace-root-relative source tsconfig path.',
       value: entry,
     });
     return null;
@@ -462,6 +467,7 @@ function parseConditionDomainEntry(options: {
 function addConditionDomainProblems(options: {
   config: ResolvedLiminaConfig;
   consistencyContext: CustomConditionConsistencyContext;
+  generatedGraph: GeneratedTsconfigGraphResult;
   problems: string[];
   projectsByPath: Map<string, ProjectInfo>;
 }): void {
@@ -494,12 +500,16 @@ function addConditionDomainProblems(options: {
       continue;
     }
 
-    const entryPath = getConditionDomainEntryPath({
+    const configuredEntryPath = getConditionDomainEntryPath({
       config: options.config,
       entry: normalizedDomain.entry,
     });
+    const entryPath =
+      createGeneratedGraphPathAliases(options.generatedGraph).get(
+        configuredEntryPath,
+      ) ?? configuredEntryPath;
 
-    if (!isPathInsideDirectory(entryPath, options.config.rootDir)) {
+    if (!isPathInsideDirectory(configuredEntryPath, options.config.rootDir)) {
       options.problems.push(
         [
           'Invalid graph condition domain entry:',
@@ -511,14 +521,14 @@ function addConditionDomainProblems(options: {
       continue;
     }
 
-    if (!existsSync(entryPath)) {
+    if (!existsSync(configuredEntryPath)) {
       options.problems.push(
         [
           'Graph condition domain entry does not exist:',
           `  domain: ${normalizedDomain.name}`,
           `  entry: ${normalizedDomain.entry}`,
-          `  resolved: ${toRelativePath(options.config.rootDir, entryPath)}`,
-          '  reason: condition domain entries must point to an existing tsconfig*.dts.json project.',
+          `  resolved: ${toRelativePath(options.config.rootDir, configuredEntryPath)}`,
+          '  reason: condition domain entries must point to an existing source tsconfig or generated declaration project.',
         ].join('\n'),
       );
       continue;
@@ -531,7 +541,7 @@ function addConditionDomainProblems(options: {
           `  domain: ${normalizedDomain.name}`,
           `  entry: ${normalizedDomain.entry}`,
           `  resolved: ${toRelativePath(options.config.rootDir, entryPath)}`,
-          '  reason: condition domain entries must point to tsconfig*.dts.json projects, not build aggregators or ordinary typecheck configs.',
+          '  reason: condition domain entries must point to source tsconfig paths that map to generated declaration projects.',
         ].join('\n'),
       );
       continue;
@@ -546,7 +556,7 @@ function addConditionDomainProblems(options: {
           `  domain: ${normalizedDomain.name}`,
           `  entry: ${normalizedDomain.entry}`,
           `  resolved: ${toRelativePath(options.config.rootDir, entryPath)}`,
-          '  reason: condition domain entries must point to tsconfig*.dts.json projects governed by the active Limina checker entries.',
+          '  reason: condition domain entries must point to source tsconfig paths governed by the active Limina checker entries.',
         ].join('\n'),
       );
       continue;
@@ -688,7 +698,7 @@ function addTypecheckParityProblems(
 
   const typecheckFiles = new Set(typecheckProject.fileNames);
   const missingFiles = dtsProject.fileNames.filter(
-    (fileName) => !typecheckFiles.has(fileName),
+    (fileName) => !typecheckFiles.has(fileName) && !fileName.endsWith('.d.ts'),
   );
 
   if (missingFiles.length === 0) {
@@ -998,15 +1008,42 @@ function addReferenceCompletenessProblems(options: {
           `  current references: ${formatReferences(options.config.rootDir, project.references)}`,
           '  imports:',
           ...formatImportRecordLines(options.config, expectation.importRecords),
-          '  fix: add the expected tsconfig*.dts.json reference, or run `limina graph sync` to update declaration references.',
+          '  fix: ensure both source tsconfig files are selected by checker.include, then run `limina graph prepare`.',
         ].join('\n'),
       );
     }
 
+    if (project.fileNames.length === 0) {
+      continue;
+    }
+
     for (const referencePath of [...project.references].sort()) {
+      if (project.configPath.endsWith('/tsconfig.dts.json')) {
+        const generatedChecker = getGeneratedCheckerNamespace(
+          project.configPath,
+        );
+        const checkerRootConfigPath = generatedChecker
+          ? `/.limina/tsconfig/checkers/${generatedChecker}/tsconfig.dts.json`
+          : null;
+
+        if (
+          checkerRootConfigPath &&
+          project.configPath.endsWith(checkerRootConfigPath)
+        ) {
+          continue;
+        }
+      }
+
       if (
         expectedReferences.has(referencePath) ||
         !options.projectsByPath.has(referencePath)
+      ) {
+        continue;
+      }
+
+      if (
+        getGeneratedCheckerNamespace(project.configPath) &&
+        isSameGeneratedCheckerNamespace(project.configPath, referencePath)
       ) {
         continue;
       }
@@ -1234,6 +1271,10 @@ function collectExpectedReferences(options: {
             continue;
           }
 
+          if (graphResolvedFilePath.includes('/dist/')) {
+            continue;
+          }
+
           if (!targetWorkspacePackageForResolved) {
             if (shouldResolveThroughGraph(importer, targetPackageForGraph)) {
               options.problems.push(
@@ -1264,6 +1305,15 @@ function collectExpectedReferences(options: {
         }
 
         if (targetProjectPath === project.configPath) {
+          continue;
+        }
+
+        if (
+          !isSameGeneratedCheckerNamespace(
+            project.configPath,
+            targetProjectPath,
+          )
+        ) {
           continue;
         }
 
@@ -1330,316 +1380,25 @@ function createWorkspaceExportsResolutionProfiles(
   }));
 }
 
-function getGraphSyncExtensions(config: ResolvedLiminaConfig): string[] {
-  return normalizeExtensions(getActiveCheckerExtensions(config));
-}
-
-function getGraphSyncContext(
-  config: ResolvedLiminaConfig,
-): CheckerProjectParseContext {
-  return {
-    checkerPresets: [
-      ...new Set(getActiveCheckers(config).map((checker) => checker.preset)),
-    ],
-    extensions: getGraphSyncExtensions(config),
-  };
-}
-
-function createProjectExtensionsResult(options: {
-  context: CheckerProjectParseContext;
-  extensions: string[];
-  problems: string[];
-  projectPaths: string[];
-}): CollectSourceGraphProjectExtensionsResult {
-  return {
-    problems: options.problems,
-    projectContextsByPath: new Map(
-      [...new Set(options.projectPaths)]
-        .sort()
-        .map((projectPath) => [projectPath, options.context]),
-    ),
-    projectExtensionsByPath: new Map(
-      [...new Set(options.projectPaths)]
-        .sort()
-        .map((projectPath) => [projectPath, options.extensions]),
-    ),
-  };
-}
-
-function collectGraphSyncProjectExtensions(options: {
-  config: ResolvedLiminaConfig;
-  cwd: string;
-  entryPath?: string;
-}): {
-  graphRoute: CollectSourceGraphProjectExtensionsResult;
-  selectedProjectPaths: Set<string>;
-} {
-  if (!options.entryPath) {
-    const graphRoute = collectSourceGraphProjectExtensions(options.config);
-
-    return {
-      graphRoute,
-      selectedProjectPaths: new Set(
-        [...graphRoute.projectExtensionsByPath.keys()].filter(isDtsConfigPath),
-      ),
-    };
-  }
-
-  const entryPath = normalizeAbsolutePath(
-    path.isAbsolute(options.entryPath)
-      ? options.entryPath
-      : path.resolve(options.cwd, options.entryPath),
-  );
-
-  if (!existsSync(entryPath)) {
-    throw new Error(
-      [
-        'Graph sync entry does not exist:',
-        `  path: ${toRelativePath(options.config.rootDir, entryPath)}`,
-        '  reason: graph sync paths must point to an existing tsconfig*.build.json solution or tsconfig*.dts.json declaration leaf.',
-      ].join('\n'),
-    );
-  }
-
-  if (isBuildGraphConfigPath(entryPath)) {
-    const route = collectGraphProjectRouteFromRoot({
-      rootConfigPath: entryPath,
-      rootDir: options.config.rootDir,
-    });
-    const context = getGraphSyncContext(options.config);
-    const graphRoute = createProjectExtensionsResult({
-      context,
-      extensions: context.extensions,
-      problems: route.problems,
-      projectPaths: route.projectPaths,
-    });
-
-    return {
-      graphRoute,
-      selectedProjectPaths: new Set(route.projectPaths.filter(isDtsConfigPath)),
-    };
-  }
-
-  if (isDtsConfigPath(entryPath)) {
-    const graphRoute = collectSourceGraphProjectExtensions(options.config);
-    const projectExtensionsByPath = new Map(graphRoute.projectExtensionsByPath);
-    const projectContextsByPath = new Map(graphRoute.projectContextsByPath);
-    const context = getGraphSyncContext(options.config);
-
-    projectExtensionsByPath.set(
-      entryPath,
-      projectExtensionsByPath.get(entryPath) ?? context.extensions,
-    );
-    projectContextsByPath.set(
-      entryPath,
-      projectContextsByPath.get(entryPath) ?? context,
-    );
-
-    return {
-      graphRoute: {
-        problems: graphRoute.problems,
-        projectContextsByPath,
-        projectExtensionsByPath,
-      },
-      selectedProjectPaths: new Set([entryPath]),
-    };
-  }
-
-  throw new Error(
-    [
-      'Invalid graph sync entry:',
-      `  path: ${toRelativePath(options.config.rootDir, entryPath)}`,
-      '  reason: graph sync paths must point to a tsconfig*.build.json solution or a tsconfig*.dts.json declaration leaf.',
-    ].join('\n'),
-  );
-}
-
-function arePathSetsEqual(
-  left: ReadonlySet<string>,
-  right: ReadonlySet<string>,
-): boolean {
-  if (left.size !== right.size) {
-    return false;
-  }
-
-  for (const value of left) {
-    if (!right.has(value)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function getSyncedReferencePaths(options: {
-  expectedReferences: Map<string, ReferenceExpectation>;
-  graphRules: NormalizedGraphRules;
-  project: ProjectInfo;
-}): string[] {
-  const referencePaths = new Set(options.expectedReferences.keys());
-
-  for (const referencePath of options.project.references) {
-    if (
-      !referencePaths.has(referencePath) &&
-      getAllowedRefRule(
-        options.graphRules,
-        options.project.labels,
-        referencePath,
-      )
-    ) {
-      referencePaths.add(referencePath);
-    }
-  }
-
-  return [...referencePaths].sort();
-}
-
-function formatReferencePath(
-  configPath: string,
-  referencePath: string,
-): string {
-  const relativePath = toPosixPath(
-    path.relative(path.dirname(configPath), referencePath),
-  );
-
-  return relativePath.startsWith('.') ? relativePath : `./${relativePath}`;
-}
-
-function createReferencesPropertyText(
-  configPath: string,
-  referencePaths: string[],
-  indent: string,
-): string {
-  if (referencePaths.length === 0) {
-    return `${indent}"references": []`;
-  }
-
-  return [
-    `${indent}"references": [`,
-    ...referencePaths.flatMap((referencePath, index) => [
-      `${indent}  {`,
-      `${indent}    "path": ${JSON.stringify(formatReferencePath(configPath, referencePath))}`,
-      `${indent}  }${index === referencePaths.length - 1 ? '' : ','}`,
+function createGeneratedGraphPathAliases(
+  generatedGraph: GeneratedTsconfigGraphResult,
+): Map<string, string> {
+  return new Map(
+    [...generatedGraph.sourceToDts.values()].flatMap((sourceToDts) => [
+      ...sourceToDts.entries(),
     ]),
-    `${indent}]`,
-  ].join('\n');
-}
-
-function getLineIndent(text: string, position: number): string {
-  const lineStart = text.lastIndexOf('\n', position - 1) + 1;
-  const match = /^[\t ]*/u.exec(text.slice(lineStart, position));
-
-  return match?.[0] ?? '  ';
-}
-
-function getTopLevelJsonObject(
-  configPath: string,
-  text: string,
-): {
-  objectExpression: ts.ObjectLiteralExpression;
-  sourceFile: ts.JsonSourceFile;
-} {
-  const sourceFile = ts.parseJsonText(configPath, text);
-  const statement = sourceFile.statements[0];
-
-  if (
-    !statement ||
-    !ts.isExpressionStatement(statement) ||
-    !ts.isObjectLiteralExpression(statement.expression)
-  ) {
-    throw new Error(
-      [
-        'Invalid tsconfig JSON:',
-        `  config: ${configPath}`,
-        '  reason: graph sync can only update tsconfig files whose top-level value is an object.',
-      ].join('\n'),
-    );
-  }
-
-  return {
-    objectExpression: statement.expression,
-    sourceFile,
-  };
-}
-
-function getPropertyNameText(
-  property: ts.ObjectLiteralElementLike,
-): string | null {
-  if (!ts.isPropertyAssignment(property)) {
-    return null;
-  }
-
-  if (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) {
-    return property.name.text;
-  }
-
-  return null;
-}
-
-function updateReferencesText(options: {
-  configPath: string;
-  referencePaths: string[];
-  text: string;
-}): string {
-  const { objectExpression, sourceFile } = getTopLevelJsonObject(
-    options.configPath,
-    options.text,
   );
-  const referencesProperty = objectExpression.properties.find(
-    (property) => getPropertyNameText(property) === 'references',
-  );
-
-  if (referencesProperty) {
-    const propertyStart = referencesProperty.getStart(sourceFile);
-    const lineStart = options.text.lastIndexOf('\n', propertyStart - 1) + 1;
-    const prefix = options.text.slice(lineStart, propertyStart);
-    const start = prefix.trim().length === 0 ? lineStart : propertyStart;
-    const indent = getLineIndent(options.text, propertyStart);
-    const propertyText = createReferencesPropertyText(
-      options.configPath,
-      options.referencePaths,
-      start === lineStart ? indent : '',
-    );
-
-    return `${options.text.slice(0, start)}${propertyText}${options.text.slice(referencesProperty.end)}`;
-  }
-
-  if (options.referencePaths.length === 0) {
-    return options.text;
-  }
-
-  const closeBraceIndex = options.text.lastIndexOf('}', objectExpression.end);
-  const propertyText = createReferencesPropertyText(
-    options.configPath,
-    options.referencePaths,
-    '  ',
-  );
-  const needsComma = objectExpression.properties.length > 0;
-
-  return `${options.text.slice(0, closeBraceIndex)}${needsComma ? ',' : ''}\n${propertyText}\n${options.text.slice(closeBraceIndex)}`;
-}
-
-async function writeProjectReferences(options: {
-  configPath: string;
-  referencePaths: string[];
-}): Promise<void> {
-  const text = await readFile(options.configPath, 'utf8');
-  const updatedText = updateReferencesText({
-    configPath: options.configPath,
-    referencePaths: options.referencePaths,
-    text,
-  });
-
-  if (updatedText !== text) {
-    await writeFile(options.configPath, updatedText);
-  }
 }
 
 async function runGraphCheckInternal(
   config: ResolvedLiminaConfig,
   options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
-  const graphRoute = collectSourceGraphProjectExtensions(config);
+  const generatedGraph = await prepareGeneratedTsconfigGraph(config);
+  const graphRoute = collectSourceGraphProjectExtensions(
+    config,
+    generatedGraph,
+  );
   const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
   const projects = projectPaths.map((projectPath) =>
     parseProject(
@@ -1673,6 +1432,7 @@ async function runGraphCheckInternal(
     },
     packages,
     problems,
+    projectPathAliases: createGeneratedGraphPathAliases(generatedGraph),
     projectPaths,
   });
   for (const project of projects) {
@@ -1709,6 +1469,7 @@ async function runGraphCheckInternal(
   addConditionDomainProblems({
     config,
     consistencyContext: customConditionConsistencyContext,
+    generatedGraph,
     problems,
     projectsByPath,
   });
@@ -1749,135 +1510,43 @@ async function runGraphCheckInternal(
   return true;
 }
 
-async function runGraphSyncInternal(
+export async function runGraphPrepare(
   config: ResolvedLiminaConfig,
-  options: { cwd: string; entryPath?: string },
-): Promise<RunGraphSyncResult> {
-  const { graphRoute, selectedProjectPaths } =
-    collectGraphSyncProjectExtensions({
-      config,
-      cwd: options.cwd,
-      entryPath: options.entryPath,
-    });
-  const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
-  const projects = projectPaths.map((projectPath) =>
-    parseProject(
-      config,
-      projectPath,
-      graphRoute.projectContextsByPath.get(projectPath),
-    ),
-  );
-  const projectsByPath = new Map(
-    projects.map((project) => [project.configPath, project]),
-  );
-  const fileOwnerLookup = createFileOwnerLookup(projects);
-  const packages = await collectWorkspacePackages(config);
-  const importers = collectImporters(config, packages);
-  const problems: string[] = [...graphRoute.problems];
-  const workspaceExports = await createWorkspaceExportsResolutionIndex({
-    config,
-    packages,
-    profiles: createWorkspaceExportsResolutionProfiles(projects),
+  options: RunGraphPrepareOptions = {},
+): Promise<boolean> {
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
+
+  const elapsed = createElapsedTimer();
+  const task = options.flow?.start('graph prepare', {
+    depth: options.flowDepth ?? 0,
   });
 
-  problems.push(...workspaceExports.problems);
+  GraphLogger.info('graph prepare started');
 
-  const graphRules = normalizeGraphRules({
-    config,
-    include: {
-      deps: true,
-      refs: true,
-    },
-    packages,
-    problems,
-    projectPaths,
-  });
+  try {
+    const result = await prepareGeneratedTsconfigGraph(config);
 
-  for (const project of projects) {
-    if (!selectedProjectPaths.has(project.configPath)) {
-      continue;
+    if (!options.flow?.interactive) {
+      GraphLogger.success(
+        result.changed
+          ? 'graph prepare generated files'
+          : 'graph prepare found generated files up to date',
+        elapsed(),
+      );
     }
 
-    if (project.labelProblem) {
-      problems.push(project.labelProblem);
-    }
-
-    addDeniedReferenceProblems({
-      config,
-      packages,
-      problems,
-      project,
-      projectsByPath,
-      rules: graphRules,
-    });
-    addWorkspaceReferenceDependencyProblems(
-      config,
-      project,
-      projectsByPath,
-      packages,
-      importers,
-      problems,
+    task?.pass();
+    return true;
+  } catch (error) {
+    GraphLogger.error(
+      `graph prepare failed: ${formatErrorMessage(error)}`,
+      elapsed(),
     );
+    task?.fail('graph prepare failed', { error });
+    throw error;
   }
-
-  const expectedReferencesByProjectPath = collectExpectedReferences({
-    config,
-    fileOwnerLookup,
-    graphRules,
-    importers,
-    packages,
-    problems,
-    projectPaths,
-    projects,
-    projectsByPath,
-    selectedProjectPaths,
-    workspaceExports,
-  });
-
-  if (problems.length > 0) {
-    throw new Error(problems.join('\n\n'));
-  }
-
-  let changed = false;
-  let projectCount = 0;
-
-  for (const project of projects) {
-    if (
-      !selectedProjectPaths.has(project.configPath) ||
-      !isDtsProjectConfig(project.configPath)
-    ) {
-      continue;
-    }
-
-    projectCount += 1;
-
-    const referencePaths = getSyncedReferencePaths({
-      expectedReferences:
-        expectedReferencesByProjectPath.get(project.configPath) ?? new Map(),
-      graphRules,
-      project,
-    });
-    const nextReferences = new Set(referencePaths);
-
-    if (arePathSetsEqual(project.references, nextReferences)) {
-      continue;
-    }
-
-    await writeProjectReferences({
-      configPath: project.configPath,
-      referencePaths,
-    });
-    changed = true;
-  }
-
-  GraphLogger.info(
-    `${changed ? 'Synced' : 'Skipped unchanged'} ${projectCount} declaration graph project${projectCount === 1 ? '' : 's'}.`,
-  );
-
-  return {
-    changed,
-    projectCount,
-  };
 }
 
 export async function runGraphCheck(
@@ -1917,47 +1586,6 @@ export async function runGraphCheck(
       elapsed(),
     );
     task?.fail('graph check failed', { error });
-    throw error;
-  }
-}
-
-export async function runGraphSync(
-  config: ResolvedLiminaConfig,
-  options: RunGraphSyncOptions = {},
-): Promise<RunGraphSyncResult> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
-  const action = options.entryPath
-    ? `graph sync ${options.entryPath}`
-    : 'graph sync';
-  const task = options.flow?.start(action, {
-    depth: options.flowDepth ?? 0,
-  });
-
-  GraphLogger.info(`${action} started`);
-
-  try {
-    const result = await runGraphSyncInternal(config, {
-      cwd: options.cwd ?? process.cwd(),
-      entryPath: options.entryPath,
-    });
-
-    if (!options.flow?.interactive) {
-      GraphLogger.success(`${action} finished`, elapsed());
-    }
-
-    task?.pass();
-
-    return result;
-  } catch (error) {
-    GraphLogger.error(
-      `${action} failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail(`${action} failed`, { error });
     throw error;
   }
 }

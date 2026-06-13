@@ -21,9 +21,9 @@ pnpm add -D limina typescript
 
 ## Pick an Adoption Path
 
-If your workspace does not yet have clear `tsconfig*.dts.json`, `tsconfig.build.json`, and project references, start with `limina init`. It infers the declaration graph it can safely generate from existing `tsconfig*.json` files and stops when the structure is ambiguous.
+If your workspace does not yet have a Limina config, start with `limina init`. It writes a source-selector based `limina.config.mjs`, adds the root script, and ensures `.limina/` is ignored.
 
-If your repository already has a stable declaration build graph, write the minimal `limina.config.mjs` directly. In that case, Limina does not redesign the graph; it starts from the checker entry you provide and checks the structure that already exists. See [Checker Entries](./config/checkers.md) and [Config File](./config/config-file.md) for the full shape of these settings.
+If your repository already has a clear tsconfig convention, write the minimal `limina.config.mjs` directly. Limina generates its declaration graph from the source configs selected by `checker.include`. See [Checker Entries](./config/checkers.md) and [Config File](./config/config-file.md) for the full shape of these settings.
 
 ## Initialize an Existing Workspace
 
@@ -33,7 +33,7 @@ For a pnpm monorepo that has not adopted Limina's declaration graph layout yet, 
 pnpm exec limina init
 ```
 
-`limina init` searches upward for the nearest `pnpm-workspace.yaml`, confirms the workspace root, scans ordinary `tsconfig*.json` files, and writes the Limina files it can infer.
+`limina init` searches upward for the nearest `pnpm-workspace.yaml`, confirms the workspace root, and writes Limina config files.
 
 For non-interactive environments, use:
 
@@ -41,19 +41,18 @@ For non-interactive environments, use:
 pnpm exec limina init --yes
 ```
 
-Initialization can create:
+Initialization can create or update:
 
-- paired `tsconfig*.dts.json` declaration configs;
-- `tsconfig.build.json` aggregators;
 - a root `limina.config.mjs`;
+- a root `.gitignore` entry for `.limina/`;
 - a root `limina:check` script;
 - a missing root `limina` dev dependency.
 
 ::: warning
-It refuses ambiguous inputs instead of guessing, including existing `tsconfig*.build.json` or `tsconfig*.dts.json` files and `tsconfig.json` files that mix source files with project references.
+Generated checker graphs are written later under `.limina/` by `limina graph prepare` and by graph-consuming commands.
 :::
 
-When init stops this way, it usually means the repository already has a tsconfig convention. Read the files named in the error, then decide whether to keep the current layout and write config manually, or split that area into an aggregator, declaration leaf, and local companion.
+When graph preparation fails, it usually means `checker.include` matched a reserved or non-source tsconfig. Narrow `include` or add `exclude` entries until only ordinary source configs are selected.
 
 After initialization, run:
 
@@ -68,7 +67,7 @@ You only need `pnpm i` when init changed dependencies or created a root `package
 
 ## Minimal Manual Config
 
-If you already have a declaration build graph, create `limina.config.mjs` at the workspace root:
+Create `limina.config.mjs` at the workspace root:
 
 ```js
 import { defineConfig } from 'limina';
@@ -78,7 +77,8 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        entry: 'tsconfig.build.json',
+        include: ['packages/**/tsconfig*.json'],
+        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
       },
     },
   },
@@ -103,7 +103,7 @@ pnpm typecheck
 
 The default check pipeline runs:
 
-1. `graph:check`
+1. `graph:check` (which prepares the generated graph first)
 2. `source:check`
 3. `nx:check`
 4. `proof:check`
@@ -112,14 +112,14 @@ The default check pipeline runs:
 
 The first failure usually tells you which layer to inspect:
 
-- `graph:check` usually points to imports, project references, `workspace:*`, or label rules that are out of sync;
+- `graph:check` usually points to imports, generated project references, `workspace:*`, or label rules that are out of sync;
 - `source:check` usually points to file ownership, cross-package relative imports, dependency declarations, or `#imports`;
 - `nx:check` usually points to a missing or stale `project.json`; its `dependsOn` build edges are derived from `link:` artifact dependencies and actual imports of `workspace:*` exports that resolve to artifacts, so a fresh workspace must run `limina nx sync` first;
-- `proof:check` usually points to checker entries, declaration leaves, local companions, or allowlists that do not cover source files;
+- `proof:check` usually points to checker includes, generated declaration coverage, or allowlists that do not cover source files;
 - `checker:build` means a first-class build execution checker such as `tsc`, `tsgo`, or `vue-tsc` found type errors;
 - `checker:typecheck` means a second-class typecheck execution checker such as `vue-tsgo` or `svelte-check` found type errors.
 
-For example, if `@acme/app` adds an import from `@acme/core` and the first `pnpm typecheck` fails in graph checking, start with the importing file and expected reference shown in the report. Re-run the same command after the fix to confirm graph, source ownership, coverage proof, and checker execution together.
+For example, if `@acme/app` adds an import from `@acme/core` and the first `pnpm typecheck` fails in graph checking, start with the importing file and source tsconfig shown in the report. Re-run the same command after the fix to confirm graph, source ownership, coverage proof, and checker execution together.
 
 ## Add Framework Checkers
 
@@ -133,11 +133,12 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        entry: 'tsconfig.build.json',
+        include: ['packages/**/tsconfig*.json'],
+        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
       },
       vue: {
         preset: 'vue-tsc',
-        entry: 'tsconfig.vue.build.json',
+        include: ['packages/**/tsconfig.vue.json'],
       },
     },
   },

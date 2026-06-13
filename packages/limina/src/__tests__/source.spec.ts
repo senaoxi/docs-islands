@@ -65,7 +65,12 @@ async function createFixture(
         checkers: {
           typescript: {
             preset: 'tsc',
-            entry: 'tsconfig.build.json',
+            include: ['tsconfig.json', '**/tsconfig*.json'],
+            exclude: [
+              '**/tsconfig*.dts.json',
+              '**/tsconfig*.build.json',
+              '**/tsconfig*.check.json',
+            ],
           },
         },
         source: sourceBoundary,

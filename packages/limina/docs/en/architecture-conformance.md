@@ -75,10 +75,10 @@ For a source entry:
 import { createClient } from '@acme/core';
 ```
 
-If TypeScript resolves that entry to `packages/core/src/index.ts`, and that file is owned by `packages/core/tsconfig.lib.dts.json`, the app declaration leaf must reference core:
+If TypeScript resolves that entry to `packages/core/src/index.ts`, and that file is owned by `packages/core/tsconfig.lib.json`, Limina's generated app declaration leaf must reference the generated core declaration leaf:
 
 ```jsonc
-// packages/app/tsconfig.lib.dts.json
+// .limina/tsconfig/checkers/typescript/packages/app/tsconfig.lib.dts.json
 {
   "references": [{ "path": "../core/tsconfig.lib.dts.json" }],
 }
@@ -106,8 +106,8 @@ If that entry resolves into `packages/core/dist`, graph references are not requi
 
 The fix depends on the failing layer.
 
-- If export pre-resolution fails, fix the `exports` target, condition order, checker entry, or missing build output.
-- If a source entry is consumed but the declaration leaf lacks a reference, add the reference or run `limina graph sync`.
+- If export pre-resolution fails, fix the `exports` target, condition order, `checker.include`, or missing build output.
+- If a source entry is consumed but the generated declaration graph lacks an edge, make sure both source tsconfigs are selected by `checker.include`, then run `limina graph prepare`.
 - If an artifact entry is consumed through `workspace:*` but Nx `dependsOn` is stale, run `limina nx sync`.
 - If the artifact export belongs to a package without `scripts.build`, add a build target or stop exposing that entry as a build artifact.
 
@@ -151,12 +151,11 @@ limina recommends splitting these responsibilities:
 packages/app/
   tsconfig.json
   tsconfig.lib.json
-  tsconfig.lib.dts.json
   tsconfig.test.json
-  tsconfig.test.dts.json
   tsconfig.tools.json
-  tsconfig.tools.dts.json
 ```
+
+Limina mirrors those source configs into generated declaration leaves under `.limina/tsconfig/checkers/<checker>/...`.
 
 In a single-environment directory, `tsconfig.json` can be a leaf directly:
 
@@ -215,13 +214,13 @@ Traditionally, teams rely on code review to catch this. But in a monorepo, such 
 limina expresses architecture boundaries with labels.
 
 ```jsonc
-// packages/app/src/client/tsconfig.dts.json
+// packages/app/src/client/tsconfig.json
 {
   "liminaOptions": {
     "graphRules": ["runtime-client"],
   },
-  "extends": ["./tsconfig.json", "../../../tsconfig.dts.base.json"],
-  "references": [],
+  "extends": "../../../tsconfig.base.json",
+  "include": ["./**/*.ts"],
 }
 ```
 
@@ -253,7 +252,7 @@ limina reports this as an architecture violation, not an ordinary TypeScript err
 ```text
 Denied graph access:
   rules: runtime-client
-  importing project: packages/app/src/client/tsconfig.dts.json
+  importing project: packages/app/src/client/tsconfig.json
   file: packages/app/src/client/runtime.ts:1
   imported specifier: node:fs
   denied dependency: node:*
@@ -280,11 +279,11 @@ Suppose you have:
 
 ```text
 packages/core/src/index.ts
-packages/core/tsconfig.lib.dts.json
-packages/core/tsconfig.tools.dts.json
+packages/core/tsconfig.lib.json
+packages/core/tsconfig.tools.json
 ```
 
-Both dts configs include the same file:
+Both source configs include the same file:
 
 ```jsonc
 {
@@ -292,7 +291,7 @@ Both dts configs include the same file:
 }
 ```
 
-This means `src/index.ts` belongs to both the lib declaration graph and the tools declaration graph.
+This means `src/index.ts` would belong to both the generated lib declaration graph and the generated tools declaration graph.
 
 That causes several problems:
 
@@ -301,14 +300,14 @@ That causes several problems:
 3. The project reference graph cannot determine which leaf owns the file.
 4. Runtime boundary labels may conflict.
 
-limina requires each checker graph file to have exactly one declaration owner.
+limina requires each checker graph file to have exactly one source tsconfig owner per checker.
 
 ### How to fix it
 
 Give different leaves different file sets:
 
 ```jsonc
-// tsconfig.lib.dts.json
+// tsconfig.lib.json
 {
   "include": ["src/**/*.ts"],
   "exclude": ["src/tools/**"],
@@ -316,7 +315,7 @@ Give different leaves different file sets:
 ```
 
 ```jsonc
-// tsconfig.tools.dts.json
+// tsconfig.tools.json
 {
   "include": ["src/tools/**/*.ts"],
 }
@@ -372,7 +371,7 @@ For example:
 | `workspace:*` import resolves to `dist` but no Nx edge   | Artifact entry is consumed without the required build dependency                 |
 | Cross-package relative import                            | Bypasses package exports and the package owner boundary                          |
 | Project reference crosses packages but no `workspace:*`  | TS graph declares a source dependency, but package graph does not                |
-| dts leaf has no companion                                | Declaration emit has no strict typecheck proof                                   |
+| Generated declaration leaf has no source config          | Declaration emit has no strict typecheck proof                                   |
 | Source file is not covered by any checker                | Green CI does not mean the file was checked                                      |
 | Browser runtime imports `node:fs`                        | Runtime boundary is violated                                                     |
 | dist manifest has broken exports/types                   | Source is healthy, but published artifact is unhealthy                           |

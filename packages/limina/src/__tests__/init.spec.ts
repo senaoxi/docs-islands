@@ -63,9 +63,6 @@ const compilerOptions = {
   target: 'ES2023',
   types: [],
 };
-const rootTsconfigSchema = './node_modules/limina/schemas/tsconfig-schema.json';
-const packageTsconfigSchema =
-  '../../node_modules/limina/schemas/tsconfig-schema.json';
 
 function typecheckConfig(include: string[]): string {
   return stringifyConfig({
@@ -177,7 +174,7 @@ describe('runInit', () => {
     }
   });
 
-  it('rejects workspace imports that TypeScript resolves outside generated leaves', async () => {
+  it('does not preflight workspace import coverage during init', async () => {
     const fixture = await createFixture({
       'package.json': stringifyConfig({
         name: 'root',
@@ -204,19 +201,25 @@ describe('runInit', () => {
     });
 
     try {
-      await expect(
-        runInit({
-          clearScreen: false,
-          cwd: fixture.rootDir,
-          yes: true,
-        }),
-      ).rejects.toThrow(/not covered by any ordinary tsconfig/u);
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+        yes: true,
+      });
+
+      expect(result.writtenFiles).toEqual(
+        expect.arrayContaining([
+          path.join(fixture.rootDir, 'limina.config.mjs'),
+          path.join(fixture.rootDir, '.gitignore'),
+          path.join(fixture.rootDir, 'package.json'),
+        ]),
+      );
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects tsconfig.json files that mix references and source inputs', async () => {
+  it('allows referenced tsconfig inputs during init', async () => {
     const fixture = await createFixture({
       'package.json': stringifyConfig({
         name: 'root',
@@ -241,13 +244,15 @@ describe('runInit', () => {
           cwd: fixture.rootDir,
           yes: true,
         }),
-      ).rejects.toThrow(/Invalid tsconfig role/u);
+      ).resolves.toMatchObject({
+        checkCommand: 'pnpm limina:check',
+      });
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects scoped tsconfig files used as aggregators', async () => {
+  it('allows scoped aggregator tsconfig files during init', async () => {
     const fixture = await createFixture({
       'package.json': stringifyConfig({
         name: 'root',
@@ -270,7 +275,9 @@ describe('runInit', () => {
           cwd: fixture.rootDir,
           yes: true,
         }),
-      ).rejects.toThrow(/Invalid scoped tsconfig role/u);
+      ).resolves.toMatchObject({
+        checkCommand: 'pnpm limina:check',
+      });
     } finally {
       await fixture.cleanup();
     }
@@ -311,7 +318,7 @@ describe('runInit', () => {
     }
   });
 
-  it('references all root declaration leaves from the root build aggregator', async () => {
+  it('writes config and gitignore without a root build aggregator', async () => {
     const fixture = await createFixture({
       'package.json': stringifyConfig({
         name: 'root',
@@ -339,28 +346,25 @@ describe('runInit', () => {
       });
 
       expect(
-        await readJson(path.join(fixture.rootDir, 'tsconfig.build.json')),
-      ).toEqual({
-        $schema: rootTsconfigSchema,
-        files: [],
-        references: [
-          {
-            path: './packages/app/tsconfig.build.json',
-          },
-          {
-            path: './tsconfig.dts.json',
-          },
-          {
-            path: './tsconfig.tools.dts.json',
-          },
-        ],
-      });
+        await fileExists(path.join(fixture.rootDir, 'tsconfig.build.json')),
+      ).toBe(false);
+      expect(
+        await fileExists(
+          path.join(fixture.rootDir, 'packages/app/tsconfig.build.json'),
+        ),
+      ).toBe(false);
+      expect(
+        await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
+      ).toContain('include:');
+      expect(
+        await readFile(path.join(fixture.rootDir, '.gitignore'), 'utf8'),
+      ).toContain('.limina/');
     } finally {
       await fixture.cleanup();
     }
   }, 30_000);
 
-  it('generates declaration leaves, build aggregators, config, and root script', async () => {
+  it('writes config, gitignore, and root script without source-level graph configs', async () => {
     const fixture = await createFixture(createWorkspaceFixture());
 
     try {
@@ -372,59 +376,20 @@ describe('runInit', () => {
 
       expect(result.installRequired).toBe(true);
       expect(
-        await readJson(
+        await fileExists(
           path.join(fixture.rootDir, 'packages/foo/tsconfig.lib.dts.json'),
         ),
-      ).toEqual({
-        $schema: packageTsconfigSchema,
-        extends: ['./tsconfig.lib.json'],
-        compilerOptions: {
-          composite: true,
-          declaration: true,
-          declarationMap: false,
-          emitDeclarationOnly: true,
-          incremental: true,
-          noEmit: false,
-          outDir: './.limina',
-          rootDir: '.',
-          tsBuildInfoFile: './.limina/lib.tsbuildinfo',
-        },
-        references: [
-          {
-            path: '../bar/tsconfig.dts.json',
-          },
-          {
-            path: './tsconfig.helpers.dts.json',
-          },
-        ],
-      });
+      ).toBe(false);
       expect(
-        await readJson(
+        await fileExists(
           path.join(fixture.rootDir, 'packages/foo2/tsconfig.lib.dts.json'),
         ),
-      ).toMatchObject({
-        references: [
-          {
-            path: '../bar/scripts/tsconfig.tools.dts.json',
-          },
-        ],
-      });
+      ).toBe(false);
       expect(
-        await readJson(
+        await fileExists(
           path.join(fixture.rootDir, 'packages/bar/tsconfig.build.json'),
         ),
-      ).toEqual({
-        $schema: packageTsconfigSchema,
-        files: [],
-        references: [
-          {
-            path: './scripts/tsconfig.tools.dts.json',
-          },
-          {
-            path: './tsconfig.dts.json',
-          },
-        ],
-      });
+      ).toBe(false);
       await expect(
         fileExists(
           path.join(fixture.rootDir, 'packages/empty/tsconfig.build.json'),
@@ -432,7 +397,13 @@ describe('runInit', () => {
       ).resolves.toBe(false);
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
-      ).toContain("entry: 'tsconfig.build.json'");
+      ).toContain('include:');
+      expect(
+        await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
+      ).not.toContain('entry:');
+      expect(
+        await readFile(path.join(fixture.rootDir, '.gitignore'), 'utf8'),
+      ).toContain('.limina/');
 
       const rootManifest = await readJson<{
         devDependencies?: Record<string, string>;

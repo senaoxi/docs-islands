@@ -61,7 +61,7 @@ describe('limina CLI', () => {
             config: {
               checkers: {
                 typescript: {
-                  entry: 'tsconfig.build.json',
+                  include: ['tsconfig.json'],
                   preset: 'tsc',
                 },
               },
@@ -335,9 +335,9 @@ describe('limina CLI', () => {
     }
   }, 15_000);
 
-  it('runs graph sync with a declaration leaf path from the public command', async () => {
+  it('runs graph prepare from the public command', async () => {
     const rootDir = await realpath(
-      await mkdtemp(path.join(tmpdir(), 'limina-cli-graph-sync-')),
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-graph-prepare-')),
     );
     const cliPath = fileURLToPath(
       new URL('../../bin/limina.js', import.meta.url),
@@ -355,7 +355,7 @@ describe('limina CLI', () => {
             config: {
               checkers: {
                 typescript: {
-                  entry: 'tsconfig.build.json',
+                  include: ['app/tsconfig*.json'],
                   preset: 'tsc',
                 },
               },
@@ -374,34 +374,17 @@ describe('limina CLI', () => {
         "import { nodeValue } from './node';\nexport const runtimeValue = nodeValue;\n",
       );
       await writeText(
-        path.join(rootDir, 'app/tsconfig.node.dts.json'),
+        path.join(rootDir, 'app/tsconfig.node.json'),
         stringifyConfig({
           compilerOptions: buildCompilerOptions,
           include: ['node.ts'],
         }),
       );
       await writeText(
-        path.join(rootDir, 'app/tsconfig.runtime.dts.json'),
+        path.join(rootDir, 'app/tsconfig.runtime.json'),
         stringifyConfig({
-          compilerOptions: {
-            ...buildCompilerOptions,
-            tsBuildInfoFile: './.tsbuild/runtime.tsbuildinfo',
-          },
+          compilerOptions: buildCompilerOptions,
           include: ['runtime.ts'],
-        }),
-      );
-      await writeText(
-        path.join(rootDir, 'tsconfig.build.json'),
-        stringifyConfig({
-          files: [],
-          references: [
-            {
-              path: './app/tsconfig.node.dts.json',
-            },
-            {
-              path: './app/tsconfig.runtime.dts.json',
-            },
-          ],
         }),
       );
 
@@ -412,8 +395,7 @@ describe('limina CLI', () => {
           '--config',
           path.join(rootDir, 'limina.config.mjs'),
           'graph',
-          'sync',
-          'app/tsconfig.runtime.dts.json',
+          'prepare',
         ],
         {
           cwd: rootDir,
@@ -424,11 +406,14 @@ describe('limina CLI', () => {
         },
       );
 
-      expect(result.stdout).toContain('limina graph sync');
+      expect(result.stdout).toContain('limina graph prepare');
       expect(result.stdout).toContain('limina graph passed');
       expect(
         await readFile(
-          path.join(rootDir, 'app/tsconfig.runtime.dts.json'),
+          path.join(
+            rootDir,
+            '.limina/tsconfig/checkers/typescript/app/tsconfig.runtime.dts.json',
+          ),
           'utf8',
         ),
       ).toContain('"path": "./tsconfig.node.dts.json"');
@@ -661,11 +646,11 @@ describe('limina CLI', () => {
       expect(result.stdout).toContain('limina init');
       expect(result.stdout).toContain('limina init finished');
       expect(
-        await readFile(
-          path.join(rootDir, 'packages/app/tsconfig.dts.json'),
-          'utf8',
-        ),
-      ).toContain('./.limina/tsconfig.tsbuildinfo');
+        await readFile(path.join(rootDir, 'limina.config.mjs'), 'utf8'),
+      ).toContain('include:');
+      expect(
+        await readFile(path.join(rootDir, '.gitignore'), 'utf8'),
+      ).toContain('.limina/');
     } finally {
       await rm(rootDir, {
         force: true,

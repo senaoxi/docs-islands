@@ -16,7 +16,8 @@ const defaultCheckers: NonNullable<ResolvedLiminaConfig['config']>['checkers'] =
   {
     typescript: {
       preset: 'tsc',
-      entry: 'tsconfig.build.json',
+      include: ['tsconfig.json', '**/tsconfig*.json'],
+      exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
     },
   };
 const buildCompilerOptions = {
@@ -243,7 +244,6 @@ describe('runNx', () => {
         }),
         'packages/a/src/index.ts':
           "import { runtimeValue } from '@example/b/runtime';\nexport const value = runtimeValue;\n",
-        'packages/a/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
         'packages/a/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
         'packages/b/package.json': createPackageJson('@example/b', {
           build: true,
@@ -259,7 +259,6 @@ describe('runNx', () => {
         'packages/b/dist/runtime.d.ts':
           'export declare const runtimeValue = 1;\n',
         'packages/b/dist/runtime.js': 'export const runtimeValue = 1;\n',
-        'packages/b/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
         'packages/b/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
       },
       checkerFixtureConfig(),
@@ -319,7 +318,6 @@ describe('runNx', () => {
         }),
         'packages/a/src/index.ts':
           "import { sourceValue } from '@example/b';\nexport const value = sourceValue;\n",
-        'packages/a/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
         'packages/a/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
         'packages/b/package.json': createPackageJson('@example/b', {
           build: true,
@@ -335,7 +333,6 @@ describe('runNx', () => {
         'packages/b/dist/runtime.d.ts':
           'export declare const runtimeValue = 1;\n',
         'packages/b/dist/runtime.js': 'export const runtimeValue = 1;\n',
-        'packages/b/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
         'packages/b/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
       },
       checkerFixtureConfig(),
@@ -377,7 +374,6 @@ describe('runNx', () => {
         }),
         'packages/a/src/index.ts':
           "import { sourceValue } from '@example/b';\nexport const value = sourceValue;\n",
-        'packages/a/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
         'packages/a/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts'], {
           baseUrl: '.',
           paths: {
@@ -396,7 +392,6 @@ describe('runNx', () => {
         'packages/b/src/index.ts': 'export const sourceValue = 1;\n',
         'packages/b/dist/index.d.ts': 'export declare const sourceValue = 1;\n',
         'packages/b/dist/index.js': 'export const sourceValue = 1;\n',
-        'packages/b/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
         'packages/b/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
       },
       checkerFixtureConfig(),
@@ -437,7 +432,7 @@ describe('runNx', () => {
           },
         }),
         'packages/a/src/index.ts': 'export const value = 1;\n',
-        'packages/a/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
+        'packages/a/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
         'packages/b/package.json': createPackageJson('@example/b', {
           build: true,
           exports: {
@@ -451,7 +446,7 @@ describe('runNx', () => {
         'packages/b/dist/runtime.d.ts':
           'export declare const runtimeValue = 1;\n',
         'packages/b/dist/runtime.js': 'export const runtimeValue = 1;\n',
-        'packages/b/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
+        'packages/b/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
       },
       checkerFixtureConfig(),
     );
@@ -482,7 +477,7 @@ describe('runNx', () => {
         }),
         'packages/a/src/index.ts':
           "import type { RuntimeValue } from '@example/b/types';\nexport type Value = RuntimeValue;\n",
-        'packages/a/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
+        'packages/a/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
         'packages/b/package.json': createPackageJson('@example/b', {
           build: true,
           exports: {
@@ -494,7 +489,7 @@ describe('runNx', () => {
         'packages/b/src/index.ts': 'export const sourceValue = 1;\n',
         'packages/b/dist/types.d.ts':
           'export interface RuntimeValue { ready: true }\n',
-        'packages/b/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
+        'packages/b/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
       },
       checkerFixtureConfig(),
     );
@@ -945,7 +940,7 @@ describe('runNx', () => {
         }),
         'packages/a/src/index.ts':
           "import { runtimeValue } from '@example/b/runtime';\nexport const value = runtimeValue;\n",
-        'packages/a/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
+        'packages/a/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
         'packages/b/package.json': createPackageJson('@example/b', {
           exports: {
             './runtime': {
@@ -958,7 +953,7 @@ describe('runNx', () => {
         'packages/b/dist/runtime.d.ts':
           'export declare const runtimeValue = 1;\n',
         'packages/b/dist/runtime.js': 'export const runtimeValue = 1;\n',
-        'packages/b/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
+        'packages/b/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
       },
       checkerFixtureConfig(),
     );
@@ -1012,7 +1007,7 @@ describe('runNx', () => {
         }),
         'packages/a/src/index.ts':
           "import { runtimeValue } from '@example/b/runtime';\nexport const value = runtimeValue;\n",
-        'packages/a/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
+        'packages/a/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
         'packages/b/package.json': createPackageJson('@example/b', {
           build: true,
           dependencies: {
@@ -1029,7 +1024,7 @@ describe('runNx', () => {
         'packages/b/dist/runtime.d.ts':
           'export declare const runtimeValue = 1;\n',
         'packages/b/dist/runtime.js': 'export const runtimeValue = 1;\n',
-        'packages/b/tsconfig.lib.dts.json': dtsBuildConfig(['src/**/*.ts']),
+        'packages/b/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
       },
       checkerFixtureConfig(),
     );

@@ -48,7 +48,6 @@ interface KnipConfig extends KnipWorkspaceConfig {
 }
 
 const requireFromLimina = createRequire(import.meta.url);
-const knipTypescriptConfigFileName = 'tsconfig.build.json';
 const knipJsonIssueFields = [
   'dependencies',
   'devDependencies',
@@ -327,31 +326,6 @@ function addOwnerProjectsToKnipConfig(options: {
   }
 }
 
-async function hasTypescriptBuildConfig(
-  workspacePackages: WorkspacePackage[],
-): Promise<boolean> {
-  for (const workspacePackage of workspacePackages) {
-    if (
-      await pathExists(
-        path.join(workspacePackage.directory, knipTypescriptConfigFileName),
-      )
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function createVirtualEntryContent(
   sourceFiles: string[],
   entryDir: string,
@@ -372,6 +346,15 @@ function createVirtualEntryContent(
     ...imports,
     '',
   ].join('\n');
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function withTemporaryVirtualEntries<T>(
@@ -596,16 +579,12 @@ export async function collectKnipSourceIssues(options: {
   ignoredKeys: Set<string>;
   includeFiles: boolean;
   ownerProjects: KnipOwnerProject[];
+  tsConfigFile?: string;
   workspacePackages: WorkspacePackage[];
 }): Promise<KnipSourceIssues> {
   const include: KnipSourceIssueType[] = options.includeFiles
     ? ['dependencies', 'files']
     : ['dependencies'];
-  const tsConfigFile = (await hasTypescriptBuildConfig(
-    options.workspacePackages,
-  ))
-    ? knipTypescriptConfigFileName
-    : undefined;
   const report = await withTemporaryVirtualEntries(
     options.ownerProjects,
     async (ownerProjects) => {
@@ -622,7 +601,9 @@ export async function collectKnipSourceIssues(options: {
             configPath,
             include,
             rootDir: options.config.rootDir,
-            ...(tsConfigFile ? { tsConfigFile } : {}),
+            ...(options.tsConfigFile
+              ? { tsConfigFile: options.tsConfigFile }
+              : {}),
           }),
         ),
       );

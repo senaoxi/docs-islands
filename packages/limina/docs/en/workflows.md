@@ -70,8 +70,8 @@ jobs:
 
 ::: tip
 
-- Keep `tsconfig.build.json` files as pure aggregators with `files: []` and `references`.
-- Keep declaration leaves close to local companions, and let declaration leaves add only declaration-output settings.
+- Keep source `tsconfig.json` aggregators pure with `files: []` and `references`.
+- Keep source tsconfig file sets intentional, and let Limina own generated declaration leaves under `.limina/`.
 - Keep workspace package exports intentional: source entries need references, artifact entries need build edges when consumed.
 - Run source, package, and release checks; they protect different layers.
 - Keep allowlists small and explain why each exception is safe.

@@ -176,11 +176,11 @@ describe('runPipeline', () => {
     fixture.config.config = {
       checkers: {
         svelte: {
-          entry: 'tsconfig.svelte.build.json',
+          include: ['tsconfig.svelte.json'],
           preset: 'svelte-check',
         },
         typescript: {
-          entry: 'tsconfig.build.json',
+          include: ['tsconfig.json'],
           preset: 'tsc',
         },
       },
@@ -221,11 +221,11 @@ describe('runPipeline', () => {
       ).toBe(true);
       expect(
         chunks.some((chunk) =>
-          chunk.includes('[fail] default check blocked at graph:check'),
+          chunk.includes('[fail] default check blocked at proof:check'),
         ),
       ).toBe(true);
       expect(
-        chunks.some((chunk) => chunk.includes('[skip] skipped: source:check')),
+        chunks.some((chunk) => chunk.includes('[skip] skipped: checker:build')),
       ).toBe(true);
     } finally {
       await fixture.cleanup();

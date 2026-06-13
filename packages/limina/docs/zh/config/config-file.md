@@ -44,7 +44,8 @@ export default defineConfig(({ mode }) => ({
     checkers: {
       typescript: {
         preset: 'tsc',
-        entry: 'tsconfig.build.json',
+        include: ['packages/**/tsconfig*.json'],
+        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
       },
     },
   },
@@ -53,7 +54,7 @@ export default defineConfig(({ mode }) => ({
 
 无论是否开启 strict 模式，图检查都会通过当前检查器配置校验工作区包导出：公开导出必须可解析，解析到源码归属方的工作区导入必须有匹配项目引用。
 
-strict 模式不会改变命令入口，但会在 `graph:check`、`source:check`、`proof:check`、`package:check` 和 `release:check` 中追加更完整的建模约束。类型检查叶子必须有同名声明叶子；声明叶子必须继承本地配套配置，并且除 declaration/build 输出配置外保持相同文件集合；构建图配置只能引用构建聚合器或声明叶子；源码归属必须落在最近的 `package.json` 下；构建后和打包后的包清单不能暴露 `workspace:`、`link:`、`file:` 或 `catalog:` 依赖说明符。
+strict 模式不会改变命令入口，但会在 `graph:check`、`source:check`、`proof:check`、`package:check` 和 `release:check` 中追加更完整的建模约束。检查器 include 必须解析到普通源码 tsconfig；生成声明覆盖必须唯一归属源码文件；源码归属必须落在最近的 `package.json` 下；构建后和打包后的包清单不能暴露 `workspace:`、`link:`、`file:` 或 `catalog:` 依赖说明符。
 
 ## mode
 
@@ -118,7 +119,8 @@ export default defineConfig(({ command }) => ({
     checkers: {
       typescript: {
         preset: 'tsc',
-        entry: 'tsconfig.build.json',
+        include: ['packages/**/tsconfig*.json'],
+        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
       },
     },
   },

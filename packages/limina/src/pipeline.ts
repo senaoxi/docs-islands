@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'pathe';
 import { getCheckerAdapter } from './checkers';
-import { runGraphCheck } from './commands/graph';
+import { runGraphCheck, runGraphPrepare } from './commands/graph';
 import { runNx } from './commands/nx';
 import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
@@ -32,6 +32,7 @@ const builtInTaskNames = new Set<string>([
   'checker:build',
   'checker:typecheck',
   'graph:check',
+  'graph:prepare',
   'nx:check',
   'package:check',
   'proof:check',
@@ -192,6 +193,13 @@ export async function runBuiltinTask(
   switch (taskName) {
     case 'graph:check': {
       return runGraphCheck(config, {
+        clearScreen: false,
+        flow: options.flow,
+        flowDepth: 1,
+      });
+    }
+    case 'graph:prepare': {
+      return runGraphPrepare(config, {
         clearScreen: false,
         flow: options.flow,
         flowDepth: 1,

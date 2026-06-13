@@ -73,6 +73,7 @@ export type PipelineStep =
 export type BuiltinTaskName =
   | 'checker:build'
   | 'checker:typecheck'
+  | 'graph:prepare'
   | 'graph:check'
   | 'nx:check'
   | 'package:check'
@@ -100,14 +101,19 @@ export interface CheckerConfig {
    */
   preset: CheckerPreset;
   /**
-   * Checker entry project used by both build and typecheck execution modes.
+   * Source-level ordinary tsconfig selectors covered by this checker.
    */
-  entry: string;
+  include: string[];
+  /**
+   * Optional source-level tsconfig exclusion patterns.
+   */
+  exclude?: string[];
 }
 
 export interface ResolvedCheckerConfig {
-  entry: string;
+  exclude: string[];
   extensions: string[];
+  include: string[];
   name: string;
   preset: CheckerPreset;
 }
@@ -769,16 +775,28 @@ const checkerExtensionsConfigReason =
   'checker extensions are fixed by built-in presets and cannot be configured.';
 
 const checkerRoutesConfigReason =
-  'checker routes are not supported; move routes.build to entry and migrate routes.typecheck targets to tsconfig*.dts.json leaves reachable from that entry with local companions.';
+  'checker routes are not supported; configure checker.include with source tsconfig selectors.';
 
 const unsupportedCheckerPresetReason =
-  'configured checker entries require a built-in checker adapter.';
+  'configured checkers require a built-in checker adapter.';
+
+const checkerEntryConfigReason =
+  'checker.entry has been removed; configure checker.include with source tsconfig selectors.';
 
 const checkerConfigShapeSchema = z
   .looseObject({})
   .superRefine((checker, ctx) => {
     const preset = checker.preset;
-    const entry = checker.entry;
+    const include = checker.include;
+    const exclude = checker.exclude;
+
+    if (Object.hasOwn(checker, 'entry')) {
+      ctx.addIssue({
+        code: 'custom',
+        message: checkerEntryConfigReason,
+        path: ['entry'],
+      });
+    }
 
     if (Object.hasOwn(checker, 'extensions')) {
       ctx.addIssue({
@@ -810,12 +828,45 @@ const checkerConfigShapeSchema = z
       });
     }
 
-    if (typeof entry !== 'string' || entry.trim().length === 0) {
+    if (!Array.isArray(include) || include.length === 0) {
       ctx.addIssue({
         code: 'custom',
-        message: 'checker entry must be a non-empty string path.',
-        path: ['entry'],
+        message: 'checker include must be a non-empty string array.',
+        path: ['include'],
       });
+    } else {
+      for (const [index, value] of include.entries()) {
+        if (typeof value !== 'string' || value.trim().length === 0) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'checker include entries must be non-empty string paths.',
+            path: ['include', index],
+          });
+        }
+      }
+    }
+
+    if (exclude === undefined) {
+      return;
+    }
+
+    if (!Array.isArray(exclude)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'checker exclude must be a string array when configured.',
+        path: ['exclude'],
+      });
+      return;
+    }
+
+    for (const [index, value] of exclude.entries()) {
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'checker exclude entries must be non-empty string paths.',
+          path: ['exclude', index],
+        });
+      }
     }
   });
 
@@ -1046,7 +1097,7 @@ function formatLiminaConfigShapeIssue(
         'Invalid Limina checker entry config:',
         `  field: ${checkerField}.entry`,
         `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
-        '  reason: checker entry must be a non-empty string path.',
+        `  reason: ${issue.message}`,
       ].join('\n');
     }
 

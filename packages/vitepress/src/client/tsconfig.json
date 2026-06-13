@@ -1,4 +1,8 @@
 {
+  "$schema": "../../../../node_modules/limina/schemas/tsconfig-schema.json",
+  "liminaOptions": {
+    "graphRules": ["runtime-client"],
+  },
   // Runtime local check and rolldown-plugin-dts input. Declaration leaf: ./tsconfig.lib.dts.json.
   "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {

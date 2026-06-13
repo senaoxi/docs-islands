@@ -12,6 +12,10 @@ import {
 } from '../config';
 import type { LiminaFlowReporter } from '../flow';
 import {
+  type GeneratedTsconfigGraphResult,
+  prepareGeneratedTsconfigGraph,
+} from '../generated-graph';
+import {
   collectImportsFromFile,
   createImportAnalysisContext,
   formatImportRecordLocation,
@@ -1554,6 +1558,138 @@ function hasProvidedPackageExports(owner: PackageOwner): boolean {
   return Object.hasOwn(owner.manifest, 'exports');
 }
 
+function collectManifestEntryTargets(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return [value];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(collectManifestEntryTargets);
+  }
+
+  if (isPlainRecord(value)) {
+    return Object.values(value).flatMap(collectManifestEntryTargets);
+  }
+
+  return [];
+}
+
+function collectPackageManifestEntryTargets(
+  manifest: PackageManifest,
+): string[] {
+  const targets = new Set<string>();
+  const manifestRecord = manifest as Record<string, unknown>;
+
+  for (const value of [
+    manifestRecord.exports,
+    manifestRecord.main,
+    manifestRecord.module,
+    manifestRecord.browser,
+    manifestRecord.types,
+    manifestRecord.typings,
+    manifestRecord.bin,
+  ]) {
+    for (const target of collectManifestEntryTargets(value)) {
+      targets.add(target);
+    }
+  }
+
+  return [...targets].sort();
+}
+
+function normalizeManifestTargetPath(value: string): string | null {
+  let target = normalizeSlashes(value.trim());
+
+  while (target.startsWith('./')) {
+    target = target.slice(2);
+  }
+
+  if (
+    target.length === 0 ||
+    target.includes('*') ||
+    target.endsWith('/package.json') ||
+    target === 'package.json' ||
+    path.isAbsolute(target) ||
+    /^[A-Za-z]:[\\/]/u.test(target) ||
+    target === '..' ||
+    target.startsWith('../') ||
+    target.includes('/../') ||
+    target.endsWith('/..')
+  ) {
+    return null;
+  }
+
+  return target;
+}
+
+function collectSourceCandidatesForManifestTarget(target: string): string[] {
+  const candidates = new Set<string>([target]);
+  const withoutDist = target.startsWith('dist/') ? target.slice(5) : null;
+
+  if (withoutDist) {
+    candidates.add(withoutDist);
+  }
+
+  for (const candidate of [...candidates]) {
+    const replacements: string[] = [];
+
+    if (/\.d\.mts$/u.test(candidate)) {
+      replacements.push(candidate.replace(/\.d\.mts$/u, '.mts'));
+    } else if (/\.d\.cts$/u.test(candidate)) {
+      replacements.push(candidate.replace(/\.d\.cts$/u, '.cts'));
+    } else if (/\.d\.ts$/u.test(candidate)) {
+      replacements.push(candidate.replace(/\.d\.ts$/u, '.ts'));
+    } else if (/\.mjs$/u.test(candidate)) {
+      replacements.push(candidate.replace(/\.mjs$/u, '.mts'));
+    } else if (/\.cjs$/u.test(candidate)) {
+      replacements.push(candidate.replace(/\.cjs$/u, '.cts'));
+    } else if (/\.jsx$/u.test(candidate)) {
+      replacements.push(candidate.replace(/\.jsx$/u, '.tsx'));
+      replacements.push(candidate.replace(/\.jsx$/u, '.jsx'));
+    } else if (/\.js$/u.test(candidate)) {
+      replacements.push(candidate.replace(/\.js$/u, '.ts'));
+      replacements.push(candidate.replace(/\.js$/u, '.tsx'));
+      replacements.push(candidate.replace(/\.js$/u, '.js'));
+    }
+
+    for (const replacement of replacements) {
+      candidates.add(replacement);
+    }
+  }
+
+  return [...candidates].sort();
+}
+
+function collectManifestSourceEntryPatterns(
+  moduleSet: OwnerSourceModuleSet,
+): string[] {
+  const filesByOwnerRelativePath = new Map(
+    moduleSet.files.map((filePath) => [
+      normalizeSlashes(toRelativePath(moduleSet.owner.directory, filePath)),
+      filePath,
+    ]),
+  );
+  const patterns = new Set<string>();
+
+  for (const rawTarget of collectPackageManifestEntryTargets(
+    moduleSet.owner.manifest,
+  )) {
+    const target = normalizeManifestTargetPath(rawTarget);
+
+    if (!target) {
+      continue;
+    }
+
+    for (const candidate of collectSourceCandidatesForManifestTarget(target)) {
+      if (filesByOwnerRelativePath.has(candidate)) {
+        patterns.add(candidate);
+      }
+    }
+  }
+
+  return [...patterns].sort();
+}
+
 interface UnusedModuleConfig {
   entryPatternsByOwnerName: Map<string, string[]>;
   ignoredKeys: Set<string>;
@@ -1935,9 +2071,14 @@ function createKnipOwnerProjects(options: {
 }): KnipOwnerProject[] {
   return options.ownerModuleSets.map((moduleSet) => ({
     directory: moduleSet.owner.directory,
-    entryFiles:
-      options.entryPatternsByOwnerName.get(moduleSet.owner.name as string) ??
-      [],
+    entryFiles: [
+      ...new Set([
+        ...(options.entryPatternsByOwnerName.get(
+          moduleSet.owner.name as string,
+        ) ?? []),
+        ...collectManifestSourceEntryPatterns(moduleSet),
+      ]),
+    ].sort(),
     ignoreFiles: moduleSet.files
       .filter((filePath) =>
         options.ignoredModuleKeys.has(
@@ -2060,6 +2201,7 @@ function addUnusedModuleProblems(options: {
 
 async function addKnipBackedSourceProblems(options: {
   config: ResolvedLiminaConfig;
+  generatedGraph: GeneratedTsconfigGraphResult;
   ownerModuleSets: OwnerSourceModuleSet[];
   problems: string[];
   workspacePackages: WorkspacePackage[];
@@ -2108,6 +2250,7 @@ async function addKnipBackedSourceProblems(options: {
     ignoredKeys: ignoredDependencies,
     includeFiles,
     ownerProjects: needsDependencyAnalysis || includeFiles ? ownerProjects : [],
+    tsConfigFile: getKnipTsConfigFile(options.config, options.generatedGraph),
     workspacePackages: options.workspacePackages,
   });
 
@@ -2128,6 +2271,17 @@ async function addKnipBackedSourceProblems(options: {
       problems: options.problems,
     });
   }
+}
+
+function getKnipTsConfigFile(
+  config: ResolvedLiminaConfig,
+  generatedGraph: GeneratedTsconfigGraphResult,
+): string | undefined {
+  const entryPath =
+    generatedGraph.checkerEntries.get('typescript') ??
+    generatedGraph.checkerEntries.values().next().value;
+
+  return entryPath ? toRelativePath(config.rootDir, entryPath) : undefined;
 }
 
 function createSourceProjectEntries(
@@ -2161,7 +2315,11 @@ async function runSourceCheckInternal(
   config: ResolvedLiminaConfig,
   options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
-  const graphRoute = collectSourceGraphProjectExtensions(config);
+  const generatedGraph = await prepareGeneratedTsconfigGraph(config);
+  const graphRoute = collectSourceGraphProjectExtensions(
+    config,
+    generatedGraph,
+  );
   const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
   const projects = projectPaths.map((projectPath) =>
     parseProject(
@@ -2187,6 +2345,7 @@ async function runSourceCheckInternal(
   });
   await addKnipBackedSourceProblems({
     config,
+    generatedGraph,
     ownerModuleSets,
     problems,
     workspacePackages: packages,

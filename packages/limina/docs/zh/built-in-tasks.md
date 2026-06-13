@@ -17,7 +17,7 @@
 
 ## `graph:check`
 
-对应 `limina graph check`，校验由声明叶子（`tsconfig*.dts.json`）组成的项目引用图。下面逐项说明它检测什么、为什么这么要求、以及一个典型例子。
+对应 `limina graph check`，校验 `.limina/` 下生成的声明叶子组成的项目引用图；用户可见的规范路径是被 `checker.include` 选中的源码 tsconfig。下面逐项说明它检测什么、为什么这么要求、以及一个典型例子。
 
 ::: tip
 这里提到的 deny/allow 规则在[图规则](./config/graph-rules.md)中定义。
@@ -25,11 +25,12 @@
 
 ### 声明叶子的编译选项要齐全
 
-声明叶子靠 `tsc -b` 增量地只产出 `.d.ts`。所以它必须打开 `composite`、`incremental`、`declaration`、`emitDeclarationOnly`，关掉 `noEmit`，并写明 `rootDir` / `outDir` / `tsBuildInfoFile`。少一个，增量构建就没法正确产出声明。
+生成的声明叶子靠 `tsc -b` 增量地只产出 `.d.ts`。Limina 会在 `limina graph prepare` 时写出这些叶子；每个叶子都会打开 `composite`、`incremental`、`declaration`、`emitDeclarationOnly`，关掉 `noEmit`，并写明 `rootDir` / `outDir` / `tsBuildInfoFile`。
 
 ```jsonc
-// packages/core/tsconfig.lib.dts.json
+// .limina/tsconfig/checkers/typescript/packages/core/tsconfig.lib.dts.json
 {
+  "extends": "../../../../../packages/core/tsconfig.lib.json",
   "compilerOptions": {
     "composite": true,
     "incremental": true,
@@ -43,19 +44,20 @@
 }
 ```
 
-漏了 `composite` 这类选项会报 `Invalid declaration leaf compiler option:`；漏了 `outDir` 这类输出项会报 `Missing declaration leaf output option:`。
+这些文件是生成产物，所以形状错误通常表示生成图过期或异常；运行 `limina graph prepare`，并查看诊断中映射回来的源码 tsconfig 路径。
 
 ### 每个叶子都要有配对的本地配置
 
-每个 `*.dts.json` 都要有一个同范围的普通 `tsconfig*.json`（本地配套配置）来管类型语义。两者的类型相关选项（如 `strict`、`module`、`target`）必须一致，且叶子纳入的文件不能超出本地配套配置——否则「产声明用的配置」和「类型检查用的配置」会对不上。
+每个生成的 `*.dts.json` 都要通过 `liminaOptions.sourceConfig` 指回负责类型语义的普通源码 `tsconfig*.json`。类型相关选项（如 `strict`、`module`、`target`）来自这个源码配置，生成叶子纳入的文件也不能超出源码配置。
 
 ```text
 packages/core/
-  tsconfig.lib.json       # 本地配套配置：strict: true
-  tsconfig.lib.dts.json   # 叶子：也要 strict: true，文件集是本地配套配置的子集
+  tsconfig.lib.json       # 源码配置：strict: true
+.limina/tsconfig/checkers/typescript/packages/core/
+  tsconfig.lib.dts.json   # 生成叶子，sourceConfig -> packages/core/tsconfig.lib.json
 ```
 
-没有本地配套配置会报 `Missing typecheck companion config:`；选项不一致会报 `Typecheck option mismatch between declaration leaf and companion config:`。
+没有 `sourceConfig` 的生成叶子会被拒绝。诊断涉及生成路径时，Limina 会尽量通过 manifest 映射回源码 tsconfig 路径。
 
 ### 源码入口导入需要匹配引用
 
@@ -66,7 +68,7 @@ packages/core/
 import { createClient } from '@acme/core'; // 引用了 core
 ```
 
-如果 `packages/app/tsconfig.lib.dts.json` 的 `references` 没列 core，报 `Missing project reference for workspace import:`；列了多余、无导入支撑的引用报 `Extra project reference not proven by static imports:`。解析到 `dist/*.d.ts` 这类构建声明产物的导入不要求项目引用。源码入口边的修复方式是补上或删掉引用，或直接 `limina graph sync` 自动对齐。
+生成的声明引用必须和真实导入到的、由其他生成声明项目拥有的源码文件对应。如果源码边缺失，确认两端源码 tsconfig 都被 `checker.include` 选中，然后运行 `limina graph prepare`。解析到 `dist/*.d.ts` 这类构建声明产物的导入不要求项目引用。
 
 ### 工作区包导出必须可解析
 
@@ -90,14 +92,14 @@ import { createClient } from '@acme/core'; // 引用了 core
 
 ### 命中 deny 规则的引用/依赖会被拒
 
-如果在 `graph.rules.<label>.deny` 里定义了架构红线（例如「客户端不准依赖 Node 运行时」），并让某个叶子通过 `liminaOptions.graphRules` 显式启用，那么命中红线的引用或依赖会被拒绝。
+如果在 `graph.rules.<label>.deny` 里定义了架构红线（例如「客户端不准依赖 Node 运行时」），并让某个源码 tsconfig 通过 `liminaOptions.graphRules` 显式启用，那么命中红线的引用或依赖会被拒绝。
 
 ```jsonc
-// tsconfig.lib.dts.json
+// packages/app/tsconfig.client.json
 { "liminaOptions": { "graphRules": ["runtime-client"] } }
 ```
 
-命中时报 `Denied graph access:`，并带上你在规则里写的 `reason`。
+`limina graph prepare` 会把规则标签复制到生成声明叶子里。命中时报 `Denied graph access:`，并带上你在规则里写的 `reason`。
 
 ## `source:check`
 
@@ -249,24 +251,24 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 
 ### 同一文件不能被重复覆盖
 
-同一个源码文件被同一检查器的两个声明叶子同时纳入，会造成重复构建和归属歧义。
+同一个源码文件被同一检查器的两个源码 tsconfig 同时纳入，会造成重复的生成声明归属和归属歧义。
 
-报 `Duplicate checker graph coverage:`。修复：让每个文件只属于一个叶子。
+报 `Duplicate checker graph coverage:`。修复：让每个文件在同一检查器下只属于一个源码 tsconfig。
 
 ### 聚合器必须是纯聚合器
 
-`tsconfig*.build.json` 和带 `references` 的聚合 `tsconfig.json` 只能有 `$schema` / `files: []` / `references`，不能混入 `compilerOptions` 等。
+源码层带 `references` 的聚合 `tsconfig.json` 只能有 `$schema` / `files: []` / `references`，不能混入 `compilerOptions` 等。Limina 会在 `.limina/tsconfig/checkers/<checker>/tsconfig.build.json` 写出检查器 build 聚合器。
 
 ```jsonc
-// tsconfig.build.json
-{ "files": [], "references": [{ "path": "./tsconfig.lib.dts.json" }] }
+// tsconfig.json
+{ "files": [], "references": [{ "path": "./tsconfig.lib.json" }] }
 ```
 
-不满足报 `Build graph config is not a pure aggregator:` 或 `Default tsconfig.json is not a pure aggregator:`。
+不满足报 `Default tsconfig.json is not a pure aggregator:`。
 
 ### 声明叶子的形状要对
 
-每个 `*.dts.json` 要能被某检查器入口触达、有配对的本地配置、对 `tsc -b` 合法，且文件集和（非输出类）选项与本地配套配置对齐。
+每个生成的 `*.dts.json` 要能被生成的检查器 build 入口触达、有 `sourceConfig`、对 `tsc -b` 合法，且文件集和（非输出类）选项与源码配置对齐。
 
 分别报 `DTS config is not reachable from any checker entry:`、`DTS config is not valid for tsc -b:`、`DTS config file set does not match its strict local tsconfig:`、`DTS config overrides a typecheck compiler option from its strict local tsconfig:`。
 
@@ -322,7 +324,7 @@ strict 模式下还要求：叶子必须（传递地）`extends` 其本地配套
 
 ```js
 // limina.config.mjs（节选）
-checkers: { vue: { preset: 'vue-tsgo', entry: 'tsconfig.app.dts.json' } }
+checkers: { vue: { preset: 'vue-tsgo', include: ['apps/app/tsconfig.json'] } }
 ```
 
 有 `.vue` 类型错误时非零退出，报 `typecheck checks failed:`。修复：解决报出来的 `.vue` 类型错误。

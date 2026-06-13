@@ -64,11 +64,11 @@ export {
 
 export {
   runGraphCheck,
-  runGraphSync,
+  runGraphPrepare,
   type RunGraphCheckOptions,
-  type RunGraphSyncOptions,
-  type RunGraphSyncResult,
+  type RunGraphPrepareOptions,
 } from './commands/graph';
+
 export {
   runInit,
   type RunInitOptions,
@@ -86,4 +86,10 @@ export {
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from './commands/typecheck';
+export {
+  prepareGeneratedTsconfigGraph,
+  type GeneratedCheckerManifest,
+  type GeneratedTsconfigGraphManifest,
+  type GeneratedTsconfigGraphResult,
+} from './generated-graph';
 export { isOrdinaryTypecheckConfigPath } from './tsconfig';

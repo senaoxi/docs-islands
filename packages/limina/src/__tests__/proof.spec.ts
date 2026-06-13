@@ -36,7 +36,8 @@ async function createFixture(files: Record<string, string>): Promise<{
         checkers: {
           typescript: {
             preset: 'tsc',
-            entry: 'tsconfig.build.json',
+            include: ['tsconfig.json', '**/tsconfig*.json'],
+            exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
           },
         },
       },
@@ -52,18 +53,6 @@ function createPassingFiles(
 ): Record<string, string> {
   return {
     'packages/pkg/src/index.ts': 'export const value = 1;\n',
-    'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
-      extends: './tsconfig.json',
-      compilerOptions: {
-        composite: true,
-        declaration: true,
-        emitDeclarationOnly: true,
-        noEmit: false,
-        outDir: './.tsbuild',
-        rootDir: 'src',
-        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
-      },
-    }),
     'packages/pkg/tsconfig.json': JSON.stringify({
       compilerOptions: {
         lib: ['ES2023'],
@@ -80,14 +69,6 @@ function createPassingFiles(
       references: [
         {
           path: './packages/pkg/tsconfig.json',
-        },
-      ],
-    }),
-    'tsconfig.build.json': JSON.stringify({
-      files: [],
-      references: [
-        {
-          path: './packages/pkg/tsconfig.lib.dts.json',
         },
       ],
     }),
@@ -100,18 +81,6 @@ function createStrictSingleEnvironmentFiles(
 ): Record<string, string> {
   return {
     'packages/pkg/src/index.ts': 'export const value = 1;\n',
-    'packages/pkg/tsconfig.dts.json': JSON.stringify({
-      extends: './tsconfig.json',
-      compilerOptions: {
-        composite: true,
-        declaration: true,
-        emitDeclarationOnly: true,
-        noEmit: false,
-        outDir: './.tsbuild',
-        rootDir: 'src',
-        tsBuildInfoFile: './.tsbuild/build.tsbuildinfo',
-      },
-    }),
     'packages/pkg/tsconfig.json': JSON.stringify({
       compilerOptions: {
         lib: ['ES2023'],
@@ -131,14 +100,6 @@ function createStrictSingleEnvironmentFiles(
         },
       ],
     }),
-    'tsconfig.build.json': JSON.stringify({
-      files: [],
-      references: [
-        {
-          path: './packages/pkg/tsconfig.dts.json',
-        },
-      ],
-    }),
     ...overrides,
   };
 }
@@ -147,18 +108,6 @@ function createStrictMultiEnvironmentFiles(
   overrides: Record<string, string> = {},
 ): Record<string, string> {
   return createPassingFiles({
-    'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
-      extends: './tsconfig.lib.json',
-      compilerOptions: {
-        composite: true,
-        declaration: true,
-        emitDeclarationOnly: true,
-        noEmit: false,
-        outDir: './.tsbuild',
-        rootDir: 'src',
-        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
-      },
-    }),
     'packages/pkg/tsconfig.lib.json': JSON.stringify({
       compilerOptions: {
         lib: ['ES2023'],
@@ -211,7 +160,7 @@ describe('runProofCheck dts config semantics', () => {
     const fixture = await createFixture(createStrictMultiEnvironmentFiles());
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
       await expect(
         runProofCheck({
           ...fixture.config,
@@ -248,7 +197,7 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
       await expect(
         runProofCheck({
           ...fixture.config,
@@ -287,7 +236,7 @@ describe('runProofCheck dts config semantics', () => {
           ...fixture.config,
           strict: true,
         }),
-      ).resolves.toBe(true);
+      ).rejects.toThrow(/Checker include matched reserved tsconfig files/u);
     } finally {
       await fixture.cleanup();
     }
@@ -308,7 +257,7 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
       await expect(
         runProofCheck({
           ...fixture.config,
@@ -324,7 +273,7 @@ describe('runProofCheck dts config semantics', () => {
     const fixture = await createFixture(createStrictMultiEnvironmentFiles());
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
       await expect(
         runProofCheck({
           ...fixture.config,
@@ -451,7 +400,9 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).rejects.toThrow(
+        /Cannot read file/u,
+      );
     } finally {
       await fixture.cleanup();
     }
@@ -517,7 +468,7 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -569,7 +520,7 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -654,11 +605,11 @@ describe('runProofCheck dts config semantics', () => {
             checkers: {
               primary: {
                 preset: 'tsc',
-                entry: 'tsconfig.build.json',
+                include: ['tsconfig.json'],
               },
               secondary: {
                 preset: 'tsc',
-                entry: 'tsconfig.alt.build.json',
+                include: ['tsconfig.alt.json'],
               },
             },
           },
@@ -742,13 +693,13 @@ describe('runProofCheck dts config semantics', () => {
             checkers: {
               ...fixture.config.config?.checkers,
               vue: {
-                entry: 'packages/pkg/tsconfig.sfc.dts.json',
+                include: ['packages/pkg/tsconfig.sfc.json'],
                 preset: 'vue-tsc',
               },
             },
           },
         }),
-      ).resolves.toBe(true);
+      ).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -766,13 +717,13 @@ describe('runProofCheck dts config semantics', () => {
             checkers: {
               ...fixture.config.config?.checkers,
               vue: {
-                entry: 'packages/pkg/tsconfig.missing.dts.json',
+                include: ['packages/pkg/tsconfig.missing.json'],
                 preset: 'vue-tsc',
               },
             },
           },
         }),
-      ).resolves.toBe(false);
+      ).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -983,18 +934,6 @@ describe('runProofCheck dts config semantics', () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tools/eslint.config.mjs': 'export default [];\n',
-        'tools/tsconfig.dts.json': JSON.stringify({
-          extends: './tsconfig.json',
-          compilerOptions: {
-            composite: true,
-            declaration: true,
-            emitDeclarationOnly: true,
-            noEmit: false,
-            outDir: './.tsbuild',
-            rootDir: '.',
-            tsBuildInfoFile: './.tsbuild/tools.tsbuildinfo',
-          },
-        }),
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
             allowJs: true,
@@ -1005,17 +944,6 @@ describe('runProofCheck dts config semantics', () => {
             types: [],
           },
           include: ['eslint.config.mjs'],
-        }),
-        'tsconfig.build.json': JSON.stringify({
-          files: [],
-          references: [
-            {
-              path: './packages/pkg/tsconfig.lib.dts.json',
-            },
-            {
-              path: './tools/tsconfig.dts.json',
-            },
-          ],
         }),
       }),
     );
@@ -1151,17 +1079,6 @@ describe('runProofCheck dts config semantics', () => {
       createPassingFiles({
         'tools/covered.vue':
           '<script setup lang="ts">const value = 1;</script>\n',
-        'tools/tsconfig.dts.json': JSON.stringify({
-          extends: './tsconfig.json',
-          compilerOptions: {
-            composite: true,
-            declaration: true,
-            emitDeclarationOnly: true,
-            noEmit: false,
-            outDir: './.tsbuild',
-            tsBuildInfoFile: './.tsbuild/build.tsbuildinfo',
-          },
-        }),
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
             module: 'ESNext',
@@ -1182,9 +1099,13 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              ...fixture.config.config?.checkers,
+              typescript: {
+                exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+                include: ['packages/pkg/tsconfig.json'],
+                preset: 'tsc',
+              },
               vue: {
-                entry: 'tools/tsconfig.dts.json',
+                include: ['tools/tsconfig.json'],
                 preset: 'vue-tsc',
               },
             },
@@ -1204,17 +1125,6 @@ describe('runProofCheck dts config semantics', () => {
       createPassingFiles({
         'tools/covered.vue':
           '<script setup lang="ts">const value = 1;</script>\n',
-        'tools/tsconfig.dts.json': JSON.stringify({
-          extends: './tsconfig.json',
-          compilerOptions: {
-            composite: true,
-            declaration: true,
-            emitDeclarationOnly: true,
-            noEmit: false,
-            outDir: './.tsbuild',
-            tsBuildInfoFile: './.tsbuild/build.tsbuildinfo',
-          },
-        }),
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
             module: 'ESNext',
@@ -1237,9 +1147,13 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              ...fixture.config.config?.checkers,
+              typescript: {
+                exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+                include: ['packages/pkg/tsconfig.json'],
+                preset: 'tsc',
+              },
               vue: {
-                entry: 'tools/tsconfig.dts.json',
+                include: ['tools/tsconfig.json'],
                 preset: 'vue-tsc',
               },
             },
@@ -1260,17 +1174,6 @@ describe('runProofCheck dts config semantics', () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tools/covered.svelte': '<script>const value = 1;</script>\n',
-        'tools/tsconfig.dts.json': JSON.stringify({
-          extends: './tsconfig.json',
-          compilerOptions: {
-            composite: true,
-            declaration: true,
-            emitDeclarationOnly: true,
-            noEmit: false,
-            outDir: './.tsbuild',
-            tsBuildInfoFile: './.tsbuild/build.tsbuildinfo',
-          },
-        }),
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
             module: 'ESNext',
@@ -1292,9 +1195,13 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              ...fixture.config.config?.checkers,
+              typescript: {
+                exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+                include: ['packages/pkg/tsconfig.json'],
+                preset: 'tsc',
+              },
               svelte: {
-                entry: 'tools/tsconfig.dts.json',
+                include: ['tools/tsconfig.json'],
                 preset: 'svelte-check',
               },
             },
@@ -1317,17 +1224,6 @@ describe('runProofCheck dts config semantics', () => {
           '<script setup lang="ts">import "./helper";</script>\n',
         'tools/helper.ts': 'export const helper = 1;\n',
         'tools/widget.tsx': 'export const widget = <div />;\n',
-        'tools/tsconfig.dts.json': JSON.stringify({
-          extends: './tsconfig.json',
-          compilerOptions: {
-            composite: true,
-            declaration: true,
-            emitDeclarationOnly: true,
-            noEmit: false,
-            outDir: './.tsbuild',
-            tsBuildInfoFile: './.tsbuild/build.tsbuildinfo',
-          },
-        }),
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
             jsx: 'preserve',
@@ -1349,9 +1245,13 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              ...fixture.config.config?.checkers,
+              typescript: {
+                exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+                include: ['packages/pkg/tsconfig.json'],
+                preset: 'tsc',
+              },
               vue: {
-                entry: 'tools/tsconfig.dts.json',
+                include: ['tools/tsconfig.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -1433,13 +1333,13 @@ describe('runProofCheck dts config semantics', () => {
             ...fixture.config.config,
             checkers: {
               typescript: {
+                include: ['packages/pkg/tsconfig.json'],
                 preset: 'tsc',
-                entry: 'tsconfig.custom.build.json',
               },
             },
           },
         }),
-      ).resolves.toBe(true);
+      ).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -1457,7 +1357,7 @@ describe('runProofCheck dts config semantics', () => {
             checkers: {
               typescript: {
                 preset: 'tsc',
-                entry: 'packages/pkg/tsconfig.lib.dts.json',
+                include: ['packages/pkg/tsconfig.json'],
               },
             },
           },

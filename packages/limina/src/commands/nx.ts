@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'pathe';
 import type { ResolvedLiminaConfig } from '../config';
 import type { LiminaFlowReporter } from '../flow';
+import { prepareGeneratedTsconfigGraph } from '../generated-graph';
 import {
   collectImportsFromFile,
   createImportAnalysisContext,
@@ -116,11 +117,15 @@ function createWorkspaceExportsResolutionProfiles(
   }));
 }
 
-function collectNxCheckerProjects(config: ResolvedLiminaConfig): {
+async function collectNxCheckerProjects(config: ResolvedLiminaConfig): Promise<{
   problems: string[];
   projects: ProjectInfo[];
-} {
-  const graphRoute = collectSourceGraphProjectExtensions(config);
+}> {
+  const generatedGraph = await prepareGeneratedTsconfigGraph(config);
+  const graphRoute = collectSourceGraphProjectExtensions(
+    config,
+    generatedGraph,
+  );
   const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
 
   return {
@@ -275,7 +280,7 @@ async function collectWorkspaceExportArtifactDependencies(options: {
   problems: string[];
   workspacePackages: WorkspacePackage[];
 }): Promise<void> {
-  const checkerProjects = collectNxCheckerProjects(options.config);
+  const checkerProjects = await collectNxCheckerProjects(options.config);
 
   options.problems.push(...checkerProjects.problems);
 

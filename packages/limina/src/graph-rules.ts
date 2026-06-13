@@ -201,6 +201,7 @@ function addNormalizedRuleRef(options: {
   index: number;
   label: string;
   problems: string[];
+  projectPathAliases?: Map<string, string>;
   projectPathSet: Set<string>;
   refsByLabel: Map<string, Map<string, GraphRuleRef>>;
   ruleKind: 'allow' | 'deny';
@@ -240,17 +241,20 @@ function addNormalizedRuleRef(options: {
   const refPath = normalizeAbsolutePath(
     path.resolve(options.config.rootDir, pathValue),
   );
+  const normalizedRefPath = options.projectPathSet.has(refPath)
+    ? refPath
+    : options.projectPathAliases?.get(refPath);
 
-  if (!options.projectPathSet.has(refPath)) {
+  if (!normalizedRefPath || !options.projectPathSet.has(normalizedRefPath)) {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.path`,
       `  path: ${pathValue}`,
-      `  reason: ${options.ruleKind}.refs path must point to a project reachable from a checker entry.`,
+      `  reason: ${options.ruleKind}.refs path must point to a source tsconfig or generated declaration project reachable from a checker entry.`,
     ]);
     return;
   }
 
-  if (!isDtsProjectConfig(refPath)) {
+  if (!isDtsProjectConfig(normalizedRefPath)) {
     addRuleEntryConfigProblem(options.problems, [
       `  field: ${field}.path`,
       `  path: ${pathValue}`,
@@ -261,8 +265,8 @@ function addNormalizedRuleRef(options: {
 
   const refs = options.refsByLabel.get(options.label) ?? new Map();
 
-  refs.set(refPath, {
-    path: refPath,
+  refs.set(normalizedRefPath, {
+    path: normalizedRefPath,
     reason: reasonValue.trim(),
   });
   options.refsByLabel.set(options.label, refs);
@@ -338,6 +342,7 @@ export function normalizeGraphRules(options: {
   include?: GraphRuleKindSelection;
   packages: WorkspacePackage[];
   problems: string[];
+  projectPathAliases?: Map<string, string>;
   projectPaths: string[];
 }): NormalizedGraphRules {
   const allowRefsByLabel = new Map<string, Map<string, GraphRuleRefAllow>>();
@@ -391,6 +396,7 @@ export function normalizeGraphRules(options: {
             index,
             label,
             problems: options.problems,
+            projectPathAliases: options.projectPathAliases,
             projectPathSet,
             refsByLabel,
             ruleKind: 'deny',
@@ -476,6 +482,7 @@ export function normalizeGraphRules(options: {
             index,
             label,
             problems: options.problems,
+            projectPathAliases: options.projectPathAliases,
             projectPathSet,
             refsByLabel: allowRefsByLabel,
             ruleKind: 'allow',

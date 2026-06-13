@@ -299,7 +299,15 @@ export function createFileOwnerLookup(
   const ownerLookup = new Map<string, string[]>();
 
   for (const project of projects) {
+    const ownerRootDir = project.options.rootDir
+      ? normalizeAbsolutePath(project.options.rootDir)
+      : path.dirname(project.configPath);
+
     for (const fileName of project.fileNames) {
+      if (!isPathInsideDirectory(fileName, ownerRootDir)) {
+        continue;
+      }
+
       const owners = ownerLookup.get(fileName) ?? [];
 
       owners.push(project.configPath);

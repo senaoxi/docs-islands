@@ -44,7 +44,8 @@ export default defineConfig(({ mode }) => ({
     checkers: {
       typescript: {
         preset: 'tsc',
-        entry: 'tsconfig.build.json',
+        include: ['packages/**/tsconfig*.json'],
+        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
       },
     },
   },
@@ -53,7 +54,7 @@ export default defineConfig(({ mode }) => ({
 
 Regardless of strict mode, graph check validates workspace package exports through the active checker profiles: public exports must resolve, and source-owned workspace imports must have matching project references.
 
-In strict mode, the existing command surface stays the same, but `graph:check`, `source:check`, `proof:check`, `package:check`, and `release:check` enforce extra modeling constraints. Typecheck leaves must have same-named declaration leaves, declaration leaves must extend their companions and keep the same file set except for declaration/build output options, build graph configs may only reference build aggregators or declaration leaves, source ownership must stay under the nearest `package.json`, and built or packed package manifests must not expose `workspace:`, `link:`, `file:`, or `catalog:` dependency specifiers.
+In strict mode, the existing command surface stays the same, but `graph:check`, `source:check`, `proof:check`, `package:check`, and `release:check` enforce extra modeling constraints. Checker includes must resolve to ordinary source tsconfigs, generated declaration coverage must uniquely own source files, source ownership must stay under the nearest `package.json`, and built or packed package manifests must not expose `workspace:`, `link:`, `file:`, or `catalog:` dependency specifiers.
 
 ## mode
 
@@ -118,7 +119,8 @@ export default defineConfig(({ command }) => ({
     checkers: {
       typescript: {
         preset: 'tsc',
-        entry: 'tsconfig.build.json',
+        include: ['packages/**/tsconfig*.json'],
+        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
       },
     },
   },

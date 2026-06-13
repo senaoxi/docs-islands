@@ -13,8 +13,8 @@
     "link-guard": "./bin/link-guard.js"
   },
   "scripts": {
-    "build": "del-cli dist && tsc -b ./tsconfig.build.json",
-    "build:watch": "tsc -b ./tsconfig.lib.dts.json -w",
+    "build": "del-cli dist && tsc -p ./tsconfig.lib.json --rootDir . --outDir ./dist --noEmit false --incremental true --declaration true --declarationMap true --emitDeclarationOnly false --tsBuildInfoFile ./dist/.tsbuildinfo && tsc -p ./tsconfig.tools.json --rootDir . --outDir ./dist --noEmit false --incremental true --declaration true --declarationMap true --emitDeclarationOnly false --tsBuildInfoFile ./dist/tools.tsbuildinfo",
+    "build:watch": "tsc -p ./tsconfig.lib.json --rootDir . --outDir ./dist --noEmit false --incremental true --declaration true --declarationMap true --emitDeclarationOnly false --tsBuildInfoFile ./dist/.tsbuildinfo -w",
     "test": "vitest run",
     "typecheck": "limina checker build",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",

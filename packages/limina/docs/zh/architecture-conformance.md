@@ -75,10 +75,10 @@ Limina 会先按照当前检查器配置预解析导出。如果 `@acme/core/run
 import { createClient } from '@acme/core';
 ```
 
-如果 TypeScript 把这个入口解析到 `packages/core/src/index.ts`，且这个文件由 `packages/core/tsconfig.lib.dts.json` 管辖，那么 app 的声明叶子必须引用 core：
+如果 TypeScript 把这个入口解析到 `packages/core/src/index.ts`，且这个文件由 `packages/core/tsconfig.lib.json` 管辖，那么 Limina 生成的 app 声明叶子必须引用生成的 core 声明叶子：
 
 ```jsonc
-// packages/app/tsconfig.lib.dts.json
+// .limina/tsconfig/checkers/typescript/packages/app/tsconfig.lib.dts.json
 {
   "references": [{ "path": "../core/tsconfig.lib.dts.json" }],
 }
@@ -106,8 +106,8 @@ import { renderRuntime } from '@acme/core/runtime';
 
 修复方式取决于失败发生在哪一层：
 
-- 如果导出预解析失败，修 `exports` target、condition 顺序、检查器入口，或补齐缺失的构建产物。
-- 如果实际消费了源码入口，但声明叶子缺引用，补上引用或运行 `limina graph sync`。
+- 如果导出预解析失败，修 `exports` target、condition 顺序、`checker.include`，或补齐缺失的构建产物。
+- 如果实际消费了源码入口，但生成声明图缺边，确认两端源码 tsconfig 都被 `checker.include` 选中，然后运行 `limina graph prepare`。
 - 如果通过 `workspace:*` 消费了产物入口，但 Nx `dependsOn` 过期，运行 `limina nx sync`。
 - 如果产物导出所属包没有 `scripts.build`，补构建目标，或不要把这个入口作为构建产物暴露。
 
@@ -151,12 +151,11 @@ limina 更推荐拆开：
 packages/app/
   tsconfig.json
   tsconfig.lib.json
-  tsconfig.lib.dts.json
   tsconfig.test.json
-  tsconfig.test.dts.json
   tsconfig.tools.json
-  tsconfig.tools.dts.json
 ```
+
+Limina 会把这些源码配置镜像成 `.limina/tsconfig/checkers/<checker>/...` 下的生成声明叶子。
 
 单环境目录中，`tsconfig.json` 可以直接是叶子：
 
@@ -215,13 +214,13 @@ export function loadConfig() {
 limina 用标签表达架构边界。
 
 ```jsonc
-// packages/app/src/client/tsconfig.dts.json
+// packages/app/src/client/tsconfig.json
 {
   "liminaOptions": {
     "graphRules": ["runtime-client"],
   },
-  "extends": ["./tsconfig.json", "../../../tsconfig.dts.base.json"],
-  "references": [],
+  "extends": "../../../tsconfig.base.json",
+  "include": ["./**/*.ts"],
 }
 ```
 
@@ -253,7 +252,7 @@ export default defineConfig({
 ```text
 Denied graph access:
   rules: runtime-client
-  importing project: packages/app/src/client/tsconfig.dts.json
+  importing project: packages/app/src/client/tsconfig.json
   file: packages/app/src/client/runtime.ts:1
   imported specifier: node:fs
   denied dependency: node:*
@@ -280,11 +279,11 @@ Denied graph access:
 
 ```text
 packages/core/src/index.ts
-packages/core/tsconfig.lib.dts.json
-packages/core/tsconfig.tools.dts.json
+packages/core/tsconfig.lib.json
+packages/core/tsconfig.tools.json
 ```
 
-两个 dts 配置都 include 了同一个文件：
+两个源码配置都 include 了同一个文件：
 
 ```jsonc
 {
@@ -292,7 +291,7 @@ packages/core/tsconfig.tools.dts.json
 }
 ```
 
-这样 `src/index.ts` 同时属于 lib 声明图和 tools 声明图。
+这样 `src/index.ts` 会同时属于生成的 lib 声明图和生成的 tools 声明图。
 
 这会导致几个问题：
 
@@ -301,14 +300,14 @@ packages/core/tsconfig.tools.dts.json
 3. 项目引用图中无法判断谁才是这个文件的归属方。
 4. 运行时边界标签可能冲突。
 
-limina 会认为一个检查器图文件必须只有一个声明归属方。
+limina 要求同一检查器下的每个图文件只能有一个源码 tsconfig 归属方。
 
 ### 修复方式
 
-让不同叶子拥有不同文件集合：
+让不同源码配置拥有不同文件集合：
 
 ```jsonc
-// tsconfig.lib.dts.json
+// tsconfig.lib.json
 {
   "include": ["src/**/*.ts"],
   "exclude": ["src/tools/**"],
@@ -316,7 +315,7 @@ limina 会认为一个检查器图文件必须只有一个声明归属方。
 ```
 
 ```jsonc
-// tsconfig.tools.dts.json
+// tsconfig.tools.json
 {
   "include": ["src/tools/**/*.ts"],
 }
@@ -330,7 +329,7 @@ src/
   tools/
 ```
 
-让每个声明叶子的边界更自然。
+让每个生成声明叶子的边界更自然。
 
 ## 把它们串起来
 
@@ -372,7 +371,7 @@ built package outputs consumed by users
 | `workspace:*` 导入解析到 `dist` 但没有 Nx 边 | 产物入口已被消费，但缺少必要构建依赖        |
 | 跨包相对导入                                 | 绕开包导出和包归属方边界                    |
 | 项目引用跨包但没有 `workspace:*`             | TS 图声明了源码依赖，但包图没有             |
-| dts 叶子没有本地配套配置                     | 声明产出没有严格类型检查证明                |
+| 生成声明叶子没有源码配置                     | 声明产出没有严格类型检查证明                |
 | 源码文件没被任何检查器覆盖                   | CI 绿不代表文件被检查                       |
 | 浏览器运行时导入 `node:fs`                   | 运行时边界被破坏                            |
 | dist 清单 exports/types 错误                 | 源码健康但发布产物不健康                    |

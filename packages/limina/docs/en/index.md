@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Limina
-  text: Architecture governance for TypeScript monorepos
-  tagline: Keep workspace exports, project references, package boundaries, Nx build edges, and published output telling the same story — caught in review and CI, not after release.
+  text: Project reference graph compiler and architecture governance CLI
+  tagline: Make your TypeScript build graph reflect architecture, not incidental imports.
   image:
     src: /logo.svg
     alt: Limina
@@ -20,34 +20,44 @@ hero:
       link: https://github.com/senaoxi/docs-islands/tree/main/packages/limina
 
 features:
-  - icon: 🔗
-    title: See the real dependency graph
-    details: When a PR adds a cross-package import, know whether it needs a project reference, a workspace dependency, an artifact build edge, or an architecture-rule change — before the graphs drift.
-    link: /built-in-tasks
-    linkText: Built-in tasks
-  - icon: 🚧
-    title: Keep packages in their lanes
-    details: "Every cross-package edge must resolve through a declared dependency and the owner's public exports. Limina flags cross-package relative imports, undeclared dependencies, escaping #imports, mixed-owner tsconfigs, unused workspace dependencies and dead source modules, and — in strict mode — cross-package dependencies that skip the workspace: protocol."
-    link: /built-in-tasks
-    linkText: Source checks
-  - icon: ✅
-    title: Prove every file is checked
-    details: Connect declaration leaves to strict local companions and framework checkers like vue-tsc and svelte-check, then prove no source file slips past every checker.
+  - icon: 🧭
+    title: Zero-config project graph discovery
+    details: Discover project boundaries from existing workspaces, tsconfig files, and source imports, then infer the actual project dependency graph so regular TypeScript monorepos can adopt type graph governance directly.
+    link: /getting-started
+    linkText: Get started
+  - icon: 🕸️
+    title: Generate type graphs automatically
+    details: Generate dedicated type-check graphs for TypeScript, Vue, Svelte, and other checkers, allowing different stacks to build, check, and diagnose under one unified model.
     link: /config/checkers
-    linkText: Checker entries
+    linkText: Configure checkers
+  - icon: 🧱
+    title: Govern project references
+    details: Detect missing references, illegal dependencies, cross-runtime calls, and architecture rule violations to ensure project relationships match declared boundaries.
+    link: /built-in-tasks
+    linkText: View graph checks
+  - icon: 🛡️
+    title: Protect package boundaries
+    details: Block cross-package relative imports, missing dependencies, private entry escapes, and internal dependencies that bypass workspace protocols, ensuring each package is accessed only through public entry points.
+    link: /built-in-tasks
+    linkText: View source checks
+  - icon: 🎯
+    title: Verify check coverage
+    details: Align source files with TypeScript, Vue, Svelte, test, tools, docs, and other check scopes to find uncovered files, duplicate coverage, or files assigned to the wrong project graph.
+    link: /config/checkers
+    linkText: Configure coverage
   - icon: 📦
-    title: Ship what consumers install
-    details: Inspect the dist a consumer actually installs — package metadata, exports, and type resolution — with publint, Are the Types Wrong, and a runtime import boundary scan.
+    title: Validate published artifacts
+    details: Inspect the npm tarball consumers actually install, and verify that package metadata, exports, types, runtime entries, and type resolution stay consistent.
     link: /config/package-checks
-    linkText: Package checks
-  - icon: 🚀
-    title: Publish with confidence
-    details: Pack the npm tarball and check publish hygiene — required README and license files, no shipped source maps, and content compared against the npm registry baseline.
+    linkText: Configure package checks
+  - icon: 🚦
+    title: Catch release risks early
+    details: Check README, license, bundled files, missing files, source maps, and registry baseline differences before publishing to confirm the release contents match expectations.
     link: /config/release-checks
-    linkText: Release checks
+    linkText: Configure release checks
   - icon: 🧩
-    title: Compose checks into pipelines
-    details: Combine Limina tasks and shell commands into named local, PR, and publish workflows. Limina complements task runners like Nx and Turborepo rather than replacing them.
+    title: Fit into existing workflows
+    details: Integrate with local development, PR, CI, and release pipelines, and work alongside task runners such as Nx and Turborepo so type graph governance becomes part of your existing toolchain.
     link: /workflows
-    linkText: Workflows
+    linkText: Configure workflows
 ---

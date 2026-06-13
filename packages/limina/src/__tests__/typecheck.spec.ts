@@ -100,15 +100,15 @@ function createLiminaConfig(rootDir: string): ResolvedLiminaConfig {
     config: {
       checkers: {
         svelte: {
-          entry: 'tsconfig.svelte.build.json',
+          include: ['tsconfig.svelte.json'],
           preset: 'svelte-check',
         },
         typescript: {
-          entry: 'tsconfig.build.json',
+          include: ['tsconfig.json'],
           preset: 'tsc',
         },
         vue: {
-          entry: 'tsconfig.vue.build.json',
+          include: ['tsconfig.vue.json'],
           preset: 'vue-tsc',
         },
       },
@@ -137,8 +137,18 @@ describe('runCheckerBuild', () => {
       expect(result.passed).toBe(true);
       expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
       expect(calls.map((target) => target.args)).toEqual([
-        ['-b', 'tsconfig.build.json', '--pretty', 'false'],
-        ['-b', 'tsconfig.vue.build.json', '--pretty', 'false'],
+        [
+          '-b',
+          '.limina/tsconfig/checkers/typescript/tsconfig.build.json',
+          '--pretty',
+          'false',
+        ],
+        [
+          '-b',
+          '.limina/tsconfig/checkers/vue/tsconfig.build.json',
+          '--pretty',
+          'false',
+        ],
       ]);
     } finally {
       await fixture.cleanup();
@@ -157,7 +167,7 @@ describe('runCheckerBuild', () => {
           config: {
             checkers: {
               nativeTypescript: {
-                entry: 'tsconfig.build.json',
+                include: ['tsconfig.json'],
                 preset: 'tsgo',
               },
             },
@@ -172,10 +182,15 @@ describe('runCheckerBuild', () => {
       expect(result.passed).toBe(true);
       expect(calls.map((target) => target.command)).toEqual(['tsgo']);
       expect(calls.map((target) => target.args)).toEqual([
-        ['-b', 'tsconfig.build.json', '--pretty', 'false'],
+        [
+          '-b',
+          '.limina/tsconfig/checkers/nativeTypescript/tsconfig.build.json',
+          '--pretty',
+          'false',
+        ],
       ]);
       expect(calls.map((target) => target.label)).toEqual([
-        'tsgo -b tsconfig.build.json',
+        'tsgo -b .limina/tsconfig/checkers/nativeTypescript/tsconfig.build.json',
       ]);
     } finally {
       await fixture.cleanup();
@@ -194,7 +209,7 @@ describe('runCheckerBuild', () => {
           config: {
             checkers: {
               vue: {
-                entry: 'tsconfig.vue.build.json',
+                include: ['tsconfig.vue.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -233,11 +248,11 @@ describe('runCheckerBuild', () => {
           config: {
             checkers: {
               typescript: {
-                entry: 'tsconfig.build.json',
+                include: ['tsconfig.json'],
                 preset: 'tsc',
               },
               vue: {
-                entry: 'tsconfig.vue.build.json',
+                include: ['tsconfig.vue.json'],
                 preset: 'vue-tsc',
               },
             },
@@ -277,7 +292,7 @@ describe('runCheckerBuild', () => {
           config: {
             checkers: {
               nativeTypescript: {
-                entry: 'tsconfig.build.json',
+                include: ['tsconfig.json'],
                 preset: 'tsgo',
               },
             },
@@ -345,7 +360,7 @@ describe('runCheckerTypecheck', () => {
       expect(result.passed).toBe(true);
       expect(calls.map((target) => target.command)).toEqual(['svelte-check']);
       expect(calls.map((target) => target.args)).toEqual([
-        ['--tsconfig', 'tsconfig.svelte.build.json'],
+        ['--tsconfig', '.limina/tsconfig/checkers/svelte/tsconfig.build.json'],
       ]);
     } finally {
       await fixture.cleanup();
@@ -364,7 +379,7 @@ describe('runCheckerTypecheck', () => {
           config: {
             checkers: {
               vue: {
-                entry: 'tsconfig.vue.build.json',
+                include: ['tsconfig.vue.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -379,10 +394,10 @@ describe('runCheckerTypecheck', () => {
       expect(result.passed).toBe(true);
       expect(calls.map((target) => target.command)).toEqual(['vue-tsgo']);
       expect(calls.map((target) => target.args)).toEqual([
-        ['--project', 'tsconfig.vue.build.json'],
+        ['--project', '.limina/tsconfig/checkers/vue/tsconfig.build.json'],
       ]);
       expect(calls.map((target) => target.label)).toEqual([
-        'vue: vue-tsgo --project tsconfig.vue.build.json',
+        'vue: vue-tsgo --project .limina/tsconfig/checkers/vue/tsconfig.build.json',
       ]);
     } finally {
       await fixture.cleanup();
@@ -406,7 +421,7 @@ describe('runCheckerTypecheck', () => {
           config: {
             checkers: {
               vue: {
-                entry: 'tsconfig.vue.build.json',
+                include: ['tsconfig.vue.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -479,7 +494,7 @@ describe('runCheckerTypecheck', () => {
           config: {
             checkers: {
               vue: {
-                entry: 'tsconfig.vue.build.json',
+                include: ['tsconfig.vue.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -514,11 +529,11 @@ describe('runCheckerTypecheck', () => {
           config: {
             checkers: {
               typescript: {
-                entry: 'tsconfig.build.json',
+                include: ['tsconfig.json'],
                 preset: 'tsc',
               },
               vue: {
-                entry: 'tsconfig.vue.build.json',
+                include: ['tsconfig.vue.json'],
                 preset: 'vue-tsc',
               },
             },

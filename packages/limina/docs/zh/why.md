@@ -58,7 +58,7 @@ limina 更像：
 
 Limina 会从检查器入口出发，读取可达项目，用 TypeScript 解析真实导入，然后报告缺失或禁止的引用。它也支持基于标签的规则，例如禁止浏览器运行时项目访问仅 Node 项目或仅 Node 依赖。
 
-例如：`@acme/app` 在源码里导入了 `@acme/core`，但 `packages/app/tsconfig.lib.dts.json` 没有引用 `packages/core/tsconfig.lib.dts.json`。Limina 会指出导入文件、当前引用和应该补上的边。修完后，`tsc -b`、编辑器和 CI 看到的是同一张依赖图。
+例如：`@acme/app` 在源码里导入了 `@acme/core`，但 `.limina/` 下生成的 app 声明叶子没有引用生成的 core 声明叶子。Limina 会指出导入文件，把生成项目映射回源码 tsconfig，并报告应该补上的边。运行 `limina graph prepare` 后，`tsc -b`、编辑器和 CI 看到的是同一张依赖图。
 
 ## 工作区依赖需要明确语义
 

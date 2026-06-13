@@ -1,6 +1,6 @@
 # 条件域
 
-`graph.conditionDomains` 用来说明：某个真实入口应该按哪一组条件去解析依赖。Limina 会从入口项目自动展开 `references`，并检查所有可达的 `tsconfig*.dts.json` 项目是否都使用配置中声明的 `compilerOptions.customConditions`。
+`graph.conditionDomains` 用来说明：某个真实源码入口应该按哪一组条件去解析依赖。Limina 会通过生成 manifest 把源码 tsconfig 映射到生成声明项目，自动展开生成声明引用，并检查所有可达的生成声明项目是否都使用配置中声明的 `compilerOptions.customConditions`。
 
 ```js
 import { defineConfig } from 'limina';
@@ -10,12 +10,12 @@ export default defineConfig({
     conditionDomains: [
       {
         name: 'web',
-        entry: 'apps/web/tsconfig.dts.json',
+        entry: 'apps/web/tsconfig.json',
         customConditions: ['browser', 'source'],
       },
       {
         name: 'node',
-        entry: 'apps/node/tsconfig.dts.json',
+        entry: 'apps/node/tsconfig.json',
         customConditions: ['node', 'source'],
       },
     ],
@@ -35,7 +35,7 @@ export default defineConfig({
 
 - **类型：** `Array<{ name: string; entry: string; customConditions: string[] }>`
 
-`entry` 必须指向启用的检查入口可达的 `tsconfig*.dts.json` 项目。`tsconfig.build.json` 这类构建聚合器不能作为条件域入口，因为条件域描述的是一棵具体的声明引用树。
+`entry` 应该指向被启用检查器选中的普通源码 tsconfig。生成的 `.limina/tsconfig/checkers/.../*.dts.json` 路径仍可作为兼容输入，但推荐写源码路径。`tsconfig.build.json` 这类构建聚合器不能作为条件域入口，因为条件域描述的是一棵具体的生成声明引用树。
 
 即使没有显式配置 `conditionDomains`，Limina 也会运行默认检查：每个受治理的声明项目，以及从它的 `references` 可达的所有声明项目，都必须拥有相同的有效 `customConditions`。显式配置 `conditionDomains` 后，你还可以把真实入口期望的条件集合写出来，让 Limina 一起校验。
 
@@ -47,12 +47,12 @@ export default defineConfig({
 
 ## 治理方式
 
-Limina 会先从启用的检查入口收集所有受治理的 `tsconfig*.dts.json` 项目。默认检查会从每个声明项目出发，沿 `references` 展开声明子树，并要求整棵子树的有效 `customConditions` 一致。
+Limina 会先 prepare 生成图，并从启用的检查器入口收集所有受治理的生成声明项目。默认检查会从每个声明项目出发，沿 `references` 展开声明子树，并要求整棵子树的有效 `customConditions` 一致。
 
 配置了 `conditionDomains` 后，Limina 还会对每个条件域做额外校验：
 
 - `name` 和 `entry` 必须是非空字符串，`customConditions` 必须是字符串数组。
-- `entry` 必须是工作区根相对路径，留在工作区内，指向存在的 `tsconfig*.dts.json`。
+- `entry` 必须是工作区根相对路径，留在工作区内，指向存在的源码 tsconfig 或生成声明项目。
 - `entry` 必须已经被启用的检查入口管辖；条件域不会把未纳入检查器的项目临时加入图中。
 - Limina 会展开 `entry` 的声明引用子树，并复用默认的一致性检查。
 - `entry` 项目的有效 `compilerOptions.customConditions` 必须等于条件域声明的 `customConditions`。

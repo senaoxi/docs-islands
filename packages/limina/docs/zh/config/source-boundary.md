@@ -66,7 +66,6 @@ export const runtimeName = 'core';
 packages/core/
   src/index.ts
   src/generated/runtime.ts
-  tsconfig.lib.dts.json
   tsconfig.lib.json
 ```
 

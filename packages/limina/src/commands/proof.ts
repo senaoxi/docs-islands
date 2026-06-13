@@ -18,6 +18,8 @@ import {
   type ResolvedLiminaConfig,
 } from '../config';
 import type { LiminaFlowReporter } from '../flow';
+import type { GeneratedTsconfigGraphResult } from '../generated-graph';
+import { prepareGeneratedTsconfigGraph } from '../generated-graph';
 import { clearCliScreen, formatErrorMessage, ProofLogger } from '../logger';
 import {
   type CheckerGraphProjectRoute,
@@ -30,12 +32,11 @@ import {
   isDtsConfigPath,
   isOrdinaryTypecheckConfigPath,
   type JsonObject,
-  parseProjectFileNamesForExtensions,
   readJsonConfig,
-  resolveProjectConfigPath,
   resolveReferencePath,
 } from '../tsconfig';
 import {
+  isPathInsideDirectory,
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
@@ -343,12 +344,23 @@ async function collectExpectedSourceFiles(
 
 function collectCheckerCoverageTargets(
   config: ResolvedLiminaConfig,
+  generatedGraph: GeneratedTsconfigGraphResult,
 ): CheckerCoverageTargetCollection {
   const problems: string[] = [];
   const targets: CheckerCoverageTarget[] = [];
 
   for (const checker of getActiveCheckers(config)) {
-    const configPath = resolveProjectConfigPath(config.rootDir, checker.entry);
+    const configPath = generatedGraph.checkerEntries.get(checker.name);
+
+    if (!configPath) {
+      problems.push(
+        [
+          'Checker proof entry is missing a generated tsconfig:',
+          `  checker: ${checker.name}`,
+        ].join('\n'),
+      );
+      continue;
+    }
 
     if (!existsSync(configPath)) {
       problems.push(
@@ -487,6 +499,26 @@ function parseProjectCoverageFileNames(options: {
   }).fileNames;
 }
 
+function parseProjectCoverage(options: {
+  config: ResolvedLiminaConfig;
+  configPath: string;
+  context: CheckerProjectParseContext;
+}): { fileNames: string[]; ownerRootDir: string } {
+  const parsed = parseCheckerProjectConfigForContext({
+    configPath: options.configPath,
+    context: options.context,
+    projectRootDir: options.config.rootDir,
+  });
+  const ownerRootDir = parsed.options.rootDir
+    ? normalizeAbsolutePath(parsed.options.rootDir)
+    : path.dirname(options.configPath);
+
+  return {
+    fileNames: parsed.fileNames,
+    ownerRootDir,
+  };
+}
+
 function collectCoverage(options: {
   config: ResolvedLiminaConfig;
   graphRoutes: CheckerGraphProjectRoute[];
@@ -505,11 +537,17 @@ function collectCoverage(options: {
         preset: route.checkerPreset,
       });
 
-      for (const filePath of parseProjectCoverageFileNames({
+      const projectCoverage = parseProjectCoverage({
         config: options.config,
         configPath: graphProjectPath,
         context: projectContext,
-      })) {
+      });
+
+      for (const filePath of projectCoverage.fileNames) {
+        if (!isPathInsideDirectory(filePath, projectCoverage.ownerRootDir)) {
+          continue;
+        }
+
         const coverageSource: CoverageSource = {
           label: toRelativePath(options.config.rootDir, graphProjectPath),
           type: 'graph',
@@ -770,17 +808,6 @@ function addDtsConfigSemanticProblems(options: {
   }
 }
 
-function getDtsConfigPathForTypecheckConfig(configPath: string): string {
-  const directory = path.dirname(configPath);
-  const fileName = path.basename(configPath);
-  const dtsFileName =
-    fileName === 'tsconfig.json'
-      ? 'tsconfig.dts.json'
-      : fileName.replace(/\.json$/u, '.dts.json');
-
-  return normalizeAbsolutePath(path.join(directory, dtsFileName));
-}
-
 function isDefaultTypecheckAggregator(configObject: JsonObject): boolean {
   return Object.hasOwn(configObject, 'references');
 }
@@ -882,10 +909,12 @@ function addDtsConfigProblems(options: {
     if (!options.graphProjectPaths.has(configPath)) {
       options.problems.push(
         [
-          'DTS config is not reachable from any checker entry:',
+          'Source-level DTS config is no longer supported:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
+          '  reason: Limina now generates declaration configs under .limina from checker.include source tsconfigs.',
         ].join('\n'),
       );
+      continue;
     }
 
     const localConfigPath = getDtsCompanionConfigPath(configPath);
@@ -974,7 +1003,12 @@ function addPureAggregatorProblems(options: {
   role: 'build graph' | 'tsconfig.json';
 }): void {
   const roleLabel = formatConfigRole(options.role);
-  const allowedKeys = new Set(['$schema', 'files', 'references']);
+  const allowedKeys = new Set([
+    '$schema',
+    'files',
+    'liminaOptions',
+    'references',
+  ]);
   const extraKeys = Object.keys(options.configObject).filter(
     (key) => !allowedKeys.has(key),
   );
@@ -1019,6 +1053,17 @@ function addBuildGraphConfigProblems(options: {
 }): void {
   for (const configPath of options.buildGraphConfigPaths) {
     const configObject = readJsonConfig(options.config, configPath);
+
+    if (!configPath.includes('/.limina/')) {
+      options.problems.push(
+        [
+          'Source-level build graph config is no longer supported:',
+          `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
+          '  reason: Limina now generates checker build aggregators under .limina from checker.include source tsconfigs.',
+        ].join('\n'),
+      );
+      continue;
+    }
 
     addPureAggregatorProblems({
       config: options.config,
@@ -1201,11 +1246,17 @@ function collectConfigFileOwners(
         preset: route.checkerPreset,
       });
 
-      for (const filePath of parseProjectFileNamesForExtensions(
+      const projectCoverage = parseProjectCoverage({
         config,
         configPath,
-        projectContext,
-      )) {
+        context: projectContext,
+      });
+
+      for (const filePath of projectCoverage.fileNames) {
+        if (!isPathInsideDirectory(filePath, projectCoverage.ownerRootDir)) {
+          continue;
+        }
+
         if (!sourceFiles.has(filePath)) {
           continue;
         }
@@ -1272,39 +1323,6 @@ function addDuplicateGraphCoverageProblems(options: {
         ].join('\n'),
       );
     }
-  }
-}
-
-function addStrictOrdinaryTypecheckCompanionProblems(options: {
-  config: ResolvedLiminaConfig;
-  ordinaryConfigPaths: string[];
-  problems: string[];
-}): void {
-  for (const configPath of options.ordinaryConfigPaths) {
-    const configObject = readJsonConfig(options.config, configPath);
-
-    if (
-      path.basename(configPath) === 'tsconfig.json' &&
-      isDefaultTypecheckAggregator(configObject)
-    ) {
-      continue;
-    }
-
-    const expectedDtsConfigPath =
-      getDtsConfigPathForTypecheckConfig(configPath);
-
-    if (existsSync(expectedDtsConfigPath)) {
-      continue;
-    }
-
-    options.problems.push(
-      [
-        'Strict mode typecheck config is missing its declaration leaf:',
-        `  typecheck config: ${toRelativePath(options.config.rootDir, configPath)}`,
-        `  expected declaration leaf: ${toRelativePath(options.config.rootDir, expectedDtsConfigPath)}`,
-        '  reason: strict: true requires every tsconfig*.json typecheck leaf to have a same-named tsconfig*.dts.json build leaf.',
-      ].join('\n'),
-    );
   }
 }
 
@@ -1481,8 +1499,15 @@ async function runProofCheckInternal(
   options: { logSuccess?: boolean } = {},
 ): Promise<boolean> {
   const problems: string[] = [];
-  const graphRouteCollection = collectGraphProjectRoutes(config);
-  const entryRouteCollection = collectCheckerEntryProjectRoutes(config);
+  const generatedGraph = await prepareGeneratedTsconfigGraph(config);
+  const graphRouteCollection = collectGraphProjectRoutes(
+    config,
+    generatedGraph,
+  );
+  const entryRouteCollection = collectCheckerEntryProjectRoutes(
+    config,
+    generatedGraph,
+  );
   const entryProjectPaths = [
     ...new Set(
       entryRouteCollection.routes.flatMap((route) => route.projectPaths),
@@ -1528,11 +1553,6 @@ async function runProofCheckInternal(
   });
 
   if (isStrictConfig(config)) {
-    addStrictOrdinaryTypecheckCompanionProblems({
-      config,
-      ordinaryConfigPaths: ordinaryTypecheckConfigPaths,
-      problems,
-    });
     addStrictDuplicateTypecheckOwnershipProblems({
       config,
       ordinaryConfigPaths: ordinaryTypecheckConfigPaths,
@@ -1545,7 +1565,10 @@ async function runProofCheckInternal(
     return false;
   }
 
-  const checkerTargetCollection = collectCheckerCoverageTargets(config);
+  const checkerTargetCollection = collectCheckerCoverageTargets(
+    config,
+    generatedGraph,
+  );
   const checkerTargets = checkerTargetCollection.targets;
 
   problems.push(...checkerTargetCollection.problems);

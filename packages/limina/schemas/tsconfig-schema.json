@@ -35,6 +35,18 @@
           "items": {
             "$ref": "#/definitions/nonEmptyString"
           }
+        },
+        "generated": {
+          "type": "boolean",
+          "description": "Internal Limina marker for generated tsconfig files."
+        },
+        "checker": {
+          "$ref": "#/definitions/nonEmptyString",
+          "description": "Internal Limina checker name for generated tsconfig files."
+        },
+        "sourceConfig": {
+          "$ref": "#/definitions/nonEmptyString",
+          "description": "Internal Limina source config pointer for generated declaration configs."
         }
       }
     }

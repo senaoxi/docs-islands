@@ -1098,27 +1098,12 @@ export function getCheckerExtensions(
 
   if (adapter) {
     if (isVueCheckerPreset(checker.preset)) {
-      if (!options.projectRootDir) {
-        throw new Error(
-          [
-            'Unable to resolve Vue checker extensions:',
-            `  preset: ${checker.preset}`,
-            '  reason: Vue checker extensions must be read from the checker API and require a resolved project root.',
-          ].join('\n'),
-        );
-      }
-
-      return adapter.extensions({
-        configPath: normalizeAbsolutePath(
-          path.resolve(options.projectRootDir, checker.entry),
-        ),
-        projectRootDir: options.projectRootDir,
-      });
+      return normalizeExtensions([...getTypeScriptCheckerExtensions(), '.vue']);
     }
 
     return adapter.extensions({
       configPath: normalizeAbsolutePath(
-        path.resolve(options.projectRootDir ?? '', checker.entry),
+        path.resolve(options.projectRootDir ?? '', 'tsconfig.json'),
       ),
       projectRootDir: options.projectRootDir ?? '',
     });
@@ -1139,10 +1124,11 @@ export function getResolvedCheckers(config: {
 
   return Object.entries(checkers)
     .map(([name, checker]) => ({
-      entry: checker.entry.trim(),
+      exclude: (checker.exclude ?? []).map((value) => value.trim()),
       extensions: getCheckerExtensions(checker, {
         projectRootDir: config.rootDir,
       }),
+      include: checker.include.map((value) => value.trim()),
       name,
       preset: checker.preset,
     }))

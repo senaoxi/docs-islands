@@ -17,11 +17,9 @@ import {
   type ResolvedLiminaConfig,
 } from '../config';
 import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
+import { prepareGeneratedTsconfigGraph } from '../generated-graph';
 import { clearCliScreen, formatErrorMessage, TypecheckLogger } from '../logger';
-import {
-  collectGraphProjectRouteFromRoot,
-  resolveProjectConfigPath,
-} from '../tsconfig';
+import { collectGraphProjectRouteFromRoot } from '../tsconfig';
 import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
 export interface TypecheckTarget {
@@ -329,6 +327,7 @@ async function runCheckerBuildInternal(
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
   const allCheckers = getActiveCheckers(options.config);
+  const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
   const checkers = getExecutionCheckers({
     checkers: allCheckers,
     executionKind: 'build',
@@ -355,7 +354,11 @@ async function runCheckerBuildInternal(
   }
 
   const targets = checkers.flatMap((checker) => {
-    const configPath = resolveProjectConfigPath(projectRootDir, checker.entry);
+    const configPath = generatedGraph.checkerEntries.get(checker.name);
+
+    if (!configPath) {
+      throw new Error(`Missing generated entry for checker "${checker.name}".`);
+    }
 
     rootConfigPaths.push(configPath);
 
@@ -499,6 +502,7 @@ async function runCheckerTypecheckInternal(
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
   const allCheckers = getActiveCheckers(options.config);
+  const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
   const checkers = getExecutionCheckers({
     checkers: allCheckers,
     executionKind: 'typecheck',
@@ -525,7 +529,11 @@ async function runCheckerTypecheckInternal(
   }
 
   const targets = checkers.map((checker) => {
-    const configPath = resolveProjectConfigPath(projectRootDir, checker.entry);
+    const configPath = generatedGraph.checkerEntries.get(checker.name);
+
+    if (!configPath) {
+      throw new Error(`Missing generated entry for checker "${checker.name}".`);
+    }
 
     rootConfigPaths.push(configPath);
 

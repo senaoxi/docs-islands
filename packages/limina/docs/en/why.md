@@ -58,7 +58,7 @@ Project references are supposed to describe which project depends on which other
 
 Limina reads the projects reachable from your checker entries, resolves real imports with TypeScript, and reports missing or forbidden references. It also checks label-based rules, so a browser runtime project can be denied access to Node-only projects or dependencies.
 
-For example, `@acme/app` imports `@acme/core`, but `packages/app/tsconfig.lib.dts.json` does not reference `packages/core/tsconfig.lib.dts.json`. Limina points at the importing file, the current references, and the missing edge. After the fix, `tsc -b`, the editor, and CI are looking at the same dependency graph.
+For example, `@acme/app` imports `@acme/core`, but the generated app declaration leaf under `.limina/` does not reference the generated core declaration leaf. Limina points at the importing file, maps the generated project back to the source tsconfig, and reports the missing edge. After `limina graph prepare`, `tsc -b`, the editor, and CI are looking at the same dependency graph.
 
 ## Workspace Dependencies Need Clear Meaning
 

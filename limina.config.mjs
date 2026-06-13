@@ -2,22 +2,34 @@ import { defineConfig } from 'limina';
 
 export default defineConfig({
   strict: true,
-  // Shared checker entries used by graph, proof, paths, and typecheck checks.
+  // Shared checker source config coverage used by graph, proof, paths, and typecheck checks.
   config: {
-    /**
-     * Note: The two reference trees built by tsconfig.build.json and
-     * tsconfig.vue.build.json have common tsconfig*.dts.json leaf nodes.
-     * Using tsgo may cause cache hit failure,
-     * so the unified underlying implementation is maintained at the total entry point.
-     */
     checkers: {
       typescript: {
         preset: 'tsc',
-        entry: 'tsconfig.build.json',
+        include: [
+          'tsconfig.json',
+          'utils/tsconfig.json',
+          'utils/tsconfig.*.json',
+          'packages/**/tsconfig.json',
+          'packages/**/tsconfig.*.json',
+        ],
+        exclude: [
+          '**/docs/**',
+          '**/tsconfig*.dts.json',
+          '**/tsconfig*.build.json',
+          '**/tsconfig*.base.json',
+          '**/tsconfig*.check.json',
+        ],
       },
       vue: {
         preset: 'vue-tsc',
-        entry: 'tsconfig.vue.build.json',
+        include: [
+          'docs/tsconfig.json',
+          'packages/*/docs/tsconfig.json',
+          'packages/vitepress/src/shared/tsconfig.json',
+          'packages/vitepress/theme/tsconfig.json',
+        ],
       },
     },
     source: {
@@ -133,7 +145,7 @@ export default defineConfig({
   // boundaries.
   graph: {
     // Label-based package and declaration boundary rules. Labels are declared
-    // inside tsconfig*.dts.json with "limina": "<label>".
+    // inside source tsconfig*.json files with liminaOptions.graphRules.
     rules: {
       'runtime-client': {
         deny: {
@@ -145,7 +157,7 @@ export default defineConfig({
           ],
           refs: [
             {
-              path: 'packages/vitepress/src/node/tsconfig.dts.json',
+              path: 'packages/vitepress/src/node/tsconfig.json',
               reason: 'client runtime must not depend on node runtime',
             },
           ],
@@ -162,11 +174,11 @@ export default defineConfig({
           ],
           refs: [
             {
-              path: 'packages/vitepress/src/node/tsconfig.dts.json',
+              path: 'packages/vitepress/src/node/tsconfig.json',
               reason: 'shared runtime must stay independent of node runtime',
             },
             {
-              path: 'packages/vitepress/src/client/tsconfig.dts.json',
+              path: 'packages/vitepress/src/client/tsconfig.json',
               reason: 'shared runtime must stay independent of client runtime',
             },
           ],
@@ -234,29 +246,47 @@ export default defineConfig({
     ],
     // Default TypeScript project-reference graph check.
     graph: [
+      'graph:prepare',
       'graph:check',
       {
         type: 'command',
         command: 'tsgo',
-        args: ['-b', 'tsconfig.build.json', '--pretty', 'false'],
+        args: [
+          '-b',
+          '.limina/tsconfig/checkers/typescript/tsconfig.build.json',
+          '--pretty',
+          'false',
+        ],
       },
     ],
     // Production library/runtime declaration graph.
     lib: [
+      'graph:prepare',
       {
         type: 'command',
         command: 'tsgo',
-        args: ['-b', 'tsconfig.lib.build.json', '--pretty', 'false'],
+        args: [
+          '-b',
+          '.limina/tsconfig/checkers/typescript/tsconfig.build.json',
+          '--pretty',
+          'false',
+        ],
       },
     ],
     // Source-owned Vue SFC checks that are intentionally outside native tsc -b.
     // Prefer vue-tsc here: current vue-tsgo --build does not preserve
     // TypeScript project-reference boundaries or support incremental builds.
     vue: [
+      'graph:prepare',
       {
         type: 'command',
         command: 'vue-tsc',
-        args: ['-b', 'tsconfig.vue.build.json', '--pretty', 'false'],
+        args: [
+          '-b',
+          '.limina/tsconfig/checkers/vue/tsconfig.build.json',
+          '--pretty',
+          'false',
+        ],
       },
     ],
     // Validation pipeline for consumer docs, playground, and smoke projects.

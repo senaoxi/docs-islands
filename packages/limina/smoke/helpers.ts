@@ -323,28 +323,16 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        entry: 'tsconfig.build.json',
+        include: ['app/tsconfig.lib.json'],
       },
     },
     source: {
       include: ['**/*.ts'],
-      exclude: ['node_modules', '.tsbuild', 'dist'],
+      exclude: ['node_modules', '.limina', '.tsbuild', 'dist'],
     },
   },
 });
 `,
-    'utf8',
-  );
-  await writeFile(
-    path.join(fixtureDir, 'tsconfig.build.json'),
-    stringifyJson({
-      files: [],
-      references: [
-        {
-          path: './app/tsconfig.lib.dts.json',
-        },
-      ],
-    }),
     'utf8',
   );
   await writeFile(
@@ -361,21 +349,26 @@ export default defineConfig({
     'utf8',
   );
   await writeFile(
-    path.join(fixtureDir, 'app', 'tsconfig.lib.dts.json'),
+    path.join(fixtureDir, 'app', 'tsconfig.json'),
+    stringifyJson({
+      files: [],
+      references: [
+        {
+          path: './tsconfig.lib.json',
+        },
+      ],
+    }),
+    'utf8',
+  );
+  await writeFile(
+    path.join(fixtureDir, 'app', 'tsconfig.lib.json'),
     stringifyJson({
       compilerOptions: {
-        composite: true,
-        declaration: true,
-        emitDeclarationOnly: true,
-        incremental: true,
         module: 'ESNext',
         moduleResolution: 'bundler',
-        noEmit: false,
-        outDir: './.tsbuild',
-        rootDir: '.',
+        noEmit: true,
         strict: true,
         target: 'ES2023',
-        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
         types: [],
       },
       include: ['src/**/*.ts'],

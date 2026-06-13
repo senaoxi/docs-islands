@@ -11,6 +11,7 @@ import {
 } from './checkers';
 import type { CheckerPreset } from './config';
 import { getActiveCheckers, type ResolvedLiminaConfig } from './config';
+import type { GeneratedTsconfigGraphResult } from './generated-graph';
 import {
   normalizeAbsolutePath,
   toPosixPath,
@@ -283,31 +284,40 @@ export function isDtsConfigPath(configPath: string): boolean {
 }
 
 export function getDtsCompanionConfigPath(dtsConfigPath: string): string {
-  const directory = path.dirname(dtsConfigPath);
-  const fileName = path.basename(dtsConfigPath);
-  const companionFileName =
-    fileName === 'tsconfig.dts.json'
-      ? 'tsconfig.json'
-      : fileName.replace(/\.dts\.json$/u, '.json');
-  const scopedCompanionPath = normalizeAbsolutePath(
-    path.join(directory, companionFileName),
+  const configObject = readJsonConfigFile(
+    path.dirname(dtsConfigPath),
+    dtsConfigPath,
   );
+  const liminaOptions = configObject.liminaOptions;
 
   if (
-    companionFileName === 'tsconfig.json' ||
-    existsSync(scopedCompanionPath)
+    liminaOptions &&
+    typeof liminaOptions === 'object' &&
+    !Array.isArray(liminaOptions)
   ) {
-    return scopedCompanionPath;
+    const sourceConfig = (liminaOptions as { sourceConfig?: unknown })
+      .sourceConfig;
+
+    if (typeof sourceConfig === 'string' && sourceConfig.trim().length > 0) {
+      return resolveReferencePath(dtsConfigPath, sourceConfig);
+    }
   }
 
-  return normalizeAbsolutePath(path.join(directory, 'tsconfig.json'));
+  throw new Error(
+    [
+      'Generated declaration config is missing its source config metadata:',
+      `  config: ${dtsConfigPath}`,
+      '  field: liminaOptions.sourceConfig',
+      '  reason: Limina no longer infers source companions from source-level tsconfig*.dts.json files.',
+    ].join('\n'),
+  );
 }
 
 export function isBuildGraphConfigPath(configPath: string): boolean {
   return buildGraphConfigFilePattern.test(path.basename(configPath));
 }
 
-function isReservedTypeScriptConfigFile(fileName: string): boolean {
+export function isReservedTypeScriptConfigFile(fileName: string): boolean {
   return (
     dtsConfigFilePattern.test(fileName) ||
     buildGraphConfigFilePattern.test(fileName) ||
@@ -322,6 +332,15 @@ export function isOrdinaryTypecheckConfigPath(configPath: string): boolean {
   return (
     tsconfigFilePattern.test(fileName) &&
     !isReservedTypeScriptConfigFile(fileName)
+  );
+}
+
+export function isOrdinarySourceTypecheckConfigPath(
+  configPath: string,
+): boolean {
+  return (
+    isOrdinaryTypecheckConfigPath(configPath) &&
+    !configPath.split(path.sep).includes('.limina')
   );
 }
 
@@ -454,6 +473,7 @@ export function collectGraphProjectRouteFromRoot(options: {
 
 export function collectGraphProjectRoutes(
   config: ResolvedLiminaConfig,
+  generatedGraph?: GeneratedTsconfigGraphResult,
 ): CollectCheckerGraphProjectRoutesResult {
   const routes: CheckerGraphProjectRoute[] = [];
   const problems: string[] = [];
@@ -465,10 +485,18 @@ export function collectGraphProjectRoutes(
       continue;
     }
 
-    const rootConfigPath = resolveProjectConfigPath(
-      config.rootDir,
-      checker.entry,
-    );
+    const rootConfigPath = generatedGraph?.checkerEntries.get(checker.name);
+
+    if (!rootConfigPath) {
+      problems.push(
+        [
+          'Missing generated checker graph entry:',
+          `  checker: ${checker.name}`,
+          '  reason: run limina graph prepare before collecting checker graph routes.',
+        ].join('\n'),
+      );
+      continue;
+    }
 
     if (!existsSync(rootConfigPath)) {
       problems.push(
@@ -504,15 +532,24 @@ export function collectGraphProjectRoutes(
 
 export function collectCheckerEntryProjectRoutes(
   config: ResolvedLiminaConfig,
+  generatedGraph?: GeneratedTsconfigGraphResult,
 ): CollectCheckerGraphProjectRoutesResult {
   const routes: CheckerGraphProjectRoute[] = [];
   const problems: string[] = [];
 
   for (const checker of getActiveCheckers(config)) {
-    const rootConfigPath = resolveProjectConfigPath(
-      config.rootDir,
-      checker.entry,
-    );
+    const rootConfigPath = generatedGraph?.checkerEntries.get(checker.name);
+
+    if (!rootConfigPath) {
+      problems.push(
+        [
+          'Missing generated checker entry:',
+          `  checker: ${checker.name}`,
+          '  reason: run limina graph prepare before collecting checker entry routes.',
+        ].join('\n'),
+      );
+      continue;
+    }
 
     if (!existsSync(rootConfigPath)) {
       problems.push(
@@ -548,8 +585,9 @@ export function collectCheckerEntryProjectRoutes(
 
 export function collectGraphProjectRoute(
   config: ResolvedLiminaConfig,
+  generatedGraph?: GeneratedTsconfigGraphResult,
 ): CollectGraphProjectPathsResult {
-  const routeCollection = collectGraphProjectRoutes(config);
+  const routeCollection = collectGraphProjectRoutes(config, generatedGraph);
 
   return {
     problems: routeCollection.problems,
@@ -561,8 +599,9 @@ export function collectGraphProjectRoute(
 
 export function collectSourceGraphProjectExtensions(
   config: ResolvedLiminaConfig,
+  generatedGraph?: GeneratedTsconfigGraphResult,
 ): CollectSourceGraphProjectExtensionsResult {
-  const routeCollection = collectGraphProjectRoutes(config);
+  const routeCollection = collectGraphProjectRoutes(config, generatedGraph);
   const projectContextsByPath = new Map<string, CheckerProjectParseContext>();
   const projectExtensionsByPath = new Map<string, string[]>();
   for (const route of routeCollection.routes) {

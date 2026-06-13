@@ -17,7 +17,7 @@ The first column is also the string name for each task inside a pipeline; you ca
 
 ## `graph:check`
 
-Maps to `limina graph check`. Validates the project-reference graph formed by declaration leaves (`tsconfig*.dts.json`). Each item below explains what it detects, why, and a typical example.
+Maps to `limina graph check`. Validates the project-reference graph formed by generated declaration leaves under `.limina/`, using the source tsconfigs selected by `checker.include` as the canonical user-facing paths. Each item below explains what it detects, why, and a typical example.
 
 ::: tip
 The deny/allow rules referenced here are defined in [Graph Rules](./config/graph-rules.md).
@@ -25,11 +25,12 @@ The deny/allow rules referenced here are defined in [Graph Rules](./config/graph
 
 ### Declaration leaves need the full set of compiler options
 
-A declaration leaf emits only `.d.ts` incrementally through `tsc -b`. So it must turn on `composite`, `incremental`, `declaration`, `emitDeclarationOnly`, turn off `noEmit`, and set `rootDir` / `outDir` / `tsBuildInfoFile`. Missing one means the incremental build cannot emit declarations correctly.
+A generated declaration leaf emits only `.d.ts` incrementally through `tsc -b`. Limina writes these leaves during `limina graph prepare`; each one turns on `composite`, `incremental`, `declaration`, `emitDeclarationOnly`, turns off `noEmit`, and sets `rootDir` / `outDir` / `tsBuildInfoFile`.
 
 ```jsonc
-// packages/core/tsconfig.lib.dts.json
+// .limina/tsconfig/checkers/typescript/packages/core/tsconfig.lib.dts.json
 {
+  "extends": "../../../../../packages/core/tsconfig.lib.json",
   "compilerOptions": {
     "composite": true,
     "incremental": true,
@@ -43,19 +44,20 @@ A declaration leaf emits only `.d.ts` incrementally through `tsc -b`. So it must
 }
 ```
 
-A missing option like `composite` reports `Invalid declaration leaf compiler option:`; a missing output field like `outDir` reports `Missing declaration leaf output option:`.
+These files are generated, so a shape problem usually means the generated graph is stale or malformed; run `limina graph prepare` and check the reported source tsconfig path.
 
 ### Every leaf needs a paired companion
 
-Each `*.dts.json` needs a same-scope ordinary `tsconfig*.json` (the companion) that owns type semantics. Their type-affecting options (such as `strict`, `module`, `target`) must agree, and the leaf may not include files beyond the companion — otherwise the "config that emits declarations" and the "config that type-checks" disagree.
+Each generated `*.dts.json` needs a `liminaOptions.sourceConfig` that points back to the ordinary source `tsconfig*.json` that owns type semantics. Type-affecting options (such as `strict`, `module`, `target`) are inherited from that source config, and the generated leaf may not include files beyond the source config.
 
 ```text
 packages/core/
-  tsconfig.lib.json       # companion: strict: true
-  tsconfig.lib.dts.json   # leaf: also strict: true, file set is a subset of the companion
+  tsconfig.lib.json       # source config: strict: true
+.limina/tsconfig/checkers/typescript/packages/core/
+  tsconfig.lib.dts.json   # generated leaf, sourceConfig -> packages/core/tsconfig.lib.json
 ```
 
-No companion reports `Missing typecheck companion config:`; mismatched options report `Typecheck option mismatch between declaration leaf and companion config:`.
+Generated leaves without `sourceConfig` are rejected. When diagnostics mention a generated path, Limina maps it back through the manifest and reports the source tsconfig path whenever possible.
 
 ### Source-owned imports need matching references
 
@@ -66,7 +68,7 @@ A leaf's `references` must match the real imports that resolve to source files o
 import { createClient } from '@acme/core'; // references core
 ```
 
-If `packages/app/tsconfig.lib.dts.json` does not list core in `references`, it reports `Missing project reference for workspace import:`; an extra reference with no import behind it reports `Extra project reference not proven by static imports:`. Imports that resolve to built declarations such as `dist/*.d.ts` do not require a project reference. Fix source-owned edges by adding or removing the reference, or run `limina graph sync` to align automatically.
+Generated declaration references must match real imports that resolve to source files owned by another generated declaration project. If a source-owned edge is missing, make sure both source tsconfig files are selected by `checker.include`, then run `limina graph prepare`. Imports that resolve to built declarations such as `dist/*.d.ts` do not require a project reference.
 
 ### Workspace package exports must resolve
 
@@ -90,14 +92,14 @@ Unresolved exports report `Workspace package export is not resolvable by TypeScr
 
 ### References/dependencies that hit a deny rule are rejected
 
-If you define an architecture boundary under `graph.rules.<label>.deny` (for example, "client must not depend on the node runtime") and opt a leaf in through `liminaOptions.graphRules`, then a reference or dependency that hits the boundary is rejected.
+If you define an architecture boundary under `graph.rules.<label>.deny` (for example, "client must not depend on the node runtime") and opt a source tsconfig in through `liminaOptions.graphRules`, then a reference or dependency that hits the boundary is rejected.
 
 ```jsonc
-// tsconfig.lib.dts.json
+// packages/app/tsconfig.client.json
 { "liminaOptions": { "graphRules": ["runtime-client"] } }
 ```
 
-A hit reports `Denied graph access:`, along with the `reason` you wrote in the rule.
+`limina graph prepare` copies the rule labels into the generated declaration leaf. A hit reports `Denied graph access:`, along with the `reason` you wrote in the rule.
 
 ## `source:check`
 
@@ -254,24 +256,24 @@ Reports `Source files are not covered by typecheck proof:`. Fix: bring it into a
 
 ### The same file must not be covered twice
 
-A source file included by two declaration leaves of the same checker causes duplicate builds and ownership ambiguity.
+A source file included by two source tsconfigs of the same checker causes duplicate generated declaration owners and ownership ambiguity.
 
-Reports `Duplicate checker graph coverage:`. Fix: make each file belong to a single leaf.
+Reports `Duplicate checker graph coverage:`. Fix: make each file belong to a single source tsconfig per checker.
 
 ### Aggregators must be pure aggregators
 
-`tsconfig*.build.json` and aggregator `tsconfig.json` files (those with `references`) may only carry `$schema` / `files: []` / `references`, with no `compilerOptions` and so on.
+Source-level aggregator `tsconfig.json` files (those with `references`) may only carry `$schema` / `files: []` / `references`, with no `compilerOptions` and so on. Limina writes checker build aggregators under `.limina/tsconfig/checkers/<checker>/tsconfig.build.json`.
 
 ```jsonc
-// tsconfig.build.json
-{ "files": [], "references": [{ "path": "./tsconfig.lib.dts.json" }] }
+// tsconfig.json
+{ "files": [], "references": [{ "path": "./tsconfig.lib.json" }] }
 ```
 
-Otherwise it reports `Build graph config is not a pure aggregator:` or `Default tsconfig.json is not a pure aggregator:`.
+Otherwise it reports `Default tsconfig.json is not a pure aggregator:`.
 
 ### Declaration leaves must have the right shape
 
-Each `*.dts.json` must be reachable from a checker entry, have a paired companion, be valid for `tsc -b`, and align its file set and (non-output) options with the companion.
+Each generated `*.dts.json` must be reachable from a generated checker build entry, have a `sourceConfig`, be valid for `tsc -b`, and align its file set and (non-output) options with the source config.
 
 These report `DTS config is not reachable from any checker entry:`, `DTS config is not valid for tsc -b:`, `DTS config file set does not match its strict local tsconfig:`, and `DTS config overrides a typecheck compiler option from its strict local tsconfig:` respectively.
 
@@ -327,7 +329,7 @@ It runs the typecheck-execution presets: `vue-tsgo --project`, `svelte-check --t
 
 ```js
 // limina.config.mjs (excerpt)
-checkers: { vue: { preset: 'vue-tsgo', entry: 'tsconfig.app.dts.json' } }
+checkers: { vue: { preset: 'vue-tsgo', include: ['apps/app/tsconfig.json'] } }
 ```
 
 A `.vue` type error makes it exit non-zero and report `typecheck checks failed:`. Fix: resolve the reported `.vue` type error.
