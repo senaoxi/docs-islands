@@ -30,9 +30,10 @@ export default defineConfig({
 ## Why This Exists
 
 `compilerOptions.customConditions` decides which branch of a package `exports`
-map TypeScript, Limina's Oxc resolver, and the real bundler choose. Conditions
-such as `browser`, `node`, and `source` usually mean "resolve this code for a
-different environment or build mode."
+map TypeScript and Limina's resolver use inside a governed tsconfig domain.
+Conditions such as `browser`, `node`, and `source` usually mean "resolve this
+code for a different environment or build mode." Other resolvers may instead
+use one global condition set, which is a different model.
 
 A declaration reference tree is only the project graph used by `tsc -b`. It does
 not say whether an entry should resolve as browser code, Node code, or source
@@ -60,16 +61,17 @@ describes a concrete generated declaration reference tree.
 Limina also runs a default check without explicit domains: for every governed
 declaration project, that project and all declaration projects reachable through
 its references must share the same effective `customConditions`. Explicit
-`conditionDomains` let you also write down the condition set expected by real
-entry projects.
+`conditionDomains` let you also write down the condition set expected by a real
+entry.
 
 ::: danger Note
 
 When you configure `conditionDomains` for an entry, make sure the
-`customConditions` listed here match the conditions used by the real bundler.
-Limina does not read or rewrite bundler config. If the bundler uses another
-condition set, a passing Limina check still cannot guarantee that runtime
-resolution chooses the same `exports` branch.
+`customConditions` listed here match the runtime conditions you actually intend
+for that entry. Limina does not read or rewrite other resolver configuration. If
+another resolver uses one global condition set while Limina checks several
+tsconfig domains, a passing Limina check still cannot guarantee that every
+runtime path chooses the same `exports` branch.
 
 :::
 
@@ -104,10 +106,9 @@ discover projects outside the checker graph.
 Explicit condition domains turn "does this entry resolve as web, node, or
 source?" into a rule Limina can check. If it is wrong, graph check fails early
 instead of letting a package `exports` map choose the wrong branch and later show
-up as a missing edge, a false positive, or an incorrect build order.
+up as a missing edge, a false positive, or an incorrect artifact classification.
 
 They also let multi-entry workspaces govern multiple resolution domains in
 parallel. For example, a browser entry can use `['browser', 'source']` while a
 Node entry uses `['node', 'source']`. Each entry's declaration reference tree
-stays internally consistent, and Limina's TypeScript/Oxc resolution is easier to
-keep aligned with the real bundler.
+stays internally consistent inside the condition domain Limina checks.

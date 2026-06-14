@@ -37,7 +37,7 @@ features:
     linkText: 查看图检查
   - icon: 🛡️
     title: 保护包边界
-    details: 阻止跨包相对导入、漏写依赖、私有入口逃逸和绕过 workspace 协议的内部依赖，确保每个包只能通过公开入口被访问。
+    details: 阻止跨包相对导入、漏写依赖、私有入口逃逸和绕过声明包边界的内部依赖，确保每个包只能通过公开入口被访问。
     link: /zh/built-in-tasks
     linkText: 查看源码检查
   - icon: 🎯
@@ -57,7 +57,7 @@ features:
     linkText: 配置发布检查
   - icon: 🧩
     title: 融入现有工作流
-    details: 接入本地开发、PR、CI 和发布流程，并与 Nx、Turborepo 等任务运行器协作，让类型图治理成为现有工具链的一部分。
+    details: 接入本地开发、PR、CI 和发布流程，并在需要时导出用于架构审查的限定依赖图。
     link: /zh/workflows
     linkText: 配置工作流
 ---

@@ -74,12 +74,12 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/zh/monorepo-constraints',
       },
       {
-        text: 'references 推导',
-        link: '/zh/references-inference',
+        text: '从 import 到 references',
+        link: '/zh/import-to-references',
       },
       {
-        text: '模块解析',
-        link: '/zh/module-resolution',
+        text: '从解析到架构图',
+        link: '/zh/resolution-to-architecture-graph',
       },
     ],
   },

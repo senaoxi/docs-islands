@@ -1,15 +1,14 @@
 # Built-in Tasks
 
-Built-in tasks are the check units `limina check` runs directly, and each one maps to a `limina <command>` subcommand. `limina check` (with no name) runs the first six below in a fixed order, stopping at the first failure and marking the rest as skipped. `package:check` and `release:check` are not in the default flow; they usually go into a publish [pipeline](./config/pipelines.md).
+Built-in tasks are the check units `limina check` runs directly, and each one maps to a `limina <command>` subcommand. `limina check` (with no name) runs the first five below in a fixed order, stopping at the first failure and marking the rest as skipped. `package:check` and `release:check` are not in the default flow; they usually go into a publish [pipeline](./config/pipelines.md).
 
 | Task                | Command                    | Default `limina check` | Surface                                  |
 | ------------------- | -------------------------- | ---------------------- | ---------------------------------------- |
 | `graph:check`       | `limina graph check`       | Yes, step 1            | Declaration graph / project references   |
 | `source:check`      | `limina source check`      | Yes, step 2            | Package ownership boundaries             |
-| `nx:check`          | `limina nx check`          | Yes, step 3            | Nx build edges                           |
-| `proof:check`       | `limina proof check`       | Yes, step 4            | Source coverage / tsconfig shape         |
-| `checker:build`     | `limina checker build`     | Yes, step 5            | First-class compile (emits declarations) |
-| `checker:typecheck` | `limina checker typecheck` | Yes, step 6            | Second-class type checking               |
+| `proof:check`       | `limina proof check`       | Yes, step 3            | Source coverage / tsconfig shape         |
+| `checker:build`     | `limina checker build`     | Yes, step 4            | First-class compile (emits declarations) |
+| `checker:typecheck` | `limina checker typecheck` | Yes, step 5            | Second-class type checking               |
 | `package:check`     | `limina package check`     | No, publish-time       | Built output                             |
 | `release:check`     | `limina release check`     | No, publish-time       | Release hygiene                          |
 
@@ -61,14 +60,31 @@ Generated leaves without `sourceConfig` are rejected. When diagnostics mention a
 
 ### Source-owned imports need matching references
 
-A leaf's `references` must match the real imports that resolve to source files owned by another declaration project. Code that imports another package's source entry must have a matching reference; otherwise the incremental build cannot get the upstream declarations. Conversely, a reference no import justifies is flagged too, so there are no dead edges.
+A leaf's `references` must match real source edges: static imports that resolve to source files owned by another declaration project, plus any documented `liminaOptions.implicitRefs`. Code that imports another package's source entry must have a matching reference; otherwise the incremental build cannot get the upstream declarations. Conversely, a reference justified by neither static imports nor `implicitRefs` is flagged too, so there are no dead edges.
 
 ```ts
 // packages/app/src/main.ts
 import { createClient } from '@acme/core'; // references core
 ```
 
-Generated declaration references must match real imports that resolve to source files owned by another generated declaration project. If a source-owned edge is missing, make sure both source tsconfig files are selected by `checker.include`, then run `limina graph prepare`. Imports that resolve to built declarations such as `dist/*.d.ts` do not require a project reference.
+Generated declaration references come from real imports that resolve to source files owned by another generated declaration project. If a source-owned edge is missing, make sure both source tsconfig files are selected by `checker.include`, then run `limina graph prepare`. Imports that resolve to built declarations such as `dist/*.d.ts` do not require a project reference.
+
+When a real edge cannot be seen from static imports, document it on the source tsconfig that needs the edge:
+
+```jsonc
+{
+  "liminaOptions": {
+    "implicitRefs": [
+      {
+        "path": "../core/tsconfig.json",
+        "reason": "Loaded by generated route manifest.",
+      },
+    ],
+  },
+}
+```
+
+`implicitRefs.path` points to another ordinary source tsconfig relative to the declaring config. Limina maps it to the generated declaration project. Do not put `references` on source leaf configs; only solution-style `tsconfig.json` aggregators should carry TypeScript `references`.
 
 ### Workspace package exports must resolve
 
@@ -114,7 +130,7 @@ You cannot use `../` to reach into another package's directory; reaching another
 import { helper } from '../../a/src/util';
 ```
 
-Reports `Relative import escapes package owner scope:`. Fix: declare a `workspace:*` dependency on `@acme/a` in `packages/b/package.json` and change it to `import { helper } from '@acme/a'`.
+Reports `Relative import escapes package owner scope:`. Fix: declare a dependency on `@acme/a` in `packages/b/package.json` and change it to `import { helper } from '@acme/a'`.
 
 ### A bare import must be declared first
 
@@ -136,17 +152,6 @@ A `#xxx` subpath import must be defined in the package's `package.json#imports`,
 ```
 
 No match reports `Unauthorized package import specifier:`; unresolvable reports `Unresolved package import specifier:`; resolving into another package reports `Package import resolves to another package owner:`.
-
-### Strict: cross-package must use the `workspace:` protocol
-
-In strict mode, when an import resolves to another workspace package, the dependency must be declared with `workspace:`, not `link:` / `file:` / `catalog:` or a plain version range — so the source graph is deterministic.
-
-```jsonc
-// package.json (not "link:../a")
-{ "dependencies": { "@acme/a": "workspace:*" } }
-```
-
-Otherwise it reports `Workspace bare package import must use workspace: dependency:`.
 
 ### A tsconfig / module may belong to only one owner
 
@@ -200,41 +205,21 @@ source: {
 
 Reports `Unused source module:`. If the module is a real extra entry, add it through `source.knip.workspaces[pkg].entry`; for something intentionally kept but invisible to Knip, ignore it via `source.knip.workspaces[pkg].ignoreFiles`.
 
-## `nx:check`
+## `graph export`
 
-Maps to `limina nx check`. Validates that each package's Nx `project.json` build edges stay in sync with artifact consumption.
+Maps to `limina graph export`. It exports the package dependency graph that Limina inferred from real imports and module resolution inside the governed tsconfig domains.
 
-### Build edges are derived from artifact dependencies
-
-A package's `link:<dep>/dist` means "I depend on that package's built output." Limina also scans checker-covered source files: if package A declares package B with `workspace:*` and actually imports a public export that resolves into B's artifact directory, A also needs a build dependency on B. This includes pure type artifacts such as `dist/*.d.ts`.
-
-```jsonc
-// packages/app/package.json
-{
-  "dependencies": {
-    "@acme/core": "workspace:*",
-    "@acme/ui": "link:../ui/dist",
-  },
-}
+```sh
+pnpm exec limina graph export --view all --output .limina/dependency-graph.json
 ```
 
-Accordingly, `app`'s `build` target in `project.json` should `dependsOn` `ui`'s build, and should also `dependsOn` `core` when app actually imports a core export that resolves to `core/dist`.
+The JSON contains package nodes and `source` / `artifact` edges. A `source` edge means the import resolved to source governed by the type graph. An `artifact` edge means the import resolved to built output such as `dist/*.js` or `dist/*.d.ts`. Dependency protocols do not decide the edge kind; the resolved file does.
 
-### Missing `project.json` or a divergent `dependsOn` is stale
+Each edge respects the importing project's compiler options, including `compilerOptions.customConditions`. Because this is a Limina-governed graph rather than a global build resolver graph, use it for architecture inspection and diagnostics, not as an authoritative task graph or build-order source:
 
-A non-root workspace package with no `project.json`, or whose `dependsOn` diverges from the derived value, is stale, and `nx:check` fails.
-
-Reports `Nx project config state is stale; run \`limina nx sync build\`.`. Fix: run `limina nx sync`.
-
-### Artifact dependency targets must be valid
-
-A `link:` must point at a real workspace package, the target must have a `build` script, it must point at an artifact directory (such as `dist`), and it must not form a cycle. A consumed `workspace:*` artifact export also requires the target package to have a `build` script. Link-derived and workspace-export-derived edges are checked together for cycles.
-
-These report `Nx build dependency points at an unknown workspace package:`, `Nx build dependency target has no build script:`, `Nx build dependency does not point at an artifact directory:`, and `Nx artifact build dependency cycle:` respectively.
-
-::: warning
-`nx:check` is in the default `limina check`, so a brand-new repo must run `limina nx sync` first to generate `project.json`, otherwise the default check stops here.
-:::
+```sh
+pnpm exec limina graph export --view artifact
+```
 
 ## `proof:check`
 

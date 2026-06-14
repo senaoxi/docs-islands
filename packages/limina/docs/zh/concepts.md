@@ -47,7 +47,7 @@ export default defineConfig({
 }
 ```
 
-生成叶子负责图结构。它继承源码配置，强制声明 emit，记录 `liminaOptions.sourceConfig`，并引用从源码导入推导出的其他生成叶子。
+生成叶子负责图结构。它继承源码配置，强制声明 emit，记录 `liminaOptions.sourceConfig`，并引用从源码导入推导或通过 `liminaOptions.implicitRefs` 声明的其他生成叶子。
 
 当一个包或一个包内的某个环境需要进入检查器图时，把它的源码 tsconfig 放进 `include`。例如选中 `packages/core/tsconfig.lib.json` 后，Limina 会为 `@acme/core` 生成声明边界。`@acme/app` 导入 `@acme/core` 时，Limina 就能验证并生成对应的声明引用。
 
@@ -77,21 +77,25 @@ packages/core/tsconfig.test.json
 
 如果一个源码配置只是负责把多个源码项目组合起来，就让它保持聚合器角色。生成构建聚合器位于 `.limina/`，由 `limina graph prepare` 重新创建。
 
-## 源码依赖
+## 源码边与产物边
 
-用 `workspace:*` 声明的依赖会链接同一个工作区里的另一个包。一个包可以让一部分公开入口指向源码，也可以让另一部分公开入口指向构建产物。
+一个包可以让一部分公开入口指向源码，也可以让另一部分公开入口指向构建产物。`package.json` 里的依赖协议负责声明访问权限，但不决定这段关系是源码消费还是产物消费；解析到的文件才决定。
 
 对于声明了 `exports` 的工作区包，Limina 会预解析每一个公开子路径。TypeScript 解析必须能找到稳定类型入口：`.d.ts` 系列声明、`.ts` / `.tsx` / `.mts` / `.cts` 这类源码、`.json`，或检查器支持的源码扩展名，例如 `.vue`。如果 TypeScript 只能解析到运行时 JavaScript，或者 TypeScript / Oxc 无法解析某个导出，图检查会报告这个包导出。
 
-当 `@acme/app` 导入了 `@acme/core` 的某个公开入口时，只有这个入口解析到被生成声明项目管辖的文件，图引用才要求对应的生成叶子引用 core 的生成叶子。`dist/*.d.ts` 这类构建后的声明产物已经是输出，不要求项目引用。互补的一侧由 Nx 检查管：如果 app 实际导入的 `workspace:*` 入口解析到了 core 的产物目录，那么 app 的 `project.json` 应该通过 `dependsOn` 指向 core 的构建目标。
+当 `@acme/app` 导入了 `@acme/core` 的某个公开入口时，只有这个入口解析到被生成声明项目管辖的文件，图引用才要求对应的生成叶子引用 core 的生成叶子。`dist/*.d.ts` 这类构建后的声明产物已经是输出，不要求项目引用。互补的一侧会出现在 `limina graph export --view artifact` 里，作为限定范围内的架构事实。
 
-## 产物依赖
+## 依赖图导出
 
-用 `link:`、`file:`、`catalog:` 或普通 semver 声明的依赖会被视为产物依赖。它通常不应该再建模成源码项目引用。
+`limina graph export` 会以 JSON 导出 package 节点和 source/artifact 边：
 
-产物依赖应该在包输出层检查，而不是假装它的源码属于当前图。
+```sh
+pnpm exec limina graph export --view all
+```
 
-如果某个包只是想像外部消费者一样使用一个已经构建好的包，就应该把它当作产物依赖。例如某个工具包通过普通 semver 使用 `@acme/core` 的发布产物，而不是参与 core 的源码构建图。这样源码图不会被不必要的引用拉大，发布产物问题则交给 `limina package check` 在输出层处理。
+需要源码关系时使用 `--view source`；需要检查产物消费事实时使用 `--view artifact`。每条边都在 Limina 管辖的 tsconfig 域内解析，并尊重该域的 `compilerOptions.customConditions`。这份导出不是权威任务图，也不是构建顺序来源。
+
+产物输出仍然由 `limina package check` 在包输出层检查，而不是假装它的源码属于当前类型图。
 
 ## 标签与规则
 

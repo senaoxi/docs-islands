@@ -1,6 +1,6 @@
-# Checker Entries
+# 检查器入口
 
-Checker entry 用来告诉 Limina：每个检查器应该接管哪些普通源码 `tsconfig*.json`。Limina 会把声明图、检查器构建入口、声明输出目录、tsbuildinfo 和 manifest 全部生成到 `.limina/`。
+检查器入口用来告诉 Limina：每个检查器应该接管哪些普通源码 `tsconfig*.json`。Limina 会把声明图、检查器构建入口、声明输出目录、tsbuildinfo 和产物清单全部生成到 `.limina/`。
 
 ```js
 import { defineConfig } from 'limina';

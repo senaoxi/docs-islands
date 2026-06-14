@@ -37,7 +37,7 @@ features:
     linkText: View graph checks
   - icon: 🛡️
     title: Protect package boundaries
-    details: Block cross-package relative imports, missing dependencies, private entry escapes, and internal dependencies that bypass workspace protocols, ensuring each package is accessed only through public entry points.
+    details: Block cross-package relative imports, missing dependencies, private entry escapes, and internal dependencies that bypass declared package boundaries, ensuring each package is accessed only through public entry points.
     link: /built-in-tasks
     linkText: View source checks
   - icon: 🎯
@@ -57,7 +57,7 @@ features:
     linkText: Configure release checks
   - icon: 🧩
     title: Fit into existing workflows
-    details: Integrate with local development, PR, CI, and release pipelines, and work alongside task runners such as Nx and Turborepo so type graph governance becomes part of your existing toolchain.
+    details: Integrate with local development, PR, CI, and release pipelines, and export scoped dependency graphs for architecture review when needed.
     link: /workflows
     linkText: Configure workflows
 ---

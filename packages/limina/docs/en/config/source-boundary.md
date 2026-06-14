@@ -48,7 +48,7 @@ export default defineConfig({
 `exclude` is the directory or glob set that should stay outside source governance. Use it for `dist`, `.tsbuild`, fixtures, generated caches, and other files that should not be treated as governed source. When `exclude` is omitted, Limina reads the workspace root `.gitignore` and always also excludes a fixed list of directories and config files.
 
 ::: details Always-excluded entries (in addition to root `.gitignore`)
-`nx.json`, `project.json`, `tsconfig.json`, `**/tsconfig.*.json`, `dist`, `.nx`, `.git`, `.tsbuild`, `coverage`, and `node_modules`.
+TypeScript config files, known task-tool config/cache files, `dist`, `.git`, `.tsbuild`, `coverage`, and `node_modules`.
 :::
 
 For example, after `include` covers `packages/**/src/**/*.{ts,tsx,vue}`, adding this file makes it part of the proof boundary:

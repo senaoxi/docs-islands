@@ -42,7 +42,6 @@ A string step can be a built-in Limina task:
 - `checker:build`
 - `checker:typecheck`
 - `graph:check`
-- `nx:check`
 - `package:check`
 - `proof:check`
 - `release:check`
@@ -70,7 +69,7 @@ Object form declares an external command explicitly:
 
 ## Object task step
 
-- **Type:** `{ type: 'task'; name: BuiltinTaskName }` where `BuiltinTaskName` is `'graph:check' | 'source:check' | 'proof:check' | 'checker:build' | 'checker:typecheck' | 'package:check' | 'release:check' | 'nx:check'`
+- **Type:** `{ type: 'task'; name: BuiltinTaskName }` where `BuiltinTaskName` is `'graph:check' | 'source:check' | 'proof:check' | 'checker:build' | 'checker:typecheck' | 'package:check' | 'release:check'`
 
 Built-in tasks can also be written explicitly:
 

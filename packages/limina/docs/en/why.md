@@ -7,46 +7,40 @@ As the repository grows, the same files begin to serve different jobs:
 - the editor wants fast local type information;
 - `tsc -b` wants a clean project reference graph;
 - framework files may need `vue-tsc`, `vue-tsgo`, or `svelte-check`;
-- packages may import each other through `workspace:*`;
+- packages may import each other through declared package dependencies;
 - published output must work after it is packed and installed.
 
 Those jobs are related, but TypeScript does not automatically prove that they agree with each other. Limina exists for that gap.
 
-## How Limina Relates to Nx / Turborepo
+## Where Limina Fits
 
-Limina, Nx, and Turborepo all belong to the category of monorepo tooling, but they operate at different layers of the problem.
+Limina belongs to the monorepo toolbox, but it operates at a specific layer of the problem.
 
-Nx and Turborepo primarily solve problems at the **task-execution layer**: which projects run which tasks, what order tasks run in, which tasks run in parallel, which results can be cached, and how CI runs faster. Limina solves problems at the **architecture-conformance layer**: before those tasks run, can the repository structure itself be trusted — do the TypeScript source graph, the package dependency graph, project references, package exports, runtime boundaries, and published artifacts all express the same facts?
+Limina does not bundle code, run tests, or schedule every repository task. It solves problems at the **architecture-conformance layer**: can the repository structure itself be trusted, and do the TypeScript source graph, package dependency graph, project references, package exports, runtime boundaries, scoped graph exports, and published artifacts all express the same facts?
 
-The two are not mutually exclusive. A project can use both together:
+A project can run Limina alongside the rest of its workflow:
 
-```json [package.json]
-{
-  "scripts": {
-    "build": "turbo build",
-    "test": "turbo test",
-    "typecheck": "limina check typecheck",
-    "prepublishOnly": "limina check publish"
-  }
-}
+```sh
+pnpm exec limina check
+pnpm exec limina graph export --view artifact --output .limina/dependency-graph.json
 ```
 
-Here Nx / Turborepo own task orchestration, affected execution, parallelism, caching, and CI acceleration. Limina owns whether workspace package exports resolve correctly, whether imports are authorized by the nearest `package.json`, whether project references match source-owned imports, whether `workspace:*` artifact imports are reflected in Nx build edges, whether `tsconfig*.dts.json` files have strict companions, whether source files are covered by checkers, whether client / shared / node runtime boundaries hold, and whether published `dist` artifacts are usable by consumers.
+Here the surrounding workflow still owns ordinary execution concerns. Limina owns whether workspace package exports resolve correctly, whether imports are authorized by the nearest `package.json`, whether project references match source-owned imports, whether artifact imports are visible in the scoped dependency graph, whether source configs have valid graph companions, whether source files are covered by checkers, whether client / shared / node runtime boundaries hold, and whether published `dist` artifacts are usable by consumers.
 
-Nx itself also offers module-boundary and conformance capabilities, for example declaring dependency constraints through project tags and enforcing them with an ESLint rule or Nx Conformance. The difference is that limina's rules are not generic tag-level project-dependency policies:
+Some tools also offer module-boundary and conformance capabilities, for example declaring dependency constraints through project metadata. The difference is that limina's rules are not generic project-dependency policies:
 
 ```text
-Nx module boundaries are more like:
-  "Can a project tagged A depend on a project tagged B?"
+Generic module boundaries are more like:
+  "Can project A depend on project B?"
 
 limina is more like:
   "Is this dependency consistent across package.json, tsconfig references,
    TypeScript module resolution, source file ownership, and dist package exports?"
 ```
 
-That is also why monorepos need conformance even when `tsc`, Nx, and Turborepo are all in place: large TypeScript workspaces have a class of problems that are not execution-efficiency problems but structural-truth problems — is this dependency source or artifact, is this import authorized by `package.json`, does this project reference reflect a real import, does this declaration come from strictly checked source, is this file covered by any checker, does this runtime cross the client/node boundary, and is this `dist` output truly installable for consumers?
+That is also why monorepos need conformance even when typechecking and workflow automation are already in place: large TypeScript workspaces have a class of problems that are not execution-efficiency problems but structural-truth problems. Is this dependency source or artifact? Is this import authorized by `package.json`? Does this project reference reflect a real import? Does this declaration come from checked source? Is this file covered by any checker? Does this runtime cross the client/node boundary? Is this `dist` output truly installable for consumers?
 
-> Nx makes monorepo tasks run more efficiently; limina makes the monorepo structure those tasks depend on more trustworthy.
+> Automation can make monorepo work run more smoothly; limina makes the monorepo structure that work depends on more trustworthy.
 
 ::: tip
 For concrete, worked scenarios of what limina checks, see [Architecture Conformance](./architecture-conformance.md). To wire limina into a repository, see [Getting Started](./getting-started.md).
@@ -62,13 +56,13 @@ For example, `@acme/app` imports `@acme/core`, but the generated app declaration
 
 ## Workspace Dependencies Need Clear Meaning
 
-`workspace:*` means "this package is linked from the same workspace". That relationship can expose source entries, artifact entries, or a deliberate mix of both through `package.json#exports`.
+A package dependency declaration authorizes access to another package, but it does not say whether an import consumes source or a built artifact. The resolved public export decides that meaning.
 
 That distinction matters because TypeScript project references do not rewrite package exports. If package A references package B but imports `@scope/b`, TypeScript still follows B's package exports. Limina therefore resolves the public exports first and treats the resolved entry as the fact source for later checks.
 
-If the import resolves to a checker-owned source file, the consuming declaration leaf must reference the owner leaf. If the import resolves to a built declaration artifact such as `dist/*.d.ts`, graph references are not required. If the import resolves to `dist` through a `workspace:*` dependency, Nx checks require the consuming package's build target to depend on the producer's build target.
+If the import resolves to a checker-owned source file, the consuming declaration leaf must reference the owner leaf. If the import resolves to a built declaration artifact such as `dist/*.d.ts`, graph references are not required. Instead, `limina graph export --view artifact` reports that artifact edge inside the importing tsconfig's condition domain. That export is useful for review and diagnostics, not as a task-ordering guarantee.
 
-For example, `@acme/app` depends on `@acme/core` with `workspace:*`. If it imports `@acme/core` and that export resolves to `./src/index.ts`, graph check requires the matching project reference. If it imports `@acme/core/runtime` and that export resolves to `./dist/runtime.d.ts` or `./dist/runtime.js`, Nx check expects app's `project.json` to contain a build dependency on core.
+For example, `@acme/app` depends on `@acme/core`. If it imports `@acme/core` and that export resolves to `./src/index.ts`, graph check requires the matching project reference. If it imports `@acme/core/runtime` and that export resolves to `./dist/runtime.d.ts` or `./dist/runtime.js`, graph export reports an artifact edge from app to core.
 
 ## Source Ownership Should Be Boring
 

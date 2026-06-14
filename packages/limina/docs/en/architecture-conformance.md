@@ -1,6 +1,6 @@
 # Architecture Conformance
 
-[Why Limina](./why.md) explains the positioning: Nx and Turborepo operate at the task-execution layer, while limina operates at the architecture-conformance layer — proving that the structure a monorepo depends on is trustworthy before any task runs.
+[Why Limina](./why.md) explains the positioning: limina operates at the architecture-conformance layer, proving whether the structure a monorepo depends on is trustworthy before downstream workflows run.
 
 This page is the practical companion. It walks through concrete scenarios where a pnpm + TypeScript monorepo looks healthy — commands succeed, CI is green — yet the underlying graphs already disagree with each other. Each scenario shows the symptom, how limina sees it, and how to fix it.
 
@@ -63,7 +63,7 @@ This is valid in limina's current model. Workspace package exports may point to 
 - TypeScript must resolve every public export to a stable type entry or supported source entry;
 - Oxc must resolve every public export, with a declaration-only fallback when TypeScript resolves a pure `.d.ts` export;
 - imports that resolve to checker-owned source entries participate in project-reference governance;
-- imports that resolve to `dist` participate in Nx artifact build-edge governance.
+- imports that resolve to `dist` become artifact edges in the exported dependency graph.
 
 ### How limina sees this
 
@@ -90,15 +90,13 @@ For an artifact entry:
 import { renderRuntime } from '@acme/core/runtime';
 ```
 
-If that entry resolves into `packages/core/dist`, graph references are not required. Instead, `limina nx check` expects `packages/app/project.json` to make app's build depend on core's build:
+If that entry resolves into `packages/core/dist`, graph references are not required. Instead, `limina graph export --view artifact` reports an artifact edge:
 
-```jsonc
+```json
 {
-  "targets": {
-    "build": {
-      "dependsOn": [{ "projects": ["@acme/core"], "target": "build" }],
-    },
-  },
+  "from": "pkg:@acme/app",
+  "to": "pkg:@acme/core",
+  "kind": "artifact"
 }
 ```
 
@@ -108,10 +106,7 @@ The fix depends on the failing layer.
 
 - If export pre-resolution fails, fix the `exports` target, condition order, `checker.include`, or missing build output.
 - If a source entry is consumed but the generated declaration graph lacks an edge, make sure both source tsconfigs are selected by `checker.include`, then run `limina graph prepare`.
-- If an artifact entry is consumed through `workspace:*` but Nx `dependsOn` is stale, run `limina nx sync`.
-- If the artifact export belongs to a package without `scripts.build`, add a build target or stop exposing that entry as a build artifact.
-
-See [Built-in Tasks](./built-in-tasks.md#nxcheck) for the Nx side of artifact build edges.
+- If an artifact entry is consumed, inspect the artifact view as a Limina-scoped architecture fact. Do not treat it as an authoritative build-order source.
 
 ## `tsconfig.json` Has Too Many Responsibilities
 
@@ -351,7 +346,7 @@ TypeScript / Oxc module resolution
 source-owned imports and artifact imports
         │
         ▼
-TypeScript project references and Nx build edges
+TypeScript project references and exported artifact edges
         │
         ▼
 source files covered by checkers
@@ -364,19 +359,19 @@ If any layer expresses a different fact, limina considers the monorepo unhealthy
 
 For example:
 
-| Symptom                                                  | limina's judgment                                                                |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| workspace export cannot be resolved by TypeScript/Oxc    | Public package contract is not resolvable in the active checker/runtime profiles |
-| `workspace:*` import resolves to source but no reference | Source entry is consumed without the matching TS project edge                    |
-| `workspace:*` import resolves to `dist` but no Nx edge   | Artifact entry is consumed without the required build dependency                 |
-| Cross-package relative import                            | Bypasses package exports and the package owner boundary                          |
-| Project reference crosses packages but no `workspace:*`  | TS graph declares a source dependency, but package graph does not                |
-| Generated declaration leaf has no source config          | Declaration emit has no strict typecheck proof                                   |
-| Source file is not covered by any checker                | Green CI does not mean the file was checked                                      |
-| Browser runtime imports `node:fs`                        | Runtime boundary is violated                                                     |
-| dist manifest has broken exports/types                   | Source is healthy, but published artifact is unhealthy                           |
-| dist import has undeclared dependency                    | Consumers may miss dependencies after installation                               |
+| Symptom                                                     | limina's judgment                                                                |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| workspace export cannot be resolved by TypeScript/Oxc       | Public package contract is not resolvable in the active checker/runtime profiles |
+| Declared package import resolves to source but no reference | Source entry is consumed without the matching TS project edge                    |
+| Import resolves to `dist`                                   | Artifact entry is consumed and should appear in graph export                     |
+| Cross-package relative import                               | Bypasses package exports and the package owner boundary                          |
+| Project reference crosses packages without a declaration    | TS graph declares a source dependency, but package graph does not                |
+| Generated declaration leaf has no source config             | Declaration emit has no checked source proof                                     |
+| Source file is not covered by any checker                   | Green CI does not mean the file was checked                                      |
+| Browser runtime imports `node:fs`                           | Runtime boundary is violated                                                     |
+| dist manifest has broken exports/types                      | Source is healthy, but published artifact is unhealthy                           |
+| dist import has undeclared dependency                       | Consumers may miss dependencies after installation                               |
 
 ::: tip
-The source-side scenarios above are enforced by graph and source checks, artifact build edges by Nx checks, and the `dist` output-health rows by [Package Checks](./config/package-checks.md). For the full set of commands that run these layers, see [Built-in Tasks](./built-in-tasks.md).
+The source-side scenarios above are enforced by graph and source checks, artifact edges are exported by `limina graph export`, and the `dist` output-health rows are enforced by [Package Checks](./config/package-checks.md). For the full set of commands that run these layers, see [Built-in Tasks](./built-in-tasks.md).
 :::

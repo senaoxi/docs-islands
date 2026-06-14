@@ -15,24 +15,18 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | 命令                      | 说明                                                                                      |
 | ------------------------- | ----------------------------------------------------------------------------------------- |
 | `limina init [--yes]`     | 生成 `limina.config.mjs`、确保忽略 `.limina/`，并为 pnpm 工作区添加 `limina:check` 脚本。 |
-| `limina check`            | 运行默认流水线：图、源码、Nx 项目同步、覆盖证明、检查器构建和检查器类型检查。             |
+| `limina check`            | 运行默认流水线：图、源码、覆盖证明、检查器构建和检查器类型检查。                          |
 | `limina check <pipeline>` | 运行 `pipelines` 中的用户命名流水线。                                                     |
 
 ## 图与源码
 
-| 命令                   | 说明                                                                        |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `limina graph prepare` | 生成 `.limina/manifest.json` 和检查器作用域内的声明 / 构建 tsconfig 图。    |
-| `limina graph check`   | 先 prepare，再校验生成的项目引用、工作区导入、图规则和源码 / 产物依赖语义。 |
-| `limina source check`  | 校验包归属、相对导入边界、裸包依赖声明和 `#imports`。                       |
-| `limina proof check`   | 校验声明叶子、本地配套配置、检查器覆盖、纯聚合器和源码覆盖。                |
-
-## Nx 同步
-
-| 命令                          | 说明                                                                                                                   |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `limina nx sync [target...]`  | 根据 `link:` 制品依赖和实际导入到产物的 `workspace:*` 导出同步 `project.json` 目标的 `dependsOn`。默认目标为 `build`。 |
-| `limina nx check [target...]` | 检查 Nx 目标的 `dependsOn` 是否过期。默认目标为 `build`。                                                              |
+| 命令                   | 说明                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `limina graph prepare` | 生成 `.limina/manifest.json` 和检查器作用域内的声明 / 构建 tsconfig 图。     |
+| `limina graph check`   | 先 prepare，再校验生成的项目引用、工作区导入、图规则和源码 / 产物依赖语义。  |
+| `limina graph export`  | 导出中立的包依赖图 JSON；支持 `--view source\|artifact\|all` 和 `--output`。 |
+| `limina source check`  | 校验包归属、相对导入边界、裸包依赖声明和 `#imports`。                        |
+| `limina proof check`   | 校验声明叶子、本地配套配置、检查器覆盖、纯聚合器和源码覆盖。                 |
 
 ## 检查器
 

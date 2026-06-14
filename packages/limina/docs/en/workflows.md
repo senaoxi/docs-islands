@@ -14,11 +14,10 @@ pnpm exec limina graph check
 
 Use these while changing TypeScript configs or package boundaries.
 
-When artifact consumption changes, sync the Nx target graph. Limina derives these edges from `link:` artifact dependencies and from actual imports of `workspace:*` exports that resolve into `dist`:
+When artifact consumption changes, inspect the dependency graph. Limina derives artifact edges from actual imports that resolve into built output inside the governed tsconfig domains:
 
 ```sh
-pnpm exec limina nx sync build docs:build
-pnpm exec limina nx check build docs:build
+pnpm exec limina graph export --view artifact --output .limina/dependency-graph.json
 ```
 
 ### Pull Requests
@@ -27,7 +26,7 @@ pnpm exec limina nx check build docs:build
 pnpm exec limina check
 ```
 
-This proves graph, source ownership, Nx project sync, coverage, first-class checker builds, and second-class checker execution together.
+This proves graph, source ownership, coverage, first-class checker builds, and second-class checker execution together.
 
 ### Pre-publish
 
@@ -72,7 +71,7 @@ jobs:
 
 - Keep source `tsconfig.json` aggregators pure with `files: []` and `references`.
 - Keep source tsconfig file sets intentional, and let Limina own generated declaration leaves under `.limina/`.
-- Keep workspace package exports intentional: source entries need references, artifact entries need build edges when consumed.
+- Keep workspace package exports intentional: consumed source entries need generated references from imports or `implicitRefs`, and consumed artifact entries appear in `limina graph export --view artifact` as scoped architecture facts.
 - Run source, package, and release checks; they protect different layers.
 - Keep allowlists small and explain why each exception is safe.
 
@@ -92,7 +91,7 @@ They inspect the package output under `package.entries[].outDir`. That output mu
 
 ### Can workspace exports point to dist?
 
-Yes. Workspace package exports may point to source entries or built artifacts. Limina first requires TypeScript and Oxc to resolve every public export. Graph references are required for imports whose resolved entry is owned by a declaration project; built declarations such as `dist/*.d.ts` do not require project references. When a `workspace:*` import actually resolves into `dist`, `limina nx check` requires the consuming package to depend on the producer's build target.
+Yes. Workspace package exports may point to source entries or built artifacts. Limina first requires the active resolver profiles to resolve every public export. Generated graph references are required for imports whose resolved entry is owned by a declaration project, with `liminaOptions.implicitRefs` available for real dynamic or virtual edges that static imports cannot prove. Built declarations such as `dist/*.d.ts` do not require project references. When an import resolves into `dist`, Limina reports an artifact edge in the condition domain of the importing tsconfig. That edge is useful for review and diagnostics, but it is not a task-ordering guarantee.
 
 ### Should Vue or Svelte files be placed in the TypeScript graph?
 

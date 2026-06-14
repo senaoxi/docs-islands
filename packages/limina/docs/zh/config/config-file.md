@@ -52,7 +52,7 @@ export default defineConfig(({ mode }) => ({
 }));
 ```
 
-无论是否开启 strict 模式，图检查都会通过当前检查器配置校验工作区包导出：公开导出必须可解析，解析到源码归属方的工作区导入必须有匹配项目引用。
+无论是否开启 strict 模式，图检查都会通过当前检查器配置校验工作区包导出：公开导出必须可解析，解析到源码归属方的工作区导入必须有来自静态导入或 `liminaOptions.implicitRefs` 的生成项目引用。
 
 strict 模式不会改变命令入口，但会在 `graph:check`、`source:check`、`proof:check`、`package:check` 和 `release:check` 中追加更完整的建模约束。检查器 include 必须解析到普通源码 tsconfig；生成声明覆盖必须唯一归属源码文件；源码归属必须落在最近的 `package.json` 下；构建后和打包后的包清单不能暴露 `workspace:`、`link:`、`file:` 或 `catalog:` 依赖说明符。
 
@@ -77,7 +77,7 @@ export default defineConfig(({ mode }) => ({
 
 ## command
 
-- **类型：** `'check' | 'graph' | 'nx' | 'package' | 'proof' | 'release' | 'source'`
+- **类型：** `'check' | 'graph' | 'package' | 'proof' | 'release' | 'source'`
 - **相关：** [检查器入口](./checkers.md)
 
 `command` 表示当前加载配置的命令族，例如 `check`、`graph`、`source`、`package` 或 `release`。当某些昂贵配置只服务于特定命令时，可以按 `command` 分支返回。

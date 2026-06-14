@@ -1,15 +1,14 @@
 # 内置任务
 
-内置任务是 `limina check` 能直接调用的检查单元，每一个都对应一条 `limina <command>` 子命令。`limina check`（不带名字）会按固定顺序跑下表前六个，遇到第一个失败就停下，后续步骤标记为跳过。`package:check` 和 `release:check` 不在默认流程里，通常放进发布用的命名[流水线](./config/pipelines.md)。
+内置任务是 `limina check` 能直接调用的检查单元，每一个都对应一条 `limina <command>` 子命令。`limina check`（不带名字）会按固定顺序跑下表前五个，遇到第一个失败就停下，后续步骤标记为跳过。`package:check` 和 `release:check` 不在默认流程里，通常放进发布用的命名[流水线](./config/pipelines.md)。
 
 | 任务                | 对应命令                   | 默认 `limina check` | 作用面                   |
 | ------------------- | -------------------------- | ------------------- | ------------------------ |
 | `graph:check`       | `limina graph check`       | 是，第 1 步         | 声明图 / 项目引用        |
 | `source:check`      | `limina source check`      | 是，第 2 步         | 包归属边界               |
-| `nx:check`          | `limina nx check`          | 是，第 3 步         | Nx 构建边                |
-| `proof:check`       | `limina proof check`       | 是，第 4 步         | 源码覆盖 / tsconfig 形状 |
-| `checker:build`     | `limina checker build`     | 是，第 5 步         | 一等公民编译（产出声明） |
-| `checker:typecheck` | `limina checker typecheck` | 是，第 6 步         | 二等公民类型检查         |
+| `proof:check`       | `limina proof check`       | 是，第 3 步         | 源码覆盖 / tsconfig 形状 |
+| `checker:build`     | `limina checker build`     | 是，第 4 步         | 一等公民编译（产出声明） |
+| `checker:typecheck` | `limina checker typecheck` | 是，第 5 步         | 二等公民类型检查         |
 | `package:check`     | `limina package check`     | 否，发布期          | 构建产物                 |
 | `release:check`     | `limina release check`     | 否，发布期          | 发布卫生                 |
 
@@ -61,14 +60,31 @@ packages/core/
 
 ### 源码入口导入需要匹配引用
 
-叶子的 `references` 必须和真实导入到的、由其他声明项目拥有的源码入口对应。代码导入了别的包的源码入口，就必须有对应引用；否则增量构建拿不到上游声明。反过来，列了却没有导入证明的引用也会被指出来，避免无用边。
+叶子的 `references` 必须和真实源码边对应：静态导入到的、由其他声明项目拥有的源码入口，以及写明原因的 `liminaOptions.implicitRefs`。代码导入了别的包的源码入口，就必须有对应引用；否则增量构建拿不到上游声明。反过来，既没有静态导入证明、也没有 `implicitRefs` 说明的引用也会被指出来，避免无用边。
 
 ```ts
 // packages/app/src/main.ts
 import { createClient } from '@acme/core'; // 引用了 core
 ```
 
-生成的声明引用必须和真实导入到的、由其他生成声明项目拥有的源码文件对应。如果源码边缺失，确认两端源码 tsconfig 都被 `checker.include` 选中，然后运行 `limina graph prepare`。解析到 `dist/*.d.ts` 这类构建声明产物的导入不要求项目引用。
+生成的声明引用来自真实导入到的、由其他生成声明项目拥有的源码文件。如果源码边缺失，确认两端源码 tsconfig 都被 `checker.include` 选中，然后运行 `limina graph prepare`。解析到 `dist/*.d.ts` 这类构建声明产物的导入不要求项目引用。
+
+如果真实边无法从静态导入里看出来，把它写在需要补边的源码 tsconfig 上：
+
+```jsonc
+{
+  "liminaOptions": {
+    "implicitRefs": [
+      {
+        "path": "../core/tsconfig.json",
+        "reason": "Loaded by generated route manifest.",
+      },
+    ],
+  },
+}
+```
+
+`implicitRefs.path` 相对声明它的配置指向另一份普通源码 tsconfig。Limina 会把它映射到生成的声明项目。不要在源码叶子配置里手写 `references`；只有 solution-style 的 `tsconfig.json` 聚合器应该携带 TypeScript `references`。
 
 ### 工作区包导出必须可解析
 
@@ -114,7 +130,7 @@ import { createClient } from '@acme/core'; // 引用了 core
 import { helper } from '../../a/src/util';
 ```
 
-报 `Relative import escapes package owner scope:`。修复：在 `packages/b/package.json` 用 `workspace:*` 声明对 `@acme/a` 的依赖，并改成 `import { helper } from '@acme/a'`。
+报 `Relative import escapes package owner scope:`。修复：在 `packages/b/package.json` 声明对 `@acme/a` 的依赖，并改成 `import { helper } from '@acme/a'`。
 
 ### 裸包导入必须先声明
 
@@ -136,17 +152,6 @@ import pMap from 'p-map'; // 但 package.json 里没声明 p-map
 ```
 
 没匹配上报 `Unauthorized package import specifier:`；解析不了报 `Unresolved package import specifier:`；落到别的包报 `Package import resolves to another package owner:`。
-
-### strict：跨包要用 `workspace:` 协议
-
-strict 模式下，导入解析到另一个工作区包时，依赖声明必须用 `workspace:`，不能用 `link:` / `file:` / `catalog:` 或普通版本号——这样源码图才确定。
-
-```jsonc
-// package.json（不能写成 "link:../a"）
-{ "dependencies": { "@acme/a": "workspace:*" } }
-```
-
-不满足报 `Workspace bare package import must use workspace: dependency:`。
 
 ### 一个 tsconfig / 模块只能属于一个归属方
 
@@ -195,41 +200,21 @@ source: {
 
 报 `Unused source module:`。如果它是真实的额外入口，写进 `source.knip.workspaces[pkg].entry`；确属有意保留但 Knip 看不见的，用 `source.knip.workspaces[pkg].ignoreFiles` 豁免。
 
-## `nx:check`
+## `graph export`
 
-对应 `limina nx check`，校验各包的 Nx `project.json` 构建边是否与产物消费保持同步。
+对应 `limina graph export`，导出 Limina 在受管辖 tsconfig 域内从真实导入和模块解析结果推导出的包依赖图。
 
-### 从产物依赖推导构建边
-
-每个包的 `link:<dep>/dist` 表示「我依赖这个包构建后的产物」。Limina 还会扫描检查器覆盖的源码文件：如果包 A 用 `workspace:*` 声明了包 B，并且实际导入了一个解析到 B 产物目录的公开导出，那么 A 也需要构建依赖指向 B。这包括 `dist/*.d.ts` 这类纯类型产物。
-
-```jsonc
-// packages/app/package.json
-{
-  "dependencies": {
-    "@acme/core": "workspace:*",
-    "@acme/ui": "link:../ui/dist",
-  },
-}
+```sh
+pnpm exec limina graph export --view all --output .limina/dependency-graph.json
 ```
 
-对应地，`app` 的 `project.json` 中 `build` 应当 `dependsOn` `ui` 的构建；当 app 实际导入了一个解析到 `core/dist` 的 core 导出时，也应当 `dependsOn` core 的构建。
+JSON 中包含 package 节点，以及 `source` / `artifact` 两类边。`source` 边表示导入解析到了类型图管辖的源码；`artifact` 边表示导入解析到了 `dist/*.js` 或 `dist/*.d.ts` 这类构建产物。依赖协议不决定边类型，解析到的文件才决定。
 
-### 缺 `project.json` 或 `dependsOn` 不一致就是过期
+每条边都会尊重导入方项目的 compiler options，包括 `compilerOptions.customConditions`。这是 Limina 管辖域里的架构视图，不是全局构建解析图；它适合用于架构检查和诊断，不应该作为权威任务图或构建顺序来源：
 
-非根工作区包没有 `project.json`，或它的 `dependsOn` 与推导结果对不上，都判为过期，`nx:check` 失败。
-
-报 `Nx project config state is stale; run \`limina nx sync build\`.`。修复：跑 `limina nx sync`。
-
-### 产物依赖目标必须合法
-
-`link:` 必须指向真实的工作区包、目标要有 `build` 脚本、要指向产物目录（如 `dist`），且不能成环。被消费到的 `workspace:*` 产物导出也要求目标包有 `build` 脚本。由 link 推导的边和由工作区导出推导的边会一起参与环检测。
-
-分别报 `Nx build dependency points at an unknown workspace package:`、`Nx build dependency target has no build script:`、`Nx build dependency does not point at an artifact directory:`、`Nx artifact build dependency cycle:`。
-
-::: warning
-`nx:check` 在默认 `limina check` 里，所以全新仓库要先 `limina nx sync` 生成 `project.json`，否则默认检查会卡在这一步。
-:::
+```sh
+pnpm exec limina graph export --view artifact
+```
 
 ## `proof:check`
 

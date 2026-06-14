@@ -52,7 +52,7 @@ export default defineConfig(({ mode }) => ({
 }));
 ```
 
-Regardless of strict mode, graph check validates workspace package exports through the active checker profiles: public exports must resolve, and source-owned workspace imports must have matching project references.
+Regardless of strict mode, graph check validates workspace package exports through the active checker profiles: public exports must resolve, and source-owned workspace imports must have generated project references from static imports or `liminaOptions.implicitRefs`.
 
 In strict mode, the existing command surface stays the same, but `graph:check`, `source:check`, `proof:check`, `package:check`, and `release:check` enforce extra modeling constraints. Checker includes must resolve to ordinary source tsconfigs, generated declaration coverage must uniquely own source files, source ownership must stay under the nearest `package.json`, and built or packed package manifests must not expose `workspace:`, `link:`, `file:`, or `catalog:` dependency specifiers.
 
@@ -77,7 +77,7 @@ export default defineConfig(({ mode }) => ({
 
 ## command
 
-- **Type:** `'check' | 'graph' | 'nx' | 'package' | 'proof' | 'release' | 'source'`
+- **Type:** `'check' | 'graph' | 'package' | 'proof' | 'release' | 'source'`
 - **Related:** [Checker Entries](./checkers.md)
 
 `command` is the command family currently loading the config, such as `check`, `graph`, `source`, `package`, or `release`. Use it when expensive configuration only matters for one command family.

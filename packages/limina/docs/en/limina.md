@@ -1,10 +1,10 @@
 # What is Limina
 
-Limina keeps a TypeScript monorepo honest. It checks that the source graph, package ownership, typecheck coverage, workspace exports, Nx build edges, and built package outputs all describe the same project.
+Limina keeps a TypeScript monorepo honest. It checks that the source graph, package ownership, typecheck coverage, workspace exports, exported dependency facts, and built package outputs all describe the same project.
 
 For a small package, `tsc --noEmit` may be enough. In a larger workspace, there are usually more moving parts:
 
-- packages import each other through `workspace:*`;
+- packages import each other through declared package dependencies;
 - TypeScript project references describe the build graph;
 - Vue, Svelte, docs, tools, tests, and runtime code may need different checkers;
 - published packages need their own `exports`, types, dependency declarations, README, and license files.
@@ -17,9 +17,9 @@ Think of Limina as an architecture health check for the monorepo. It does not wr
 
 Limina is built around a single config file, `limina.config.mjs`, and a few focused checks:
 
-- **Graph checks** verify that real imports match TypeScript project references and workspace dependency rules.
+- **Graph checks** verify that real imports match TypeScript project references and declared package dependency rules.
 - **Source checks** keep files inside the package that owns them and make sure imports are declared where they are used.
-- **Nx checks** keep each package's `project.json` `dependsOn` build edges in sync with artifact consumption from `link:` dependencies and actually imported `workspace:*` exports that resolve to `dist`.
+- **Dependency graph export** gives you a scoped JSON view of source and artifact consumption inferred from real imports and resolution results.
 - **Proof checks** show that declaration configs, local typecheck configs, checker entries, and allowlists cover the intended source files.
 - **Checker runs** call `tsc`, `tsgo`, `vue-tsc`, `vue-tsgo`, or `svelte-check` against the right targets derived from the graph.
 - **Package checks** inspect built output the way consumers install it, using `publint`, Are The Types Wrong, and a runtime import boundary scan.
@@ -42,10 +42,10 @@ Limina is not a bundler, test runner, package publisher, or hidden preset. The g
 
 ## Common Situations
 
-- **A pull request changes a cross-package import**: `@acme/app` adds `import { createClient } from '@acme/core'`, but the app declaration leaf does not reference core. `limina check` reports the missing project reference or missing `workspace:*` dependency before the build graph drifts after merge.
+- **A pull request changes a cross-package import**: `@acme/app` adds `import { createClient } from '@acme/core'`, but the app declaration leaf does not reference core. `limina check` reports the missing project reference or missing package dependency before the build graph drifts after merge.
 - **Browser code imports a Node-only dependency**: a `runtime-client` project accidentally imports `node:fs` or `@acme/internal-node`. A graph rule blocks that edge before the browser runtime fails in production.
 - **Source typechecks pass but publish output is broken**: local `tsc` passes, but `dist/package.json` points `exports` or `types` at the wrong files. `limina package check` inspects the built output from a consumer's point of view before npm publish.
-- **A workspace export mixes source and `dist` entries**: `@acme/core` exposes `.` from `src` and `./runtime` from `dist`. Limina accepts both entries after TypeScript and Oxc can resolve them. Imports of the source entry require the matching project reference; imports of the `dist` entry make Nx `dependsOn` core's build target.
+- **A workspace export mixes source and `dist` entries**: `@acme/core` exposes `.` from `src` and `./runtime` from `dist`. Limina accepts both entries after TypeScript and Oxc can resolve them. Imports of the source entry require the matching project reference; imports of the `dist` entry become artifact edges in the exported dependency graph.
 
 ## How It Fits Into Your Workflow
 
