@@ -13,7 +13,6 @@ import {
 import {
   getActiveCheckerExtensions,
   getActiveCheckers,
-  isStrictConfig,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
 } from '../config';
@@ -738,7 +737,7 @@ function addDtsConfigSemanticProblems(options: {
   if (onlyInDts.length > 0 || onlyInLocal.length > 0) {
     options.problems.push(
       [
-        'DTS config file set does not match its strict local tsconfig:',
+        'DTS config file set does not match its local typecheck config:',
         `  config: ${toRelativePath(options.config.rootDir, options.dtsConfigPath)}`,
         `  local: ${toRelativePath(options.config.rootDir, options.localConfigPath)}`,
         ...(onlyInDts.length > 0
@@ -798,7 +797,7 @@ function addDtsConfigSemanticProblems(options: {
 
     options.problems.push(
       [
-        'DTS config overrides a typecheck compiler option from its strict local tsconfig:',
+        'DTS config overrides a typecheck compiler option from its local typecheck config:',
         `  config: ${toRelativePath(options.config.rootDir, options.dtsConfigPath)}`,
         `  local: ${toRelativePath(options.config.rootDir, options.localConfigPath)}`,
         `  option: compilerOptions.${optionName}`,
@@ -867,7 +866,7 @@ function configExtendsPathTransitively(options: {
   return false;
 }
 
-function addStrictDtsCompanionExtendsProblems(options: {
+function addDtsCompanionExtendsProblems(options: {
   config: ResolvedLiminaConfig;
   configObject: JsonObject;
   dtsConfigPath: string;
@@ -888,11 +887,11 @@ function addStrictDtsCompanionExtendsProblems(options: {
 
   options.problems.push(
     [
-      'Strict mode requires declaration leaves to transitively extend their companion typecheck config:',
+      'Declaration leaf does not transitively extend its companion typecheck config:',
       `  declaration leaf: ${toRelativePath(options.config.rootDir, options.dtsConfigPath)}`,
       `  expected companion: ${toRelativePath(options.config.rootDir, options.localConfigPath)}`,
       `  direct extends: ${rawExtends.length > 0 ? rawExtends.join(', ') : '(none)'}`,
-      '  reason: strict: true requires tsconfig*.dts.json to add only declaration/build output behavior on top of the matching tsconfig*.json.',
+      '  reason: tsconfig*.dts.json must add only declaration/build output behavior on top of the matching tsconfig*.json.',
     ].join('\n'),
   );
 }
@@ -923,7 +922,7 @@ function addDtsConfigProblems(options: {
     if (!existsSync(localConfigPath)) {
       options.problems.push(
         [
-          'DTS config is missing its strict local tsconfig:',
+          'DTS config is missing its local typecheck config:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
           `  expected: ${toRelativePath(options.config.rootDir, localConfigPath)}`,
         ].join('\n'),
@@ -931,15 +930,13 @@ function addDtsConfigProblems(options: {
       continue;
     }
 
-    if (isStrictConfig(options.config)) {
-      addStrictDtsCompanionExtendsProblems({
-        config: options.config,
-        configObject,
-        dtsConfigPath: configPath,
-        localConfigPath,
-        problems: options.problems,
-      });
-    }
+    addDtsCompanionExtendsProblems({
+      config: options.config,
+      configObject,
+      dtsConfigPath: configPath,
+      localConfigPath,
+      problems: options.problems,
+    });
 
     const context = options.projectContextsByPath.get(configPath);
     const dtsConfig = parseConfig(options.config, configPath, context);
@@ -1124,10 +1121,6 @@ function addBuildGraphConfigProblems(options: {
       role: 'build graph',
     });
 
-    if (!isStrictConfig(options.config)) {
-      continue;
-    }
-
     if (!Array.isArray(configObject.references)) {
       continue;
     }
@@ -1148,12 +1141,12 @@ function addBuildGraphConfigProblems(options: {
 
       options.problems.push(
         [
-          'Strict mode build graph references a non-build project:',
+          'Build graph references a non-build project:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
           `  field: references[${index}].path`,
           `  reference: ${reference.path}`,
           `  resolved: ${toRelativePath(options.config.rootDir, referencePath)}`,
-          '  reason: strict: true requires tsconfig*.build.json to reference only tsconfig*.build.json aggregators or tsconfig*.dts.json declaration leaves.',
+          '  reason: tsconfig*.build.json may reference only tsconfig*.build.json aggregators or tsconfig*.dts.json declaration leaves.',
         ].join('\n'),
       );
     }
@@ -1377,7 +1370,7 @@ function addDuplicateGraphCoverageProblems(options: {
   }
 }
 
-function addStrictDuplicateTypecheckOwnershipProblems(options: {
+function addDuplicateTypecheckOwnershipProblems(options: {
   config: ResolvedLiminaConfig;
   ordinaryConfigPaths: string[];
   problems: string[];
@@ -1418,7 +1411,7 @@ function addStrictDuplicateTypecheckOwnershipProblems(options: {
 
     options.problems.push(
       [
-        'Strict mode source file belongs to multiple typecheck configs:',
+        'Source file belongs to multiple typecheck configs:',
         `  file: ${toRelativePath(options.config.rootDir, fileName)}`,
         '  typecheck configs:',
         ...uniqueOwners
@@ -1430,7 +1423,7 @@ function addStrictDuplicateTypecheckOwnershipProblems(options: {
           .map(
             (owner) => `    - ${toRelativePath(options.config.rootDir, owner)}`,
           ),
-        '  reason: strict: true requires each source module to belong to exactly one tsconfig*.json typecheck leaf.',
+        '  reason: each source module must belong to exactly one tsconfig*.json typecheck leaf.',
       ].join('\n'),
     );
   }
@@ -1608,13 +1601,11 @@ async function runProofCheckInternal(
     problems,
   });
 
-  if (isStrictConfig(config)) {
-    addStrictDuplicateTypecheckOwnershipProblems({
-      config,
-      ordinaryConfigPaths: ordinaryTypecheckConfigPaths,
-      problems,
-    });
-  }
+  addDuplicateTypecheckOwnershipProblems({
+    config,
+    ordinaryConfigPaths: ordinaryTypecheckConfigPaths,
+    problems,
+  });
 
   if (problems.length > 0) {
     ProofLogger.error(problems.join('\n\n'));

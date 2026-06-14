@@ -7,8 +7,8 @@ import {
   createImportAnalysisContext,
   findPackageForFile,
   parseProject,
-  resolveInternalImport,
   type ProjectInfo,
+  resolveInternalImport,
 } from './graph-context';
 import { collectSourceGraphProjectExtensions } from './tsconfig';
 import {

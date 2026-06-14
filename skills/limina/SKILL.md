@@ -13,12 +13,12 @@ Limina is not a bundler and does not replace `tsc`, `tsgo`, `vue-tsc`, `vue-tsgo
 
 The repository under Limina governance has these layers; downstream work usually touches one or more of them:
 
-| Layer            | File pattern                                | Role                                                                                                                                                             |
-| ---------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Graph aggregator | `tsconfig*.build.json`                      | Pure aggregator — only `$schema`, `files: []`, `references`. The single checker entry.                                                                           |
-| Declaration leaf | `tsconfig*.dts.json`                        | Emits declarations via `tsc -b`. Has strict build options + direct `references`. Optionally carries `liminaOptions.graphRules` labels that opt into graph rules. |
-| Local companion  | `tsconfig*.json` (e.g. `tsconfig.lib.json`) | Owns strict typecheck semantics. Paired one-to-one with a declaration leaf of the same scope.                                                                    |
-| IDE/default leaf | `tsconfig.json`                             | Either a pure aggregator with `references` OR a single typecheck leaf — never both.                                                                              |
+| Layer            | File pattern                                | Role                                                                                                                                                                  |
+| ---------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Graph aggregator | `tsconfig*.build.json`                      | Pure aggregator — only `$schema`, `files: []`, `references`. The single checker entry.                                                                                |
+| Declaration leaf | `tsconfig*.dts.json`                        | Emits declarations via `tsc -b`. Has declaration build options + direct `references`. Optionally carries `liminaOptions.graphRules` labels that opt into graph rules. |
+| Local companion  | `tsconfig*.json` (e.g. `tsconfig.lib.json`) | Owns typecheck semantics. Paired one-to-one with a declaration leaf of the same scope.                                                                                |
+| IDE/default leaf | `tsconfig.json`                             | Either a pure aggregator with `references` OR a single typecheck leaf — never both.                                                                                   |
 
 Pairing rule: `tsconfig.lib.dts.json` ↔ `tsconfig.lib.json`, `tsconfig.tools.dts.json` ↔ `tsconfig.tools.json`, `tsconfig.test.dts.json` ↔ `tsconfig.test.json`, and `tsconfig.dts.json` ↔ `tsconfig.json` when the directory has a single environment.
 
@@ -26,8 +26,6 @@ Dependency semantics (driven by the package-manifest specifier, not the import s
 
 - `workspace:*` → **source dependency**: must be modeled as a `tsc -b` project reference; the dependency package's source manifest should expose source files. If an actual import resolves to `dist`, Limina rejects it.
 - `link:`, `file:`, `catalog:`, normal semver → **artifact dependency**: must NOT be modeled as a project reference; consumed as already-built output.
-
-Top-level `strict: true` turns the full modeling rules on for the existing checks. In strict mode, every ordinary `tsconfig*.json` leaf needs a same-named `tsconfig*.dts.json` leaf, build aggregators may only reference build aggregators or dts leaves, ordinary typecheck ownership is unique and nearest-package scoped, workspace source imports must resolve to files owned by the source graph, artifact dependencies must not keep cross-package project references, and built or packed package manifests must not expose `workspace:`, `link:`, `file:`, or `catalog:` specifiers.
 
 ## Quick start
 
@@ -48,7 +46,6 @@ Minimal config:
 import { defineConfig } from 'limina';
 
 export default defineConfig({
-  strict: true,
   config: {
     checkers: {
       typescript: { preset: 'tsc', entry: 'tsconfig.build.json' },
@@ -236,7 +233,7 @@ const config = await loadConfig({ cwd: process.cwd() });
 // → ResolvedLiminaConfig: LiminaConfig & { configPath, rootDir }
 ```
 
-`defineConfig(value)` is an identity helper with overloads for: plain object, Promise, `(env) => config`, `(env) => Promise<config>`. The env argument is `{ command, mode }` where `mode` defaults to `process.env.NODE_ENV ?? 'default'`. Function configs can return `strict: mode === 'strict' || mode === 'ci'` when a workspace wants strict modeling only in selected environments.
+`defineConfig(value)` is an identity helper with overloads for: plain object, Promise, `(env) => config`, `(env) => Promise<config>`. The env argument is `{ command, mode }` where `mode` defaults to `process.env.NODE_ENV ?? 'default'`.
 
 `loadConfig` options: `{ command?, configPath?, cwd?, mode? }`. With no `configPath`, Limina walks up from `cwd` to find the nearest `limina.config.mjs`, bounded by the `pnpm-workspace.yaml` root.
 

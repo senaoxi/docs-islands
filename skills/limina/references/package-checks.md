@@ -26,7 +26,7 @@ For every entry selected by the CLI plan:
 
 1. **Manifest presence** — `<outDir>/package.json` must exist.
 2. **Tarball pack** (only if `publint` or `attw` is enabled) — Limina runs `@publint/pack` against `outDir` (with `ignoreScripts: true` and `packageManager: 'pnpm'`) into a temporary directory and feeds the buffer to both tools.
-3. **publint** — runs `publint` in strict mode (overridable) against the tarball. Every error and warning is logged; any message of type `error` or `warning` fails the check.
+3. **publint** — runs `publint` with its strict option enabled by default against the tarball. Every error and warning is logged; any message of type `error` or `warning` fails the check.
 4. **attw (Are The Types Wrong)** — calls `@arethetypeswrong/core`'s `checkPackage` on the tarball. Problems are filtered by the active profile, then any remaining problem fails the check.
 5. **boundary** — extracts bare-package import specifiers from every `.js`/`.mjs`/`.cjs` in the output via `es-module-lexer` and validates each.
 
@@ -51,7 +51,7 @@ For every selected release entry, Limina reads `<outDir>/package.json`, rejects 
 publint?: { strict?: boolean }   // default { strict: true }
 ```
 
-Strict mode emits warnings as failure conditions in addition to errors. Set `strict: false` to allow warnings to log without failing the check.
+When enabled, publint warnings fail the check in addition to errors. Set `strict: false` to allow warnings to log without failing the check.
 
 ## attw configuration
 

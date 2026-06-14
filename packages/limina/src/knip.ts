@@ -455,6 +455,36 @@ async function withTemporaryKnipConfig<T>(
   }
 }
 
+async function withTemporaryRootPackageJson<T>(
+  rootDir: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const packageJsonPath = path.join(rootDir, 'package.json');
+
+  if (await pathExists(packageJsonPath)) {
+    return await run();
+  }
+
+  await writeFile(
+    packageJsonPath,
+    `${JSON.stringify(
+      {
+        private: true,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  try {
+    return await run();
+  } finally {
+    await rm(packageJsonPath, {
+      force: true,
+    });
+  }
+}
+
 export function collectUnusedWorkspaceDependencyIssues(options: {
   report: JSONReport;
   rootDir: string;
@@ -595,17 +625,21 @@ export async function collectKnipSourceIssues(options: {
         workspacePackages: options.workspacePackages,
       });
 
-      return await withTemporaryKnipConfig(knipConfig, async (configPath) =>
-        parseKnipJsonReport(
-          await runKnipCli({
-            configPath,
-            include,
-            rootDir: options.config.rootDir,
-            ...(options.tsConfigFile
-              ? { tsConfigFile: options.tsConfigFile }
-              : {}),
-          }),
-        ),
+      return await withTemporaryRootPackageJson(
+        options.config.rootDir,
+        async () =>
+          withTemporaryKnipConfig(knipConfig, async (configPath) =>
+            parseKnipJsonReport(
+              await runKnipCli({
+                configPath,
+                include,
+                rootDir: options.config.rootDir,
+                ...(options.tsConfigFile
+                  ? { tsConfigFile: options.tsConfigFile }
+                  : {}),
+              }),
+            ),
+          ),
       );
     },
   );

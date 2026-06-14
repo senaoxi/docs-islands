@@ -392,7 +392,6 @@ function createConfig(
   entries: NonNullable<NonNullable<ResolvedLiminaConfig['package']>['entries']>,
   options: {
     release?: ResolvedLiminaConfig['release'];
-    strict?: boolean;
   } = {},
 ): ResolvedLiminaConfig {
   return {
@@ -402,7 +401,6 @@ function createConfig(
     },
     release: options.release,
     rootDir,
-    strict: options.strict,
   };
 }
 
@@ -675,7 +673,7 @@ describe('runPackageCheck and runReleaseCheck', () => {
     }
   });
 
-  it('rejects pnpm-local output manifest dependency specifiers in strict package checks', async () => {
+  it('rejects pnpm-local output manifest dependency specifiers', async () => {
     const pkg = await createOutputPackage(
       {
         'index.js': 'export const value = 1;\n',
@@ -690,19 +688,13 @@ describe('runPackageCheck and runReleaseCheck', () => {
     try {
       await expect(
         runPackageCheck({
-          config: createConfig(
-            pkg.outDir,
-            [
-              {
-                checks: ['boundary'],
-                name: '@example/pkg',
-                outDir: pkg.outDir,
-              },
-            ],
+          config: createConfig(pkg.outDir, [
             {
-              strict: true,
+              checks: ['boundary'],
+              name: '@example/pkg',
+              outDir: pkg.outDir,
             },
-          ),
+          ]),
         }),
       ).resolves.toBe(false);
     } finally {
@@ -1210,7 +1202,7 @@ describe('runPackageCheck and runReleaseCheck', () => {
     }
   });
 
-  it('fails strict release checks when the packed manifest leaks local specifiers in devDependencies', async () => {
+  it('fails release checks when the packed manifest leaks local specifiers in devDependencies', async () => {
     const rootDir = await createWorkspaceRoot();
 
     try {
@@ -1231,19 +1223,13 @@ describe('runPackageCheck and runReleaseCheck', () => {
 
       await expect(
         runReleaseCheck({
-          config: createConfig(
-            rootDir,
-            [
-              {
-                checks: ['boundary'],
-                name: '@example/a',
-                outDir,
-              },
-            ],
+          config: createConfig(rootDir, [
             {
-              strict: true,
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
             },
-          ),
+          ]),
           packageNames: ['@example/a'],
         }),
       ).resolves.toBe(false);

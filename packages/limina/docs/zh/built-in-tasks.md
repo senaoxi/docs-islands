@@ -47,11 +47,11 @@
 
 ### 每个叶子都要有配对的本地配置
 
-每个生成的 `*.dts.json` 都要通过 `liminaOptions.sourceConfig` 指回负责类型语义的普通源码 `tsconfig*.json`。类型相关选项（如 `strict`、`module`、`target`）来自这个源码配置，生成叶子纳入的文件也不能超出源码配置。
+每个生成的 `*.dts.json` 都要通过 `liminaOptions.sourceConfig` 指回负责类型语义的普通源码 `tsconfig*.json`。`module`、`target`、`lib` 等类型相关选项来自这个源码配置，生成叶子纳入的文件也不能超出源码配置。
 
 ```text
 packages/core/
-  tsconfig.lib.json       # 源码配置：strict: true
+  tsconfig.lib.json       # 源码配置负责类型相关选项
 .limina/tsconfig/checkers/typescript/packages/core/
   tsconfig.lib.dts.json   # 生成叶子，sourceConfig -> packages/core/tsconfig.lib.json
 ```
@@ -180,9 +180,9 @@ export default defineConfig({
 
 报 `Unused workspace package dependency:`。若确实是经生成代码/运行时字符串使用，用 `source.knip.workspaces[pkg].ignoreDependencies` 豁免；否则删掉这条依赖。
 
-### strict：从 exports 不可达的源码模块（Knip）
+### 从 exports 不可达的源码模块（Knip）
 
-strict 模式下，Limina 还会让 Knip 检查：某个归属方的源码模块如果从包 `exports`、`bin`、scripts、Knip 支持的插件入口和 `source.knip.workspaces[pkg].entry` 都触达不到，就是死模块。
+Limina 会让 Knip 检查：某个归属方的源码模块如果从包 `exports`、`bin`、scripts、Knip 支持的插件入口和 `source.knip.workspaces[pkg].entry` 都触达不到，就是死模块。
 
 ```js
 source: {
@@ -255,7 +255,7 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 
 每个生成的 `*.dts.json` 要能被生成的检查器 build 入口触达、有 `sourceConfig`、对 `tsc -b` 合法，且文件集和（非输出类）选项与源码配置对齐。
 
-分别报 `DTS config is not reachable from any checker entry:`、`DTS config is not valid for tsc -b:`、`DTS config file set does not match its strict local tsconfig:`、`DTS config overrides a typecheck compiler option from its strict local tsconfig:`。
+分别报 `DTS config is not reachable from any checker entry:`、`DTS config is not valid for tsc -b:`、`DTS config file set does not match its local typecheck config:`、`DTS config overrides a typecheck compiler option from its local typecheck config:`。
 
 ### 目录里 `tsconfig.json` 的角色
 
@@ -263,11 +263,11 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 
 报 `Single typecheck environment should use default tsconfig.json:` 或 `Directory with multiple typecheck environments must use tsconfig.json as an aggregator:`。
 
-### strict 追加约束
+### 类型检查形状约束
 
-strict 模式下还要求：叶子必须（传递地）`extends` 其本地配套配置、构建图只能引用 build/dts 项目、每个模块只属于一个类型检查配置。
+叶子必须传递地 `extends` 其本地配套配置、构建图只能引用 build/dts 项目、每个模块只属于一个类型检查配置。
 
-分别报 `Strict mode requires declaration leaves to transitively extend their companion typecheck config:`、`Strict mode build graph references a non-build project:`、`Strict mode source file belongs to multiple typecheck configs:`。
+分别报 `Declaration leaf does not transitively extend its companion typecheck config:`、`Build graph references a non-build project:`、`Source file belongs to multiple typecheck configs:`。
 
 ## `checker:build`
 
@@ -324,7 +324,7 @@ checkers: { vue: { preset: 'vue-tsgo', include: ['apps/app/tsconfig.json'] } }
 
 ### publint：打包是否规范
 
-对产物跑 publint（默认 strict），检查 `exports`、`main` / `module` / `types` 字段、发布文件是否齐全等打包规范问题。
+对产物跑 publint，检查 `exports`、`main` / `module` / `types` 字段、发布文件是否齐全等打包规范问题。
 
 报形如 `publint found N issue(s): <label>`。修复：按 publint 提示修 `package.json`。
 
@@ -344,11 +344,11 @@ checkers: { vue: { preset: 'vue-tsgo', include: ['apps/app/tsconfig.json'] } }
 
 检查的是 `outDir` 下的产物，所以必须先构建。没构建就跑会报 `outDir package.json not found`，并提示 `Run the package build first.`。修复：先 `pnpm build`。
 
-### strict：产物清单要可发布
+### 产物清单要可发布
 
-strict 模式下，产物 `package.json` 必须是完整 npm 清单，且不含 `workspace:` / `link:` / `file:` / `catalog:` 这类 pnpm 本地依赖。
+产物 `package.json` 必须是完整 npm 清单，且不含 `workspace:` / `link:` / `file:` / `catalog:` 这类 pnpm 本地依赖。
 
-报形如 `[<label>] [strict] output package.json ...`。
+报形如 `[<label>] output package.json ...`。
 
 ## `release:check`
 
@@ -356,7 +356,7 @@ strict 模式下，产物 `package.json` 必须是完整 npm 清单，且不含 
 
 ### 不能是 private（及本地依赖）
 
-产物清单若 `private: true`，npm 根本不会发布，直接拒绝；strict 模式下还拒绝产物里出现 `workspace:` / `link:` / `file:` / `catalog:` 依赖。
+产物清单若 `private: true`，npm 根本不会发布，直接拒绝；release check 也会拒绝产物里出现 `workspace:` / `link:` / `file:` / `catalog:` 依赖。
 
 private 时报 `selected release package has "private": true; npm publish would reject it`。
 
@@ -368,9 +368,9 @@ private 时报 `selected release package has "private": true; npm publish would 
 
 ### 发布清单不暴露本地依赖
 
-打包后的清单不能出现 `workspace:` / `link:` 这类本地说明符；工作区发布依赖必须指向真实且已发布的包。
+打包后的清单任一依赖区间都不能出现 `workspace:` / `link:` / `file:` / `catalog:` 这类本地说明符；工作区发布依赖必须指向真实且已发布的包。
 
-报形如 `packed package manifest must not expose workspace: or link: dependency specifiers`，或 `<dep> is not published to the npm registry`。
+报形如 `packed package manifest must not expose workspace:, link:, file:, or catalog: dependency specifiers in any dependency section`，或 `<dep> is not published to the npm registry`。
 
 ### 与 npm 上的内容做哈希对比
 

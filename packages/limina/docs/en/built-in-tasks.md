@@ -47,11 +47,11 @@ These files are generated, so a shape problem usually means the generated graph 
 
 ### Every leaf needs a paired companion
 
-Each generated `*.dts.json` needs a `liminaOptions.sourceConfig` that points back to the ordinary source `tsconfig*.json` that owns type semantics. Type-affecting options (such as `strict`, `module`, `target`) are inherited from that source config, and the generated leaf may not include files beyond the source config.
+Each generated `*.dts.json` needs a `liminaOptions.sourceConfig` that points back to the ordinary source `tsconfig*.json` that owns type semantics. Type-affecting options such as `module`, `target`, and `lib` are inherited from that source config, and the generated leaf may not include files beyond the source config.
 
 ```text
 packages/core/
-  tsconfig.lib.json       # source config: strict: true
+  tsconfig.lib.json       # source config owns type-affecting options
 .limina/tsconfig/checkers/typescript/packages/core/
   tsconfig.lib.dts.json   # generated leaf, sourceConfig -> packages/core/tsconfig.lib.json
 ```
@@ -185,9 +185,9 @@ export default defineConfig({
 
 Reports `Unused workspace package dependency:`. If it is genuinely used through generated code or a runtime string, ignore it via `source.knip.workspaces[pkg].ignoreDependencies`; otherwise remove the dependency.
 
-### Strict: source modules unreachable from exports (Knip)
+### Source modules unreachable from exports (Knip)
 
-In strict mode, Limina also lets Knip check whether an owner's source module is unreachable from package `exports`, `bin`, scripts, Knip-supported plugin entries, and `source.knip.workspaces[pkg].entry` — in which case it is a dead module.
+Limina lets Knip check whether an owner's source module is unreachable from package `exports`, `bin`, scripts, Knip-supported plugin entries, and `source.knip.workspaces[pkg].entry` — in which case it is a dead module.
 
 ```js
 source: {
@@ -260,7 +260,7 @@ Otherwise it reports `Default tsconfig.json is not a pure aggregator:`.
 
 Each generated `*.dts.json` must be reachable from a generated checker build entry, have a `sourceConfig`, be valid for `tsc -b`, and align its file set and (non-output) options with the source config.
 
-These report `DTS config is not reachable from any checker entry:`, `DTS config is not valid for tsc -b:`, `DTS config file set does not match its strict local tsconfig:`, and `DTS config overrides a typecheck compiler option from its strict local tsconfig:` respectively.
+These report `DTS config is not reachable from any checker entry:`, `DTS config is not valid for tsc -b:`, `DTS config file set does not match its local typecheck config:`, and `DTS config overrides a typecheck compiler option from its local typecheck config:` respectively.
 
 ### The role of `tsconfig.json` per directory
 
@@ -268,11 +268,11 @@ When a directory has a single typecheck environment, use the default `tsconfig.j
 
 Reports `Single typecheck environment should use default tsconfig.json:` or `Directory with multiple typecheck environments must use tsconfig.json as an aggregator:`.
 
-### Strict adds extra constraints
+### Typecheck shape constraints
 
-In strict mode, a leaf must (transitively) `extends` its companion, the build graph may reference only build/dts projects, and each module belongs to exactly one typecheck config.
+A leaf must transitively `extends` its companion, the build graph may reference only build/dts projects, and each module belongs to exactly one typecheck config.
 
-These report `Strict mode requires declaration leaves to transitively extend their companion typecheck config:`, `Strict mode build graph references a non-build project:`, and `Strict mode source file belongs to multiple typecheck configs:` respectively.
+These report `Declaration leaf does not transitively extend its companion typecheck config:`, `Build graph references a non-build project:`, and `Source file belongs to multiple typecheck configs:` respectively.
 
 ## `checker:build`
 
@@ -329,7 +329,7 @@ Maps to `limina package check`. Runs packaging-correctness checks against **buil
 
 ### publint: is the package well-formed
 
-It runs publint (strict by default) against the output to check `exports`, the `main` / `module` / `types` fields, whether published files are complete, and other packaging-correctness issues.
+It runs publint against the output to check `exports`, the `main` / `module` / `types` fields, whether published files are complete, and other packaging-correctness issues.
 
 Reports something like `publint found N issue(s): <label>`. Fix: address the publint findings in `package.json`.
 
@@ -349,11 +349,11 @@ Reports something like `package boundary found N issue(s): <label>`. Fix: add th
 
 It checks the output under `outDir`, so you must build first. Running it without a build reports `outDir package.json not found` with `Run the package build first.`. Fix: run `pnpm build` first.
 
-### Strict: the output manifest must be publishable
+### The output manifest must be publishable
 
-In strict mode, the output `package.json` must be a complete npm manifest with no `workspace:` / `link:` / `file:` / `catalog:` pnpm-local dependencies.
+The output `package.json` must be a complete npm manifest with no `workspace:` / `link:` / `file:` / `catalog:` pnpm-local dependencies.
 
-Reports something like `[<label>] [strict] output package.json ...`.
+Reports something like `[<label>] output package.json ...`.
 
 ## `release:check`
 
@@ -361,7 +361,7 @@ Maps to `limina release check`. Runs publish-time hygiene and consistency checks
 
 ### It cannot be private (or carry local dependencies)
 
-If the output manifest is `private: true`, npm will not publish it, so it is rejected outright; strict mode also rejects `workspace:` / `link:` / `file:` / `catalog:` dependencies in the output.
+If the output manifest is `private: true`, npm will not publish it, so it is rejected outright; release check also rejects `workspace:` / `link:` / `file:` / `catalog:` dependencies in the output.
 
 A private manifest reports `selected release package has "private": true; npm publish would reject it`.
 
@@ -373,9 +373,9 @@ A missing file reports `tarball is missing required file(s): LICENSE.md`. Fix: a
 
 ### The published manifest must not expose local dependencies
 
-The packed manifest must not contain `workspace:` / `link:` local specifiers; workspace publish dependencies must point at real, published packages.
+The packed manifest must not contain `workspace:` / `link:` / `file:` / `catalog:` local specifiers in any dependency section; workspace publish dependencies must point at real, published packages.
 
-Reports something like `packed package manifest must not expose workspace: or link: dependency specifiers`, or `<dep> is not published to the npm registry`.
+Reports something like `packed package manifest must not expose workspace:, link:, file:, or catalog: dependency specifiers in any dependency section`, or `<dep> is not published to the npm registry`.
 
 ### It compares content hashes against npm
 

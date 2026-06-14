@@ -2,7 +2,7 @@
 
 Limina configuration starts from `limina.config.mjs` inside the workspace. Read the reference by topic:
 
-- [Config File](./config-file.md): `defineConfig`, function config, `mode`, `command`, and `strict`.
+- [Config File](./config-file.md): `defineConfig`, function config, `mode`, and `command`.
 - [Checker Entries](./checkers.md): `config.checkers.<name>`, `preset`, `entry`, and fixed extensions.
 - [Source Boundary](./source-boundary.md): `config.source.include` / `exclude` — the governed-file boundary for proof coverage.
 - [Source Checks](./source-checks.md): top-level `source.knip` / `tsconfigOwnership` — dependency, module, and ordinary tsconfig ownership checks.

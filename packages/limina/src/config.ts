@@ -655,16 +655,6 @@ export interface ReleaseConfig {
  */
 export interface LiminaConfig {
   /**
-   * Enable strict workspace modeling rules.
-   *
-   * Strict mode keeps the existing command surface but makes graph, proof,
-   * source, package, and release checks enforce the complete Limina workspace
-   * model.
-   *
-   * @default false
-   */
-  strict?: boolean;
-  /**
    * Shared project facts, such as checker entries and source boundary.
    */
   config?: SharedLiminaConfig;
@@ -952,7 +942,6 @@ const releaseConfigShapeSchema = z.looseObject({
 
 const liminaConfigShapeSchema = z
   .looseObject({
-    strict: z.boolean().optional(),
     config: sharedLiminaConfigShapeSchema.optional(),
     release: releaseConfigShapeSchema.optional(),
   })
@@ -1020,15 +1009,6 @@ function formatLiminaConfigShapeIssue(
       '  field: config',
       `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
       '  reason: config must be an object.',
-    ].join('\n');
-  }
-
-  if (field === 'strict') {
-    return [
-      'Invalid Limina config:',
-      '  field: strict',
-      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
-      '  reason: strict must be a boolean.',
     ].join('\n');
   }
 
@@ -1202,10 +1182,6 @@ export function validateLiminaConfig(config: LiminaConfig): void {
   if (problems.length > 0) {
     throw new Error(problems.join('\n\n'));
   }
-}
-
-export function isStrictConfig(config: Pick<LiminaConfig, 'strict'>): boolean {
-  return config.strict === true;
 }
 
 export function getActiveCheckers(

@@ -160,9 +160,8 @@ interface SourceUnusedModuleIgnoreEntry {
 - `owner` must name an existing package owner with a package.json name.
 - `reason` must be a non-empty explanation for why these modules are legitimate entries.
 
-`source.unusedModules.ignore` configures exceptions for strict-mode unused source module analysis:
+`source.unusedModules.ignore` configures exceptions for unused source module analysis:
 
-- `strict: true` enables unused source module checks automatically.
 - Limina provides Knip with each named package owner's known source module set.
 - Knip counts modules reachable from source-facing package entries, binaries, scripts, Knip-supported plugin entries, and `source.additionalEntries`.
 - `file` must be a workspace-root-relative path inside the repository and must belong to that owner's source module set.

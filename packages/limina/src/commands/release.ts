@@ -1,6 +1,6 @@
 import { createElapsedTimer } from 'logaria/helper';
 import path from 'pathe';
-import { isStrictConfig, type ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config';
 import type { LiminaFlowReporter } from '../flow';
 import { clearCliScreen, formatErrorMessage, ReleaseLogger } from '../logger';
 import {
@@ -52,7 +52,7 @@ function logReleaseCheckPlan(options: {
   );
 }
 
-function collectStrictOutputManifestProblems(options: {
+function collectOutputManifestProblems(options: {
   label: string;
   manifest: DistPackageJson;
   outDir: string;
@@ -83,7 +83,7 @@ function collectStrictOutputManifestProblems(options: {
 
       problems.push(
         [
-          `${options.label}: ${options.manifest.name} -> ${dependencyName} [${sectionName}] (${specifier}): output package manifest must not expose workspace:, link:, file:, or catalog: dependency specifiers when strict: true`,
+          `${options.label}: ${options.manifest.name} -> ${dependencyName} [${sectionName}] (${specifier}): output package manifest must not expose workspace:, link:, file:, or catalog: dependency specifiers`,
           `  output: ${toRelativePath(options.rootDir, options.outDir)}`,
         ].join('\n'),
       );
@@ -146,23 +146,21 @@ async function runReleaseCheckEntry(options: {
       label: options.label,
       packageJsonPath: outputPackageJsonPath,
     });
-    const strictOutputProblems = isStrictConfig(options.config)
-      ? collectStrictOutputManifestProblems({
-          label: options.label,
-          manifest: outputManifest,
-          outDir: options.outDir,
-          rootDir: options.config.rootDir,
-        })
-      : [];
+    const outputProblems = collectOutputManifestProblems({
+      label: options.label,
+      manifest: outputManifest,
+      outDir: options.outDir,
+      rootDir: options.config.rootDir,
+    });
 
-    if (strictOutputProblems.length > 0) {
+    if (outputProblems.length > 0) {
       throw new PackageReleaseConsistencyError(
         [
           `package release check failed for ${options.label}:`,
           `  output: ${toRelativePath(options.config.rootDir, options.outDir)}`,
           '',
           'Output package manifest is not publish-ready:',
-          ...strictOutputProblems.map((problem) => `  - ${problem}`),
+          ...outputProblems.map((problem) => `  - ${problem}`),
         ].join('\n'),
       );
     }
@@ -239,7 +237,7 @@ export async function runReleaseCheck(
       config: options.config,
       cwd,
       packageNames: options.packageNames,
-      strictCwd: true,
+      requireCwdPackageMatch: true,
     });
 
     logReleaseCheckPlan({

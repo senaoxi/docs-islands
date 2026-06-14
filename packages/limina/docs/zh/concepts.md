@@ -61,7 +61,7 @@ packages/core/tsconfig.tools.json
 packages/core/tsconfig.test.json
 ```
 
-源码配置负责严格类型检查语义，例如 `strict`、`lib`、`types`、`jsx` 和框架设置。覆盖证明检查会验证生成覆盖；检查器构建则通过 `tsc -b`、`tsgo -b` 或 `vue-tsc -b` 运行生成入口。
+源码配置负责类型检查语义，例如 `lib`、`types`、`jsx` 和框架设置。覆盖证明检查会验证生成覆盖；检查器构建则通过 `tsc -b`、`tsgo -b` 或 `vue-tsc -b` 运行生成入口。
 
 ::: warning
 当前 `vue-tsgo` 在执行上是二等公民，因为它的构建模式不能保持 TypeScript 项目引用边界，也不具备增量构建语义；但选中的源码 tsconfig 仍会参与 Limina 图检查和覆盖证明。

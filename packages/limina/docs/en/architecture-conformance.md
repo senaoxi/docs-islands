@@ -58,7 +58,7 @@ From pnpm's perspective, this is fine. `workspace:*` links the local workspace p
 }
 ```
 
-This is valid in limina's current model. Workspace package exports may point to source files or built artifacts, and the rule is not controlled by strict mode. What matters is the resolved entry:
+This is valid in limina's current model. Workspace package exports may point to source files or built artifacts. What matters is the resolved entry:
 
 - TypeScript must resolve every public export to a stable type entry or supported source entry;
 - Oxc must resolve every public export, with a declaration-only fallback when TypeScript resolves a pure `.d.ts` export;
@@ -159,7 +159,6 @@ In a single-environment directory, `tsconfig.json` can be a leaf directly:
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "strict": true,
   },
   "include": ["src/**/*.ts"],
 }

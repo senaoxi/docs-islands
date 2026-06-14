@@ -1230,7 +1230,6 @@ function validatePackedManifest(options: {
   manifest: PublishManifest;
   rootPackageName: string;
   state: ReleaseConsistencyState;
-  strict: boolean;
 }): void {
   const { manifest, rootPackageName, state } = options;
 
@@ -1250,30 +1249,28 @@ function validatePackedManifest(options: {
     }
   }
 
-  if (options.strict) {
-    for (const entry of collectPackageDependencyEntries(manifest)) {
-      if (!isLocalPackageDependencySpecifier(entry.specifier)) {
-        continue;
-      }
-
-      const isAlreadyCoveredPublishSpecifier =
-        entry.sectionName !== 'devDependencies' &&
-        (isWorkspaceDependencySpecifier(entry.specifier) ||
-          isLinkDependencySpecifier(entry.specifier));
-
-      if (isAlreadyCoveredPublishSpecifier) {
-        continue;
-      }
-
-      state.packedManifestProblems.push({
-        dependencyName: entry.dependencyName,
-        importerName: rootPackageName,
-        message:
-          'strict packed package manifest must not expose workspace:, link:, file:, or catalog: dependency specifiers in any dependency section',
-        sectionName: entry.sectionName,
-        specifier: entry.specifier,
-      });
+  for (const entry of collectPackageDependencyEntries(manifest)) {
+    if (!isLocalPackageDependencySpecifier(entry.specifier)) {
+      continue;
     }
+
+    const isAlreadyCoveredPublishSpecifier =
+      entry.sectionName !== 'devDependencies' &&
+      (isWorkspaceDependencySpecifier(entry.specifier) ||
+        isLinkDependencySpecifier(entry.specifier));
+
+    if (isAlreadyCoveredPublishSpecifier) {
+      continue;
+    }
+
+    state.packedManifestProblems.push({
+      dependencyName: entry.dependencyName,
+      importerName: rootPackageName,
+      message:
+        'packed package manifest must not expose workspace:, link:, file:, or catalog: dependency specifiers in any dependency section',
+      sectionName: entry.sectionName,
+      specifier: entry.specifier,
+    });
   }
 
   for (const dependency of state.directWorkspaceDependencies) {
@@ -1467,7 +1464,6 @@ export async function assertPackageReleaseConsistency(
       manifest: packedManifest,
       rootPackageName: options.outputManifest.name,
       state,
-      strict: options.config.strict === true,
     });
   }
 

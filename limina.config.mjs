@@ -1,7 +1,6 @@
 import { defineConfig } from 'limina';
 
 export default defineConfig({
-  strict: true,
   // Shared checker source config coverage used by graph, proof, paths, and typecheck checks.
   config: {
     checkers: {

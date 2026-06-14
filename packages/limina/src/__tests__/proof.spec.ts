@@ -76,7 +76,7 @@ function createPassingFiles(
   };
 }
 
-function createStrictSingleEnvironmentFiles(
+function createSingleEnvironmentFiles(
   overrides: Record<string, string> = {},
 ): Record<string, string> {
   return {
@@ -104,7 +104,7 @@ function createStrictSingleEnvironmentFiles(
   };
 }
 
-function createStrictMultiEnvironmentFiles(
+function createMultiEnvironmentFiles(
   overrides: Record<string, string> = {},
 ): Record<string, string> {
   return createPassingFiles({
@@ -156,25 +156,19 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('gates missing typecheck declaration companions behind strict mode', async () => {
-    const fixture = await createFixture(createStrictMultiEnvironmentFiles());
+  it('rejects missing typecheck declaration companions', async () => {
+    const fixture = await createFixture(createMultiEnvironmentFiles());
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(false);
-      await expect(
-        runProofCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects dts leaves that do not transitively extend their companion in strict mode', async () => {
+  it('rejects dts leaves that do not transitively extend their companion', async () => {
     const fixture = await createFixture(
-      createStrictSingleEnvironmentFiles({
+      createSingleEnvironmentFiles({
         'packages/pkg/tsconfig.dts.json': JSON.stringify({
           compilerOptions: {
             composite: true,
@@ -198,20 +192,14 @@ describe('runProofCheck dts config semantics', () => {
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(false);
-      await expect(
-        runProofCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('accepts dts leaves that transitively extend their companion in strict mode', async () => {
+  it('rejects checker includes that match declaration helper configs', async () => {
     const fixture = await createFixture(
-      createStrictSingleEnvironmentFiles({
+      createSingleEnvironmentFiles({
         'packages/pkg/tsconfig.dts.base.json': JSON.stringify({
           extends: './tsconfig.json',
         }),
@@ -231,18 +219,15 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(
-        runProofCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).rejects.toThrow(/Checker include matched reserved tsconfig files/u);
+      await expect(runProofCheck(fixture.config)).rejects.toThrow(
+        /Checker include matched reserved tsconfig files/u,
+      );
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects build graph references to ordinary configs in strict mode', async () => {
+  it('rejects build graph references to ordinary configs', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tsconfig.extra.build.json': JSON.stringify({
@@ -258,28 +243,16 @@ describe('runProofCheck dts config semantics', () => {
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(false);
-      await expect(
-        runProofCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects duplicate ordinary typecheck ownership in strict mode', async () => {
-    const fixture = await createFixture(createStrictMultiEnvironmentFiles());
+  it('rejects duplicate ordinary typecheck ownership', async () => {
+    const fixture = await createFixture(createMultiEnvironmentFiles());
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(false);
-      await expect(
-        runProofCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -408,7 +381,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('reports missing strict local tsconfig files', async () => {
+  it('reports missing local typecheck config files', async () => {
     const files = createPassingFiles();
     delete files['packages/pkg/tsconfig.json'];
     const fixture = await createFixture(files);
@@ -420,7 +393,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('reports typecheck compiler option drift from the strict local tsconfig', async () => {
+  it('reports typecheck compiler option drift from the local typecheck config', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({

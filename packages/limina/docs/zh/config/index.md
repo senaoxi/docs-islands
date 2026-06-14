@@ -2,7 +2,7 @@
 
 Limina 的配置入口是工作区内部的 `limina.config.mjs`。具体字段按主题拆开阅读：
 
-- [配置文件](./config-file.md)：`defineConfig`、函数配置、`mode`、`command` 和 `strict`。
+- [配置文件](./config-file.md)：`defineConfig`、函数配置、`mode` 和 `command`。
 - [检查器入口](./checkers.md)：`config.checkers.<name>`、`preset`、`entry` 和固定扩展名。
 - [源码边界](./source-boundary.md)：`config.source.include` / `exclude`——覆盖证明使用的受治理文件边界。
 - [源码检查](./source-checks.md)：顶层 `source.knip` / `tsconfigOwnership`——依赖、模块和普通 tsconfig 归属检查。

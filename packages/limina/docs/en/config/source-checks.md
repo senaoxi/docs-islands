@@ -4,13 +4,12 @@
 This page documents the top-level `source` option — the **Knip-driven dependency and module reachability checks** run by `source:check`. It is different from `config.source`, which defines the governed-file boundary used by proof coverage. For that option, see [Source Boundary](./source-boundary.md).
 :::
 
-`source check` owns package authority and ordinary typecheck ownership checks. Its unused workspace dependency branch is Knip-backed and uses package entries instead of `include` / `exclude`. In `strict: true`, `source check` also uses Knip to report unused source modules from Limina's package owner module sets.
+`source check` owns package authority and ordinary typecheck ownership checks. Its Knip-backed branch uses package entries instead of `include` / `exclude` to report unused workspace dependencies and unused source modules from Limina's package owner module sets.
 
 ```js
 import { defineConfig } from 'limina';
 
 export default defineConfig({
-  strict: true,
   source: {
     knip: {
       workspaces: {},
@@ -25,7 +24,7 @@ export default defineConfig({
 - **Type:** `boolean | SourceKnipCheckConfig`
 - **Default:** `true`
 
-`source.knip` controls the Knip-backed parts of `source:check`: unused workspace dependencies and, in `strict: true`, unused source modules.
+`source.knip` controls the Knip-backed parts of `source:check`: unused workspace dependencies and unused source modules.
 
 Use `knip: true` or omit the option to use Limina's generated default Knip config. Use `knip: false` to skip these Knip-backed checks. Use an object to configure Limina's semantic Knip rules by workspace package name:
 
@@ -90,7 +89,7 @@ Then `utils/tsconfig.lib.json` can describe the source side:
 
 As long as the selected source config explains the source and output directories, such as `rootDir: "."` and `outDir: "./dist"`, Limina can map `utils/dist/src/env.js` back to `utils/src/env.ts`. The source module is then considered reachable from the package entry even without an `exports.source` condition.
 
-If the source config selected by `checker.include` does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but Limina may not find the source module behind it. In `strict: true`, that source file may be reported as unused. Prefer fixing the selected source config over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
+If the source config selected by `checker.include` does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but Limina may not find the source module behind it. That source file may be reported as unused. Prefer fixing the selected source config over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
 
 Limina also determines Knip's `project` file set automatically from governed source modules. Users do not configure `project`.
 
@@ -98,7 +97,6 @@ Limina also determines Knip's `project` file set automatically from governed sou
 import { defineConfig } from 'limina';
 
 export default defineConfig({
-  strict: true,
   source: {
     knip: {
       workspaces: {
@@ -150,11 +148,7 @@ Ignore entries must name an existing workspace package in `dep` and a dependency
 
 - **Type:** `Array<{ file: string; reason: string }>`
 
-::: info
-This is a `strict: true` feature. `source check` enables unused source module detection automatically when `strict: true`.
-:::
-
-Use `ignoreFiles` only when a strict-mode source module is intentionally retained but not visible to Knip.
+Use `ignoreFiles` only when a source module is intentionally retained but not visible to Knip.
 
 Ignore entries must use a workspace-root-relative file path that stays inside the repository and a non-empty reason. The file must belong to the keyed package's source module set known to Limina.
 

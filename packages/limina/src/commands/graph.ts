@@ -2,7 +2,7 @@ import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'pathe';
-import ts from 'typescript';
+import type ts from 'typescript';
 import type { ResolvedLiminaConfig } from '../config';
 import {
   collectDependencyGraph,

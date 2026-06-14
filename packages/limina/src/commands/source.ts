@@ -7,7 +7,6 @@ import type { CheckerProjectParseContext } from '../checkers';
 import {
   getActiveCheckerExtensions,
   getActiveCheckers,
-  isStrictConfig,
   type ResolvedLiminaConfig,
 } from '../config';
 import type { LiminaFlowReporter } from '../flow';
@@ -1591,7 +1590,9 @@ function collectSourceCandidatesForManifestTarget(target: string): string[] {
     candidates.add(withoutDist);
   }
 
-  for (const candidate of [...candidates]) {
+  const initialCandidates = [...candidates];
+
+  for (const candidate of initialCandidates) {
     const replacements: string[] = [];
 
     if (/\.d\.mts$/u.test(candidate)) {
@@ -1605,12 +1606,16 @@ function collectSourceCandidatesForManifestTarget(target: string): string[] {
     } else if (/\.cjs$/u.test(candidate)) {
       replacements.push(candidate.replace(/\.cjs$/u, '.cts'));
     } else if (/\.jsx$/u.test(candidate)) {
-      replacements.push(candidate.replace(/\.jsx$/u, '.tsx'));
-      replacements.push(candidate.replace(/\.jsx$/u, '.jsx'));
+      replacements.push(
+        candidate.replace(/\.jsx$/u, '.tsx'),
+        candidate.replace(/\.jsx$/u, '.jsx'),
+      );
     } else if (/\.js$/u.test(candidate)) {
-      replacements.push(candidate.replace(/\.js$/u, '.ts'));
-      replacements.push(candidate.replace(/\.js$/u, '.tsx'));
-      replacements.push(candidate.replace(/\.js$/u, '.js'));
+      replacements.push(
+        candidate.replace(/\.js$/u, '.ts'),
+        candidate.replace(/\.js$/u, '.tsx'),
+        candidate.replace(/\.js$/u, '.js'),
+      );
     }
 
     for (const replacement of replacements) {
@@ -2153,7 +2158,7 @@ function addUnusedModuleProblems(options: {
         `  owner: ${moduleSet.owner.name}`,
         `  package manifest: ${toRelativePath(options.config.rootDir, moduleSet.owner.packageJsonPath)}`,
         `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
-        '  reason: strict mode requires owner-governed source modules to be reachable from package entries, binaries, scripts, or Knip plugin entries.',
+        '  reason: owner-governed source modules must be reachable from package entries, binaries, scripts, or Knip plugin entries.',
         `  fix: delete ${toRelativePath(options.config.rootDir, filePath)}, make it reachable from a package manifest entry or source.knip.workspaces["${moduleSet.owner.name}"].entry, or add source.knip.workspaces["${moduleSet.owner.name}"].ignoreFiles with file "${toRelativePath(options.config.rootDir, filePath)}" and a reason.`,
       ].join('\n'),
     );
@@ -2191,8 +2196,7 @@ async function addKnipBackedSourceProblems(options: {
     ownerModuleSets: options.ownerModuleSets,
     problems: options.problems,
   });
-  const includeFiles =
-    isStrictConfig(options.config) && options.ownerModuleSets.length > 0;
+  const includeFiles = options.ownerModuleSets.length > 0;
   const needsDependencyAnalysis =
     options.workspacePackages.length > 0 && declarations.length > 0;
   const ownerProjects = createKnipOwnerProjects({

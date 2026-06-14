@@ -14,7 +14,6 @@ async function writeText(filePath: string, text: string): Promise<void> {
 describe('defineConfig', () => {
   it('returns the explicit user config unchanged', () => {
     const config = defineConfig({
-      strict: true,
       config: {
         checkers: {
           typescript: {
@@ -105,7 +104,6 @@ describe('defineConfig', () => {
       },
     });
 
-    expect(config.strict).toBe(true);
     expect(config.config?.checkers?.typescript?.include).toEqual([
       'tsconfig.custom.json',
     ]);
@@ -408,7 +406,6 @@ describe('defineConfig', () => {
 
   it('returns config factories unchanged', async () => {
     const config = defineConfig(async ({ mode }) => ({
-      strict: mode === 'ci',
       config: {
         checkers: {
           typescript: {
@@ -420,7 +417,6 @@ describe('defineConfig', () => {
     }));
 
     await expect(config({ command: 'graph', mode: 'ci' })).resolves.toEqual({
-      strict: true,
       config: {
         checkers: {
           typescript: {
@@ -512,7 +508,6 @@ export default Promise.resolve({});
 import { defineConfig } from '${new URL('../config.ts', import.meta.url).href}';
 
 export default defineConfig(async ({ mode }) => ({
-  strict: mode === 'ci',
   config: {
     checkers: {
       typescript: {
@@ -533,7 +528,6 @@ export default defineConfig(async ({ mode }) => ({
 
       expect(config.configPath).toBe(path.join(rootDir, 'limina.config.mjs'));
       expect(config.rootDir).toBe(rootDir);
-      expect(config.strict).toBe(true);
       expect(config.config?.checkers?.typescript?.include).toEqual([
         'tsconfig.ci.json',
       ]);
@@ -695,34 +689,6 @@ export default null;
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
         /limina config must export or return an object/u,
-      );
-    } finally {
-      await rm(rootDir, {
-        force: true,
-        recursive: true,
-      });
-    }
-  });
-
-  it('rejects non-boolean strict config values', async () => {
-    const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
-
-    try {
-      await writeText(
-        path.join(rootDir, 'pnpm-workspace.yaml'),
-        'packages: []\n',
-      );
-      await writeText(
-        path.join(rootDir, 'limina.config.mjs'),
-        `
-export default {
-  strict: 'yes',
-};
-`,
-      );
-
-      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /strict must be a boolean/u,
       );
     } finally {
       await rm(rootDir, {

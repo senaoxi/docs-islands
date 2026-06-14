@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'pathe';
 import { glob } from 'tinyglobby';
-import ts from 'typescript';
+import type ts from 'typescript';
 import {
   type CheckerProjectParseContext,
   parseCheckerProjectConfigForContext,

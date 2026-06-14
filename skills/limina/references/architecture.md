@@ -104,7 +104,7 @@ Pairing rule (derived from the filename):
 | `tsconfig.<scope>.dts.json` | `tsconfig.<scope>.json` |
 | `tsconfig.dts.json`         | `tsconfig.json`         |
 
-The companion defines strict local typecheck semantics. Proof check compares it with the declaration leaf, while first-class checker build runs the build graph.
+The companion defines local typecheck semantics. Proof check compares it with the declaration leaf, while first-class checker build runs the build graph.
 
 ### Default / IDE entry — `tsconfig.json`
 
@@ -178,7 +178,7 @@ Each label can have a single rule. `deny.refs[].path` MUST resolve to a `tsconfi
 
 - A non-aggregator leaf and its companion must keep their file set within ONE nearest-`package.json` owner.
 - A relative source import must not cross the nearest package.json owner boundary — use the package name instead.
-- A bare package import is classified from TypeScript's resolved entry module first: current-owner targets are allowed, other workspace owners require a manifest dependency, strict mode requires `workspace:`, artifact-package targets require a manifest dependency, and unresolved imports fall back to the raw package root.
+- A bare package import is classified from TypeScript's resolved entry module first: current-owner targets are allowed, other workspace owners require a manifest dependency, artifact-package targets require a manifest dependency, and unresolved imports fall back to the raw package root.
 - Dependency authorization accepts `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`.
 - A `#xxx` package-import specifier must match the importing package's `package.json#imports` field, must not resolve to another workspace/package owner, and may resolve to a named artifact package only when the owner declares that dependency.
 - Self-package imports (`packageName` === own name) and Node builtins are exempt from authorization.

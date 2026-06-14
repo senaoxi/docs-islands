@@ -688,7 +688,7 @@ packages:
     }
   });
 
-  it('allows resolved workspace bare imports declared in any dependency section outside strict mode', async () => {
+  it('allows resolved workspace bare imports declared in any dependency section', async () => {
     const pathOptions = {
       baseUrl: '.',
       paths: {
@@ -766,12 +766,7 @@ packages:
     });
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -1724,7 +1719,7 @@ packages:
     }
   });
 
-  it('accepts strict source modules reachable from exported source entries', async () => {
+  it('accepts source modules reachable from exported source entries', async () => {
     const fixture = await createFixture({
       ...createWorkspacePackageFiles({
         appSource:
@@ -1734,18 +1729,13 @@ packages:
     });
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('accepts strict source modules reachable from exported build artifacts through tsconfig source maps', async () => {
+  it('accepts source modules reachable from exported build artifacts through tsconfig source maps', async () => {
     const fixture = await createFixture({
       ...createWorkspacePackageFiles({
         appManifest: {
@@ -1773,18 +1763,13 @@ packages:
     });
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects strict source modules unreachable from package entries', async () => {
+  it('rejects source modules unreachable from package entries', async () => {
     const errorSpy = vi
       .spyOn(SourceLogger, 'error')
       .mockImplementation(() => {});
@@ -1796,12 +1781,7 @@ packages:
     });
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(false);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain('Unused source module:');
@@ -1813,7 +1793,7 @@ packages:
     }
   });
 
-  it('does not report strict unused source modules for no-exports owners', async () => {
+  it('does not report unused source modules for no-exports owners', async () => {
     const fixture = await createFixture({
       ...createWorkspacePackageFiles({
         appManifest: {
@@ -1826,33 +1806,13 @@ packages:
     });
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('does not report unreachable source modules outside strict mode', async () => {
-    const fixture = await createFixture({
-      ...createWorkspacePackageFiles({
-        appSource: "export { internalValue } from '@example/internal';\n",
-      }),
-      'packages/app/src/dead.ts': 'export const deadValue = 1;\n',
-    });
-
-    try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('accepts strict source modules reachable from package bins', async () => {
+  it('accepts source modules reachable from package bins', async () => {
     const fixture = await createFixture({
       ...createWorkspacePackageFiles({
         appManifest: {
@@ -1866,18 +1826,13 @@ packages:
     });
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('accepts strict source modules reachable from package scripts', async () => {
+  it('accepts source modules reachable from package scripts', async () => {
     const fixture = await createFixture({
       ...createWorkspacePackageFiles({
         appManifest: {
@@ -1891,18 +1846,13 @@ packages:
     });
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('accepts strict source modules reachable from additional entry globs', async () => {
+  it('accepts source modules reachable from additional entry globs', async () => {
     const fixture = await createFixture(
       {
         ...createWorkspacePackageFiles({
@@ -1931,18 +1881,13 @@ packages:
     );
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('allows configured strict unused source modules with a reason', async () => {
+  it('allows configured unused source modules with a reason', async () => {
     const fixture = await createFixture(
       {
         ...createWorkspacePackageFiles({
@@ -1971,12 +1916,7 @@ packages:
     );
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -2021,12 +1961,7 @@ packages:
     );
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(false);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain('Invalid source Knip entry config:');
@@ -2085,12 +2020,7 @@ packages:
     );
 
     try {
-      await expect(
-        runSourceCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(false);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain('reason must be a non-empty string');

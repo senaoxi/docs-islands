@@ -13,15 +13,15 @@ import { runReleaseCheck } from './commands/release';
 import { runSourceCheck } from './commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
 import {
-  loadConfig,
   type LiminaCommand,
+  loadConfig,
   type PackageAttwProfile,
   type PackageCheckToolSelection,
   type ResolvedLiminaConfig,
 } from './config';
 import {
-  stringifyDependencyGraph,
   type DependencyGraphView,
+  stringifyDependencyGraph,
 } from './dependency-graph';
 import { createLiminaFlowReporter } from './flow';
 import { clearCliScreen, CliLogger, formatErrorMessage } from './logger';

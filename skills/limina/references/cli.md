@@ -89,7 +89,7 @@ Validates package-owner boundary rules:
 - A non-aggregator `tsconfig*.dts.json` (or its companion) must stay within ONE nearest-`package.json` owner. Mixing owners is an error.
 - Every source file must have a package owner.
 - A relative source import must not cross the nearest package.json owner boundary.
-- A bare package import is checked from TypeScript's resolved entry first. Current-owner targets are allowed, other workspace owners require a manifest dependency, strict mode requires `workspace:`, artifact-package targets require a manifest dependency, and unresolved imports fall back to the raw package root.
+- A bare package import is checked from TypeScript's resolved entry first. Current-owner targets are allowed, other workspace owners require a manifest dependency, artifact-package targets require a manifest dependency, and unresolved imports fall back to the raw package root.
 - Dependency authorization accepts `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`.
 - `#xxx` package imports must match the nearest package.json `imports` field, may resolve within the current owner, must not resolve to another workspace owner, and may resolve to a named artifact package only when the owner declares that dependency.
 
@@ -170,7 +170,7 @@ For every selected entry:
 2. If `publint` or `attw` is enabled, pack the directory with `@publint/pack` (ignoring scripts) into a temporary directory and feed the tarball to both tools.
 3. Run boundary check if enabled: parse every `.js`/`.mjs`/`.cjs` in the output, extract bare-package imports, validate them against the output manifest's dependencies, self-export specifiers, and runtime environment classification.
 
-`publint` is run in strict mode by default (overridable per entry with `publint.strict`).
+`publint` runs with its strict option enabled by default (overridable per entry with `publint.strict`).
 
 Exit code: 1 if any check on any entry fails, or if no runnable entry exists for the selected tool.
 

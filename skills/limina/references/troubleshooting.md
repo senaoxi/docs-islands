@@ -180,12 +180,12 @@ Failure-by-failure cause and fix for the error classes Limina emits. Use this wh
 - **Cause**: The leaf's resolved options are wrong for declaration emit through `tsc -b`.
 - **Fix**: Set `composite: true`, ensure `noEmit` is not `true`, set `declaration: true`, `emitDeclarationOnly: true`.
 
-### `DTS config file set does not match its strict local tsconfig:`
+### `DTS config file set does not match its local typecheck config:`
 
 - **Cause**: The leaf and companion have different file lists.
 - **Fix**: Align `include`/`files` so they cover the same files.
 
-### `DTS config overrides a typecheck compiler option from its strict local tsconfig:`
+### `DTS config overrides a typecheck compiler option from its local typecheck config:`
 
 - **Cause**: The leaf redeclares a type-affecting compilerOption with a different value than the companion.
 - **Fix**: Remove that option from the leaf, or update the companion to match.

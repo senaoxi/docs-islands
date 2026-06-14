@@ -25,7 +25,6 @@ import type {
   ResolvedLiminaConfig,
   RuntimeEnvironment,
 } from '../config';
-import { isStrictConfig } from '../config';
 import type { LiminaFlowReporter } from '../flow';
 import { clearCliScreen, formatErrorMessage, PackageLogger } from '../logger';
 import { toRelativePath } from '../utils/path';
@@ -273,7 +272,7 @@ function collectPackageDependencyEntries(
   return entries;
 }
 
-function collectStrictBuiltPackageManifestProblems(options: {
+function collectBuiltPackageManifestProblems(options: {
   label: string;
   manifest: DistPackageJson;
   packageJsonPath: string;
@@ -286,10 +285,10 @@ function collectStrictBuiltPackageManifestProblems(options: {
   ) {
     problems.push(
       [
-        `[${options.label}] [strict] output package.json is not a complete npm package manifest`,
+        `[${options.label}] output package.json is not a complete npm package manifest`,
         `  package.json: ${options.packageJsonPath}`,
         '  field: name',
-        '  reason: strict: true requires built package outputs to include a non-empty package name.',
+        '  reason: built package outputs must include a non-empty package name.',
       ].join('\n'),
     );
   }
@@ -301,12 +300,12 @@ function collectStrictBuiltPackageManifestProblems(options: {
 
     problems.push(
       [
-        `[${options.label}] [strict] output package.json exposes a pnpm-local dependency specifier`,
+        `[${options.label}] output package.json exposes a pnpm-local dependency specifier`,
         `  package.json: ${options.packageJsonPath}`,
         `  dependency: ${entry.dependencyName}`,
         `  section: ${entry.sectionName}`,
         `  specifier: ${entry.specifier}`,
-        '  reason: strict: true requires built package manifests to be publish-ready npm package manifests without workspace:, link:, file:, or catalog: specifiers.',
+        '  reason: built package manifests must be publish-ready npm package manifests without workspace:, link:, file:, or catalog: specifiers.',
       ].join('\n'),
     );
   }
@@ -738,7 +737,7 @@ export function createPackageEntrySelectionPlan(options: {
   config: ResolvedLiminaConfig;
   cwd: string;
   packageNames?: readonly string[];
-  strictCwd: boolean;
+  requireCwdPackageMatch: boolean;
   tool?: PackageCheckToolSelection;
 }): PackageEntrySelectionPlan {
   const entries = getConfiguredPackageEntries(options.config);
@@ -783,7 +782,7 @@ export function createPackageEntrySelectionPlan(options: {
 
       if (selectedEntries.length > 0) {
         selectionReason = `nearest package.json name "${cwdPackageName}" matched configured package entry name.`;
-      } else if (options.strictCwd) {
+      } else if (options.requireCwdPackageMatch) {
         throw new Error(
           [
             `Nearest package.json name "${cwdPackageName}" does not match a configured package entry.`,
@@ -796,7 +795,7 @@ export function createPackageEntrySelectionPlan(options: {
         selectedEntries = entries;
         selectionReason = `nearest package.json name "${cwdPackageName}" did not match configured package entries; running all configured entries.`;
       }
-    } else if (options.strictCwd) {
+    } else if (options.requireCwdPackageMatch) {
       throw new Error(
         [
           'No package name was found from cwd up to the workspace root.',
@@ -1101,16 +1100,14 @@ async function runPackageCheckEntry(options: {
       label,
       packageJsonPath: outputPackageJsonPath,
     });
-    const strictManifestProblems = isStrictConfig(options.config)
-      ? collectStrictBuiltPackageManifestProblems({
-          label,
-          manifest: outputManifest,
-          packageJsonPath: toRelativePath(
-            options.config.rootDir,
-            outputPackageJsonPath,
-          ),
-        })
-      : [];
+    const manifestProblems = collectBuiltPackageManifestProblems({
+      label,
+      manifest: outputManifest,
+      packageJsonPath: toRelativePath(
+        options.config.rootDir,
+        outputPackageJsonPath,
+      ),
+    });
 
     const needsPackedTarball =
       options.checks.includes('publint') || options.checks.includes('attw');
@@ -1141,9 +1138,9 @@ async function runPackageCheckEntry(options: {
       packTask?.pass();
     }
 
-    let passed = strictManifestProblems.length === 0;
+    let passed = manifestProblems.length === 0;
 
-    for (const problem of strictManifestProblems) {
+    for (const problem of manifestProblems) {
       PackageLogger.error(problem);
     }
 
@@ -1295,7 +1292,7 @@ export async function runPackageCheck(
       config: options.config,
       cwd,
       packageNames: options.packageNames,
-      strictCwd: false,
+      requireCwdPackageMatch: false,
       tool: options.tool,
     });
 

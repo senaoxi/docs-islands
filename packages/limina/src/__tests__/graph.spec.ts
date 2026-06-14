@@ -871,7 +871,7 @@ describe('runGraphCheck checker entry', () => {
     }
   });
 
-  it('allows artifact-facing exports in strict mode when no workspace source import selects them', async () => {
+  it('allows artifact-facing exports when no workspace source import selects them', async () => {
     const fixture = await createFixture({
       'packages/internal/dist/index.d.ts':
         'export declare const value: number;\n',
@@ -905,12 +905,6 @@ packages:
 
     try {
       await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
-      await expect(
-        runGraphCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -1269,7 +1263,7 @@ packages:
     }
   });
 
-  it('accepts source package exports in strict mode', async () => {
+  it('accepts source package exports', async () => {
     const fixture = await createFixture({
       'packages/internal/package.json': stringifyConfig({
         exports: {
@@ -1300,18 +1294,13 @@ packages:
     });
 
     try {
-      await expect(
-        runGraphCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('accepts tsconfig-owned json package exports in strict mode', async () => {
+  it('accepts tsconfig-owned json package exports', async () => {
     const fixture = await createFixture({
       'packages/internal/package.json': stringifyConfig({
         exports: {
@@ -1346,12 +1335,7 @@ packages:
     });
 
     try {
-      await expect(
-        runGraphCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -1396,7 +1380,7 @@ packages:
     }
   });
 
-  it('does not inspect unselected package exports outside checker-reachable tsconfigs in strict mode', async () => {
+  it('does not inspect unselected package exports outside checker-reachable tsconfigs', async () => {
     const fixture = await createFixture({
       'packages/internal/package.json': stringifyConfig({
         exports: {
@@ -1428,12 +1412,7 @@ packages:
     });
 
     try {
-      await expect(
-        runGraphCheck({
-          ...fixture.config,
-          strict: true,
-        }),
-      ).resolves.toBe(true);
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }

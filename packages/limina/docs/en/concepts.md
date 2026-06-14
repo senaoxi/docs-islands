@@ -61,7 +61,7 @@ packages/core/tsconfig.tools.json
 packages/core/tsconfig.test.json
 ```
 
-The source config owns strict typecheck semantics such as `strict`, `lib`, `types`, `jsx`, and framework settings. Proof check verifies generated coverage, while checker build runs generated entries through `tsc -b`, `tsgo -b`, or `vue-tsc -b`.
+The source config owns typecheck semantics such as `lib`, `types`, `jsx`, and framework settings. Proof check verifies generated coverage, while checker build runs generated entries through `tsc -b`, `tsgo -b`, or `vue-tsc -b`.
 
 ::: warning
 Current `vue-tsgo` support is second-class for execution because its build mode does not preserve TypeScript project-reference boundaries or provide incremental build semantics; selected source tsconfigs still participate in Limina graph/proof coverage.
