@@ -1307,6 +1307,145 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
+  it('rejects project references in source typecheck leaf configs', async () => {
+    const fixture = await createFixture({
+      'packages/dep/src/index.ts': 'export const depValue = 1;\n',
+      'packages/dep/tsconfig.json': JSON.stringify({
+        compilerOptions: {
+          lib: ['ES2023'],
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/test/index.ts': 'export const testValue = 1;\n',
+      'packages/pkg/tsconfig.json': JSON.stringify({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+          {
+            path: './tsconfig.test.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.lib.json': JSON.stringify({
+        compilerOptions: {
+          lib: ['ES2023'],
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+        references: [
+          {
+            path: '../dep/tsconfig.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.test.json': JSON.stringify({
+        compilerOptions: {
+          lib: ['ES2023'],
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['test/**/*.ts'],
+      }),
+      'tsconfig.json': JSON.stringify({
+        files: [],
+        references: [
+          {
+            path: './packages/dep/tsconfig.json',
+          },
+          {
+            path: './packages/pkg/tsconfig.json',
+          },
+        ],
+      }),
+    });
+
+    try {
+      await expect(runProofCheck(fixture.config)).rejects.toThrow(
+        'Source typecheck config declares project references',
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('accepts solution-style default tsconfig references', async () => {
+    const fixture = await createFixture(createPassingFiles());
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps rejecting non-pure solution-style tsconfig aggregators', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'tsconfig.json': JSON.stringify({
+          compilerOptions: {
+            strict: true,
+          },
+          files: [],
+          references: [
+            {
+              path: './packages/pkg/tsconfig.json',
+            },
+          ],
+        }),
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects implicitRefs on solution-style tsconfig aggregators', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'tsconfig.json': JSON.stringify({
+          files: [],
+          liminaOptions: {
+            implicitRefs: [
+              {
+                path: './packages/pkg/tsconfig.json',
+                reason: 'Aggregators do not own source files.',
+              },
+            ],
+          },
+          references: [
+            {
+              path: './packages/pkg/tsconfig.json',
+            },
+          ],
+        }),
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('uses the shared graph root config', async () => {
     const fixture = await createFixture(
       createPassingFiles({

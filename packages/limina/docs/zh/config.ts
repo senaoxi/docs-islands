@@ -70,6 +70,14 @@ const sidebar: DefaultTheme.SidebarItem[] = [
         link: '/zh/architecture-conformance',
       },
       {
+        text: 'Monorepo 约束',
+        link: '/zh/monorepo-constraints',
+      },
+      {
+        text: 'references 推导',
+        link: '/zh/references-inference',
+      },
+      {
         text: '模块解析',
         link: '/zh/module-resolution',
       },

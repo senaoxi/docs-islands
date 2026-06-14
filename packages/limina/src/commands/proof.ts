@@ -30,6 +30,7 @@ import {
   getDtsCompanionConfigPath,
   isBuildGraphConfigPath,
   isDtsConfigPath,
+  isOrdinarySourceTypecheckConfigPath,
   isOrdinaryTypecheckConfigPath,
   type JsonObject,
   readJsonConfig,
@@ -1040,9 +1041,59 @@ function addPureAggregatorProblems(options: {
         `${roleLabel} is not a pure aggregator:`,
         `  config: ${toRelativePath(options.config.rootDir, options.configPath)}`,
         `  fields: ${extraKeys.sort().join(', ')}`,
-        '  reason: pure aggregators may only declare $schema, files, and references; move source inputs and compiler options into leaf configs.',
+        '  reason: pure aggregators may only declare $schema, files, references, and Limina metadata; move source inputs and compiler options into leaf configs.',
       ].join('\n'),
     );
+  }
+}
+
+function hasImplicitRefs(configObject: JsonObject): boolean {
+  const liminaOptions = configObject.liminaOptions;
+
+  return (
+    isPlainRecord(liminaOptions) && Object.hasOwn(liminaOptions, 'implicitRefs')
+  );
+}
+
+function addSourceReferenceRoleProblems(options: {
+  config: ResolvedLiminaConfig;
+  ordinaryConfigPaths: string[];
+  problems: string[];
+}): void {
+  for (const configPath of options.ordinaryConfigPaths) {
+    if (!isOrdinarySourceTypecheckConfigPath(configPath)) {
+      continue;
+    }
+
+    const configObject = readJsonConfig(options.config, configPath);
+
+    if (!Object.hasOwn(configObject, 'references')) {
+      continue;
+    }
+
+    if (path.basename(configPath) !== 'tsconfig.json') {
+      options.problems.push(
+        [
+          'Source typecheck config declares project references:',
+          `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
+          '  field: references',
+          '  reason: source typecheck leaf configs must not hand-maintain project references; Limina infers static source edges and liminaOptions.implicitRefs documents dynamic or virtual edges.',
+          '  fix: move IDE aggregation references to a solution-style tsconfig.json, or replace this source leaf reference with liminaOptions.implicitRefs.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    if (hasImplicitRefs(configObject)) {
+      options.problems.push(
+        [
+          'Solution tsconfig declares Limina implicit references:',
+          `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
+          '  field: liminaOptions.implicitRefs',
+          '  reason: solution-style tsconfig.json files aggregate typecheck configs and do not own source files, so implicitRefs must live on the source typecheck config that needs the extra edge.',
+        ].join('\n'),
+      );
+    }
   }
 }
 
@@ -1545,6 +1596,11 @@ async function runProofCheckInternal(
     config,
     problems,
     tsconfigPaths: defaultTsconfigPaths,
+  });
+  addSourceReferenceRoleProblems({
+    config,
+    ordinaryConfigPaths: ordinaryTypecheckConfigPaths,
+    problems,
   });
   addDefaultTsconfigEnvironmentProblems({
     config,

@@ -1660,6 +1660,81 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
+  it('accepts implicit references not proven by static imports', async () => {
+    const fixture = await createFixture({
+      'app/node.ts': 'export const nodeValue = 1;\n',
+      'app/runtime.ts': 'export const runtimeValue = 1;\n',
+      'app/tsconfig.node.json': typecheckConfig(['node.ts']),
+      'app/tsconfig.runtime.json': stringifyConfig({
+        compilerOptions: {
+          ...buildCompilerOptions,
+          noEmit: true,
+        },
+        include: ['runtime.ts'],
+        liminaOptions: {
+          implicitRefs: [
+            {
+              path: './tsconfig.node.json',
+              reason: 'Loaded by a generated runtime manifest.',
+            },
+          ],
+        },
+      }),
+    });
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps deny refs authoritative over implicit references', async () => {
+    const fixture = await createFixture(
+      {
+        'app/node.ts': 'export const nodeValue = 1;\n',
+        'app/runtime.ts': 'export const runtimeValue = 1;\n',
+        'app/tsconfig.node.json': typecheckConfig(['node.ts']),
+        'app/tsconfig.runtime.json': stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['runtime.ts'],
+          liminaOptions: {
+            graphRules: ['runtime'],
+            implicitRefs: [
+              {
+                path: './tsconfig.node.json',
+                reason: 'Loaded by a generated runtime manifest.',
+              },
+            ],
+          },
+        }),
+      },
+      {
+        rules: {
+          runtime: {
+            deny: {
+              refs: [
+                {
+                  path: 'app/tsconfig.node.json',
+                  reason: 'runtime must not depend on node internals',
+                },
+              ],
+            },
+          },
+        },
+      },
+    );
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it.skip('keeps deny refs authoritative over allow refs', async () => {
     const fixture = await createFixture(
       createLocalBoundaryFiles({
