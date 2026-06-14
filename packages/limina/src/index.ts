@@ -64,10 +64,23 @@ export {
 
 export {
   runGraphCheck,
+  runGraphExport,
   runGraphPrepare,
   type RunGraphCheckOptions,
+  type RunGraphExportOptions,
   type RunGraphPrepareOptions,
 } from './commands/graph';
+export {
+  collectDependencyGraph,
+  stringifyDependencyGraph,
+  type CollectDependencyGraphOptions,
+  type DependencyGraphDocument,
+  type DependencyGraphEdge,
+  type DependencyGraphEdgeKind,
+  type DependencyGraphEvidence,
+  type DependencyGraphNode,
+  type DependencyGraphView,
+} from './dependency-graph';
 
 export {
   runInit,

@@ -2,7 +2,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import path from 'pathe';
 import { getCheckerAdapter } from './checkers';
 import { runGraphCheck, runGraphPrepare } from './commands/graph';
-import { runNx } from './commands/nx';
 import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
 import { runReleaseCheck } from './commands/release';
@@ -33,7 +32,6 @@ const builtInTaskNames = new Set<string>([
   'checker:typecheck',
   'graph:check',
   'graph:prepare',
-  'nx:check',
   'package:check',
   'proof:check',
   'release:check',
@@ -43,7 +41,6 @@ const builtInTaskNames = new Set<string>([
 const defaultCheckPipeline: PipelineStep[] = [
   'graph:check',
   'source:check',
-  'nx:check',
   'proof:check',
   'checker:build',
   'checker:typecheck',
@@ -218,16 +215,6 @@ export async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
       });
-    }
-    case 'nx:check': {
-      const result = await runNx(config, {
-        check: true,
-        clearScreen: false,
-        flow: options.flow,
-        flowDepth: 1,
-      });
-
-      return !result.changed;
     }
     case 'package:check': {
       return runPackageCheck({

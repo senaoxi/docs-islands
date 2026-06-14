@@ -43,9 +43,9 @@ export interface PnpmWorkspaceListEntry {
 }
 
 export interface ImporterInfo {
+  declaredWorkspaceDependencies: Set<string>;
   directory: string;
   name?: string;
-  workspaceDependencies: Set<string>;
 }
 
 export type PublishDependencySectionName =
@@ -508,25 +508,22 @@ export function collectImporters(
     }
 
     const manifest = readJsonFile<PackageManifest>(packageJsonPath);
-    const workspaceDependencies = new Set<string>();
+    const declaredWorkspaceDependencies = new Set<string>();
 
     for (const dependencies of getDependencySections(manifest)) {
-      for (const [dependencyName, specifier] of Object.entries(dependencies)) {
-        if (
-          !workspacePackageNames.has(dependencyName) ||
-          !isWorkspaceDependencySpecifier(specifier)
-        ) {
+      for (const dependencyName of Object.keys(dependencies)) {
+        if (!workspacePackageNames.has(dependencyName)) {
           continue;
         }
 
-        workspaceDependencies.add(dependencyName);
+        declaredWorkspaceDependencies.add(dependencyName);
       }
     }
 
     importers.push({
+      declaredWorkspaceDependencies,
       directory: importerDirectory,
       name: manifest.name,
-      workspaceDependencies,
     });
   }
 

@@ -76,6 +76,9 @@ const scriptExtractorRE =
   /<script\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/script>/giu;
 const htmlAttrRE =
   /(?:^|\s)(?<name>[:A-Z_a-z][\w.:-]*)(?:\s*=\s*(?:"(?<doubleQuoted>[^"]*)"|'(?<singleQuoted>[^']*)'|(?<unquoted>[^\s"'<=>`]+)))?/gu;
+// Generated checker typings may lag newer TypeScript enum members.
+const moduleKindNode18 = 101 as ts.ModuleKind;
+const moduleKindNode20 = 102 as ts.ModuleKind;
 const defaultParseOptions = {
   experimentalRawTransfer: rawTransferSupported(),
   sourceType: 'unambiguous' as const,
@@ -1115,7 +1118,51 @@ function getResolverExtensions(options: {
   ]);
 }
 
+function getEffectiveModuleResolutionKind(
+  compilerOptions: ts.CompilerOptions,
+): ts.ModuleResolutionKind {
+  if (compilerOptions.moduleResolution !== undefined) {
+    return compilerOptions.moduleResolution;
+  }
+
+  switch (compilerOptions.module) {
+    case ts.ModuleKind.Node16:
+    case moduleKindNode18:
+    case moduleKindNode20: {
+      return ts.ModuleResolutionKind.Node16;
+    }
+    case ts.ModuleKind.NodeNext: {
+      return ts.ModuleResolutionKind.NodeNext;
+    }
+    case ts.ModuleKind.Preserve: {
+      return ts.ModuleResolutionKind.Bundler;
+    }
+    default: {
+      return ts.ModuleResolutionKind.Node10;
+    }
+  }
+}
+
+function supportsPackageJsonExportsAndImports(
+  compilerOptions: ts.CompilerOptions,
+): boolean {
+  switch (getEffectiveModuleResolutionKind(compilerOptions)) {
+    case ts.ModuleResolutionKind.Node16:
+    case ts.ModuleResolutionKind.NodeNext:
+    case ts.ModuleResolutionKind.Bundler: {
+      return true;
+    }
+    default: {
+      return false;
+    }
+  }
+}
+
 function getConditionNames(compilerOptions: ts.CompilerOptions): string[] {
+  if (!supportsPackageJsonExportsAndImports(compilerOptions)) {
+    return [];
+  }
+
   return [
     ...new Set([
       ...(compilerOptions.customConditions ?? []),
@@ -1145,10 +1192,20 @@ function createResolverOptions(options: {
   configPath: string;
   extensions: string[];
 }): NapiResolveOptions {
+  const packageJsonExportsAndImports = supportsPackageJsonExportsAndImports(
+    options.compilerOptions,
+  );
+
   return {
     conditionNames: getConditionNames(options.compilerOptions),
     extensionAlias,
     extensions: options.extensions,
+    ...(packageJsonExportsAndImports
+      ? {}
+      : {
+          exportsFields: [],
+          importsFields: [],
+        }),
     nodePath: false,
     symlinks: options.compilerOptions.preserveSymlinks !== true,
     tsconfig: {
@@ -1162,10 +1219,15 @@ function createResolverCacheKey(options: {
   configPath: string;
   extensions: string[];
 }): string {
+  const packageJsonExportsAndImports = supportsPackageJsonExportsAndImports(
+    options.compilerOptions,
+  );
+
   return JSON.stringify({
     conditions: getConditionNames(options.compilerOptions),
     configPath: options.configPath,
     extensions: options.extensions,
+    packageJsonExportsAndImports,
     preserveSymlinks: options.compilerOptions.preserveSymlinks === true,
   });
 }

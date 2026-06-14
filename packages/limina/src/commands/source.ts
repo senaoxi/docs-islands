@@ -651,17 +651,6 @@ function isDependencyAuthorized(
   return collectDependencyDeclarations(manifest, packageName).length > 0;
 }
 
-function findWorkspaceDependencyDeclaration(
-  manifest: PackageManifest,
-  packageName: string,
-): DependencyDeclaration | null {
-  return (
-    collectDependencyDeclarations(manifest, packageName).find((declaration) =>
-      declaration.specifier.startsWith('workspace:'),
-    ) ?? null
-  );
-}
-
 function findPackageImportMatch(
   importsField: PackageManifest['imports'],
   specifier: string,
@@ -846,34 +835,6 @@ function addPackageImportOtherOwnerProblem(options: {
         ? [`  workspace package: ${options.workspacePackage.name}`]
         : []),
       '  reason: #... package imports must not resolve to modules governed by another package.json owner.',
-    ].join('\n'),
-  );
-}
-
-function addStrictWorkspaceDependencyProblem(options: {
-  config: ResolvedLiminaConfig;
-  importRecord: ImportRecord;
-  owner: PackageOwner;
-  packageName: string;
-  problems: string[];
-}): void {
-  const declarations = collectDependencyDeclarations(
-    options.owner.manifest,
-    options.packageName,
-  );
-
-  options.problems.push(
-    [
-      'Workspace bare package import must use workspace: dependency:',
-      `  package owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
-      `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
-      `  imported specifier: ${options.importRecord.specifier}`,
-      `  package: ${options.packageName}`,
-      ...declarations.map(
-        (declaration) =>
-          `  found in ${declaration.sectionName}: ${declaration.specifier}`,
-      ),
-      '  reason: strict: true requires imports that resolve to another workspace package to be declared with the workspace: protocol.',
     ].join('\n'),
   );
 }
@@ -2498,20 +2459,6 @@ async function runSourceCheckInternal(
                 workspacePackage: target.workspacePackage,
               });
               continue;
-            }
-
-            if (
-              target.workspacePackage &&
-              isStrictConfig(config) &&
-              !findWorkspaceDependencyDeclaration(owner.manifest, packageName)
-            ) {
-              addStrictWorkspaceDependencyProblem({
-                config,
-                importRecord,
-                owner,
-                packageName,
-                problems,
-              });
             }
 
             continue;

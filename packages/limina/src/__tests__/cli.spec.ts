@@ -41,6 +41,23 @@ const buildCompilerOptions = {
 };
 
 describe('limina CLI', () => {
+  it('shows graph export options without the removed task orchestrator command', async () => {
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+    const rootHelp = await execFileAsync(process.execPath, [cliPath, '--help']);
+    const graphHelp = await execFileAsync(process.execPath, [
+      cliPath,
+      'graph',
+      '--help',
+    ]);
+
+    expect(rootHelp.stdout).toContain('graph <action>');
+    expect(rootHelp.stdout).not.toContain('nx <action>');
+    expect(graphHelp.stdout).toContain('--view <view>');
+    expect(graphHelp.stdout).toContain('--output <path>');
+  });
+
   it('runs source check from the public command', async () => {
     const rootDir = await realpath(
       await mkdtemp(path.join(tmpdir(), 'limina-cli-')),
@@ -252,9 +269,9 @@ describe('limina CLI', () => {
     }
   }, 30_000);
 
-  it('runs nx sync with repeated targets from the public command', async () => {
+  it('exports the dependency graph to stdout from the public command', async () => {
     const rootDir = await realpath(
-      await mkdtemp(path.join(tmpdir(), 'limina-cli-nx-sync-')),
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-graph-export-')),
     );
     const cliPath = fileURLToPath(
       new URL('../../bin/limina.js', import.meta.url),
@@ -274,27 +291,66 @@ describe('limina CLI', () => {
       );
       await writeText(
         path.join(rootDir, 'limina.config.mjs'),
-        'export default {};\n',
+        `export default ${JSON.stringify(
+          {
+            config: {
+              checkers: {
+                typescript: {
+                  exclude: ['**/tsconfig*.dts.json'],
+                  include: ['packages/**/tsconfig*.json'],
+                  preset: 'tsc',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        )};\n`,
       );
       await writeText(
         path.join(rootDir, 'packages/a/package.json'),
         stringifyConfig({
           dependencies: {
-            '@example/b': 'link:../b/dist',
+            '@example/b': 'workspace:*',
           },
           name: '@example/a',
-          scripts: {
-            build: 'echo build',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/a/src/index.ts'),
+        "import { value } from '@example/b';\nexport const appValue = value;\n",
+      );
+      await writeText(
+        path.join(rootDir, 'packages/a/tsconfig.lib.json'),
+        stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
           },
+          include: ['src/**/*.ts'],
         }),
       );
       await writeText(
         path.join(rootDir, 'packages/b/package.json'),
         stringifyConfig({
-          name: '@example/b',
-          scripts: {
-            build: 'echo build',
+          exports: {
+            '.': './src/index.ts',
           },
+          name: '@example/b',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/src/index.ts'),
+        'export const value = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/tsconfig.lib.json'),
+        stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['src/**/*.ts'],
         }),
       );
 
@@ -304,11 +360,8 @@ describe('limina CLI', () => {
           cliPath,
           '--config',
           path.join(rootDir, 'limina.config.mjs'),
-          'nx',
-          'sync',
-          'docs:build',
-          'build',
-          'docs:build',
+          'graph',
+          'export',
         ],
         {
           cwd: rootDir,
@@ -319,14 +372,24 @@ describe('limina CLI', () => {
         },
       );
 
-      expect(result.stdout).toContain('limina nx sync');
-      expect(result.stdout).toContain('limina nx passed');
-      expect(
-        await readFile(path.join(rootDir, 'packages/a/project.json'), 'utf8'),
-      ).toContain('"docs:build"');
-      expect(
-        await readFile(path.join(rootDir, 'packages/a/project.json'), 'utf8'),
-      ).toContain('"@example/b"');
+      const graph = JSON.parse(result.stdout) as {
+        edges: { from: string; kind: string; to: string }[];
+      };
+
+      expect(graph.edges).toEqual([
+        {
+          evidence: [
+            {
+              importer: 'packages/a/src/index.ts',
+              resolvedPath: 'packages/b/src/index.ts',
+              specifier: '@example/b',
+            },
+          ],
+          from: 'pkg:@example/a',
+          kind: 'source',
+          to: 'pkg:@example/b',
+        },
+      ]);
     } finally {
       await rm(rootDir, {
         force: true,
@@ -425,9 +488,9 @@ describe('limina CLI', () => {
     }
   }, 15_000);
 
-  it('runs nx check with the default build target from the public command', async () => {
+  it('exports an artifact dependency graph to an output file', async () => {
     const rootDir = await realpath(
-      await mkdtemp(path.join(tmpdir(), 'limina-cli-nx-check-')),
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-graph-export-output-')),
     );
     const cliPath = fileURLToPath(
       new URL('../../bin/limina.js', import.meta.url),
@@ -447,26 +510,77 @@ describe('limina CLI', () => {
       );
       await writeText(
         path.join(rootDir, 'limina.config.mjs'),
-        'export default {};\n',
+        `export default ${JSON.stringify(
+          {
+            config: {
+              checkers: {
+                typescript: {
+                  exclude: ['**/tsconfig*.dts.json'],
+                  include: ['packages/**/tsconfig*.json'],
+                  preset: 'tsc',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        )};\n`,
       );
       await writeText(
         path.join(rootDir, 'packages/a/package.json'),
         stringifyConfig({
-          name: '@example/a',
-          scripts: {
-            build: 'echo build',
+          dependencies: {
+            '@example/b': 'workspace:*',
           },
+          name: '@example/a',
         }),
       );
       await writeText(
-        path.join(rootDir, 'packages/a/project.json'),
+        path.join(rootDir, 'packages/a/src/index.ts'),
+        "import { runtimeValue } from '@example/b/runtime';\nexport const value = runtimeValue;\n",
+      );
+      await writeText(
+        path.join(rootDir, 'packages/a/tsconfig.lib.json'),
         stringifyConfig({
-          name: '@example/a',
-          targets: {
-            build: {
-              dependsOn: [],
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['src/**/*.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/package.json'),
+        stringifyConfig({
+          exports: {
+            './runtime': {
+              default: './dist/runtime.js',
+              types: './dist/runtime.d.ts',
             },
           },
+          name: '@example/b',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/dist/runtime.d.ts'),
+        'export declare const runtimeValue = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/dist/runtime.js'),
+        'export const runtimeValue = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/src/index.ts'),
+        'export const sourceValue = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/tsconfig.lib.json'),
+        stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['src/**/*.ts'],
         }),
       );
 
@@ -476,8 +590,12 @@ describe('limina CLI', () => {
           cliPath,
           '--config',
           path.join(rootDir, 'limina.config.mjs'),
-          'nx',
-          'check',
+          'graph',
+          'export',
+          '--view',
+          'artifact',
+          '--output',
+          'dependency-graph.json',
         ],
         {
           cwd: rootDir,
@@ -487,9 +605,13 @@ describe('limina CLI', () => {
           },
         },
       );
+      const graph = JSON.parse(
+        await readFile(path.join(rootDir, 'dependency-graph.json'), 'utf8'),
+      ) as { edges: { kind: string }[]; view: string };
 
-      expect(result.stdout).toContain('limina nx check');
-      expect(result.stdout).toContain('limina nx passed');
+      expect(result.stdout).toBe('');
+      expect(graph.view).toBe('artifact');
+      expect(graph.edges.map((edge) => edge.kind)).toEqual(['artifact']);
     } finally {
       await rm(rootDir, {
         force: true,
@@ -498,7 +620,7 @@ describe('limina CLI', () => {
     }
   }, 15_000);
 
-  it('rejects the old nx generate action from the public command', async () => {
+  it('rejects the removed task orchestrator command from the public command', async () => {
     const rootDir = await realpath(
       await mkdtemp(path.join(tmpdir(), 'limina-cli-nx-generate-')),
     );
@@ -515,13 +637,7 @@ describe('limina CLI', () => {
       await expect(
         execFileAsync(
           process.execPath,
-          [
-            cliPath,
-            '--config',
-            path.join(rootDir, 'limina.config.mjs'),
-            'nx',
-            'generate',
-          ],
+          [cliPath, '--config', path.join(rootDir, 'limina.config.mjs'), 'nx'],
           {
             cwd: rootDir,
             env: {
@@ -531,9 +647,7 @@ describe('limina CLI', () => {
           },
         ),
       ).rejects.toMatchObject({
-        stderr: expect.stringContaining(
-          'Unknown nx action "generate". Expected sync or check.',
-        ),
+        stderr: expect.stringContaining('Unknown command "nx".'),
       });
     } finally {
       await rm(rootDir, {

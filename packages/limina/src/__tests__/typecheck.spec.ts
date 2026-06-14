@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import {
   chmod,
   mkdir,
@@ -516,7 +517,7 @@ describe('runCheckerTypecheck', () => {
     }
   });
 
-  it('passes without running targets when no second-class checkers are configured', async () => {
+  it('skips graph preparation and build-only peer checks when no second-class checkers are configured', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
       'tsconfig.build.json': tsconfig({ files: [] }),
@@ -541,12 +542,14 @@ describe('runCheckerTypecheck', () => {
           configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
           rootDir: fixture.rootDir,
         },
+        checkerPackageResolver: (): string | undefined => undefined,
         cwd: fixture.rootDir,
         runner: passingRunner(calls),
       });
 
       expect(result.passed).toBe(true);
       expect(calls).toHaveLength(0);
+      expect(existsSync(path.join(fixture.rootDir, '.limina'))).toBe(false);
     } finally {
       await fixture.cleanup();
     }

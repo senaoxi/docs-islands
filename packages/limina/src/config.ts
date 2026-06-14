@@ -75,7 +75,6 @@ export type BuiltinTaskName =
   | 'checker:typecheck'
   | 'graph:prepare'
   | 'graph:check'
-  | 'nx:check'
   | 'package:check'
   | 'proof:check'
   | 'release:check'
@@ -701,7 +700,6 @@ export interface LiminaConfig {
 export type LiminaCommand =
   | 'check'
   | 'graph'
-  | 'nx'
   | 'package'
   | 'proof'
   | 'release'

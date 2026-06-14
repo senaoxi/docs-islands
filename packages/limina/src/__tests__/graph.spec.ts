@@ -1208,7 +1208,7 @@ packages:
     }
   });
 
-  it.skip('rejects cross-package build references without workspace protocol dependencies', async () => {
+  it('allows cross-package source references with any declared dependency protocol', async () => {
     const fixture = await createFixture({
       'packages/a/package.json': stringifyConfig({
         dependencies: {
@@ -1263,7 +1263,7 @@ packages:
         '@example/b',
       );
 
-      await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }

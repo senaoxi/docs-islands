@@ -1,20 +1,28 @@
 #!/usr/bin/env node
 import { cac } from 'cac';
-import { runGraphCheck, runGraphPrepare } from './commands/graph';
+import path from 'pathe';
+import {
+  runGraphCheck,
+  runGraphExport,
+  runGraphPrepare,
+} from './commands/graph';
 import { runInit } from './commands/init';
-import { runNx } from './commands/nx';
 import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
 import { runReleaseCheck } from './commands/release';
 import { runSourceCheck } from './commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
 import {
-  type LiminaCommand,
   loadConfig,
+  type LiminaCommand,
   type PackageAttwProfile,
   type PackageCheckToolSelection,
   type ResolvedLiminaConfig,
 } from './config';
+import {
+  stringifyDependencyGraph,
+  type DependencyGraphView,
+} from './dependency-graph';
 import { createLiminaFlowReporter } from './flow';
 import { clearCliScreen, CliLogger, formatErrorMessage } from './logger';
 import { runDefaultCheck, runPipeline } from './pipeline';
@@ -36,6 +44,11 @@ interface PackageFlags extends GlobalFlags, PackageSelectionFlags {
 }
 
 type CheckerFlags = GlobalFlags;
+
+interface GraphFlags extends GlobalFlags {
+  output?: string;
+  view?: string;
+}
 
 interface InitFlags {
   yes?: boolean;
@@ -106,6 +119,22 @@ function parsePackageNames(
   return packageNames.length > 0 ? packageNames : undefined;
 }
 
+function parseDependencyGraphView(
+  view: string | undefined,
+): DependencyGraphView | undefined {
+  if (!view) {
+    return undefined;
+  }
+
+  if (view === 'all' || view === 'artifact' || view === 'source') {
+    return view;
+  }
+
+  throw new Error(
+    `Invalid graph export --view "${view}". Expected one of: all, artifact, source.`,
+  );
+}
+
 function createCliFlow() {
   clearCliScreen();
 
@@ -167,51 +196,34 @@ async function main(): Promise<void> {
 
   cli
     .command(
-      'nx <action> [...targets]',
-      'Sync or check Nx project target dependencies from workspace artifact dependencies',
+      'graph <action>',
+      'Prepare, check, or export TypeScript graph architecture',
     )
-    .action(
-      async (
-        action: string,
-        targets: string[] | undefined,
-        flags: GlobalFlags,
-      ) => {
-        if (action !== 'sync' && action !== 'check') {
-          throw new Error(
-            `Unknown nx action "${action}". Expected sync or check.`,
-          );
-        }
-
-        const flow = createCliFlow();
-        flow.intro(`limina nx ${action}`);
-        const config = await load(flags, 'nx');
-        const result = await runNx(config, {
-          check: action === 'check',
-          clearScreen: false,
-          flow,
-          targets,
-        });
-
-        if (action === 'check' && result.changed) {
-          process.exitCode = 1;
-        }
-
-        flow.outro(
-          action === 'check' && result.changed
-            ? 'limina nx failed'
-            : 'limina nx passed',
-        );
-      },
-    );
-
-  cli
-    .command('graph <action>', 'Prepare or check TypeScript graph architecture')
-    .action(async (action: string, flags: GlobalFlags) => {
-      if (action !== 'check' && action !== 'prepare') {
+    .option('--view <view>', 'Dependency graph view: all, source, or artifact')
+    .option('--output <path>', 'Write graph export JSON to this file')
+    .action(async (action: string, flags: GraphFlags) => {
+      if (action !== 'check' && action !== 'prepare' && action !== 'export') {
         throw new Error(
-          `Unknown graph action "${action}". Expected check or prepare.`,
+          `Unknown graph action "${action}". Expected check, prepare, or export.`,
         );
       }
+
+      if (action === 'export') {
+        const config = await load(flags, 'graph');
+        const graph = await runGraphExport(config, {
+          outputPath: flags.output
+            ? path.resolve(process.cwd(), flags.output)
+            : undefined,
+          view: parseDependencyGraphView(flags.view),
+        });
+
+        if (!flags.output) {
+          process.stdout.write(stringifyDependencyGraph(graph));
+        }
+
+        return;
+      }
+
       const flow = createCliFlow();
       flow.intro(`limina graph ${action}`);
       const config = await load(flags, 'graph');

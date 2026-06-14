@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   clearImportAnalysisCache,
@@ -437,6 +438,9 @@ describe('import analysis', () => {
       );
 
       const context = createImportAnalysisContext();
+      const bundlerCompilerOptions = {
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+      };
       const checkerContext = {
         checkerPresets: [],
         configPath,
@@ -447,7 +451,7 @@ describe('import analysis', () => {
         resolveInternalImport(
           'conditional',
           indexPath,
-          {},
+          bundlerCompilerOptions,
           checkerContext,
           context,
         ),
@@ -456,11 +460,96 @@ describe('import analysis', () => {
         resolveInternalImport(
           'conditional',
           indexPath,
-          { customConditions: ['source'] },
+          {
+            ...bundlerCompilerOptions,
+            customConditions: ['source'],
+          },
           checkerContext,
           context,
         ),
       ).toBe(sourcePath);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('uses legacy package lookup for node10 instead of package exports conditions', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      const indexPath = await writeText(
+        rootDir,
+        'src/index.ts',
+        "import { value } from 'legacy-conditional';\nvoid value;\n",
+      );
+      await writeText(
+        rootDir,
+        'node_modules/legacy-conditional/src/index.ts',
+        'export const value = "source";\n',
+      );
+      await writeText(
+        rootDir,
+        'node_modules/legacy-conditional/dist/export.js',
+        'export const value = "export";\n',
+      );
+      const mainPath = await writeText(
+        rootDir,
+        'node_modules/legacy-conditional/dist/main.js',
+        'export const value = "main";\n',
+      );
+
+      await writeText(
+        rootDir,
+        'node_modules/legacy-conditional/package.json',
+        JSON.stringify({
+          exports: {
+            '.': {
+              source: './src/index.ts',
+              default: './dist/export.js',
+            },
+          },
+          main: './dist/main.js',
+          name: 'legacy-conditional',
+          type: 'module',
+        }),
+      );
+      const configPath = await writeText(
+        rootDir,
+        'tsconfig.json',
+        JSON.stringify({
+          compilerOptions: {
+            moduleResolution: 'node10',
+          },
+        }),
+      );
+      const node10CompilerOptions = {
+        customConditions: ['source'],
+        moduleResolution: ts.ModuleResolutionKind.Node10,
+      };
+      const checkerContext = {
+        checkerPresets: [],
+        configPath,
+        extensions: ['.ts', '.js'],
+      };
+
+      expect(
+        resolveModuleNameWithOxc({
+          compilerOptions: node10CompilerOptions,
+          containingFile: indexPath,
+          context: checkerContext,
+          specifier: 'legacy-conditional',
+        }),
+      ).toBe(mainPath);
+
+      expect(
+        resolveInternalImport(
+          'legacy-conditional',
+          indexPath,
+          node10CompilerOptions,
+          checkerContext,
+          createImportAnalysisContext(),
+        ),
+      ).toBe(mainPath);
     } finally {
       await rm(rootDir, { force: true, recursive: true });
     }

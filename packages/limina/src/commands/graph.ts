@@ -1,8 +1,15 @@
 import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'pathe';
 import ts from 'typescript';
 import type { ResolvedLiminaConfig } from '../config';
+import {
+  collectDependencyGraph,
+  type DependencyGraphDocument,
+  type DependencyGraphView,
+  stringifyDependencyGraph,
+} from '../dependency-graph';
 import type { LiminaFlowReporter } from '../flow';
 import {
   type GeneratedTsconfigGraphResult,
@@ -70,6 +77,11 @@ export interface RunGraphPrepareOptions {
   clearScreen?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+}
+
+export interface RunGraphExportOptions {
+  outputPath?: string;
+  view?: DependencyGraphView;
 }
 
 const requiredDtsCompilerOptions: [keyof ts.CompilerOptions, unknown][] = [
@@ -867,6 +879,17 @@ function getResolvedWorkspacePackage(
   return findPackageForFile(filePath, packages);
 }
 
+function shouldUseWorkspaceExportResolution(options: {
+  resolvedFilePath: string | null;
+  targetPackage: WorkspacePackage | null;
+}): boolean {
+  if (!options.targetPackage) {
+    return false;
+  }
+
+  return !options.resolvedFilePath;
+}
+
 function addWorkspaceReferenceDependencyProblems(
   config: ResolvedLiminaConfig,
   project: ProjectInfo,
@@ -899,20 +922,20 @@ function addWorkspaceReferenceDependencyProblems(
       continue;
     }
 
-    if (importer?.workspaceDependencies.has(targetPackage.name)) {
+    if (importer?.declaredWorkspaceDependencies.has(targetPackage.name)) {
       continue;
     }
 
     problems.push(
       [
-        'Project reference crosses workspace packages without a workspace:* dependency:',
+        'Project reference crosses workspace packages without a declared dependency:',
         `  referencing project: ${toRelativePath(config.rootDir, project.configPath)}`,
         `  referenced project: ${toRelativePath(config.rootDir, referencePath)}`,
         `  referencing package: ${sourcePackage.name}`,
         `  referenced package: ${targetPackage.name}`,
         `  package manifest: ${toRelativePath(config.rootDir, path.join(sourcePackage.directory, 'package.json'))}`,
-        `  reason: a cross-package tsconfig*.dts.json reference is a source dependency edge, so ${sourcePackage.name} must declare ${targetPackage.name} with the workspace: protocol.`,
-        `  fix: add "${targetPackage.name}": "workspace:*" to dependencies, devDependencies, peerDependencies, or optionalDependencies in the referencing package manifest. If this package intentionally consumes built artifacts, remove the project reference; ${formatArtifactDependencyPolicy(targetPackage)}`,
+        `  reason: a cross-package project reference is a source dependency edge, so ${sourcePackage.name} must declare ${targetPackage.name} in dependencies, devDependencies, peerDependencies, or optionalDependencies.`,
+        `  fix: declare "${targetPackage.name}" in the referencing package manifest. If this package intentionally consumes built artifacts, remove the project reference; ${formatArtifactDependencyPolicy(targetPackage)}`,
       ].join('\n'),
     );
   }
@@ -1134,15 +1157,23 @@ function collectExpectedReferences(options: {
                 importRecord.specifier,
               )
             : null;
+        const internalResolvedFilePath = resolveInternalImport(
+          importRecord.specifier,
+          filePath,
+          project.options,
+          project,
+          importAnalysis,
+        );
+        const useWorkspaceExportResolution = shouldUseWorkspaceExportResolution(
+          {
+            resolvedFilePath: internalResolvedFilePath,
+            targetPackage,
+          },
+        );
         const resolvedFilePath =
-          workspaceExportResolution?.oxcResolvedFileName ??
-          resolveInternalImport(
-            importRecord.specifier,
-            filePath,
-            project.options,
-            project,
-            importAnalysis,
-          );
+          (useWorkspaceExportResolution
+            ? workspaceExportResolution?.oxcResolvedFileName
+            : null) ?? internalResolvedFilePath;
 
         if (!resolvedFilePath) {
           if (!targetPackage) {
@@ -1163,8 +1194,9 @@ function collectExpectedReferences(options: {
         }
 
         const graphResolvedFilePath =
-          workspaceExportResolution?.typeScriptResolvedFileName ??
-          resolvedFilePath;
+          (useWorkspaceExportResolution
+            ? workspaceExportResolution?.typeScriptResolvedFileName
+            : null) ?? resolvedFilePath;
 
         if (!graphResolvedFilePath) {
           if (!targetPackage) {
@@ -1188,7 +1220,13 @@ function collectExpectedReferences(options: {
           graphResolvedFilePath,
           options.packages,
         );
-        const targetPackageForGraph = targetPackage;
+        const targetPackageForGraph = useWorkspaceExportResolution
+          ? targetPackage
+          : targetWorkspacePackageForResolved &&
+              targetPackage &&
+              targetWorkspacePackageForResolved.name === targetPackage.name
+            ? targetPackage
+            : null;
         const resolvedPackageName = getResolvedPackageName(
           resolvedFilePath,
           options.packages,
@@ -1251,8 +1289,8 @@ function collectExpectedReferences(options: {
               `  file: ${formatImportRecordLocation(options.config.rootDir, importRecord)}`,
               `  imported specifier: ${importRecord.specifier}`,
               `  resolved file: ${toRelativePath(options.config.rootDir, resolvedFilePath)}`,
-              '  reason: workspace:* dependencies are source dependencies, but TypeScript resolved this package export to a file not owned by the source graph. tsc -b does not rewrite package exports through project references.',
-              `  fix: point the dependency package's source manifest exports at source files, or stop using workspace:* plus project references for artifact consumption; ${formatArtifactDependencyPolicy(targetPackageForGraph)}`,
+              '  reason: this import resolved to a file not owned by the source graph, so it is not a source project-reference edge.',
+              `  fix: point the dependency package export at source files, or treat this relationship as artifact consumption; ${formatArtifactDependencyPolicy(targetPackageForGraph)}`,
             ].join('\n'),
           );
           continue;
@@ -1284,7 +1322,7 @@ function collectExpectedReferences(options: {
                   `  file: ${formatImportRecordLocation(options.config.rootDir, importRecord)}`,
                   `  imported specifier: ${importRecord.specifier}`,
                   `  resolved file: ${toRelativePath(options.config.rootDir, graphResolvedFilePath)}`,
-                  `  reason: workspace:* dependencies are source dependency edges and must resolve to files owned by the source graph; ${formatArtifactDependencyPolicy(targetPackageForGraph)}`,
+                  `  reason: source dependency edges must resolve to files owned by the source graph; ${formatArtifactDependencyPolicy(targetPackageForGraph)}`,
                 ].join('\n'),
               );
             }
@@ -1588,4 +1626,20 @@ export async function runGraphCheck(
     task?.fail('graph check failed', { error });
     throw error;
   }
+}
+
+export async function runGraphExport(
+  config: ResolvedLiminaConfig,
+  options: RunGraphExportOptions = {},
+): Promise<DependencyGraphDocument> {
+  const graph = await collectDependencyGraph(config, {
+    view: options.view,
+  });
+
+  if (options.outputPath) {
+    await mkdir(path.dirname(options.outputPath), { recursive: true });
+    await writeFile(options.outputPath, stringifyDependencyGraph(graph));
+  }
+
+  return graph;
 }

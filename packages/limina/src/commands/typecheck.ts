@@ -502,15 +502,31 @@ async function runCheckerTypecheckInternal(
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
   const allCheckers = getActiveCheckers(options.config);
-  const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
   const checkers = getExecutionCheckers({
     checkers: allCheckers,
     executionKind: 'typecheck',
   });
   const flowDepth = options.flowDepth ?? 0;
   const rootConfigPaths: string[] = [];
+
+  if (checkers.length === 0) {
+    options.flow?.info('no second-class checker entries configured', {
+      depth: flowDepth + 1,
+    });
+
+    if (!options.flow?.interactive) {
+      TypecheckLogger.success('No second-class checker entries configured.');
+    }
+
+    return {
+      passed: true,
+      projectRootDir,
+      rootConfigPaths,
+    };
+  }
+
   const problems = collectCheckerPeerDependencyProblems({
-    checkers: allCheckers,
+    checkers,
     projectRootDir,
     resolvePackage: options.checkerPackageResolver,
   });
@@ -528,6 +544,7 @@ async function runCheckerTypecheckInternal(
     };
   }
 
+  const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
   const targets = checkers.map((checker) => {
     const configPath = generatedGraph.checkerEntries.get(checker.name);
 
@@ -545,22 +562,6 @@ async function runCheckerTypecheckInternal(
       projectRootDir,
     });
   });
-
-  if (targets.length === 0) {
-    options.flow?.info('no second-class checker entries configured', {
-      depth: flowDepth + 1,
-    });
-
-    if (!options.flow?.interactive) {
-      TypecheckLogger.success('No second-class checker entries configured.');
-    }
-
-    return {
-      passed: true,
-      projectRootDir,
-      rootConfigPaths,
-    };
-  }
 
   options.flow?.info(`found ${targets.length} checker typecheck entry(s)`, {
     depth: flowDepth + 1,

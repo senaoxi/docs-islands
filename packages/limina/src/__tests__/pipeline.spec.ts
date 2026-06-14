@@ -150,10 +150,11 @@ describe('runPipeline', () => {
     });
   });
 
-  it('recognizes nx:check as a built-in task', () => {
+  it('does not recognize removed task orchestrator checks as built-in tasks', () => {
     expect(normalizePipelineStep('nx:check')).toEqual({
-      name: 'nx:check',
-      type: 'task',
+      args: [],
+      command: 'nx:check',
+      type: 'command',
     });
   });
 

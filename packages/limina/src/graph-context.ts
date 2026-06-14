@@ -262,7 +262,7 @@ export function shouldResolveThroughGraph(
 
   return (
     importer.name === targetPackage.name ||
-    importer.workspaceDependencies.has(targetPackage.name)
+    importer.declaredWorkspaceDependencies.has(targetPackage.name)
   );
 }
 
@@ -270,8 +270,8 @@ export function formatArtifactDependencyPolicy(
   targetPackage: WorkspacePackage,
 ): string {
   return targetPackage.manifest.private === true
-    ? 'private workspace packages cannot be consumed from a registry, so artifact consumers should use link: and should not keep a project reference.'
-    : 'artifact consumers should use link: for local dist output, or catalog:/semver to consume the published production package, and should not keep a project reference.';
+    ? 'private workspace packages cannot be consumed from a registry, so artifact consumers should use the dependency graph export with an external task tool instead of keeping a source project reference.'
+    : 'artifact consumers should use the dependency graph export with an external task tool, or consume the published production package, instead of keeping a source project reference.';
 }
 
 export function inferPackageProject(

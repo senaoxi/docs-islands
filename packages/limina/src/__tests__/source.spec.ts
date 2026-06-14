@@ -730,7 +730,7 @@ packages:
     }
   });
 
-  it('rejects resolved workspace bare imports without workspace: in strict mode', async () => {
+  it('allows resolved workspace bare imports with any declared dependency protocol', async () => {
     const pathOptions = {
       baseUrl: '.',
       paths: {
@@ -771,7 +771,7 @@ packages:
           ...fixture.config,
           strict: true,
         }),
-      ).resolves.toBe(false);
+      ).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }

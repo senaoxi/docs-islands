@@ -239,7 +239,6 @@ export default defineConfig({
     typecheck: [
       'graph:check',
       'source:check',
-      'nx:check',
       'proof:check',
       'checker:build',
       'checker:typecheck',
@@ -323,7 +322,6 @@ export default defineConfig({
     publish: [
       'graph:check',
       'source:check',
-      'nx:check',
       'proof:check',
       'package:check',
       'release:check',
