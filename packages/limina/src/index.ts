@@ -89,8 +89,11 @@ export {
 } from './commands/init';
 export { runSourceCheck, type RunSourceCheckOptions } from './commands/source';
 export {
+  runBuild,
   runCheckerBuild,
   runCheckerTypecheck,
+  type RunBuildOptions,
+  type RunBuildResult,
   type RunCheckerBuildOptions,
   type RunCheckerBuildResult,
   type RunCheckerTypecheckOptions,

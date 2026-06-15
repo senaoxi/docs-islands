@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -52,10 +53,127 @@ describe('limina CLI', () => {
       '--help',
     ]);
 
+    expect(rootHelp.stdout).toContain('build');
     expect(rootHelp.stdout).toContain('graph <action>');
     expect(rootHelp.stdout).not.toContain('nx <action>');
     expect(graphHelp.stdout).toContain('--view <view>');
     expect(graphHelp.stdout).toContain('--output <path>');
+  });
+
+  it('runs build with a selected source project from the public command', async () => {
+    const rootDir = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-build-')),
+    );
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages:\n  - packages/*\n',
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `export default ${JSON.stringify(
+          {
+            config: {
+              checkers: {
+                typescript: {
+                  include: ['packages/pkg/tsconfig.lib.json'],
+                  preset: 'tsc',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        )};\n`,
+      );
+      await writeText(
+        path.join(rootDir, 'node_modules/.bin/tsc'),
+        [
+          '#!/usr/bin/env sh',
+          'printf "%s\\n" "$@" > "$PWD/tsc-args.txt"',
+          'exit 0',
+          '',
+        ].join('\n'),
+      );
+      await chmod(path.join(rootDir, 'node_modules/.bin/tsc'), 0o755);
+      await writeText(
+        path.join(rootDir, 'node_modules/typescript/package.json'),
+        stringifyConfig({
+          name: 'typescript',
+          version: '0.0.0-test',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/pkg/src/index.ts'),
+        'export const value = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'packages/pkg/tsconfig.lib.json'),
+        stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['src/**/*.ts'],
+        }),
+      );
+
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'build',
+          '-p',
+          'packages/pkg/tsconfig.lib.json',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const tscArgs = await readFile(
+        path.join(rootDir, 'tsc-args.txt'),
+        'utf8',
+      );
+
+      expect(result.stdout).toContain('limina build');
+      expect(result.stdout).toContain('limina build passed');
+      expect(tscArgs).toContain(
+        '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json',
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  }, 15_000);
+
+  it('rejects positional build targets from the public command', async () => {
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+
+    await expect(
+      execFileAsync(process.execPath, [
+        cliPath,
+        'build',
+        'packages/pkg/tsconfig.lib.json',
+      ]),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        'limina build does not accept positional arguments',
+      ),
+    });
   });
 
   it('runs source check from the public command', async () => {
@@ -475,7 +593,7 @@ describe('limina CLI', () => {
         await readFile(
           path.join(
             rootDir,
-            '.limina/tsconfig/checkers/typescript/app/tsconfig.runtime.dts.json',
+            '.limina/tsconfig/checkers/typescript/projects/app/tsconfig.runtime.dts.json',
           ),
           'utf8',
         ),

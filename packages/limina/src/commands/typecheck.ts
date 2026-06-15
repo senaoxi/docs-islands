@@ -1,7 +1,7 @@
 import { createElapsedTimer } from 'logaria/helper';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'pathe';
 import {
@@ -19,8 +19,16 @@ import {
 import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
 import { prepareGeneratedTsconfigGraph } from '../generated-graph';
 import { clearCliScreen, formatErrorMessage, TypecheckLogger } from '../logger';
-import { collectGraphProjectRouteFromRoot } from '../tsconfig';
-import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
+import {
+  collectGraphProjectRouteFromRoot,
+  isOrdinarySourceTypecheckConfigPath,
+  resolveProjectConfigPath,
+} from '../tsconfig';
+import {
+  isPathInsideDirectory,
+  normalizeAbsolutePath,
+  toRelativePath,
+} from '../utils/path';
 
 export interface TypecheckTarget {
   args: string[];
@@ -304,6 +312,25 @@ export interface RunCheckerBuildResult {
   rootConfigPaths: string[];
 }
 
+export interface RunBuildOptions {
+  clearScreen?: boolean;
+  config: ResolvedLiminaConfig;
+  cwd?: string;
+  flow?: LiminaFlowReporter;
+  flowDepth?: number;
+  checkerPackageResolver?: CheckerPackageResolver;
+  project?: string;
+  runner?: TypecheckRunner;
+  tscCommand?: string;
+}
+
+export interface RunBuildResult {
+  passed: boolean;
+  projectRootDir: string;
+  rootConfigPaths: string[];
+  sourceConfigPath: string | null;
+}
+
 export interface RunCheckerTypecheckOptions {
   clearScreen?: boolean;
   config: ResolvedLiminaConfig;
@@ -492,6 +519,363 @@ export async function runCheckerBuild(
       elapsed(),
     );
     task?.fail('checker build failed', { error });
+    throw error;
+  }
+}
+
+function findNearestDefaultTsconfig(options: {
+  rootDir: string;
+  startDir: string;
+}): string | null {
+  let currentDir = normalizeAbsolutePath(options.startDir);
+  const rootDir = normalizeAbsolutePath(options.rootDir);
+
+  while (isPathInsideDirectory(currentDir, rootDir)) {
+    const candidatePath = path.join(currentDir, 'tsconfig.json');
+
+    if (existsSync(candidatePath)) {
+      return normalizeAbsolutePath(candidatePath);
+    }
+
+    if (currentDir === rootDir) {
+      return null;
+    }
+
+    const parentDir = path.dirname(currentDir);
+
+    if (parentDir === currentDir) {
+      return null;
+    }
+
+    currentDir = parentDir;
+  }
+
+  return null;
+}
+
+function resolveBuildSourceConfigPath(options: {
+  cwd: string;
+  project?: string;
+  rootDir: string;
+}): string {
+  const sourceConfigPath = options.project
+    ? resolveProjectConfigPath(options.cwd, options.project)
+    : findNearestDefaultTsconfig({
+        rootDir: options.rootDir,
+        startDir: options.cwd,
+      });
+
+  if (!sourceConfigPath) {
+    throw new Error(
+      [
+        'Unable to resolve build tsconfig:',
+        `  cwd: ${toRelativePath(options.rootDir, options.cwd)}`,
+        '  reason: no tsconfig.json was found in this directory or its workspace parents.',
+        '  fix: run limina build from a directory with a tsconfig.json, or pass -p <source-tsconfig>.',
+      ].join('\n'),
+    );
+  }
+
+  if (!existsSync(sourceConfigPath)) {
+    throw new Error(
+      [
+        'Unable to resolve build tsconfig:',
+        `  config: ${toRelativePath(options.rootDir, sourceConfigPath)}`,
+        '  reason: the requested source tsconfig does not exist.',
+      ].join('\n'),
+    );
+  }
+
+  if (statSync(sourceConfigPath).isDirectory()) {
+    throw new Error(
+      [
+        'Unable to resolve build tsconfig:',
+        `  config: ${toRelativePath(options.rootDir, sourceConfigPath)}`,
+        '  reason: expected a tsconfig*.json file, but received a directory.',
+      ].join('\n'),
+    );
+  }
+
+  if (!isPathInsideDirectory(sourceConfigPath, options.rootDir)) {
+    throw new Error(
+      [
+        'Invalid limina build project:',
+        `  config: ${sourceConfigPath}`,
+        `  reason: build projects must be inside the Limina workspace root at ${options.rootDir}.`,
+      ].join('\n'),
+    );
+  }
+
+  if (!isOrdinarySourceTypecheckConfigPath(sourceConfigPath)) {
+    throw new Error(
+      [
+        'Invalid limina build project:',
+        `  config: ${toRelativePath(options.rootDir, sourceConfigPath)}`,
+        '  reason: limina build expects an ordinary source tsconfig*.json file, not a generated, declaration, build, base, or check config.',
+      ].join('\n'),
+    );
+  }
+
+  return sourceConfigPath;
+}
+
+function formatBuildTargetResolutionProblem(options: {
+  checkers: ResolvedCheckerConfig[];
+  projectRootDir: string;
+  sourceConfigPath: string;
+}): string {
+  return [
+    'No Limina build target found for source tsconfig:',
+    `  config: ${toRelativePath(options.projectRootDir, options.sourceConfigPath)}`,
+    '  reason: this tsconfig is not governed by any configured checker after include/exclude and solution references are resolved.',
+    '  configured checkers:',
+    ...options.checkers.map(
+      (checker) =>
+        `    - config.checkers.${checker.name} (${checker.preset}) include: ${checker.include.join(', ')}`,
+    ),
+    '  fix: pass -p <source-tsconfig> for a governed config, or update config.checkers.<checker>.include/exclude.',
+  ].join('\n');
+}
+
+function formatTypecheckOnlyBuildProblem(options: {
+  checkers: ResolvedCheckerConfig[];
+  projectRootDir: string;
+  sourceConfigPath: string;
+}): string {
+  return [
+    'No build-capable Limina checker found for source tsconfig:',
+    `  config: ${toRelativePath(options.projectRootDir, options.sourceConfigPath)}`,
+    '  reason: the matching checker(s) are typecheck-only and cannot emit declaration builds.',
+    '  matching checkers:',
+    ...options.checkers.map(
+      (checker) => `    - config.checkers.${checker.name} (${checker.preset})`,
+    ),
+    '  fix: configure a build-capable checker such as tsc, tsgo, or vue-tsc for this tsconfig.',
+  ].join('\n');
+}
+
+async function runBuildInternal(
+  options: RunBuildOptions,
+): Promise<RunBuildResult> {
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
+  const sourceConfigPath = resolveBuildSourceConfigPath({
+    cwd,
+    project: options.project,
+    rootDir: projectRootDir,
+  });
+  const allCheckers = getActiveCheckers(options.config);
+  const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
+  const flowDepth = options.flowDepth ?? 0;
+  const rootConfigPaths: string[] = [];
+  const ownedTargets = allCheckers
+    .map((checker) => ({
+      checker,
+      buildModule: generatedGraph.sourceToBuild
+        .get(checker.name)
+        ?.get(sourceConfigPath),
+    }))
+    .filter(
+      (
+        target,
+      ): target is {
+        checker: ResolvedCheckerConfig;
+        buildModule: { kind: 'project' | 'solution'; path: string };
+      } => Boolean(target.buildModule),
+    );
+
+  if (ownedTargets.length === 0) {
+    TypecheckLogger.error(
+      formatBuildTargetResolutionProblem({
+        checkers: allCheckers,
+        projectRootDir,
+        sourceConfigPath,
+      }),
+    );
+
+    return {
+      passed: false,
+      projectRootDir,
+      rootConfigPaths,
+      sourceConfigPath,
+    };
+  }
+
+  const buildTargets = ownedTargets.filter(({ checker }) => {
+    const adapter = getCheckerAdapter(checker.preset);
+
+    return adapter?.execution === 'build';
+  });
+
+  if (buildTargets.length === 0) {
+    TypecheckLogger.error(
+      formatTypecheckOnlyBuildProblem({
+        checkers: ownedTargets.map(({ checker }) => checker),
+        projectRootDir,
+        sourceConfigPath,
+      }),
+    );
+
+    return {
+      passed: false,
+      projectRootDir,
+      rootConfigPaths,
+      sourceConfigPath,
+    };
+  }
+
+  const problems = collectCheckerPeerDependencyProblems({
+    checkers: buildTargets.map(({ checker }) => checker),
+    projectRootDir,
+    resolvePackage: options.checkerPackageResolver,
+  });
+
+  if (problems.length > 0) {
+    options.flow?.fail('checker dependency preflight failed', {
+      depth: flowDepth + 1,
+    });
+    TypecheckLogger.error(problems.join('\n\n'));
+
+    return {
+      passed: false,
+      projectRootDir,
+      rootConfigPaths,
+      sourceConfigPath,
+    };
+  }
+
+  const targets = buildTargets.map(({ buildModule, checker }) => {
+    rootConfigPaths.push(buildModule.path);
+
+    return createCheckerTarget({
+      checker,
+      commandOverride: options.tscCommand,
+      configPath: buildModule.path,
+      executionKind: 'build',
+      projectRootDir,
+    });
+  });
+
+  options.flow?.info(`found ${targets.length} build target(s)`, {
+    depth: flowDepth + 1,
+  });
+
+  TypecheckLogger.info(
+    [
+      `Running build for ${targets.length} generated target(s).`,
+      `Source: ${toRelativePath(projectRootDir, sourceConfigPath)}`,
+      `CWD: ${toRelativePath(cwd, projectRootDir)}`,
+      `Entries: ${rootConfigPaths
+        .map((configPath) => toRelativePath(projectRootDir, configPath))
+        .join(', ')}`,
+    ].join('\n'),
+  );
+
+  const targetTasks = new Map<string, LiminaFlowTask>();
+  const results = await runWithConcurrency(
+    targets,
+    1,
+    options.runner ?? createDefaultRunner(),
+    {
+      onTargetResult: (target, result) => {
+        const task = targetTasks.get(target.configPath);
+
+        if (!task) {
+          return;
+        }
+
+        if (result.status === 0) {
+          task.pass();
+        } else {
+          const suffix = result.error
+            ? formatErrorMessage(result.error)
+            : `exited with code ${result.status}`;
+
+          task.fail(undefined, { error: suffix });
+        }
+      },
+      onTargetStart: (target) => {
+        if (!options.flow) {
+          return;
+        }
+
+        targetTasks.set(
+          target.configPath,
+          options.flow.start(
+            target.label ??
+              `build: ${toRelativePath(projectRootDir, target.configPath)}`,
+            {
+              collapseOnSuccess: false,
+              depth: flowDepth + 1,
+            },
+          ),
+        );
+      },
+    },
+  );
+  const failedResults = results.filter((result) => result.status !== 0);
+  const passed = failedResults.length === 0;
+
+  if (!passed) {
+    TypecheckLogger.error(
+      [
+        'build failed:',
+        ...failedResults.map((result) => {
+          const suffix = result.error
+            ? `: ${formatErrorMessage(result.error)}`
+            : ` exited with code ${result.status}`;
+
+          return `  ${toRelativePath(projectRootDir, result.configPath)}${suffix}`;
+        }),
+      ].join('\n'),
+    );
+  } else if (!options.flow?.interactive) {
+    TypecheckLogger.success(`Built ${targets.length} generated target(s).`);
+  }
+
+  return {
+    passed,
+    projectRootDir,
+    rootConfigPaths,
+    sourceConfigPath,
+  };
+}
+
+export async function runBuild(
+  options: RunBuildOptions,
+): Promise<RunBuildResult> {
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
+
+  const elapsed = createElapsedTimer();
+  const task = options.flow?.start('build', {
+    depth: options.flowDepth ?? 0,
+  });
+
+  TypecheckLogger.info('build started');
+
+  try {
+    const result = await runBuildInternal(options);
+
+    if (result.passed) {
+      if (!options.flow?.interactive) {
+        TypecheckLogger.success('build finished', elapsed());
+      }
+
+      task?.pass();
+    } else {
+      TypecheckLogger.error('build finished with failures', elapsed());
+      task?.fail('build finished with failures');
+    }
+
+    return result;
+  } catch (error) {
+    TypecheckLogger.error(
+      `build failed: ${formatErrorMessage(error)}`,
+      elapsed(),
+    );
+    task?.fail('build failed', { error });
     throw error;
   }
 }

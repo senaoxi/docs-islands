@@ -11,7 +11,11 @@ import { runPackageCheck } from './commands/package';
 import { runProofCheck } from './commands/proof';
 import { runReleaseCheck } from './commands/release';
 import { runSourceCheck } from './commands/source';
-import { runCheckerBuild, runCheckerTypecheck } from './commands/typecheck';
+import {
+  runBuild,
+  runCheckerBuild,
+  runCheckerTypecheck,
+} from './commands/typecheck';
 import {
   type LiminaCommand,
   loadConfig,
@@ -44,6 +48,11 @@ interface PackageFlags extends GlobalFlags, PackageSelectionFlags {
 }
 
 type CheckerFlags = GlobalFlags;
+
+interface BuildFlags extends GlobalFlags {
+  '--'?: string[];
+  project?: string;
+}
 
 interface GraphFlags extends GlobalFlags {
   output?: string;
@@ -85,6 +94,14 @@ function parsePackageTool(
   throw new Error(
     `Invalid package check --tool "${tool}". Expected one of: all, publint, attw, boundary.`,
   );
+}
+
+function formatUnexpectedBuildArguments(args: string[]): string {
+  return [
+    'limina build does not accept positional arguments.',
+    `  received: ${args.join(' ')}`,
+    '  fix: pass the source tsconfig or directory with -p, --project <path>.',
+  ].join('\n');
 }
 
 function parsePackageAttwProfile(
@@ -294,6 +311,37 @@ async function main(): Promise<void> {
       }
 
       flow.outro(passed ? 'limina source passed' : 'limina source failed');
+    });
+
+  cli
+    .command('build', 'Build the nearest or selected Limina tsconfig target')
+    .option(
+      '-p, --project <path>',
+      'Source tsconfig file or directory to build',
+    )
+    .action(async (flags: BuildFlags) => {
+      const positionalArgs = [...cli.args, ...(flags['--'] ?? [])];
+
+      if (positionalArgs.length > 0) {
+        throw new Error(formatUnexpectedBuildArguments(positionalArgs));
+      }
+
+      const flow = createCliFlow();
+      flow.intro('limina build');
+      const config = await load(flags, 'build');
+      const result = await runBuild({
+        clearScreen: false,
+        config,
+        cwd: process.cwd(),
+        flow,
+        project: flags.project,
+      });
+
+      if (!result.passed) {
+        process.exitCode = 1;
+      }
+
+      flow.outro(result.passed ? 'limina build passed' : 'limina build failed');
     });
 
   cli

@@ -54,7 +54,7 @@ Only built-in presets are accepted. Custom presets and custom `extensions` are r
 
 `include` is a non-empty list of workspace-root-relative selectors for ordinary source `tsconfig*.json` files. It must not select generated `.limina` files, source-level `tsconfig*.dts.json`, `tsconfig*.build.json`, base configs, or other reserved TypeScript config files.
 
-During `graph prepare`, Limina expands `include` minus `exclude`, reads each source config, and writes generated declaration leaves under `.limina/tsconfig/checkers/<checker>/...`. The generated leaf extends the source config, forces composite declaration emit options, writes declaration output under `.limina/dts/checkers/<checker>/...`, and records the source mapping in `.limina/manifest.json`.
+During `graph prepare`, Limina expands `include` minus `exclude`, reads each source config, and writes generated declaration leaves under `.limina/tsconfig/checkers/<checker>/projects/...`. The generated leaf extends the source config, forces composite declaration emit options, writes declaration output under `.limina/dts/checkers/<checker>/...`, and records the source mapping in `.limina/manifest.json`. Source `tsconfig.json` solution aggregators are generated under `.limina/tsconfig/checkers/<checker>/solutions/...`.
 
 ## exclude
 

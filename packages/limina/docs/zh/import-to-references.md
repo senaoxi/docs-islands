@@ -141,7 +141,7 @@ Limina 生成的是 `.limina/` 下的类型输出模块。
 ```text
 packages/core/tsconfig.lib.json
   -> packages/core/src/**/*.ts
-  -> .limina/tsconfig/checkers/tsc/packages/core/tsconfig.lib.dts.json
+  -> .limina/tsconfig/checkers/tsc/projects/packages/core/tsconfig.lib.dts.json
 ```
 
 这样一来，Limina 不需要用户在源码叶子配置里手写 TypeScript 原生 `references`。源码类型配置只负责描述：
@@ -208,7 +208,7 @@ packages/core/tsconfig.lib.json
 同时 Limina 已经为该源码类型配置生成了：
 
 ```text
-.limina/tsconfig/checkers/tsc/packages/core/tsconfig.lib.dts.json
+.limina/tsconfig/checkers/tsc/projects/packages/core/tsconfig.lib.dts.json
 ```
 
 那么当前项目就可以生成一条 reference：

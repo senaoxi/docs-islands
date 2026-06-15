@@ -49,8 +49,21 @@ export interface GeneratedCheckerManifest {
   preset: string;
   entry: string;
   roots: string[];
+  sourceToBuild: Record<string, GeneratedBuildModuleManifest>;
   sourceToDts: Record<string, string>;
   dtsToSource: Record<string, string>;
+}
+
+export type GeneratedBuildModuleKind = 'project' | 'solution';
+
+export interface GeneratedBuildModuleManifest {
+  kind: GeneratedBuildModuleKind;
+  path: string;
+}
+
+export interface GeneratedBuildModule {
+  kind: GeneratedBuildModuleKind;
+  path: string;
 }
 
 export interface GeneratedTsconfigGraphManifest {
@@ -63,6 +76,7 @@ export interface GeneratedTsconfigGraphResult {
   changed: boolean;
   manifestPath: string;
   checkerEntries: Map<string, string>;
+  sourceToBuild: Map<string, Map<string, GeneratedBuildModule>>;
   sourceToDts: Map<string, Map<string, string>>;
   dtsToSource: Map<string, Map<string, string>>;
   manifest: GeneratedTsconfigGraphManifest;
@@ -77,6 +91,21 @@ interface SourceProject {
   graphRules: string[];
   options: ts.CompilerOptions;
   references: Set<string>;
+}
+
+interface SolutionProject {
+  buildConfigPath: string;
+  checkerName: string;
+  configPath: string;
+  references: Set<string>;
+}
+
+interface CheckerSourceConfigCollection {
+  buildModulesBySourcePath: Map<string, GeneratedBuildModule>;
+  projectConfigPaths: Set<string>;
+  rootConfigPaths: string[];
+  solutionConfigPaths: Set<string>;
+  solutionReferencesBySourcePath: Map<string, string[]>;
 }
 
 interface ImplicitRef {
@@ -161,8 +190,33 @@ export function getGeneratedDtsConfigPath(options: {
       generatedTsconfigDir,
       'checkers',
       options.checkerName,
+      'projects',
       relativeDir === '.' ? '' : relativeDir,
       dtsFileName,
+    ),
+  );
+}
+
+function getGeneratedSolutionBuildConfigPath(options: {
+  checkerName: string;
+  rootDir: string;
+  sourceConfigPath: string;
+}): string {
+  const relativeSourcePath = toRelativePath(
+    options.rootDir,
+    options.sourceConfigPath,
+  );
+  const relativeDir = path.dirname(relativeSourcePath);
+
+  return normalizeAbsolutePath(
+    path.join(
+      options.rootDir,
+      generatedTsconfigDir,
+      'checkers',
+      options.checkerName,
+      'solutions',
+      relativeDir === '.' ? '' : relativeDir,
+      'tsconfig.build.json',
     ),
   );
 }
@@ -584,12 +638,35 @@ function isEmptyLeafConfig(configObject: JsonObject): boolean {
   );
 }
 
-function collectCheckerSourceConfigLeaves(options: {
+function createProjectBuildModule(options: {
+  checkerName: string;
+  rootDir: string;
+  sourceConfigPath: string;
+}): GeneratedBuildModule {
+  return {
+    kind: 'project',
+    path: getGeneratedDtsConfigPath(options),
+  };
+}
+
+function createSolutionBuildModule(options: {
+  checkerName: string;
+  rootDir: string;
+  sourceConfigPath: string;
+}): GeneratedBuildModule {
+  return {
+    kind: 'solution',
+    path: getGeneratedSolutionBuildConfigPath(options),
+  };
+}
+
+function collectCheckerSourceConfigModules(options: {
+  checkerName: string;
+  collection: CheckerSourceConfigCollection;
   config: ResolvedLiminaConfig;
   excludedConfigPaths: Set<string>;
   problems: string[];
   sourceConfigPath: string;
-  sourceConfigPaths: Set<string>;
   seenConfigs: Set<string>;
 }): void {
   if (options.excludedConfigPaths.has(options.sourceConfigPath)) {
@@ -619,10 +696,23 @@ function collectCheckerSourceConfigLeaves(options: {
     isDefaultTsconfigPath(options.sourceConfigPath) &&
     isPureSolutionConfig(configObject)
   ) {
+    options.collection.solutionConfigPaths.add(options.sourceConfigPath);
+    options.collection.buildModulesBySourcePath.set(
+      options.sourceConfigPath,
+      createSolutionBuildModule({
+        checkerName: options.checkerName,
+        rootDir: options.config.rootDir,
+        sourceConfigPath: options.sourceConfigPath,
+      }),
+    );
+
     const referenceCollection = collectReferencePathInfosForConfig(
       options.config.rootDir,
       options.sourceConfigPath,
     );
+    const referenceSourceConfigPaths: string[] = [];
+
+    options.problems.push(...referenceCollection.problems);
 
     for (const reference of referenceCollection.references) {
       const referencePath = reference.resolvedPath;
@@ -634,21 +724,39 @@ function collectCheckerSourceConfigLeaves(options: {
         continue;
       }
 
-      collectCheckerSourceConfigLeaves({
+      collectCheckerSourceConfigModules({
+        checkerName: options.checkerName,
+        collection: options.collection,
         config: options.config,
         excludedConfigPaths: options.excludedConfigPaths,
         problems: options.problems,
         sourceConfigPath: referencePath,
-        sourceConfigPaths: options.sourceConfigPaths,
         seenConfigs: options.seenConfigs,
       });
+
+      if (options.collection.buildModulesBySourcePath.has(referencePath)) {
+        referenceSourceConfigPaths.push(referencePath);
+      }
     }
+
+    options.collection.solutionReferencesBySourcePath.set(
+      options.sourceConfigPath,
+      [...new Set(referenceSourceConfigPaths)].sort(),
+    );
 
     return;
   }
 
   if (!isEmptyLeafConfig(configObject)) {
-    options.sourceConfigPaths.add(options.sourceConfigPath);
+    options.collection.projectConfigPaths.add(options.sourceConfigPath);
+    options.collection.buildModulesBySourcePath.set(
+      options.sourceConfigPath,
+      createProjectBuildModule({
+        checkerName: options.checkerName,
+        rootDir: options.config.rootDir,
+        sourceConfigPath: options.sourceConfigPath,
+      }),
+    );
   }
 }
 
@@ -713,7 +821,7 @@ async function collectCheckerSourceConfigs(
   checkerName: string,
   include: string[],
   exclude: string[],
-): Promise<string[]> {
+): Promise<CheckerSourceConfigCollection> {
   const paths = await glob(include.map(normalizeWorkspaceGlob), {
     absolute: true,
     cwd: config.rootDir,
@@ -743,16 +851,23 @@ async function collectCheckerSourceConfigs(
     config,
     exclude,
   );
-  const sourceConfigPaths = new Set<string>();
+  const collection: CheckerSourceConfigCollection = {
+    buildModulesBySourcePath: new Map(),
+    projectConfigPaths: new Set(),
+    rootConfigPaths: [],
+    solutionConfigPaths: new Set(),
+    solutionReferencesBySourcePath: new Map(),
+  };
   const seenConfigs = new Set<string>();
 
   for (const sourcePath of sourcePaths) {
-    collectCheckerSourceConfigLeaves({
+    collectCheckerSourceConfigModules({
+      checkerName,
+      collection,
       config,
       excludedConfigPaths,
       problems,
       sourceConfigPath: sourcePath,
-      sourceConfigPaths,
       seenConfigs,
     });
   }
@@ -763,7 +878,15 @@ async function collectCheckerSourceConfigs(
     );
   }
 
-  return [...sourceConfigPaths].sort();
+  collection.rootConfigPaths = [
+    ...new Set(
+      sourcePaths.filter((sourcePath) =>
+        collection.buildModulesBySourcePath.has(sourcePath),
+      ),
+    ),
+  ].sort();
+
+  return collection;
 }
 
 function createSourceProject(options: {
@@ -805,6 +928,37 @@ function createSourceProject(options: {
     graphRules: readGraphRules(options.config, options.sourceConfigPath),
     options: parsed.options,
     references: new Set(),
+  };
+}
+
+function createSolutionProject(options: {
+  checkerName: string;
+  collection: CheckerSourceConfigCollection;
+  config: ResolvedLiminaConfig;
+  sourceConfigPath: string;
+}): SolutionProject {
+  const referenceSourceConfigPaths =
+    options.collection.solutionReferencesBySourcePath.get(
+      options.sourceConfigPath,
+    ) ?? [];
+
+  return {
+    buildConfigPath: getGeneratedSolutionBuildConfigPath({
+      checkerName: options.checkerName,
+      rootDir: options.config.rootDir,
+      sourceConfigPath: options.sourceConfigPath,
+    }),
+    checkerName: options.checkerName,
+    configPath: options.sourceConfigPath,
+    references: new Set(
+      referenceSourceConfigPaths
+        .map(
+          (sourceConfigPath) =>
+            options.collection.buildModulesBySourcePath.get(sourceConfigPath)
+              ?.path,
+        )
+        .filter((buildPath): buildPath is string => Boolean(buildPath)),
+    ),
   };
 }
 
@@ -1065,21 +1219,42 @@ function createGeneratedDtsConfig(
   };
 }
 
+function createGeneratedSolutionBuildConfig(
+  config: ResolvedLiminaConfig,
+  solution: SolutionProject,
+): Record<string, unknown> {
+  return {
+    $schema: createLiminaTsconfigSchemaPath(
+      config.rootDir,
+      solution.buildConfigPath,
+    ),
+    files: [],
+    references: [...solution.references].sort().map((referencePath) => ({
+      path: createRelativePath(solution.buildConfigPath, referencePath),
+    })),
+    liminaOptions: {
+      generated: true,
+      checker: solution.checkerName,
+      sourceConfig: createRelativePath(
+        solution.buildConfigPath,
+        solution.configPath,
+      ),
+    },
+  };
+}
+
 function createCheckerBuildConfig(options: {
   checkerName: string;
   entryPath: string;
-  projects: SourceProject[];
+  references: string[];
   rootDir: string;
 }): Record<string, unknown> {
   return {
     $schema: createLiminaTsconfigSchemaPath(options.rootDir, options.entryPath),
     files: [],
-    references: options.projects
-      .map((project) => project.dtsConfigPath)
-      .sort()
-      .map((referencePath) => ({
-        path: createRelativePath(options.entryPath, referencePath),
-      })),
+    references: options.references.sort().map((referencePath) => ({
+      path: createRelativePath(options.entryPath, referencePath),
+    })),
     liminaOptions: {
       generated: true,
       checker: options.checkerName,
@@ -1136,19 +1311,34 @@ function createManifest(options: {
   checkers: ReturnType<typeof getActiveCheckers>;
   projectsByChecker: Map<string, SourceProject[]>;
   rootDir: string;
+  sourceToBuildByChecker: Map<string, Map<string, GeneratedBuildModule>>;
 }): GeneratedTsconfigGraphManifest {
   const manifestCheckers: Record<string, GeneratedCheckerManifest> = {};
 
   for (const checker of options.checkers) {
     const projects = options.projectsByChecker.get(checker.name) ?? [];
     const entryPath = options.checkerEntries.get(checker.name);
+    const sourceToBuildBySourcePath =
+      options.sourceToBuildByChecker.get(checker.name) ?? new Map();
 
     if (!entryPath) {
       continue;
     }
 
+    const sourceToBuild: Record<string, GeneratedBuildModuleManifest> = {};
     const sourceToDts: Record<string, string> = {};
     const dtsToSource: Record<string, string> = {};
+
+    for (const [sourceConfigPath, buildModule] of sourceToBuildBySourcePath) {
+      const sourcePath = toPosixPath(
+        toRelativePath(options.rootDir, sourceConfigPath),
+      );
+
+      sourceToBuild[sourcePath] = {
+        kind: buildModule.kind,
+        path: toPosixPath(toRelativePath(options.rootDir, buildModule.path)),
+      };
+    }
 
     for (const project of projects) {
       const sourcePath = toPosixPath(
@@ -1170,6 +1360,11 @@ function createManifest(options: {
           toPosixPath(toRelativePath(options.rootDir, project.configPath)),
         )
         .sort(),
+      sourceToBuild: Object.fromEntries(
+        Object.entries(sourceToBuild).sort(([left], [right]) =>
+          left.localeCompare(right),
+        ),
+      ),
       sourceToDts,
       dtsToSource,
     };
@@ -1189,6 +1384,7 @@ function createResult(options: {
   rootDir: string;
 }): GeneratedTsconfigGraphResult {
   const checkerEntries = new Map<string, string>();
+  const sourceToBuild = new Map<string, Map<string, GeneratedBuildModule>>();
   const sourceToDts = new Map<string, Map<string, string>>();
   const dtsToSource = new Map<string, Map<string, string>>();
 
@@ -1200,6 +1396,22 @@ function createResult(options: {
       normalizeAbsolutePath(path.join(options.rootDir, checkerManifest.entry)),
     );
 
+    sourceToBuild.set(
+      checkerName,
+      new Map(
+        Object.entries(checkerManifest.sourceToBuild ?? {}).map(
+          ([sourcePath, buildModule]) => [
+            normalizeAbsolutePath(path.join(options.rootDir, sourcePath)),
+            {
+              kind: buildModule.kind,
+              path: normalizeAbsolutePath(
+                path.join(options.rootDir, buildModule.path),
+              ),
+            },
+          ],
+        ),
+      ),
+    );
     sourceToDts.set(
       checkerName,
       new Map(
@@ -1228,18 +1440,86 @@ function createResult(options: {
     changed: options.changed,
     manifestPath: options.manifestPath,
     checkerEntries,
+    sourceToBuild,
     sourceToDts,
     dtsToSource,
     manifest: options.manifest,
   };
 }
 
+function addDuplicateCheckerOwnershipProblems(options: {
+  checkerCollectionsByName: Map<string, CheckerSourceConfigCollection>;
+  checkers: ReturnType<typeof getActiveCheckers>;
+  problems: string[];
+  rootDir: string;
+}): void {
+  const ownersByPresetAndSourcePath = new Map<
+    string,
+    {
+      checkerNames: string[];
+      preset: string;
+      sourceConfigPath: string;
+    }
+  >();
+
+  for (const checker of options.checkers) {
+    const collection = options.checkerCollectionsByName.get(checker.name);
+
+    if (!collection) {
+      continue;
+    }
+
+    for (const sourceConfigPath of collection.buildModulesBySourcePath.keys()) {
+      const key = JSON.stringify([checker.preset, sourceConfigPath]);
+      const ownership = ownersByPresetAndSourcePath.get(key) ?? {
+        checkerNames: [],
+        preset: checker.preset,
+        sourceConfigPath,
+      };
+
+      ownership.checkerNames.push(checker.name);
+      ownersByPresetAndSourcePath.set(key, ownership);
+    }
+  }
+
+  for (const ownership of ownersByPresetAndSourcePath.values()) {
+    const checkerNames = [...new Set(ownership.checkerNames)].sort(
+      (left, right) => left.localeCompare(right),
+    );
+
+    if (checkerNames.length < 2) {
+      continue;
+    }
+
+    options.problems.push(
+      [
+        'Duplicate Limina checker ownership:',
+        `  preset: ${ownership.preset}`,
+        `  source config: ${toRelativePath(options.rootDir, ownership.sourceConfigPath)}`,
+        `  checkers: ${checkerNames.join(', ')}`,
+        '  reason: checkers with the same preset must not govern the same source tsconfig after solution references are expanded.',
+        '  fix: narrow config.checkers.<checker>.include or config.checkers.<checker>.exclude so only one checker owns this tsconfig for the preset.',
+      ].join('\n'),
+    );
+  }
+}
+
 export async function prepareGeneratedTsconfigGraph(
   config: ResolvedLiminaConfig,
 ): Promise<GeneratedTsconfigGraphResult> {
   const checkers = getActiveCheckers(config);
+  const checkerCollectionsByName = new Map<
+    string,
+    CheckerSourceConfigCollection
+  >();
   const projectsByChecker = new Map<string, SourceProject[]>();
+  const rootBuildPathsByChecker = new Map<string, string[]>();
+  const solutionsByChecker = new Map<string, SolutionProject[]>();
   const checkerEntries = new Map<string, string>();
+  const sourceToBuildByChecker = new Map<
+    string,
+    Map<string, GeneratedBuildModule>
+  >();
   const writeContext: GeneratedGraphWriteContext = {
     changed: false,
     expectedFiles: new Set(),
@@ -1248,22 +1528,49 @@ export async function prepareGeneratedTsconfigGraph(
   const problems: string[] = [];
 
   for (const checker of checkers) {
-    const sourceConfigPaths = await collectCheckerSourceConfigs(
+    const collection = await collectCheckerSourceConfigs(
       config,
       checker.name,
       checker.include,
       checker.exclude,
     );
-    const projects = sourceConfigPaths.map((sourceConfigPath) =>
-      createSourceProject({
-        checkerName: checker.name,
-        checkerPreset: checker.preset,
-        config,
-        sourceConfigPath,
-      }),
-    );
+    const projects = [...collection.projectConfigPaths]
+      .sort()
+      .map((sourceConfigPath) =>
+        createSourceProject({
+          checkerName: checker.name,
+          checkerPreset: checker.preset,
+          config,
+          sourceConfigPath,
+        }),
+      );
+    const solutions = [...collection.solutionConfigPaths]
+      .sort()
+      .map((sourceConfigPath) =>
+        createSolutionProject({
+          checkerName: checker.name,
+          collection,
+          config,
+          sourceConfigPath,
+        }),
+      );
 
+    checkerCollectionsByName.set(checker.name, collection);
     projectsByChecker.set(checker.name, projects);
+    solutionsByChecker.set(checker.name, solutions);
+    sourceToBuildByChecker.set(
+      checker.name,
+      collection.buildModulesBySourcePath,
+    );
+    rootBuildPathsByChecker.set(
+      checker.name,
+      collection.rootConfigPaths
+        .map(
+          (sourceConfigPath) =>
+            collection.buildModulesBySourcePath.get(sourceConfigPath)?.path,
+        )
+        .filter((buildPath): buildPath is string => Boolean(buildPath)),
+    );
     checkerEntries.set(
       checker.name,
       getGeneratedCheckerEntryPath({
@@ -1272,6 +1579,13 @@ export async function prepareGeneratedTsconfigGraph(
       }),
     );
   }
+
+  addDuplicateCheckerOwnershipProblems({
+    checkerCollectionsByName,
+    checkers,
+    problems,
+    rootDir: config.rootDir,
+  });
 
   const allProjects = [...projectsByChecker.values()].flat();
 
@@ -1290,6 +1604,8 @@ export async function prepareGeneratedTsconfigGraph(
 
   for (const [checkerName, projects] of projectsByChecker) {
     const entryPath = checkerEntries.get(checkerName);
+    const solutions = solutionsByChecker.get(checkerName) ?? [];
+    const rootBuildPaths = rootBuildPathsByChecker.get(checkerName) ?? [];
 
     if (!entryPath) {
       continue;
@@ -1303,13 +1619,21 @@ export async function prepareGeneratedTsconfigGraph(
       );
     }
 
+    for (const solution of solutions) {
+      await writeGeneratedJson(
+        writeContext,
+        solution.buildConfigPath,
+        createGeneratedSolutionBuildConfig(config, solution),
+      );
+    }
+
     await writeGeneratedJson(
       writeContext,
       entryPath,
       createCheckerBuildConfig({
         checkerName,
         entryPath,
-        projects,
+        references: rootBuildPaths,
         rootDir: config.rootDir,
       }),
     );
@@ -1320,6 +1644,7 @@ export async function prepareGeneratedTsconfigGraph(
     checkers,
     projectsByChecker,
     rootDir: config.rootDir,
+    sourceToBuildByChecker,
   });
   const manifestPath = normalizeAbsolutePath(
     path.join(config.rootDir, generatedManifestPath),

@@ -27,7 +27,7 @@
 生成的声明叶子靠 `tsc -b` 增量地只产出 `.d.ts`。Limina 会在 `limina graph prepare` 时写出这些叶子；每个叶子都会打开 `composite`、`incremental`、`declaration`、`emitDeclarationOnly`，关掉 `noEmit`，并写明 `rootDir` / `outDir` / `tsBuildInfoFile`。
 
 ```jsonc
-// .limina/tsconfig/checkers/typescript/packages/core/tsconfig.lib.dts.json
+// .limina/tsconfig/checkers/typescript/projects/packages/core/tsconfig.lib.dts.json
 {
   "extends": "../../../../../packages/core/tsconfig.lib.json",
   "compilerOptions": {
@@ -52,7 +52,7 @@
 ```text
 packages/core/
   tsconfig.lib.json       # 源码配置负责类型相关选项
-.limina/tsconfig/checkers/typescript/packages/core/
+.limina/tsconfig/checkers/typescript/projects/packages/core/
   tsconfig.lib.dts.json   # 生成叶子，sourceConfig -> packages/core/tsconfig.lib.json
 ```
 
@@ -242,7 +242,7 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 
 ### 聚合器必须是纯聚合器
 
-源码层带 `references` 的聚合 `tsconfig.json` 只能有 `$schema` / `files: []` / `references`，不能混入 `compilerOptions` 等。Limina 会在 `.limina/tsconfig/checkers/<checker>/tsconfig.build.json` 写出检查器 build 聚合器。
+源码层带 `references` 的聚合 `tsconfig.json` 只能有 `$schema` / `files: []` / `references`，不能混入 `compilerOptions` 等。Limina 会在 `.limina/tsconfig/checkers/<checker>/tsconfig.build.json` 写出检查器根 build 聚合器，并在 `.limina/tsconfig/checkers/<checker>/solutions/.../tsconfig.build.json` 下写出源码 solution build 聚合器。
 
 ```jsonc
 // tsconfig.json

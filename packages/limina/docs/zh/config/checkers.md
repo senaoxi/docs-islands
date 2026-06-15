@@ -54,7 +54,7 @@ export default defineConfig({
 
 `include` 是非空的、相对工作区根目录的选择器列表，只能选中普通源码 `tsconfig*.json`。不要让它选中 `.limina`、源码级 `tsconfig*.dts.json`、`tsconfig*.build.json`、base config 或其他保留 tsconfig。
 
-`limina graph prepare` 会展开 `include` 减去 `exclude`，读取源码配置，并在 `.limina/tsconfig/checkers/<checker>/...` 下生成声明叶子。生成叶子会 `extends` 源码配置，强制声明 emit 选项，把声明输出写到 `.limina/dts/checkers/<checker>/...`，并在 `.limina/manifest.json` 里记录映射。
+`limina graph prepare` 会展开 `include` 减去 `exclude`，读取源码配置，并在 `.limina/tsconfig/checkers/<checker>/projects/...` 下生成声明叶子。生成叶子会 `extends` 源码配置，强制声明 emit 选项，把声明输出写到 `.limina/dts/checkers/<checker>/...`，并在 `.limina/manifest.json` 里记录映射。源码 `tsconfig.json` solution 聚合器会生成到 `.limina/tsconfig/checkers/<checker>/solutions/...` 下。
 
 ## exclude
 

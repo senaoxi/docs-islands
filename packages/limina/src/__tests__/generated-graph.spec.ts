@@ -79,7 +79,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const result = await prepareGeneratedTsconfigGraph(fixture.config);
       const sourcePath = 'packages/pkg/tsconfig.lib.json';
       const dtsPath =
-        '.limina/tsconfig/checkers/typescript/packages/pkg/tsconfig.lib.dts.json';
+        '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json';
 
       expect(result.manifestPath).toBe(
         path.join(fixture.rootDir, '.limina/manifest.json'),
@@ -146,7 +146,13 @@ describe('prepareGeneratedTsconfigGraph', () => {
       ]);
       expect(result.manifest.checkers.typescript?.sourceToDts).toMatchObject({
         'packages/pkg/tsconfig.json':
-          '.limina/tsconfig/checkers/typescript/packages/pkg/tsconfig.dts.json',
+          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.dts.json',
+      });
+      expect(result.manifest.checkers.typescript?.sourceToBuild).toMatchObject({
+        'packages/pkg/tsconfig.json': {
+          kind: 'project',
+          path: '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.dts.json',
+        },
       });
     } finally {
       await fixture.cleanup();
@@ -230,17 +236,67 @@ describe('prepareGeneratedTsconfigGraph', () => {
 
       expect(buildConfig.references).toEqual([
         {
-          path: './packages/pkg/tsconfig.lib.dts.json',
+          path: './solutions/tsconfig.build.json',
+        },
+      ]);
+
+      const rootSolutionConfig = JSON.parse(
+        await readFile(
+          path.join(
+            fixture.rootDir,
+            '.limina/tsconfig/checkers/typescript/solutions/tsconfig.build.json',
+          ),
+          'utf8',
+        ),
+      ) as {
+        references: { path: string }[];
+      };
+
+      expect(rootSolutionConfig.references).toEqual([
+        {
+          path: './packages/pkg/tsconfig.build.json',
+        },
+      ]);
+
+      const packageSolutionConfig = JSON.parse(
+        await readFile(
+          path.join(
+            fixture.rootDir,
+            '.limina/tsconfig/checkers/typescript/solutions/packages/pkg/tsconfig.build.json',
+          ),
+          'utf8',
+        ),
+      ) as {
+        references: { path: string }[];
+      };
+
+      expect(packageSolutionConfig.references).toEqual([
+        {
+          path: '../../../projects/packages/pkg/tsconfig.lib.dts.json',
         },
         {
-          path: './packages/pkg/tsconfig.test.dts.json',
+          path: '../../../projects/packages/pkg/tsconfig.test.dts.json',
         },
       ]);
       expect(result.manifest.checkers.typescript?.sourceToDts).toMatchObject({
         'packages/pkg/tsconfig.lib.json':
-          '.limina/tsconfig/checkers/typescript/packages/pkg/tsconfig.lib.dts.json',
+          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json',
         'packages/pkg/tsconfig.test.json':
-          '.limina/tsconfig/checkers/typescript/packages/pkg/tsconfig.test.dts.json',
+          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.test.dts.json',
+      });
+      expect(result.manifest.checkers.typescript?.sourceToBuild).toMatchObject({
+        'tsconfig.json': {
+          kind: 'solution',
+          path: '.limina/tsconfig/checkers/typescript/solutions/tsconfig.build.json',
+        },
+        'packages/pkg/tsconfig.json': {
+          kind: 'solution',
+          path: '.limina/tsconfig/checkers/typescript/solutions/packages/pkg/tsconfig.build.json',
+        },
+        'packages/pkg/tsconfig.lib.json': {
+          kind: 'project',
+          path: '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json',
+        },
       });
     } finally {
       await fixture.cleanup();
@@ -303,7 +359,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
       ]);
       expect(result.manifest.checkers.typescript?.sourceToDts).toEqual({
         'packages/pkg/tsconfig.lib.json':
-          '.limina/tsconfig/checkers/typescript/packages/pkg/tsconfig.lib.dts.json',
+          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json',
       });
     } finally {
       await fixture.cleanup();
@@ -358,7 +414,138 @@ describe('prepareGeneratedTsconfigGraph', () => {
       ]);
       expect(result.manifest.checkers.typescript?.sourceToDts).toEqual({
         'packages/pkg/tsconfig.json':
-          '.limina/tsconfig/checkers/typescript/packages/pkg/tsconfig.dts.json',
+          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.dts.json',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects same-preset checkers that govern the same source leaf', async () => {
+    const fixture = await createFixture({
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      await expect(
+        prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              one: {
+                preset: 'tsc',
+                include: ['packages/pkg/tsconfig.json'],
+              },
+              two: {
+                preset: 'tsc',
+                include: ['packages/pkg/tsconfig.json'],
+              },
+            },
+          },
+        }),
+      ).rejects.toThrow('Duplicate Limina checker ownership');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects same-preset checkers that share a solution-expanded leaf', async () => {
+    const fixture = await createFixture({
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      await expect(
+        prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              one: {
+                preset: 'tsc',
+                include: ['packages/pkg/tsconfig.json'],
+              },
+              two: {
+                preset: 'tsc',
+                include: ['packages/pkg/tsconfig.lib.json'],
+              },
+            },
+          },
+        }),
+      ).rejects.toThrow('packages/pkg/tsconfig.lib.json');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('allows different presets to share the same source config', async () => {
+    const fixture = await createFixture({
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: {
+            nativeTypescript: {
+              preset: 'tsgo',
+              include: ['packages/pkg/tsconfig.json'],
+            },
+            typescript: {
+              preset: 'tsc',
+              include: ['packages/pkg/tsconfig.json'],
+            },
+          },
+        },
+      });
+
+      expect(
+        result.manifest.checkers.nativeTypescript?.sourceToDts,
+      ).toMatchObject({
+        'packages/pkg/tsconfig.json':
+          '.limina/tsconfig/checkers/nativeTypescript/projects/packages/pkg/tsconfig.dts.json',
+      });
+      expect(result.manifest.checkers.typescript?.sourceToDts).toMatchObject({
+        'packages/pkg/tsconfig.json':
+          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.dts.json',
       });
     } finally {
       await fixture.cleanup();
@@ -413,7 +600,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
         await readFile(
           path.join(
             fixture.rootDir,
-            '.limina/tsconfig/checkers/typescript/packages/app/tsconfig.dts.json',
+            '.limina/tsconfig/checkers/typescript/projects/packages/app/tsconfig.dts.json',
           ),
           'utf8',
         ),
@@ -423,7 +610,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
 
       expect(generatedConfig.references).toEqual([
         {
-          path: '../../../vue/packages/theme/tsconfig.dts.json',
+          path: '../../../../vue/projects/packages/theme/tsconfig.dts.json',
         },
       ]);
     } finally {
@@ -433,7 +620,8 @@ describe('prepareGeneratedTsconfigGraph', () => {
 
   it('removes stale generated tsconfig files', async () => {
     const fixture = await createFixture({
-      '.limina/tsconfig/checkers/typescript/stale/tsconfig.dts.json': '{}\n',
+      '.limina/tsconfig/checkers/typescript/projects/stale/tsconfig.dts.json':
+        '{}\n',
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
       'packages/pkg/tsconfig.json': json({
         compilerOptions: {
@@ -454,7 +642,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
         existsSync(
           path.join(
             fixture.rootDir,
-            '.limina/tsconfig/checkers/typescript/stale/tsconfig.dts.json',
+            '.limina/tsconfig/checkers/typescript/projects/stale/tsconfig.dts.json',
           ),
         ),
       ).toBe(false);
@@ -508,7 +696,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
         await readFile(
           path.join(
             fixture.rootDir,
-            '.limina/tsconfig/checkers/typescript/packages/app/tsconfig.lib.dts.json',
+            '.limina/tsconfig/checkers/typescript/projects/packages/app/tsconfig.lib.dts.json',
           ),
           'utf8',
         ),
@@ -568,7 +756,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
         await readFile(
           path.join(
             fixture.rootDir,
-            '.limina/tsconfig/checkers/typescript/packages/pkg/tsconfig.runtime.dts.json',
+            '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.runtime.dts.json',
           ),
           'utf8',
         ),

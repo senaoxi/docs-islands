@@ -78,7 +78,7 @@ import { createClient } from '@acme/core';
 If TypeScript resolves that entry to `packages/core/src/index.ts`, and that file is owned by `packages/core/tsconfig.lib.json`, Limina's generated app declaration leaf must reference the generated core declaration leaf:
 
 ```jsonc
-// .limina/tsconfig/checkers/typescript/packages/app/tsconfig.lib.dts.json
+// .limina/tsconfig/checkers/typescript/projects/packages/app/tsconfig.lib.dts.json
 {
   "references": [{ "path": "../core/tsconfig.lib.dts.json" }],
 }
@@ -150,7 +150,7 @@ packages/app/
   tsconfig.tools.json
 ```
 
-Limina mirrors those source configs into generated declaration leaves under `.limina/tsconfig/checkers/<checker>/...`.
+Limina mirrors those source configs into generated declaration leaves under `.limina/tsconfig/checkers/<checker>/projects/...`.
 
 In a single-environment directory, `tsconfig.json` can be a leaf directly:
 

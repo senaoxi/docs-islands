@@ -28,7 +28,7 @@ export default defineConfig({
 
 ## 生成声明叶子
 
-生成声明叶子是 `.limina/tsconfig/checkers/<checker>/.../*.dts.json` 项目。它是能被 `tsc -b` 或 `vue-tsc -b` 消费的图节点。
+生成声明叶子是 `.limina/tsconfig/checkers/<checker>/projects/.../*.dts.json` 项目。它是能被 `tsc -b` 或 `vue-tsc -b` 消费的图节点。
 
 它应该只输出声明文件，并带有构建模式需要的选项：
 

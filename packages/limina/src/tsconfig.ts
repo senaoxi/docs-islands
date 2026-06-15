@@ -606,6 +606,10 @@ export function collectSourceGraphProjectExtensions(
   const projectExtensionsByPath = new Map<string, string[]>();
   for (const route of routeCollection.routes) {
     for (const projectPath of route.projectPaths) {
+      if (!isDtsConfigPath(projectPath)) {
+        continue;
+      }
+
       const adapterExtensions = resolveCheckerProjectExtensions({
         configPath: projectPath,
         preset: route.checkerPreset,

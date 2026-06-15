@@ -27,7 +27,7 @@ The deny/allow rules referenced here are defined in [Graph Rules](./config/graph
 A generated declaration leaf emits only `.d.ts` incrementally through `tsc -b`. Limina writes these leaves during `limina graph prepare`; each one turns on `composite`, `incremental`, `declaration`, `emitDeclarationOnly`, turns off `noEmit`, and sets `rootDir` / `outDir` / `tsBuildInfoFile`.
 
 ```jsonc
-// .limina/tsconfig/checkers/typescript/packages/core/tsconfig.lib.dts.json
+// .limina/tsconfig/checkers/typescript/projects/packages/core/tsconfig.lib.dts.json
 {
   "extends": "../../../../../packages/core/tsconfig.lib.json",
   "compilerOptions": {
@@ -52,7 +52,7 @@ Each generated `*.dts.json` needs a `liminaOptions.sourceConfig` that points bac
 ```text
 packages/core/
   tsconfig.lib.json       # source config owns type-affecting options
-.limina/tsconfig/checkers/typescript/packages/core/
+.limina/tsconfig/checkers/typescript/projects/packages/core/
   tsconfig.lib.dts.json   # generated leaf, sourceConfig -> packages/core/tsconfig.lib.json
 ```
 
@@ -247,7 +247,7 @@ Reports `Duplicate checker graph coverage:`. Fix: make each file belong to a sin
 
 ### Aggregators must be pure aggregators
 
-Source-level aggregator `tsconfig.json` files (those with `references`) may only carry `$schema` / `files: []` / `references`, with no `compilerOptions` and so on. Limina writes checker build aggregators under `.limina/tsconfig/checkers/<checker>/tsconfig.build.json`.
+Source-level aggregator `tsconfig.json` files (those with `references`) may only carry `$schema` / `files: []` / `references`, with no `compilerOptions` and so on. Limina writes a checker root build aggregator under `.limina/tsconfig/checkers/<checker>/tsconfig.build.json`, and writes source solution build aggregators under `.limina/tsconfig/checkers/<checker>/solutions/.../tsconfig.build.json`.
 
 ```jsonc
 // tsconfig.json

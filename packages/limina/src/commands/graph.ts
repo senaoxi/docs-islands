@@ -1046,7 +1046,7 @@ function addReferenceCompletenessProblems(options: {
           project.configPath,
         );
         const checkerRootConfigPath = generatedChecker
-          ? `/.limina/tsconfig/checkers/${generatedChecker}/tsconfig.dts.json`
+          ? `/.limina/tsconfig/checkers/${generatedChecker}/projects/tsconfig.dts.json`
           : null;
 
         if (

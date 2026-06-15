@@ -530,6 +530,10 @@ function collectCoverage(options: {
 
   for (const route of options.graphRoutes) {
     for (const graphProjectPath of route.projectPaths) {
+      if (!isDtsConfigPath(graphProjectPath)) {
+        continue;
+      }
+
       const projectContext = createCheckerProjectContext({
         config: options.config,
         configPath: graphProjectPath,
@@ -572,6 +576,10 @@ function collectCoverage(options: {
 
   for (const checkerTarget of options.checkerTargets) {
     for (const configPath of checkerTarget.coverageConfigPaths) {
+      if (!isDtsConfigPath(configPath)) {
+        continue;
+      }
+
       const projectContext = createCheckerProjectContext({
         config: options.config,
         configPath,
@@ -648,6 +656,10 @@ function collectProjectContextsByPath(
 
   for (const route of routes) {
     for (const projectPath of route.projectPaths) {
+      if (!isDtsConfigPath(projectPath)) {
+        continue;
+      }
+
       const existingContext = projectContextsByPath.get(projectPath) ?? {
         checkerPresets: [],
         extensions: [],
@@ -1285,6 +1297,10 @@ function collectConfigFileOwners(
 
   for (const route of graphRoutes) {
     for (const configPath of route.projectPaths) {
+      if (!isDtsConfigPath(configPath)) {
+        continue;
+      }
+
       if (!existsSync(configPath)) {
         continue;
       }

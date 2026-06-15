@@ -261,7 +261,7 @@ describe('defineConfig', () => {
           path.relative(rootDir, configPath),
         ),
       ).toEqual([
-        '.limina/tsconfig/checkers/nativeTypescript/packages/app/tsconfig.lib.dts.json',
+        '.limina/tsconfig/checkers/nativeTypescript/projects/packages/app/tsconfig.lib.dts.json',
       ]);
     } finally {
       await rm(rootDir, {
@@ -347,7 +347,7 @@ describe('defineConfig', () => {
           path.relative(rootDir, configPath),
         ),
       ).toEqual([
-        '.limina/tsconfig/checkers/vue/packages/app/tsconfig.vue.dts.json',
+        '.limina/tsconfig/checkers/vue/projects/packages/app/tsconfig.vue.dts.json',
       ]);
     } finally {
       await rm(rootDir, {

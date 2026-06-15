@@ -28,7 +28,7 @@ Any source family you want Limina to govern needs a checker entry in `limina.con
 
 ## Generated Declaration Leaf
 
-A generated declaration leaf is a `.limina/tsconfig/checkers/<checker>/.../*.dts.json` project. It is the part of the graph consumed by `tsc -b` or `vue-tsc -b`.
+A generated declaration leaf is a `.limina/tsconfig/checkers/<checker>/projects/.../*.dts.json` project. It is the part of the graph consumed by `tsc -b` or `vue-tsc -b`.
 
 It should emit declarations only, with build-mode options such as:
 
