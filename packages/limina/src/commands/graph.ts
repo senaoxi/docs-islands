@@ -1094,6 +1094,7 @@ function addReferenceCompletenessProblems(options: {
 function collectExpectedReferences(options: {
   config: ResolvedLiminaConfig;
   fileOwnerLookup: Map<string, string[]>;
+  generatedGraph: GeneratedTsconfigGraphResult;
   graphRules: NormalizedGraphRules;
   importers: ImporterInfo[];
   packages: WorkspacePackage[];
@@ -1296,7 +1297,7 @@ function collectExpectedReferences(options: {
           continue;
         }
 
-        const targetProjectPath = findTargetProject({
+        let targetProjectPath = findTargetProject({
           fileOwnerLookup: options.fileOwnerLookup,
           packages: options.packages,
           projectPaths: options.projectPaths,
@@ -1342,16 +1343,13 @@ function collectExpectedReferences(options: {
           continue;
         }
 
-        if (targetProjectPath === project.configPath) {
-          continue;
-        }
+        targetProjectPath = getPreferredGeneratedTargetProjectPath({
+          generatedGraph: options.generatedGraph,
+          importingProjectPath: project.configPath,
+          targetProjectPath,
+        });
 
-        if (
-          !isSameGeneratedCheckerNamespace(
-            project.configPath,
-            targetProjectPath,
-          )
-        ) {
+        if (targetProjectPath === project.configPath) {
           continue;
         }
 
@@ -1404,6 +1402,50 @@ function collectExpectedReferences(options: {
   }
 
   return expectedReferencesByProjectPath;
+}
+
+function getGeneratedSourceConfigPath(
+  generatedGraph: GeneratedTsconfigGraphResult,
+  projectPath: string,
+): string | undefined {
+  for (const dtsToSource of generatedGraph.dtsToSource.values()) {
+    const sourceConfigPath = dtsToSource.get(projectPath);
+
+    if (sourceConfigPath) {
+      return sourceConfigPath;
+    }
+  }
+
+  return undefined;
+}
+
+function getPreferredGeneratedTargetProjectPath(options: {
+  generatedGraph: GeneratedTsconfigGraphResult;
+  importingProjectPath: string;
+  targetProjectPath: string;
+}): string {
+  const importingChecker = getGeneratedCheckerNamespace(
+    options.importingProjectPath,
+  );
+
+  if (!importingChecker) {
+    return options.targetProjectPath;
+  }
+
+  const sourceConfigPath = getGeneratedSourceConfigPath(
+    options.generatedGraph,
+    options.targetProjectPath,
+  );
+
+  if (!sourceConfigPath) {
+    return options.targetProjectPath;
+  }
+
+  return (
+    options.generatedGraph.sourceToDts
+      .get(importingChecker)
+      ?.get(sourceConfigPath) ?? options.targetProjectPath
+  );
 }
 
 function createWorkspaceExportsResolutionProfiles(
@@ -1515,6 +1557,7 @@ async function runGraphCheckInternal(
   const expectedReferencesByProjectPath = collectExpectedReferences({
     config,
     fileOwnerLookup,
+    generatedGraph,
     graphRules,
     importers,
     packages,

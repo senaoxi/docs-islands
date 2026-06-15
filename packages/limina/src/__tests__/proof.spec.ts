@@ -356,12 +356,13 @@ describe('runProofCheck dts config semantics', () => {
   it('rejects default tsconfig aggregators with source or compiler settings', async () => {
     const fixture = await createFixture(
       createPassingFiles({
+        'base.json': JSON.stringify({}),
         'tsconfig.json': JSON.stringify({
-          extends: './tsconfig.base.json',
+          extends: './base.json',
           compilerOptions: {
             noEmit: true,
           },
-          files: [],
+          files: ['packages/pkg/src/index.ts'],
           include: ['packages/pkg/src/**/*.ts'],
           references: [
             {
@@ -372,11 +373,23 @@ describe('runProofCheck dts config semantics', () => {
       }),
     );
 
+    const errorSpy = vi
+      .spyOn(ProofLogger, 'error')
+      .mockImplementation(() => {});
+
     try {
-      await expect(runProofCheck(fixture.config)).rejects.toThrow(
-        /Cannot read file/u,
-      );
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+
+      const errors = errorSpy.mock.calls.join('\n');
+      const aggregatorReports =
+        errors.match(/Default tsconfig\.json is not a pure aggregator:/gu) ??
+        [];
+
+      expect(aggregatorReports).toHaveLength(1);
+      expect(errors).toContain('  - field: files');
+      expect(errors).toContain('  - fields: compilerOptions, extends, include');
     } finally {
+      errorSpy.mockRestore();
       await fixture.cleanup();
     }
   });
@@ -1361,6 +1374,32 @@ describe('runProofCheck dts config semantics', () => {
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects default typecheck tsconfig files with empty references', async () => {
+    const fixture = await createFixture(
+      createPassingFiles({
+        'root.ts': 'export const rootValue = 1;\n',
+        'tsconfig.json': JSON.stringify({
+          compilerOptions: {
+            lib: ['ES2023'],
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['root.ts'],
+          references: [],
+        }),
+      }),
+    );
+
+    try {
+      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }

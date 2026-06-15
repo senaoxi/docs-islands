@@ -3,14 +3,12 @@ dist
 coverage
 .pnpm-store
 .nx/
+.smoke
 .limina/
 node_modules
 .eslintcache
-.tsbuild/
-**/.tsbuild/
-.temp
 cache
-**/tsconfig.graph.paths.generated.json
+
 # ignore the temporary config.ts build output, 
 # when vitepress fails to build config.ts, 
 # it will remain in the workspace.
@@ -18,15 +16,10 @@ cache
 
 # The skills for AI tools are provided by the @docs-islands/agents subpackage 
 # and are injected during the post-hook stage of pnpm install.
-.claude/skills
-.cursor/skills
-.agent/skills
-.github/skills
+.claude/
+.cursor/
+.agent/
+.github/
 
 # Local environment overrides
 *.local
-
-.claude/worktrees
-.claude/settings.local.json
-
-.smoke

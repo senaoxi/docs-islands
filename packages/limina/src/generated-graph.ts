@@ -17,8 +17,10 @@ import {
   resolveInternalImport,
 } from './graph-context';
 import {
+  collectReferencePathInfosForConfig,
   createLiminaTsconfigSchemaPath,
   isOrdinarySourceTypecheckConfigPath,
+  type JsonObject,
   readJsonConfig,
   resolveReferencePath,
 } from './tsconfig';
@@ -111,6 +113,10 @@ function formatUnknownValue(value: unknown): string {
   }
 
   return JSON.stringify(value);
+}
+
+function formatProblemList(problems: string[], fallback: string): string {
+  return problems.join('\n\n') || fallback;
 }
 
 function createRelativePath(fromFile: string, toPath: string): string {
@@ -457,6 +463,10 @@ function addSourceReferenceConfigProblems(options: {
     return;
   }
 
+  if (isDefaultTsconfigPath(options.sourceConfigPath)) {
+    return;
+  }
+
   options.problems.push(
     [
       'Source typecheck config declares project references:',
@@ -537,6 +547,111 @@ function collectTypeRootCandidates(options: {
   return [...new Set(candidates)];
 }
 
+function isDefaultTsconfigPath(configPath: string): boolean {
+  return path.basename(configPath) === 'tsconfig.json';
+}
+
+function hasImplicitRefs(configObject: JsonObject): boolean {
+  const liminaOptions = configObject.liminaOptions;
+
+  return (
+    isPlainRecord(liminaOptions) && Object.hasOwn(liminaOptions, 'implicitRefs')
+  );
+}
+
+function isPureSolutionConfig(configObject: JsonObject): boolean {
+  const allowedKeys = new Set([
+    '$schema',
+    'files',
+    'liminaOptions',
+    'references',
+  ]);
+
+  return (
+    Array.isArray(configObject.references) &&
+    Array.isArray(configObject.files) &&
+    configObject.files.length === 0 &&
+    Object.keys(configObject).every((key) => allowedKeys.has(key)) &&
+    !hasImplicitRefs(configObject)
+  );
+}
+
+function isEmptyLeafConfig(configObject: JsonObject): boolean {
+  return (
+    Array.isArray(configObject.files) &&
+    configObject.files.length === 0 &&
+    !Object.hasOwn(configObject, 'include')
+  );
+}
+
+function collectCheckerSourceConfigLeaves(options: {
+  config: ResolvedLiminaConfig;
+  excludedConfigPaths: Set<string>;
+  problems: string[];
+  sourceConfigPath: string;
+  sourceConfigPaths: Set<string>;
+  seenConfigs: Set<string>;
+}): void {
+  if (options.excludedConfigPaths.has(options.sourceConfigPath)) {
+    return;
+  }
+
+  if (options.seenConfigs.has(options.sourceConfigPath)) {
+    return;
+  }
+
+  options.seenConfigs.add(options.sourceConfigPath);
+
+  const configObject = readJsonConfig(options.config, options.sourceConfigPath);
+  const hasReferences = Object.hasOwn(configObject, 'references');
+
+  if (hasReferences && !isDefaultTsconfigPath(options.sourceConfigPath)) {
+    addSourceReferenceConfigProblems({
+      config: options.config,
+      problems: options.problems,
+      sourceConfigPath: options.sourceConfigPath,
+    });
+    return;
+  }
+
+  if (
+    hasReferences &&
+    isDefaultTsconfigPath(options.sourceConfigPath) &&
+    isPureSolutionConfig(configObject)
+  ) {
+    const referenceCollection = collectReferencePathInfosForConfig(
+      options.config.rootDir,
+      options.sourceConfigPath,
+    );
+
+    for (const reference of referenceCollection.references) {
+      const referencePath = reference.resolvedPath;
+
+      if (
+        !existsSync(referencePath) ||
+        !isOrdinarySourceTypecheckConfigPath(referencePath)
+      ) {
+        continue;
+      }
+
+      collectCheckerSourceConfigLeaves({
+        config: options.config,
+        excludedConfigPaths: options.excludedConfigPaths,
+        problems: options.problems,
+        sourceConfigPath: referencePath,
+        sourceConfigPaths: options.sourceConfigPaths,
+        seenConfigs: options.seenConfigs,
+      });
+    }
+
+    return;
+  }
+
+  if (!isEmptyLeafConfig(configObject)) {
+    options.sourceConfigPaths.add(options.sourceConfigPath);
+  }
+}
+
 function createGeneratedCompilerOptionOverrides(
   config: ResolvedLiminaConfig,
   project: SourceProject,
@@ -575,6 +690,24 @@ function createGeneratedCompilerOptionOverrides(
   return output;
 }
 
+async function collectCheckerExcludedSourceConfigs(
+  config: ResolvedLiminaConfig,
+  exclude: string[],
+): Promise<Set<string>> {
+  if (exclude.length === 0) {
+    return new Set();
+  }
+
+  const paths = await glob(exclude.map(normalizeWorkspaceGlob), {
+    absolute: true,
+    cwd: config.rootDir,
+    ignore: sourceDiscoveryIgnore,
+    onlyFiles: true,
+  });
+
+  return new Set(paths.map(normalizeAbsolutePath));
+}
+
 async function collectCheckerSourceConfigs(
   config: ResolvedLiminaConfig,
   checkerName: string,
@@ -605,16 +738,32 @@ async function collectCheckerSourceConfigs(
     );
   }
 
-  return [...new Set(sourcePaths)].filter((sourcePath) => {
-    const configObject = readJsonConfig(config, sourcePath);
-    const files = configObject.files;
+  const problems: string[] = [];
+  const excludedConfigPaths = await collectCheckerExcludedSourceConfigs(
+    config,
+    exclude,
+  );
+  const sourceConfigPaths = new Set<string>();
+  const seenConfigs = new Set<string>();
 
-    return !(
-      Array.isArray(files) &&
-      files.length === 0 &&
-      !Object.hasOwn(configObject, 'include')
+  for (const sourcePath of sourcePaths) {
+    collectCheckerSourceConfigLeaves({
+      config,
+      excludedConfigPaths,
+      problems,
+      sourceConfigPath: sourcePath,
+      sourceConfigPaths,
+      seenConfigs,
+    });
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      formatProblemList(problems, 'Failed to collect checker source configs.'),
     );
-  });
+  }
+
+  return [...sourceConfigPaths].sort();
 }
 
 function createSourceProject(options: {
@@ -659,14 +808,44 @@ function createSourceProject(options: {
   };
 }
 
+function createDtsProjectsBySourcePath(
+  projects: SourceProject[],
+): Map<string, SourceProject[]> {
+  const projectsBySourcePath = new Map<string, SourceProject[]>();
+
+  for (const project of projects) {
+    projectsBySourcePath.set(project.configPath, [
+      ...(projectsBySourcePath.get(project.configPath) ?? []),
+      project,
+    ]);
+  }
+
+  return projectsBySourcePath;
+}
+
+function getDtsConfigPathForSourcePath(options: {
+  checkerName: string;
+  dtsProjectsBySourcePath: Map<string, SourceProject[]>;
+  sourceConfigPath: string;
+}): string | undefined {
+  const candidates =
+    options.dtsProjectsBySourcePath.get(options.sourceConfigPath) ?? [];
+
+  return (
+    candidates.find((project) => project.checkerName === options.checkerName)
+      ?.dtsConfigPath ?? candidates[0]?.dtsConfigPath
+  );
+}
+
 function inferProjectReferences(
   config: ResolvedLiminaConfig,
   projects: SourceProject[],
+  ownerProjects: SourceProject[] = projects,
 ): string[] {
   const problems: string[] = [];
   const importAnalysis = createImportAnalysisContext();
   const ownerLookup = createFileOwnerLookup(
-    projects.map((project) => ({
+    ownerProjects.map((project) => ({
       checkerPresets: project.context.checkerPresets,
       configPath: project.configPath,
       extensions: project.context.extensions,
@@ -678,9 +857,8 @@ function inferProjectReferences(
       resolverConfigPath: project.configPath,
     })),
   );
-  const dtsBySourcePath = new Map(
-    projects.map((project) => [project.configPath, project.dtsConfigPath]),
-  );
+  const localDtsProjectsBySourcePath = createDtsProjectsBySourcePath(projects);
+  const dtsProjectsBySourcePath = createDtsProjectsBySourcePath(ownerProjects);
 
   for (const project of projects) {
     addSourceReferenceConfigProblems({
@@ -694,9 +872,11 @@ function inferProjectReferences(
     problems.push(...implicitRefCollection.problems);
 
     for (const implicitRef of implicitRefCollection.implicitRefs) {
-      const targetDtsConfigPath = dtsBySourcePath.get(
-        implicitRef.targetConfigPath,
-      );
+      const targetDtsConfigPath = getDtsConfigPathForSourcePath({
+        checkerName: project.checkerName,
+        dtsProjectsBySourcePath: localDtsProjectsBySourcePath,
+        sourceConfigPath: implicitRef.targetConfigPath,
+      });
 
       if (!targetDtsConfigPath) {
         problems.push(
@@ -758,7 +938,11 @@ function inferProjectReferences(
           continue;
         }
 
-        const targetDtsConfigPath = dtsBySourcePath.get(targetSourceConfigPath);
+        const targetDtsConfigPath = getDtsConfigPathForSourcePath({
+          checkerName: project.checkerName,
+          dtsProjectsBySourcePath,
+          sourceConfigPath: targetSourceConfigPath,
+        });
 
         if (!targetDtsConfigPath) {
           problems.push(
@@ -1079,7 +1263,6 @@ export async function prepareGeneratedTsconfigGraph(
       }),
     );
 
-    problems.push(...inferProjectReferences(config, projects));
     projectsByChecker.set(checker.name, projects);
     checkerEntries.set(
       checker.name,
@@ -1090,8 +1273,19 @@ export async function prepareGeneratedTsconfigGraph(
     );
   }
 
+  const allProjects = [...projectsByChecker.values()].flat();
+
+  for (const projects of projectsByChecker.values()) {
+    problems.push(...inferProjectReferences(config, projects, allProjects));
+  }
+
   if (problems.length > 0) {
-    throw new Error(problems.join('\n\n'));
+    throw new Error(
+      formatProblemList(
+        problems,
+        'Failed to prepare generated tsconfig graph.',
+      ),
+    );
   }
 
   for (const [checkerName, projects] of projectsByChecker) {

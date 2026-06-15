@@ -1001,6 +1001,7 @@ function addPureAggregatorProblems(options: {
   role: 'build graph' | 'tsconfig.json';
 }): void {
   const roleLabel = formatConfigRole(options.role);
+  const issueLines: string[] = [];
   const allowedKeys = new Set([
     '$schema',
     'files',
@@ -1012,36 +1013,37 @@ function addPureAggregatorProblems(options: {
   );
 
   if (!Object.hasOwn(options.configObject, 'files')) {
-    options.problems.push(
-      [
-        `${roleLabel} is not a pure aggregator:`,
-        `  config: ${toRelativePath(options.config.rootDir, options.configPath)}`,
-        '  field: files',
-        '  reason: configs with project references must declare files: [].',
-      ].join('\n'),
+    issueLines.push(
+      '  - field: files',
+      '    reason: configs with project references must declare files: [].',
     );
   } else if (!isEmptyArray(options.configObject.files)) {
-    options.problems.push(
-      [
-        `${roleLabel} is not a pure aggregator:`,
-        `  config: ${toRelativePath(options.config.rootDir, options.configPath)}`,
-        '  field: files',
-        `  value: ${formatUnknownValue(options.configObject.files)}`,
-        '  reason: configs with project references must declare files: [].',
-      ].join('\n'),
+    issueLines.push(
+      '  - field: files',
+      `    value: ${formatUnknownValue(options.configObject.files)}`,
+      '    reason: configs with project references must declare files: [].',
     );
   }
 
   if (extraKeys.length > 0) {
-    options.problems.push(
-      [
-        `${roleLabel} is not a pure aggregator:`,
-        `  config: ${toRelativePath(options.config.rootDir, options.configPath)}`,
-        `  fields: ${extraKeys.sort().join(', ')}`,
-        '  reason: pure aggregators may only declare $schema, files, references, and Limina metadata; move source inputs and compiler options into leaf configs.',
-      ].join('\n'),
+    issueLines.push(
+      `  - fields: ${extraKeys.sort().join(', ')}`,
+      '    reason: pure aggregators may only declare $schema, files, references, and Limina metadata; move source inputs and compiler options into leaf configs.',
     );
   }
+
+  if (issueLines.length === 0) {
+    return;
+  }
+
+  options.problems.push(
+    [
+      `${roleLabel} is not a pure aggregator:`,
+      `  config: ${toRelativePath(options.config.rootDir, options.configPath)}`,
+      '  issues:',
+      ...issueLines,
+    ].join('\n'),
+  );
 }
 
 function hasImplicitRefs(configObject: JsonObject): boolean {
@@ -1050,6 +1052,10 @@ function hasImplicitRefs(configObject: JsonObject): boolean {
   return (
     isPlainRecord(liminaOptions) && Object.hasOwn(liminaOptions, 'implicitRefs')
   );
+}
+
+function hasProjectReferencesField(configObject: JsonObject): boolean {
+  return Object.hasOwn(configObject, 'references');
 }
 
 function addSourceReferenceRoleProblems(options: {
@@ -1064,7 +1070,7 @@ function addSourceReferenceRoleProblems(options: {
 
     const configObject = readJsonConfig(options.config, configPath);
 
-    if (!Object.hasOwn(configObject, 'references')) {
+    if (!hasProjectReferencesField(configObject)) {
       continue;
     }
 
@@ -1161,7 +1167,7 @@ function addDefaultTsconfigShapeProblems(options: {
   for (const configPath of options.tsconfigPaths) {
     const configObject = readJsonConfig(options.config, configPath);
 
-    if (!Object.hasOwn(configObject, 'references')) {
+    if (!hasProjectReferencesField(configObject)) {
       continue;
     }
 

@@ -2112,6 +2112,40 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
+  it('prefers same-checker declaration owners for configs selected by multiple checkers', async () => {
+    const fixture = await createFixture(
+      {
+        'packages/shared/package.json': stringifyConfig({
+          name: '@example/shared',
+          version: '0.0.0',
+        }),
+        'packages/shared/src/a.ts':
+          "import { b } from './b';\nexport const a = b;\n",
+        'packages/shared/src/b.ts': 'export const b = 1;\n',
+        'packages/shared/tsconfig.json': typecheckConfig(['src/**/*.ts']),
+      },
+      undefined,
+      {
+        typescript: {
+          preset: 'tsc',
+          include: ['packages/shared/tsconfig.json'],
+        },
+        vue: {
+          preset: 'vue-tsc',
+          include: ['packages/shared/tsconfig.json'],
+        },
+      },
+    );
+
+    try {
+      await linkCompilerSfc(fixture.rootDir);
+
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('requires project references for workspace imports from Vue scripts', async () => {
     const fixture = await createFixture(
       createVueWorkspacePackageFiles({

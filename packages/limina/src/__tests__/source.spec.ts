@@ -1025,20 +1025,12 @@ packages:
     }
   });
 
-  it('allows nearest bare tsconfig files to resolve transitive typecheck owners', async () => {
+  it('allows nearest bare tsconfig files to resolve solution typecheck owners', async () => {
     const fixture = await createFixture({
       ...createPackageFixture({
         source: "export const value = 'checked';\n",
       }),
       'app/tsconfig.json': stringifyConfig({
-        files: [],
-        references: [
-          {
-            path: './tsconfig.solution.json',
-          },
-        ],
-      }),
-      'app/tsconfig.solution.json': stringifyConfig({
         files: [],
         references: [
           {

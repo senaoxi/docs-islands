@@ -35,12 +35,12 @@ const liminaTsconfigSchemaPath = [
   'tsconfig-schema.json',
 ];
 
-interface ReferencePathInfo {
+export interface ReferencePathInfo {
   rawPath: string;
   resolvedPath: string;
 }
 
-interface ReferencePathCollection {
+export interface ReferencePathCollection {
   problems: string[];
   references: ReferencePathInfo[];
 }
@@ -185,7 +185,7 @@ function formatUnknownValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function collectReferencePathInfosForConfig(
+export function collectReferencePathInfosForConfig(
   rootDir: string,
   configPath: string,
 ): ReferencePathCollection {

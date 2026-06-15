@@ -9,16 +9,12 @@ export default defineConfig({
         include: [
           'tsconfig.json',
           'utils/tsconfig.json',
-          'utils/tsconfig.*.json',
           'packages/**/tsconfig.json',
-          'packages/**/tsconfig.*.json',
         ],
         exclude: [
           '**/docs/**',
-          '**/tsconfig*.dts.json',
-          '**/tsconfig*.build.json',
-          '**/tsconfig*.base.json',
-          '**/tsconfig*.check.json',
+          'packages/vitepress/src/shared/tsconfig.json',
+          'packages/vitepress/theme/tsconfig.json',
         ],
       },
       vue: {
