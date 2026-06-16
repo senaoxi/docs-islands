@@ -27,6 +27,8 @@ import {
 import { clearCliScreen, formatErrorMessage, TypecheckLogger } from '../logger';
 import {
   collectGraphProjectRouteFromRoot,
+  getRawReferencePathsForConfig,
+  isDtsConfigPath,
   isOrdinarySourceTypecheckConfigPath,
   resolveProjectConfigPath,
 } from '../tsconfig';
@@ -736,6 +738,21 @@ async function runCheckerBuildInternal(
   const failedResults = results.filter((result) => result.status !== 0);
   const passed = failedResults.length === 0;
 
+  reportBuildCheckerCombinationWarning({
+    entries: collectBuildGraphCombinationEntries({
+      generatedGraph,
+      projectRootDir,
+      roots: collectCheckerBuildCombinationRoots({
+        checkers,
+        generatedGraph,
+        projectRootDir,
+      }),
+    }),
+    flow: options.flow,
+    flowDepth,
+    projectRootDir,
+  });
+
   if (!passed) {
     TypecheckLogger.error(
       [
@@ -937,10 +954,269 @@ interface BuildTargetDescriptor {
   sourceConfigPath: string;
 }
 
+interface BuildCheckerCombinationEntry {
+  checker: ResolvedCheckerConfig;
+  entryConfigPath: string;
+  generatedConfigPath: string;
+  sourceConfigPath: string;
+}
+
 function getBuildTargetDescriptorKey(
   descriptor: BuildTargetDescriptor,
 ): string {
   return `${descriptor.checker.name}\0${descriptor.sourceConfigPath}`;
+}
+
+function shouldWarnForBuildCheckerPresetCombination(
+  presets: string[],
+): boolean {
+  const uniquePresets = [...new Set(presets)].sort();
+
+  if (uniquePresets.length <= 1) {
+    return false;
+  }
+
+  return !uniquePresets.every(
+    (preset) => preset === 'tsc' || preset === 'vue-tsc',
+  );
+}
+
+function formatBuildCheckerCombinationWarning(options: {
+  entries: BuildCheckerCombinationEntry[];
+  projectRootDir: string;
+}): string | null {
+  const entriesByGeneratedConfigPath = new Map<
+    string,
+    BuildCheckerCombinationEntry[]
+  >();
+
+  for (const entry of options.entries) {
+    entriesByGeneratedConfigPath.set(entry.generatedConfigPath, [
+      ...(entriesByGeneratedConfigPath.get(entry.generatedConfigPath) ?? []),
+      entry,
+    ]);
+  }
+
+  const warningGroups = [...entriesByGeneratedConfigPath.entries()]
+    .filter(([, entries]) =>
+      shouldWarnForBuildCheckerPresetCombination(
+        entries.map((entry) => entry.checker.preset),
+      ),
+    )
+    .sort(([left], [right]) =>
+      toRelativePath(options.projectRootDir, left).localeCompare(
+        toRelativePath(options.projectRootDir, right),
+      ),
+    );
+
+  if (warningGroups.length === 0) {
+    return null;
+  }
+
+  return [
+    'Potentially incompatible build checker combination:',
+    '  reason: these checker presets can reach the same generated declaration config but do not safely share underlying build cache semantics.',
+    '  fix: use a single cache-compatible build checker path for this generated config, or use the compatible tsc + vue-tsc combination.',
+    ...warningGroups.flatMap(([generatedConfigPath, entries]) => [
+      `  generated config: ${toRelativePath(options.projectRootDir, generatedConfigPath)}`,
+      `  source config: ${toRelativePath(options.projectRootDir, entries[0]!.sourceConfigPath)}`,
+      '  reachable from:',
+      ...formatBuildCheckerCombinationReachability({
+        entries,
+        projectRootDir: options.projectRootDir,
+      }),
+    ]),
+  ].join('\n');
+}
+
+function formatBuildCheckerCombinationReachability(options: {
+  entries: BuildCheckerCombinationEntry[];
+  projectRootDir: string;
+}): string[] {
+  const entriesByCheckerKey = new Map<
+    string,
+    {
+      checker: ResolvedCheckerConfig;
+      entryConfigPaths: Set<string>;
+    }
+  >();
+
+  for (const entry of options.entries) {
+    const key = `${entry.checker.name}\0${entry.checker.preset}`;
+    const checkerEntries = entriesByCheckerKey.get(key) ?? {
+      checker: entry.checker,
+      entryConfigPaths: new Set<string>(),
+    };
+
+    checkerEntries.entryConfigPaths.add(entry.entryConfigPath);
+    entriesByCheckerKey.set(key, checkerEntries);
+  }
+
+  return [...entriesByCheckerKey.values()]
+    .sort(
+      (left, right) =>
+        left.checker.name.localeCompare(right.checker.name) ||
+        left.checker.preset.localeCompare(right.checker.preset),
+    )
+    .flatMap(({ checker, entryConfigPaths }) => [
+      `    - config.checkers.${checker.name} (${checker.preset})`,
+      '      entry tsconfigs:',
+      ...[...entryConfigPaths]
+        .sort((left, right) =>
+          toRelativePath(options.projectRootDir, left).localeCompare(
+            toRelativePath(options.projectRootDir, right),
+          ),
+        )
+        .map(
+          (entryConfigPath) =>
+            `        - ${toRelativePath(options.projectRootDir, entryConfigPath)}`,
+        ),
+    ]);
+}
+
+function getSourceConfigPathForGeneratedDts(options: {
+  dtsConfigPath: string;
+  generatedGraph: GeneratedTsconfigGraphResult;
+}): string | null {
+  for (const dtsToSource of options.generatedGraph.dtsToSource.values()) {
+    const sourceConfigPath = dtsToSource.get(options.dtsConfigPath);
+
+    if (sourceConfigPath) {
+      return sourceConfigPath;
+    }
+  }
+
+  return null;
+}
+
+function getSourceConfigPathForBuildConfig(options: {
+  checkerName: string;
+  configPath: string;
+  generatedGraph: GeneratedTsconfigGraphResult;
+}): string | null {
+  const sourceToBuild =
+    options.generatedGraph.sourceToBuild.get(options.checkerName) ?? new Map();
+
+  for (const [sourceConfigPath, buildModule] of sourceToBuild) {
+    if (buildModule.path === options.configPath) {
+      return sourceConfigPath;
+    }
+  }
+
+  if (!isDtsConfigPath(options.configPath)) {
+    return null;
+  }
+
+  return getSourceConfigPathForGeneratedDts({
+    dtsConfigPath: options.configPath,
+    generatedGraph: options.generatedGraph,
+  });
+}
+
+function collectCheckerBuildCombinationRoots(options: {
+  checkers: ResolvedCheckerConfig[];
+  generatedGraph: GeneratedTsconfigGraphResult;
+  projectRootDir: string;
+}): {
+  checker: ResolvedCheckerConfig;
+  configPath: string;
+  entryConfigPath: string;
+}[] {
+  return options.checkers.flatMap((checker) => {
+    const checkerEntryPath = options.generatedGraph.checkerEntries.get(
+      checker.name,
+    );
+
+    if (!checkerEntryPath) {
+      return [];
+    }
+
+    return getRawReferencePathsForConfig(
+      options.projectRootDir,
+      checkerEntryPath,
+    ).flatMap((configPath) => {
+      const entryConfigPath = getSourceConfigPathForBuildConfig({
+        checkerName: checker.name,
+        configPath,
+        generatedGraph: options.generatedGraph,
+      });
+
+      return entryConfigPath
+        ? [
+            {
+              checker,
+              configPath,
+              entryConfigPath,
+            },
+          ]
+        : [];
+    });
+  });
+}
+
+function collectBuildGraphCombinationEntries(options: {
+  generatedGraph: GeneratedTsconfigGraphResult;
+  projectRootDir: string;
+  roots: {
+    checker: ResolvedCheckerConfig;
+    configPath: string;
+    entryConfigPath: string;
+  }[];
+}): BuildCheckerCombinationEntry[] {
+  const entries: BuildCheckerCombinationEntry[] = [];
+
+  for (const root of options.roots) {
+    const route = collectGraphProjectRouteFromRoot({
+      rootConfigPath: root.configPath,
+      rootDir: options.projectRootDir,
+    });
+
+    for (const generatedConfigPath of route.projectPaths.filter(
+      isDtsConfigPath,
+    )) {
+      const sourceConfigPath = getSourceConfigPathForGeneratedDts({
+        dtsConfigPath: generatedConfigPath,
+        generatedGraph: options.generatedGraph,
+      });
+
+      if (!sourceConfigPath) {
+        continue;
+      }
+
+      entries.push({
+        checker: root.checker,
+        entryConfigPath: root.entryConfigPath,
+        generatedConfigPath,
+        sourceConfigPath,
+      });
+    }
+  }
+
+  return entries;
+}
+
+function reportBuildCheckerCombinationWarning(options: {
+  entries: BuildCheckerCombinationEntry[];
+  flow?: LiminaFlowReporter;
+  flowDepth: number;
+  projectRootDir: string;
+}): void {
+  const warning = formatBuildCheckerCombinationWarning(options);
+
+  if (!warning) {
+    return;
+  }
+
+  options.flow?.warn(warning, {
+    depth: options.flowDepth + 1,
+    persistInteractive: true,
+  });
+
+  if (options.flow?.interactive) {
+    return;
+  }
+
+  TypecheckLogger.warn(warning);
 }
 
 function collectBuildTargetProviderClosure(options: {
@@ -1192,6 +1468,23 @@ async function runBuildInternal(
   );
   const failedResults = results.filter((result) => result.status !== 0);
   const passed = failedResults.length === 0;
+
+  reportBuildCheckerCombinationWarning({
+    entries: collectBuildGraphCombinationEntries({
+      generatedGraph,
+      projectRootDir,
+      roots: buildTargetDescriptors.map(
+        ({ buildModule, checker, sourceConfigPath }) => ({
+          checker,
+          configPath: buildModule.path,
+          entryConfigPath: sourceConfigPath,
+        }),
+      ),
+    }),
+    flow: options.flow,
+    flowDepth,
+    projectRootDir,
+  });
 
   if (!passed) {
     TypecheckLogger.error(

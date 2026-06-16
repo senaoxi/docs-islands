@@ -103,7 +103,7 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['packages/*/tsconfig.lib.json'],
+        include: ['packages/*/tsconfig.json'],
       },
     },
   },
@@ -112,9 +112,9 @@ export default defineConfig({
 
 This configuration does not ask Limina to blindly scan and guess the entire repository. Instead, it tells Limina:
 
-> These source-type configurations are the type-checking modules that should enter governance.
+> These `tsconfig.json` files are the source-governance entries.
 
-Starting from these entry points, Limina resolves file sets, compiler options, checker capabilities, and actual imports, and then generates the corresponding type-output modules.
+Starting from these entry points, Limina follows solution references to source configs such as `tsconfig.lib.json`, `tsconfig.test.json`, or `tsconfig.client.json`. It then resolves file sets, compiler options, checker capabilities, and actual imports, and generates the corresponding type-output modules.
 
 ## Limina Separates Type-Checking Modules from Type-Output Modules
 
@@ -410,8 +410,9 @@ Limina does not change TypeScript’s language semantics. What it does is organi
 
 | What Users Maintain                       | What Limina Handles                                                          |
 | ----------------------------------------- | ---------------------------------------------------------------------------- |
-| Source `tsconfig*.json`                   | Resolves type-checking modules and file ownership                            |
-| `limina.config.mjs#checkers`              | Declares which source configurations enter governance                        |
+| Source `tsconfig.json` entries            | Declares where source governance starts                                      |
+| Referenced source `tsconfig*.json` files  | Describes concrete type-checking modules and file ownership                  |
+| `limina.config.mjs#checkers`              | Maps entry configs to checker capabilities                                   |
 | `package.json#exports`                    | Verifies public entry points and runtime boundaries                          |
 | Source imports                            | Infers relationships between governed source projects                        |
 | `liminaOptions.implicitRefs`              | Supplements real edges invisible to static analysis                          |

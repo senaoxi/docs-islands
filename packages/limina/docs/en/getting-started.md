@@ -77,8 +77,7 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['packages/**/tsconfig*.json'],
-        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+        include: ['packages/**/tsconfig.json'],
       },
     },
   },
@@ -131,16 +130,18 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['packages/**/tsconfig*.json'],
-        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+        include: ['packages/**/tsconfig.json'],
+        exclude: ['packages/web/tsconfig.json'],
       },
       vue: {
         preset: 'vue-tsc',
-        include: ['packages/**/tsconfig.vue.json'],
+        include: ['packages/web/tsconfig.json'],
       },
     },
   },
 });
 ```
+
+Checker entries are always `tsconfig.json` files. If a package has `tsconfig.lib.json` or `tsconfig.test.json`, reference them from that package's `tsconfig.json`; Limina will follow those references.
 
 Built-in presets are `tsc`, `tsgo`, `vue-tsc`, `vue-tsgo`, and `svelte-check`. Install the matching package when you enable a checker; `tsgo` and `vue-tsgo` require `@typescript/native-preview`, and `vue-tsc` entries also require `@vue/compiler-sfc` so Limina can parse SFC imports.

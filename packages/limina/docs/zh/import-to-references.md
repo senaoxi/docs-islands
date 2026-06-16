@@ -103,7 +103,7 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['packages/*/tsconfig.lib.json'],
+        include: ['packages/*/tsconfig.json'],
       },
     },
   },
@@ -112,9 +112,9 @@ export default defineConfig({
 
 这段配置不是让 Limina 扫描整个仓库乱猜，而是告诉 Limina：
 
-> 这些源码类型配置是需要进入治理的类型校验模块。
+> 这些 `tsconfig.json` 是源码治理入口。
 
-Limina 从这些入口出发，解析文件集合、编译选项、检查器能力和真实 import，再生成对应的类型输出模块。
+Limina 从这些入口出发，跟随 solution references 找到 `tsconfig.lib.json`、`tsconfig.test.json`、`tsconfig.client.json` 这类具体源码配置，再解析文件集合、编译选项、检查器能力和真实 import，最后生成对应的类型输出模块。
 
 ## 源码类型配置和类型输出模块
 

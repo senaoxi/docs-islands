@@ -1,25 +1,25 @@
 import { defineConfig } from 'limina';
 
+const overlapConfig = [
+  'tsconfig.json',
+  'packages/vitepress/**/tsconfig.json',
+  'packages/logaria/tsconfig.json',
+  'packages/limina/tsconfig.json',
+  'packages/core/tsconfig.json',
+];
+
 export default defineConfig({
   // Shared checker source config coverage used by graph, proof, paths, and typecheck checks.
   config: {
     checkers: {
       typescript: {
-        preset: 'tsc',
-        include: [
-          'tsconfig.json',
-          'utils/tsconfig.json',
-          'packages/**/tsconfig.json',
-        ],
-        exclude: ['**/docs/**', 'packages/vitepress/theme/tsconfig.json'],
+        preset: 'tsgo',
+        include: ['utils/tsconfig.json', 'packages/**/tsconfig.json'],
+        exclude: ['**/docs/**', ...overlapConfig],
       },
       vue: {
         preset: 'vue-tsc',
-        include: [
-          'docs/tsconfig.json',
-          'packages/*/docs/tsconfig.json',
-          'packages/vitepress/theme/tsconfig.json',
-        ],
+        include: ['**/docs/**/tsconfig.json', ...overlapConfig],
       },
     },
     source: {

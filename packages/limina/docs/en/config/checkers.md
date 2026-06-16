@@ -1,6 +1,6 @@
 # Checker Entries
 
-Checker entries tell Limina which ordinary source `tsconfig*.json` files belong to each checker. Limina generates the declaration graph, checker build entries, declaration output directories, tsbuildinfo paths, and manifest under `.limina/`.
+Checker entries tell Limina which source `tsconfig.json` entry files belong to each checker. Limina starts from those entries, follows their solution references, and then generates the declaration graph, checker build entries, declaration output directories, tsbuildinfo paths, and manifest under `.limina/`.
 
 ```js
 import { defineConfig } from 'limina';
@@ -10,17 +10,12 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['tsconfig.json', 'packages/**/tsconfig*.json'],
-        exclude: [
-          '**/tsconfig*.dts.json',
-          '**/tsconfig*.build.json',
-          '**/tsconfig*.base.json',
-          '**/tsconfig*.check.json',
-        ],
+        include: ['tsconfig.json', 'packages/**/tsconfig.json'],
+        exclude: ['**/docs/**'],
       },
       vue: {
         preset: 'vue-tsc',
-        include: ['packages/*/docs/tsconfig.json', 'packages/app/tsconfig.vue.json'],
+        include: ['packages/*/docs/tsconfig.json', 'packages/app/tsconfig.json'],
       },
     },
   },
@@ -31,7 +26,7 @@ export default defineConfig({
 
 - **Type:** `string` key of `config.checkers` (a `Record<string, CheckerConfig>`)
 
-The `checkers` key is the checker namespace, such as `typescript`, `vue`, or `svelte`. Generated files are scoped by this name under `.limina/tsconfig/checkers/<name>/`, so references never cross checker namespaces.
+The `checkers` key is the checker namespace, such as `typescript`, `vue`, or `svelte`. Generated files are scoped by this name under `.limina/tsconfig/checkers/<name>/`, so diagnostics can always say which checker produced or reached a config.
 
 ## preset
 
@@ -52,24 +47,52 @@ Only built-in presets are accepted. Custom presets and custom `extensions` are r
 - **Type:** `string[]`
 - **Required:** yes
 
-`include` is a non-empty list of workspace-root-relative selectors for ordinary source `tsconfig*.json` files. It must not select generated `.limina` files, source-level `tsconfig*.dts.json`, `tsconfig*.build.json`, base configs, or other reserved TypeScript config files.
+`include` is a non-empty list of workspace-root-relative selectors for source entry files named exactly `tsconfig.json`. It must not select `tsconfig.lib.json`, `tsconfig.test.json`, `tsconfig.build.json`, generated `.limina` files, base configs, check configs, or other reserved TypeScript config files.
 
-During `graph prepare`, Limina expands `include` minus `exclude`, reads each source config, and writes generated declaration leaves under `.limina/tsconfig/checkers/<checker>/projects/...`. The generated leaf extends the source config, forces composite declaration emit options, writes declaration output under `.limina/dts/checkers/<checker>/...`, and records the source mapping in `.limina/manifest.json`. Source `tsconfig.json` solution aggregators are generated under `.limina/tsconfig/checkers/<checker>/solutions/...`.
+During `graph prepare`, Limina expands `include` minus `exclude` to get the checker entry set. Each entry must belong to only one checker. From there, Limina follows TypeScript `references` on solution-style `tsconfig.json` files and brings the referenced source configs into governance.
+
+Non-entry configs such as `tsconfig.lib.json`, `tsconfig.test.json`, or `tsconfig.tools.json` are therefore useful, but they are not selected directly by `checker.include`. They become managed only when a selected `tsconfig.json` entry references them. A standalone base, build-only, or helper config that is not reachable from an entry is inert for Limina.
+
+For every managed source config, Limina writes generated declaration leaves under `.limina/tsconfig/checkers/<checker>/projects/...`. The generated leaf extends the source config, forces composite declaration emit options, writes declaration output under `.limina/dts/checkers/<checker>/...`, and records the source mapping in `.limina/manifest.json`. Source `tsconfig.json` solution aggregators are generated under `.limina/tsconfig/checkers/<checker>/solutions/...`.
+
+## Entry Uniqueness and Capability Coverage
+
+After `include` and `exclude` are applied, checker entry sets must not overlap. The same `tsconfig.json` entry cannot be listed under both `typescript` and `vue`, even if the presets are different. Choose one checker as the entry owner.
+
+This does not mean a referenced source config can only have one capability. Once entries expand through `references`, different presets may cover the same source config. This is how a repository can add Vue capability to a source config that also participates in a TypeScript graph. The duplicate case Limina rejects is narrower: two checkers with the same preset must not govern the same expanded source config.
+
+Limina also checks file capability after expansion. If a source config includes `.vue` files but is only covered by `tsc` or `tsgo`, graph preparation fails and points to a checker preset that can handle that extension. Add a matching checker entry that reaches the config, or move those files to a config owned by the right checker.
+
+## Cross-Checker Reachability
+
+Source imports may cross checker boundaries. For example, a TypeScript-only entry may import a provider that is governed through a Vue checker entry. Limina records that provider relationship so build-capable checkers can run providers before consumers.
+
+When build-capable presets with different cache behavior can reach the same generated declaration config, Limina prints a warning after the build:
+
+```text
+Potentially incompatible build checker combination:
+  generated config: ...
+  source config: packages/core/tsconfig.lib.json
+  reachable from:
+    - config.checkers.typescript (tsgo)
+      entry tsconfigs:
+        - packages/app/tsconfig.json
+    - config.checkers.vue (vue-tsc)
+      entry tsconfigs:
+        - packages/theme/tsconfig.json
+```
+
+Read `reachable from` as the migration map. It tells you which checker and which entry `tsconfig.json` can reach the same generated config. To remove the warning, make that reachable area use cache-compatible build presets. Same-preset combinations are fine, and `tsc` with `vue-tsc` is treated as compatible. Combinations such as `tsgo` with `tsc` or `tsgo` with `vue-tsc` are warned because they do not safely share the same underlying build cache semantics.
 
 ## exclude
 
 - **Type:** `string[]`
 - **Default:** `[]`
 
-`exclude` removes selectors from `include`. Use it to avoid reserved configs and non-source helper configs:
+`exclude` removes entry selectors from `include`. Use it to keep entry ownership clear:
 
 ```js
-exclude: [
-  '**/tsconfig*.dts.json',
-  '**/tsconfig*.build.json',
-  '**/tsconfig*.base.json',
-  '**/tsconfig*.check.json',
-];
+exclude: ['**/docs/**', 'packages/legacy/tsconfig.json'];
 ```
 
 ## Removed Fields
@@ -83,8 +106,8 @@ exclude: [
 // after
 {
   preset: 'tsc',
-  include: ['packages/**/tsconfig*.json'],
-  exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+  include: ['packages/**/tsconfig.json'],
+  exclude: ['**/docs/**'],
 }
 ```
 

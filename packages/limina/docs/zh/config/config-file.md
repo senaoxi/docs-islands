@@ -88,8 +88,7 @@ export default defineConfig(({ command }) => ({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['packages/**/tsconfig*.json'],
-        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+        include: ['packages/**/tsconfig.json'],
       },
     },
   },

@@ -3,6 +3,7 @@ import { LiminaFlowReporter } from '../flow';
 
 const green = (message: string): string => `\u001B[32m${message}\u001B[0m`;
 const red = (message: string): string => `\u001B[31m${message}\u001B[0m`;
+const yellow = (message: string): string => `\u001B[33m${message}\u001B[0m`;
 
 function createBufferedFlow(options: { forceTty?: boolean } = {}): {
   chunks: string[];
@@ -161,6 +162,40 @@ describe('LiminaFlowReporter', () => {
       '\r\u001B[H\u001B[2J\u001B[3J',
       '◇    pipeline: typecheck\n',
       `${green('◆')}    tsc check (2.00s)\n`,
+    ]);
+  });
+
+  it('keeps persisted warnings in the final TTY history', () => {
+    const chunks: string[] = [];
+    const flow = new LiminaFlowReporter({
+      env: {},
+      forceTty: true,
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        columns: 80,
+        isTTY: true,
+      },
+    });
+
+    flow.intro('limina check');
+    const task = flow.start('checker build');
+    flow.warn('cache warning', {
+      depth: 1,
+      persistInteractive: true,
+    });
+    task.pass('checker build', { elapsedTimeMs: 1000 });
+
+    expect(chunks).toEqual([
+      '◇    checker build\n',
+      `${yellow('▲')}      cache warning\n`,
+      '\r\u001B[H\u001B[2J\u001B[3J',
+      '┌  limina check\n',
+      `${yellow('▲')}      cache warning\n`,
+      `${green('◆')}    checker build (1.00s)\n`,
     ]);
   });
 

@@ -4,7 +4,7 @@ Limina uses TypeScript concepts, but the model is small. The important idea is t
 
 ## Checker Entry
 
-A [checker entry](./config/checkers.md) selects ordinary source `tsconfig*.json` files for one checker namespace.
+A [checker entry](./config/checkers.md) selects source `tsconfig.json` entry files for one checker namespace.
 
 ```js
 export default defineConfig({
@@ -12,19 +12,18 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['packages/**/tsconfig*.json'],
-        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+        include: ['packages/**/tsconfig.json'],
       },
     },
   },
 });
 ```
 
-For TypeScript, this is usually a set of source config selectors. Limina expands `include` minus `exclude`, then generates the checker-scoped declaration graph under `.limina/`.
+For TypeScript, this is usually a set of package or workspace entry selectors. Limina expands `include` minus `exclude`, follows solution references from those entries, then generates the checker-scoped declaration graph under `.limina/`.
 
 For framework files, a checker entry can use `vue-tsc`, `vue-tsgo`, or `svelte-check`. These checkers cover files that normal `tsc` does not understand by itself.
 
-Any source family you want Limina to govern needs a checker entry in `limina.config.mjs`. Plain TypeScript packages usually use a `typescript` checker with source tsconfig globs; Vue or Svelte projects add their framework checker entries. Graph, proof, source, and checker commands all start from the generated manifest built from these entries.
+Any source family you want Limina to govern needs a checker entry in `limina.config.mjs`. Plain TypeScript packages usually use a `typescript` checker with `tsconfig.json` entry globs; Vue or Svelte projects add their framework checker entries for the `tsconfig.json` files that need those capabilities. Graph, proof, source, and checker commands all start from the generated manifest built from these entries.
 
 ## Generated Declaration Leaf
 
@@ -49,7 +48,7 @@ It should emit declarations only, with build-mode options such as:
 
 The generated leaf owns graph structure. It extends the source config, forces declaration emit, records `liminaOptions.sourceConfig`, and references other generated leaves inferred from source imports or declared through `liminaOptions.implicitRefs`.
 
-When a package, or one environment inside a package, belongs in the checker graph, include its source tsconfig. For example, selecting `packages/core/tsconfig.lib.json` lets Limina generate the declaration boundary for `@acme/core`. When `@acme/app` imports `@acme/core`, Limina can verify and generate the corresponding declaration reference.
+When a package, or one environment inside a package, belongs in the checker graph, start from its `tsconfig.json` entry. If that entry references `packages/core/tsconfig.lib.json`, Limina can generate the declaration boundary for `@acme/core`. When `@acme/app` imports `@acme/core`, Limina can verify and generate the corresponding declaration reference.
 
 ## Source Config
 

@@ -292,6 +292,28 @@ It runs the build-execution presets: `tsc -b`, `tsgo -b`, `vue-tsc -b`. `-b` is 
 Because it runs a real `tsc -b`, the default `limina check` emits declarations and `.tsbuildinfo` — it is not side-effect-free.
 :::
 
+### It warns about incompatible build checker combinations
+
+After the build processes finish, Limina checks which build checker presets reached the same generated declaration config. This does not change the exit code; it is a warning about cache safety.
+
+No warning is printed when every reachable checker uses the same preset, or when the only mixed presets are `tsc` and `vue-tsc`. Other mixed build presets, such as `tsgo` with `tsc` or `tsgo` with `vue-tsc`, are reported because they do not safely share the same underlying build cache semantics.
+
+The warning includes the generated config, the source config behind it, and a `reachable from` section:
+
+```text
+Potentially incompatible build checker combination:
+  source config: packages/core/tsconfig.lib.json
+  reachable from:
+    - config.checkers.typescript (tsgo)
+      entry tsconfigs:
+        - packages/app/tsconfig.json
+    - config.checkers.vue (vue-tsc)
+      entry tsconfigs:
+        - packages/theme/tsconfig.json
+```
+
+The important part is not only the `source config`. A checker may reach that config through another entry that imports it. To remove the warning, align the reachable entry area shown in `entry tsconfigs`, or switch to a compatible preset combination such as `tsc` with `vue-tsc`.
+
 ### Any compiler failure fails the task
 
 If any compiler process exits non-zero (a type error, or a missing/invalid tsconfig), the task fails.

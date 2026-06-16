@@ -287,6 +287,28 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 因为跑的是真实 `tsc -b`，默认 `limina check` 会产出声明文件和 `.tsbuildinfo`，并非无副作用。
 :::
 
+### 提示不兼容的构建检查器组合
+
+所有构建进程结束后，Limina 会检查：哪些构建类 checker preset 触达了同一个生成声明配置。这个提示不会改变退出码；它只是提醒底层 build cache 语义可能不安全。
+
+如果触达它的 checker 全部是同一个 preset，不提示。只混用了 `tsc` 和 `vue-tsc`，也不提示。其他构建类 preset 混用，例如 `tsgo` 和 `tsc`、`tsgo` 和 `vue-tsc`，会被提示，因为它们不能安全共享同一套底层 build cache 语义。
+
+提示里会列出生成配置、它对应的源码配置，以及 `reachable from`：
+
+```text
+Potentially incompatible build checker combination:
+  source config: packages/core/tsconfig.lib.json
+  reachable from:
+    - config.checkers.typescript (tsgo)
+      entry tsconfigs:
+        - packages/app/tsconfig.json
+    - config.checkers.vue (vue-tsc)
+      entry tsconfigs:
+        - packages/theme/tsconfig.json
+```
+
+重点不只是 `source config` 本身。某个 checker 可能是通过另一个入口 import 到它，进而触达这个配置。想消掉提示，需要对齐 `entry tsconfigs` 里展示的这片可达入口，或者改用兼容组合，例如 `tsc` 和 `vue-tsc`。
+
 ### 任一编译失败就失败
 
 只要有一个编译进程非零退出（类型错误，或 tsconfig 缺失/非法），任务就失败。

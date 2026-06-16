@@ -77,8 +77,7 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['packages/**/tsconfig*.json'],
-        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+        include: ['packages/**/tsconfig.json'],
       },
     },
   },
@@ -131,16 +130,18 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['packages/**/tsconfig*.json'],
-        exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+        include: ['packages/**/tsconfig.json'],
+        exclude: ['packages/web/tsconfig.json'],
       },
       vue: {
         preset: 'vue-tsc',
-        include: ['packages/**/tsconfig.vue.json'],
+        include: ['packages/web/tsconfig.json'],
       },
     },
   },
 });
 ```
+
+检查器入口始终是 `tsconfig.json`。如果包里还有 `tsconfig.lib.json` 或 `tsconfig.test.json`，让这个包的 `tsconfig.json` reference 它们；Limina 会继续跟随这些 references。
 
 内置预设包括 `tsc`、`tsgo`、`vue-tsc`、`vue-tsgo`、`svelte-check`。启用某个检查器时，请安装对应包；`tsgo` 和 `vue-tsgo` 需要 `@typescript/native-preview`，`vue-tsc` 入口还需要 `@vue/compiler-sfc`，这样 Limina 才能解析 SFC 导入。

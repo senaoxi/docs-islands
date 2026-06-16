@@ -40,6 +40,7 @@ export interface LiminaFlowMessageOptions {
   collapseOnSuccess?: boolean;
   depth?: number;
   elapsedTimeMs?: number;
+  persistInteractive?: boolean;
 }
 
 export interface LiminaFlowFailureOptions extends LiminaFlowMessageOptions {
@@ -366,7 +367,9 @@ export class LiminaFlowReporter {
   }
 
   warn(message: string, options: LiminaFlowMessageOptions = {}): void {
-    this.#emit('warn', message, options);
+    this.#emit('warn', message, options, {
+      persistInteractive: options.persistInteractive,
+    });
   }
 
   writeOutput(
