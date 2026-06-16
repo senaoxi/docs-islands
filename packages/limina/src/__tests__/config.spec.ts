@@ -215,6 +215,17 @@ describe('defineConfig', () => {
         }),
       );
       await writeText(
+        path.join(rootDir, 'packages/app/tsconfig.json'),
+        JSON.stringify({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
+        }),
+      );
+      await writeText(
         path.join(rootDir, 'packages/app/src/index.ts'),
         'export const value = 1;\n',
       );
@@ -224,7 +235,7 @@ describe('defineConfig', () => {
           checkers: {
             nativeTypescript: {
               preset: 'tsgo' as const,
-              include: ['packages/app/tsconfig.lib.json'],
+              include: ['packages/app/tsconfig.json'],
             },
           },
         },
@@ -248,7 +259,7 @@ describe('defineConfig', () => {
             '.tsx',
             '.ts',
           ],
-          include: ['packages/app/tsconfig.lib.json'],
+          include: ['packages/app/tsconfig.json'],
           name: 'nativeTypescript',
           preset: 'tsgo',
         },
@@ -261,6 +272,7 @@ describe('defineConfig', () => {
           path.relative(rootDir, configPath),
         ),
       ).toEqual([
+        '.limina/tsconfig/checkers/nativeTypescript/solutions/packages/app/tsconfig.build.json',
         '.limina/tsconfig/checkers/nativeTypescript/projects/packages/app/tsconfig.lib.dts.json',
       ]);
     } finally {
@@ -300,6 +312,17 @@ describe('defineConfig', () => {
         }),
       );
       await writeText(
+        path.join(rootDir, 'packages/app/tsconfig.json'),
+        JSON.stringify({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.vue.json',
+            },
+          ],
+        }),
+      );
+      await writeText(
         path.join(rootDir, 'packages/app/src/App.vue'),
         '<script setup lang="ts">const value = 1;</script>\n',
       );
@@ -309,7 +332,7 @@ describe('defineConfig', () => {
           checkers: {
             vue: {
               preset: 'vue-tsgo' as const,
-              include: ['packages/app/tsconfig.vue.json'],
+              include: ['packages/app/tsconfig.json'],
             },
           },
         },
@@ -334,7 +357,7 @@ describe('defineConfig', () => {
             '.vue',
             '.ts',
           ],
-          include: ['packages/app/tsconfig.vue.json'],
+          include: ['packages/app/tsconfig.json'],
           name: 'vue',
           preset: 'vue-tsgo',
         },
@@ -347,6 +370,7 @@ describe('defineConfig', () => {
           path.relative(rootDir, configPath),
         ),
       ).toEqual([
+        '.limina/tsconfig/checkers/vue/solutions/packages/app/tsconfig.build.json',
         '.limina/tsconfig/checkers/vue/projects/packages/app/tsconfig.vue.dts.json',
       ]);
     } finally {

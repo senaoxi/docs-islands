@@ -12,8 +12,7 @@ import {
 const defaultCheckers: NonNullable<ResolvedLiminaConfig['config']>['checkers'] =
   {
     typescript: {
-      exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
-      include: ['tsconfig.json', '**/tsconfig*.json'],
+      include: ['tsconfig.json', '**/tsconfig.json'],
       preset: 'tsc',
     },
   };
@@ -42,6 +41,56 @@ function stringifyConfig(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+function isFixtureSourceLeafConfig(relativePath: string): boolean {
+  const fileName = path.posix.basename(relativePath);
+
+  return (
+    /^tsconfig(?:\..+)?\.json$/u.test(fileName) &&
+    fileName !== 'tsconfig.json' &&
+    !/\.dts\.json$/u.test(fileName) &&
+    !/\.build\.json$/u.test(fileName) &&
+    !/\.base\.json$/u.test(fileName) &&
+    !/\.check\.json$/u.test(fileName)
+  );
+}
+
+function addFixtureEntryConfigs(
+  files: Record<string, string>,
+): Record<string, string> {
+  const output = { ...files };
+  const referencesByDirectory = new Map<string, string[]>();
+
+  for (const relativePath of Object.keys(files)) {
+    if (!isFixtureSourceLeafConfig(relativePath)) {
+      continue;
+    }
+
+    const directory = path.posix.dirname(relativePath);
+    const references = referencesByDirectory.get(directory) ?? [];
+
+    references.push(`./${path.posix.basename(relativePath)}`);
+    referencesByDirectory.set(directory, references);
+  }
+
+  for (const [directory, references] of referencesByDirectory) {
+    const entryPath =
+      directory === '.'
+        ? 'tsconfig.json'
+        : path.posix.join(directory, 'tsconfig.json');
+
+    if (Object.hasOwn(output, entryPath)) {
+      continue;
+    }
+
+    output[entryPath] = stringifyConfig({
+      files: [],
+      references: references.sort().map((reference) => ({ path: reference })),
+    });
+  }
+
+  return output;
+}
+
 async function createFixture(files: Record<string, string>): Promise<{
   cleanup: () => Promise<void>;
   config: ResolvedLiminaConfig;
@@ -63,7 +112,9 @@ async function createFixture(files: Record<string, string>): Promise<{
     }),
   );
 
-  for (const [relativePath, text] of Object.entries(files)) {
+  for (const [relativePath, text] of Object.entries(
+    addFixtureEntryConfigs(files),
+  )) {
     await writeText(path.join(rootDir, relativePath), text);
   }
 

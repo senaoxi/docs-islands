@@ -32,6 +32,7 @@ export interface ProjectInfo {
   fileNames: string[];
   labels: string[];
   labelProblem: string | null;
+  ownedFileNames: string[];
   options: ts.CompilerOptions;
   references: Set<string>;
   resolverConfigPath: string;
@@ -190,21 +191,33 @@ export function parseProject(
   const projectExtensions = parsed.extensions;
   const filePattern = createExtensionPattern(projectExtensions);
   const normalizedConfigPath = normalizeAbsolutePath(configPath);
+  const resolverConfigPath = isDtsProjectConfig(normalizedConfigPath)
+    ? getTypecheckConfigPath(normalizedConfigPath)
+    : normalizedConfigPath;
+  const ownedParsed =
+    resolverConfigPath === normalizedConfigPath
+      ? parsed
+      : parseCheckerProjectConfigForContext({
+          configPath: resolverConfigPath,
+          context,
+          projectRootDir: config.rootDir,
+        });
+  const normalizeFileNames = (fileNames: string[]): string[] =>
+    fileNames
+      .filter((fileName) => filePattern.test(fileName))
+      .map(normalizeAbsolutePath);
 
   return {
     checkerPresets: context.checkerPresets,
     configPath: normalizedConfigPath,
     extensions: projectExtensions,
-    fileNames: parsed.fileNames
-      .filter((fileName) => filePattern.test(fileName))
-      .map(normalizeAbsolutePath),
+    fileNames: normalizeFileNames(parsed.fileNames),
     labels: labelInfo.labels,
     labelProblem: labelInfo.labelProblem,
+    ownedFileNames: normalizeFileNames(ownedParsed.fileNames),
     options: parsed.options,
     references: new Set(getRawReferencePaths(config, configPath)),
-    resolverConfigPath: isDtsProjectConfig(normalizedConfigPath)
-      ? getTypecheckConfigPath(normalizedConfigPath)
-      : normalizedConfigPath,
+    resolverConfigPath,
   };
 }
 
@@ -303,7 +316,7 @@ export function createFileOwnerLookup(
       ? normalizeAbsolutePath(project.options.rootDir)
       : path.dirname(project.configPath);
 
-    for (const fileName of project.fileNames) {
+    for (const fileName of project.ownedFileNames) {
       if (!isPathInsideDirectory(fileName, ownerRootDir)) {
         continue;
       }

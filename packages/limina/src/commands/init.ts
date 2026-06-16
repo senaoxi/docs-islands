@@ -100,13 +100,7 @@ export default defineConfig({
         preset: 'tsc',
         include: [
           'tsconfig.json',
-          'packages/**/tsconfig*.json',
-        ],
-        exclude: [
-          '**/tsconfig*.dts.json',
-          '**/tsconfig*.build.json',
-          '**/tsconfig*.base.json',
-          '**/tsconfig*.check.json',
+          'packages/**/tsconfig.json',
         ],
       },
     },

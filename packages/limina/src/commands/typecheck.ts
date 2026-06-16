@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, statSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
+import { availableParallelism } from 'node:os';
 import path from 'pathe';
 import {
   type CheckerPackageResolver,
@@ -17,7 +18,12 @@ import {
   type ResolvedLiminaConfig,
 } from '../config';
 import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
-import { prepareGeneratedTsconfigGraph } from '../generated-graph';
+import {
+  type GeneratedBuildModule,
+  type GeneratedProviderEdge,
+  type GeneratedTsconfigGraphResult,
+  prepareGeneratedTsconfigGraph,
+} from '../generated-graph';
 import { clearCliScreen, formatErrorMessage, TypecheckLogger } from '../logger';
 import {
   collectGraphProjectRouteFromRoot,
@@ -38,6 +44,7 @@ export interface TypecheckTarget {
   command: string;
   executionKind?: CheckerExecutionKind;
   label?: string;
+  sourceConfigPath?: string;
 }
 
 export interface TypecheckTargetResult {
@@ -295,6 +302,276 @@ async function runWithConcurrency(
   return results;
 }
 
+function getDefaultBuildConcurrency(targetCount: number): number {
+  return Math.min(targetCount, availableParallelism() ?? 4);
+}
+
+function getBuildTargetDependencyKey(target: TypecheckTarget): string {
+  return [
+    target.checkerName ?? '',
+    target.sourceConfigPath ?? '',
+    target.configPath,
+  ].join('\0');
+}
+
+function providerEdgeMatchesConsumer(
+  edge: GeneratedProviderEdge,
+  target: TypecheckTarget,
+): boolean {
+  return (
+    target.checkerName === edge.fromChecker &&
+    (!target.sourceConfigPath ||
+      target.sourceConfigPath === edge.fromConfigPath)
+  );
+}
+
+function providerEdgeMatchesProvider(
+  edge: GeneratedProviderEdge,
+  target: TypecheckTarget,
+): boolean {
+  return (
+    target.checkerName === edge.toChecker &&
+    (!target.sourceConfigPath || target.sourceConfigPath === edge.toConfigPath)
+  );
+}
+
+function collectStronglyConnectedBuildTargetKeys(
+  orderedKeys: string[],
+  dependenciesByTargetKey: Map<string, Set<string>>,
+): string[][] {
+  const indexByKey = new Map<string, number>();
+  const lowLinkByKey = new Map<string, number>();
+  const stack: string[] = [];
+  const stackedKeys = new Set<string>();
+  const components: string[][] = [];
+  let nextIndex = 0;
+
+  const visit = (key: string): void => {
+    indexByKey.set(key, nextIndex);
+    lowLinkByKey.set(key, nextIndex);
+    nextIndex += 1;
+    stack.push(key);
+    stackedKeys.add(key);
+
+    for (const dependencyKey of dependenciesByTargetKey.get(key) ?? []) {
+      if (!indexByKey.has(dependencyKey)) {
+        visit(dependencyKey);
+        lowLinkByKey.set(
+          key,
+          Math.min(
+            lowLinkByKey.get(key) ?? 0,
+            lowLinkByKey.get(dependencyKey) ?? 0,
+          ),
+        );
+      } else if (stackedKeys.has(dependencyKey)) {
+        lowLinkByKey.set(
+          key,
+          Math.min(
+            lowLinkByKey.get(key) ?? 0,
+            indexByKey.get(dependencyKey) ?? 0,
+          ),
+        );
+      }
+    }
+
+    if (lowLinkByKey.get(key) !== indexByKey.get(key)) {
+      return;
+    }
+
+    const component: string[] = [];
+
+    while (stack.length > 0) {
+      const componentKey = stack.pop()!;
+
+      stackedKeys.delete(componentKey);
+      component.push(componentKey);
+
+      if (componentKey === key) {
+        break;
+      }
+    }
+
+    components.push(component);
+  };
+
+  for (const key of orderedKeys) {
+    if (!indexByKey.has(key)) {
+      visit(key);
+    }
+  }
+
+  return components
+    .map((component) =>
+      component.sort(
+        (left, right) => orderedKeys.indexOf(left) - orderedKeys.indexOf(right),
+      ),
+    )
+    .sort(
+      (left, right) =>
+        orderedKeys.indexOf(left[0]!) - orderedKeys.indexOf(right[0]!),
+    );
+}
+
+function createBuildDependencyLayers(
+  targets: TypecheckTarget[],
+  providerEdges: GeneratedProviderEdge[],
+): TypecheckTarget[][] {
+  const targetKeyByTarget = new Map<TypecheckTarget, string>(
+    targets.map((target) => [target, getBuildTargetDependencyKey(target)]),
+  );
+  const targetByKey = new Map<string, TypecheckTarget>(
+    targets.map((target) => [getBuildTargetDependencyKey(target), target]),
+  );
+  const dependenciesByTargetKey = new Map<string, Set<string>>(
+    targets.map((target) => [getBuildTargetDependencyKey(target), new Set()]),
+  );
+
+  for (const edge of providerEdges) {
+    const consumerTargets = targets.filter((target) =>
+      providerEdgeMatchesConsumer(edge, target),
+    );
+    const providerTargets = targets.filter((target) =>
+      providerEdgeMatchesProvider(edge, target),
+    );
+
+    for (const consumerTarget of consumerTargets) {
+      const consumerKey = targetKeyByTarget.get(consumerTarget);
+
+      if (!consumerKey) {
+        continue;
+      }
+
+      for (const providerTarget of providerTargets) {
+        const providerKey = targetKeyByTarget.get(providerTarget);
+
+        if (!providerKey || providerKey === consumerKey) {
+          continue;
+        }
+
+        dependenciesByTargetKey.get(consumerKey)?.add(providerKey);
+      }
+    }
+  }
+
+  const orderedKeys = targets.map(getBuildTargetDependencyKey);
+  const components = collectStronglyConnectedBuildTargetKeys(
+    orderedKeys,
+    dependenciesByTargetKey,
+  );
+  const componentIndexByKey = new Map<string, number>();
+
+  for (const [componentIndex, component] of components.entries()) {
+    for (const key of component) {
+      componentIndexByKey.set(key, componentIndex);
+    }
+  }
+
+  const dependenciesByComponentIndex = new Map<number, Set<number>>(
+    components.map((_, index) => [index, new Set<number>()]),
+  );
+
+  for (const key of orderedKeys) {
+    const componentIndex = componentIndexByKey.get(key);
+
+    if (componentIndex === undefined) {
+      continue;
+    }
+
+    for (const dependencyKey of dependenciesByTargetKey.get(key) ?? []) {
+      const dependencyComponentIndex = componentIndexByKey.get(dependencyKey);
+
+      if (
+        dependencyComponentIndex === undefined ||
+        dependencyComponentIndex === componentIndex
+      ) {
+        continue;
+      }
+
+      dependenciesByComponentIndex
+        .get(componentIndex)
+        ?.add(dependencyComponentIndex);
+    }
+  }
+
+  const remainingComponentIndexes = new Set(
+    components.map((_, index) => index),
+  );
+  const completedComponentIndexes = new Set<number>();
+  const layers: TypecheckTarget[][] = [];
+
+  while (remainingComponentIndexes.size > 0) {
+    const readyComponentIndexes = components
+      .map((_, index) => index)
+      .filter((componentIndex) => {
+        if (!remainingComponentIndexes.has(componentIndex)) {
+          return false;
+        }
+
+        const dependencies =
+          dependenciesByComponentIndex.get(componentIndex) ?? new Set();
+
+        return [...dependencies].every((dependency) =>
+          completedComponentIndexes.has(dependency),
+        );
+      });
+
+    if (readyComponentIndexes.length === 0) {
+      break;
+    }
+
+    layers.push(
+      readyComponentIndexes
+        .flatMap((componentIndex) => components[componentIndex] ?? [])
+        .map((key) => targetByKey.get(key))
+        .filter((target): target is TypecheckTarget => Boolean(target)),
+    );
+
+    for (const componentIndex of readyComponentIndexes) {
+      remainingComponentIndexes.delete(componentIndex);
+      completedComponentIndexes.add(componentIndex);
+    }
+  }
+
+  if (remainingComponentIndexes.size > 0) {
+    layers.push(
+      [...remainingComponentIndexes]
+        .flatMap((componentIndex) => components[componentIndex] ?? [])
+        .map((key) => targetByKey.get(key))
+        .filter((target): target is TypecheckTarget => Boolean(target)),
+    );
+  }
+
+  return layers;
+}
+
+async function runBuildTargets(
+  targets: TypecheckTarget[],
+  providerEdges: GeneratedProviderEdge[],
+  runner: TypecheckRunner,
+  options: {
+    onTargetResult?: (
+      target: TypecheckTarget,
+      result: TypecheckTargetResult,
+    ) => void;
+    onTargetStart?: (target: TypecheckTarget) => void;
+  } = {},
+): Promise<TypecheckTargetResult[]> {
+  const results: TypecheckTargetResult[] = [];
+
+  for (const layer of createBuildDependencyLayers(targets, providerEdges)) {
+    results.push(
+      ...(await runWithConcurrency(
+        layer,
+        getDefaultBuildConcurrency(layer.length),
+        runner,
+        options,
+      )),
+    );
+  }
+
+  return results;
+}
+
 export interface RunCheckerBuildOptions {
   clearScreen?: boolean;
   config: ResolvedLiminaConfig;
@@ -415,9 +692,9 @@ async function runCheckerBuildInternal(
   );
 
   const targetTasks = new Map<string, LiminaFlowTask>();
-  const results = await runWithConcurrency(
+  const results = await runBuildTargets(
     targets,
-    1,
+    generatedGraph.providerEdges,
     options.runner ?? createDefaultRunner(),
     {
       onTargetResult: (target, result) => {
@@ -654,6 +931,91 @@ function formatTypecheckOnlyBuildProblem(options: {
   ].join('\n');
 }
 
+interface BuildTargetDescriptor {
+  buildModule: GeneratedBuildModule;
+  checker: ResolvedCheckerConfig;
+  sourceConfigPath: string;
+}
+
+function getBuildTargetDescriptorKey(
+  descriptor: BuildTargetDescriptor,
+): string {
+  return `${descriptor.checker.name}\0${descriptor.sourceConfigPath}`;
+}
+
+function collectBuildTargetProviderClosure(options: {
+  allCheckers: ResolvedCheckerConfig[];
+  generatedGraph: GeneratedTsconfigGraphResult;
+  initialTargets: BuildTargetDescriptor[];
+}): BuildTargetDescriptor[] {
+  const checkerByName = new Map(
+    options.allCheckers.map((checker) => [checker.name, checker]),
+  );
+  const descriptorsByKey = new Map<string, BuildTargetDescriptor>();
+  const queue: BuildTargetDescriptor[] = [];
+
+  for (const target of options.initialTargets) {
+    const key = getBuildTargetDescriptorKey(target);
+
+    descriptorsByKey.set(key, target);
+    queue.push(target);
+  }
+
+  for (;;) {
+    const current = queue.shift();
+
+    if (!current) {
+      break;
+    }
+
+    for (const edge of options.generatedGraph.providerEdges) {
+      if (
+        edge.fromChecker !== current.checker.name ||
+        edge.fromConfigPath !== current.sourceConfigPath
+      ) {
+        continue;
+      }
+
+      const checker = checkerByName.get(edge.toChecker);
+
+      if (
+        !checker ||
+        getCheckerAdapter(checker.preset)?.execution !== 'build'
+      ) {
+        continue;
+      }
+
+      const buildModule = options.generatedGraph.sourceToBuild
+        .get(checker.name)
+        ?.get(edge.toConfigPath);
+
+      if (!buildModule) {
+        continue;
+      }
+
+      const descriptor: BuildTargetDescriptor = {
+        buildModule,
+        checker,
+        sourceConfigPath: edge.toConfigPath,
+      };
+      const key = getBuildTargetDescriptorKey(descriptor);
+
+      if (descriptorsByKey.has(key)) {
+        continue;
+      }
+
+      descriptorsByKey.set(key, descriptor);
+      queue.push(descriptor);
+    }
+  }
+
+  return [...descriptorsByKey.values()].sort(
+    (left, right) =>
+      left.checker.name.localeCompare(right.checker.name) ||
+      left.sourceConfigPath.localeCompare(right.sourceConfigPath),
+  );
+}
+
 async function runBuildInternal(
   options: RunBuildOptions,
 ): Promise<RunBuildResult> {
@@ -724,8 +1086,18 @@ async function runBuildInternal(
     };
   }
 
+  const buildTargetDescriptors = collectBuildTargetProviderClosure({
+    allCheckers,
+    generatedGraph,
+    initialTargets: buildTargets.map(({ buildModule, checker }) => ({
+      buildModule,
+      checker,
+      sourceConfigPath,
+    })),
+  });
+
   const problems = collectCheckerPeerDependencyProblems({
-    checkers: buildTargets.map(({ checker }) => checker),
+    checkers: buildTargetDescriptors.map(({ checker }) => checker),
     projectRootDir,
     resolvePackage: options.checkerPackageResolver,
   });
@@ -744,17 +1116,22 @@ async function runBuildInternal(
     };
   }
 
-  const targets = buildTargets.map(({ buildModule, checker }) => {
-    rootConfigPaths.push(buildModule.path);
+  const targets = buildTargetDescriptors.map(
+    ({ buildModule, checker, sourceConfigPath }) => {
+      rootConfigPaths.push(buildModule.path);
 
-    return createCheckerTarget({
-      checker,
-      commandOverride: options.tscCommand,
-      configPath: buildModule.path,
-      executionKind: 'build',
-      projectRootDir,
-    });
-  });
+      return {
+        ...createCheckerTarget({
+          checker,
+          commandOverride: options.tscCommand,
+          configPath: buildModule.path,
+          executionKind: 'build',
+          projectRootDir,
+        }),
+        sourceConfigPath,
+      };
+    },
+  );
 
   options.flow?.info(`found ${targets.length} build target(s)`, {
     depth: flowDepth + 1,
@@ -772,9 +1149,9 @@ async function runBuildInternal(
   );
 
   const targetTasks = new Map<string, LiminaFlowTask>();
-  const results = await runWithConcurrency(
+  const results = await runBuildTargets(
     targets,
-    1,
+    generatedGraph.providerEdges,
     options.runner ?? createDefaultRunner(),
     {
       onTargetResult: (target, result) => {

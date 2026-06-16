@@ -36,8 +36,7 @@ async function createFixture(files: Record<string, string>): Promise<{
         checkers: {
           typescript: {
             preset: 'tsc',
-            include: ['tsconfig.json', '**/tsconfig*.json'],
-            exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+            include: ['tsconfig.json', '**/tsconfig.json'],
           },
         },
       },
@@ -166,7 +165,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('rejects dts leaves that do not transitively extend their companion', async () => {
+  it('ignores inert dts leaves that do not transitively extend their companion', async () => {
     const fixture = await createFixture(
       createSingleEnvironmentFiles({
         'packages/pkg/tsconfig.dts.json': JSON.stringify({
@@ -191,13 +190,13 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects checker includes that match declaration helper configs', async () => {
+  it('ignores inert declaration helper configs outside managed entries', async () => {
     const fixture = await createFixture(
       createSingleEnvironmentFiles({
         'packages/pkg/tsconfig.dts.base.json': JSON.stringify({
@@ -219,15 +218,13 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).rejects.toThrow(
-        /Checker include matched reserved tsconfig files/u,
-      );
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects build graph references to ordinary configs', async () => {
+  it('ignores inert build graph references to ordinary configs', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tsconfig.extra.build.json': JSON.stringify({
@@ -242,7 +239,7 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -258,7 +255,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('rejects build graph aggregators with source inputs or compilerOptions', async () => {
+  it('ignores inert build graph aggregators with source inputs or compilerOptions', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tsconfig.build.json': JSON.stringify({
@@ -277,13 +274,13 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects dts leaves without declaration emit semantics', async () => {
+  it('ignores inert dts leaves without declaration emit semantics', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
@@ -300,13 +297,13 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('rejects multi-environment directories without a default aggregator', async () => {
+  it('ignores inert multi-environment directories outside managed entries', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
@@ -347,7 +344,7 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -406,7 +403,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('reports typecheck compiler option drift from the local typecheck config', async () => {
+  it('ignores inert dts compiler option drift from the local typecheck config', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
@@ -426,13 +423,13 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('accepts declaration-only compiler option extensions', async () => {
+  it('ignores inert declaration-only compiler option extensions', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
@@ -454,13 +451,13 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('reports dts and local file set drift', async () => {
+  it('ignores inert dts and local file set drift', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/src/extra.ts': 'export const extra = 2;\n',
@@ -478,13 +475,13 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it('ignores paths and baseUrl drift because module resolution is checked by graph validation', async () => {
+  it('ignores inert paths and baseUrl drift because module resolution is checked by graph validation', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/tsconfig.lib.dts.json': JSON.stringify({
@@ -506,7 +503,7 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -536,6 +533,14 @@ describe('runProofCheck dts config semantics', () => {
   it('rejects single-environment directories that keep a scoped local config', async () => {
     const fixture = await createFixture(
       createPassingFiles({
+        'packages/pkg/tsconfig.json': JSON.stringify({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
+        }),
         'packages/pkg/tsconfig.lib.json': JSON.stringify({
           compilerOptions: {
             module: 'ESNext',
@@ -556,7 +561,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('reports duplicate same-family checker build owners', async () => {
+  it('ignores inert duplicate same-family checker build owners', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'packages/pkg/tsconfig.alt.dts.json': JSON.stringify({
@@ -600,7 +605,7 @@ describe('runProofCheck dts config semantics', () => {
             },
           },
         }),
-      ).resolves.toBe(false);
+      ).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -678,8 +683,12 @@ describe('runProofCheck dts config semantics', () => {
             ...fixture.config.config,
             checkers: {
               ...fixture.config.config?.checkers,
+              typescript: {
+                include: ['tsconfig.json'],
+                preset: 'tsc',
+              },
               vue: {
-                include: ['packages/pkg/tsconfig.sfc.json'],
+                include: ['packages/pkg/tsconfig.json'],
                 preset: 'vue-tsc',
               },
             },
@@ -1458,7 +1467,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('uses the shared graph root config', async () => {
+  it('ignores inert shared graph root build configs', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tsconfig.custom.build.json': JSON.stringify({
@@ -1490,7 +1499,7 @@ describe('runProofCheck dts config semantics', () => {
             },
           },
         }),
-      ).resolves.toBe(false);
+      ).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }

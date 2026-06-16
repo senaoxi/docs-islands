@@ -18,7 +18,10 @@ import {
 } from '../config';
 import type { LiminaFlowReporter } from '../flow';
 import type { GeneratedTsconfigGraphResult } from '../generated-graph';
-import { prepareGeneratedTsconfigGraph } from '../generated-graph';
+import {
+  collectGeneratedSourceConfigPaths,
+  prepareGeneratedTsconfigGraph,
+} from '../generated-graph';
 import { clearCliScreen, formatErrorMessage, ProofLogger } from '../logger';
 import {
   type CheckerGraphProjectRoute,
@@ -87,10 +90,6 @@ interface ParsedConfig {
   options: ts.CompilerOptions;
 }
 
-const dtsConfigPattern = '**/tsconfig*.dts.json';
-const buildGraphConfigPattern = '**/tsconfig*.build.json';
-const tsconfigJsonPattern = '**/tsconfig.json';
-const tsconfigFilePattern = '**/tsconfig*.json';
 const defaultSourceIncludeExtensions = [
   '.ts',
   '.d.ts',
@@ -148,6 +147,7 @@ const ignoredSemanticCompilerOptions = new Set([
   'sourceMap',
   'sourceRoot',
   'tsBuildInfoFile',
+  'typeRoots',
 ]);
 
 function getCheckerCoverageExtensions(
@@ -186,51 +186,6 @@ function createCheckerProjectContext(options: {
       ...adapterExtensions,
     ]),
   };
-}
-
-async function collectTsconfigPaths(
-  config: ResolvedLiminaConfig,
-  pattern: string,
-): Promise<string[]> {
-  const paths = await glob(pattern, {
-    cwd: config.rootDir,
-    absolute: true,
-    ignore: [
-      '**/.git/**',
-      '**/.tsbuild/**',
-      '**/coverage/**',
-      '**/dist/**',
-      '**/node_modules/**',
-    ],
-  });
-
-  return paths.map(normalizeAbsolutePath).sort();
-}
-
-async function collectDtsConfigPaths(
-  config: ResolvedLiminaConfig,
-): Promise<string[]> {
-  return collectTsconfigPaths(config, dtsConfigPattern);
-}
-
-async function collectBuildGraphConfigPaths(
-  config: ResolvedLiminaConfig,
-): Promise<string[]> {
-  return collectTsconfigPaths(config, buildGraphConfigPattern);
-}
-
-async function collectDefaultTsconfigPaths(
-  config: ResolvedLiminaConfig,
-): Promise<string[]> {
-  return collectTsconfigPaths(config, tsconfigJsonPattern);
-}
-
-async function collectOrdinaryTypecheckConfigPaths(
-  config: ResolvedLiminaConfig,
-): Promise<string[]> {
-  const paths = await collectTsconfigPaths(config, tsconfigFilePattern);
-
-  return paths.filter(isOrdinaryTypecheckConfigPath);
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -509,12 +464,19 @@ function parseProjectCoverage(options: {
     context: options.context,
     projectRootDir: options.config.rootDir,
   });
+  const coverageParsed = isDtsConfigPath(options.configPath)
+    ? parseCheckerProjectConfigForContext({
+        configPath: getDtsCompanionConfigPath(options.configPath),
+        context: options.context,
+        projectRootDir: options.config.rootDir,
+      })
+    : parsed;
   const ownerRootDir = parsed.options.rootDir
     ? normalizeAbsolutePath(parsed.options.rootDir)
     : path.dirname(options.configPath);
 
   return {
-    fileNames: parsed.fileNames,
+    fileNames: coverageParsed.fileNames,
     ownerRootDir,
   };
 }
@@ -709,6 +671,52 @@ function parseConfig(
   };
 }
 
+function readRelativeTypeFiles(
+  config: ResolvedLiminaConfig,
+  sourceConfigPath: string,
+): string[] {
+  const configObject = readJsonConfig(config, sourceConfigPath);
+  const compilerOptions = configObject.compilerOptions;
+
+  if (
+    !compilerOptions ||
+    typeof compilerOptions !== 'object' ||
+    Array.isArray(compilerOptions)
+  ) {
+    return [];
+  }
+
+  const types = (compilerOptions as { types?: unknown }).types;
+
+  if (!Array.isArray(types)) {
+    return [];
+  }
+
+  return types
+    .filter(
+      (typeName): typeName is string =>
+        typeof typeName === 'string' &&
+        (typeName.startsWith('./') || typeName.startsWith('../')),
+    )
+    .map((typeName) =>
+      normalizeAbsolutePath(
+        path.resolve(path.dirname(sourceConfigPath), typeName),
+      ),
+    );
+}
+
+function normalizeGeneratedDtsTypes(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+
+  return value.filter(
+    (typeName) =>
+      typeof typeName !== 'string' ||
+      (!typeName.startsWith('./') && !typeName.startsWith('../')),
+  );
+}
+
 function formatJsonValue(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
@@ -738,11 +746,14 @@ function addDtsConfigSemanticProblems(options: {
   problems: string[];
 }): void {
   const dtsFileNames = new Set(options.dtsConfig.fileNames);
-  const localFileNames = new Set(options.localConfig.fileNames);
+  const localFileNames = new Set([
+    ...options.localConfig.fileNames,
+    ...readRelativeTypeFiles(options.config, options.localConfigPath),
+  ]);
   const onlyInDts = options.dtsConfig.fileNames.filter(
     (fileName) => !localFileNames.has(fileName),
   );
-  const onlyInLocal = options.localConfig.fileNames.filter(
+  const onlyInLocal = [...localFileNames].filter(
     (fileName) => !dtsFileNames.has(fileName),
   );
 
@@ -796,11 +807,21 @@ function addDtsConfigSemanticProblems(options: {
       continue;
     }
 
+    const localOptionValue = (
+      options.localConfig.options as Record<string, unknown>
+    )[optionName];
+    const dtsOptionValue = (
+      options.dtsConfig.options as Record<string, unknown>
+    )[optionName];
     const localValue = normalizeCompilerOptionValue(
-      (options.localConfig.options as Record<string, unknown>)[optionName],
+      optionName === 'types'
+        ? normalizeGeneratedDtsTypes(localOptionValue)
+        : localOptionValue,
     );
     const dtsValue = normalizeCompilerOptionValue(
-      (options.dtsConfig.options as Record<string, unknown>)[optionName],
+      optionName === 'types'
+        ? normalizeGeneratedDtsTypes(dtsOptionValue)
+        : dtsOptionValue,
     );
 
     if (formatJsonValue(localValue) === formatJsonValue(dtsValue)) {
@@ -1584,11 +1605,15 @@ async function runProofCheckInternal(
     config,
     entryRouteCollection.routes,
   );
-  const dtsConfigPaths = await collectDtsConfigPaths(config);
-  const buildGraphConfigPaths = await collectBuildGraphConfigPaths(config);
-  const defaultTsconfigPaths = await collectDefaultTsconfigPaths(config);
+  const dtsConfigPaths = entryProjectPaths.filter(isDtsConfigPath);
+  const buildGraphConfigPaths = entryProjectPaths.filter(
+    isBuildGraphConfigPath,
+  );
   const ordinaryTypecheckConfigPaths =
-    await collectOrdinaryTypecheckConfigPaths(config);
+    collectGeneratedSourceConfigPaths(generatedGraph);
+  const defaultTsconfigPaths = ordinaryTypecheckConfigPaths.filter(
+    (configPath) => path.basename(configPath) === 'tsconfig.json',
+  );
 
   problems.push(
     ...graphRouteCollection.problems,

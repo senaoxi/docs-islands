@@ -11,18 +11,13 @@ export default defineConfig({
           'utils/tsconfig.json',
           'packages/**/tsconfig.json',
         ],
-        exclude: [
-          '**/docs/**',
-          'packages/vitepress/src/shared/tsconfig.json',
-          'packages/vitepress/theme/tsconfig.json',
-        ],
+        exclude: ['**/docs/**', 'packages/vitepress/theme/tsconfig.json'],
       },
       vue: {
         preset: 'vue-tsc',
         include: [
           'docs/tsconfig.json',
           'packages/*/docs/tsconfig.json',
-          'packages/vitepress/src/shared/tsconfig.json',
           'packages/vitepress/theme/tsconfig.json',
         ],
       },

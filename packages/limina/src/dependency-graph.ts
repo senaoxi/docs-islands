@@ -279,7 +279,7 @@ export async function collectDependencyGraph(
   const edgesByKey = new Map<string, DependencyGraphEdge>();
 
   for (const project of checkerProjects.projects) {
-    for (const fileName of project.fileNames) {
+    for (const fileName of project.ownedFileNames) {
       const importerPackage = findPackageForFile(fileName, workspacePackages);
 
       if (!importerPackage) {

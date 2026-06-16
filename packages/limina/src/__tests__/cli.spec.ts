@@ -80,7 +80,7 @@ describe('limina CLI', () => {
             config: {
               checkers: {
                 typescript: {
-                  include: ['packages/pkg/tsconfig.lib.json'],
+                  include: ['packages/pkg/tsconfig.json'],
                   preset: 'tsc',
                 },
               },
@@ -119,6 +119,17 @@ describe('limina CLI', () => {
             noEmit: true,
           },
           include: ['src/**/*.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/pkg/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
         }),
       );
 
@@ -414,8 +425,7 @@ describe('limina CLI', () => {
             config: {
               checkers: {
                 typescript: {
-                  exclude: ['**/tsconfig*.dts.json'],
-                  include: ['packages/**/tsconfig*.json'],
+                  include: ['packages/**/tsconfig.json'],
                   preset: 'tsc',
                 },
               },
@@ -449,6 +459,13 @@ describe('limina CLI', () => {
         }),
       );
       await writeText(
+        path.join(rootDir, 'packages/a/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [{ path: './tsconfig.lib.json' }],
+        }),
+      );
+      await writeText(
         path.join(rootDir, 'packages/b/package.json'),
         stringifyConfig({
           exports: {
@@ -469,6 +486,13 @@ describe('limina CLI', () => {
             noEmit: true,
           },
           include: ['src/**/*.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [{ path: './tsconfig.lib.json' }],
         }),
       );
 
@@ -536,7 +560,7 @@ describe('limina CLI', () => {
             config: {
               checkers: {
                 typescript: {
-                  include: ['app/tsconfig*.json'],
+                  include: ['app/tsconfig.json'],
                   preset: 'tsc',
                 },
               },
@@ -566,6 +590,20 @@ describe('limina CLI', () => {
         stringifyConfig({
           compilerOptions: buildCompilerOptions,
           include: ['runtime.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'app/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.node.json',
+            },
+            {
+              path: './tsconfig.runtime.json',
+            },
+          ],
         }),
       );
 
@@ -633,8 +671,7 @@ describe('limina CLI', () => {
             config: {
               checkers: {
                 typescript: {
-                  exclude: ['**/tsconfig*.dts.json'],
-                  include: ['packages/**/tsconfig*.json'],
+                  include: ['packages/**/tsconfig.json'],
                   preset: 'tsc',
                 },
               },
@@ -665,6 +702,13 @@ describe('limina CLI', () => {
             noEmit: true,
           },
           include: ['src/**/*.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/a/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [{ path: './tsconfig.lib.json' }],
         }),
       );
       await writeText(
@@ -699,6 +743,13 @@ describe('limina CLI', () => {
             noEmit: true,
           },
           include: ['src/**/*.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [{ path: './tsconfig.lib.json' }],
         }),
       );
 

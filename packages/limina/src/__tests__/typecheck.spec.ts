@@ -9,7 +9,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { availableParallelism, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { CheckerPackageResolver } from '../checkers';
@@ -20,6 +20,7 @@ import {
   type RunCheckerBuildOptions,
   runCheckerTypecheck as runCheckerTypecheckCommand,
   type RunCheckerTypecheckOptions,
+  type TypecheckRunner,
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from '../commands/typecheck';
@@ -105,12 +106,48 @@ function failingRunner(calls: TypecheckTarget[] = []) {
   };
 }
 
+function getExpectedDefaultBuildConcurrency(targetCount: number): number {
+  return Math.min(targetCount, availableParallelism() ?? 4);
+}
+
+function delayedRunner(options: {
+  calls: TypecheckTarget[];
+  delayMs?: (target: TypecheckTarget) => number;
+  status?: number;
+}): {
+  getMaxActive: () => number;
+  runner: TypecheckRunner;
+} {
+  let activeCount = 0;
+  let maxActiveCount = 0;
+
+  return {
+    getMaxActive: () => maxActiveCount,
+    runner: async (target): Promise<TypecheckTargetResult> => {
+      options.calls.push(target);
+      activeCount += 1;
+      maxActiveCount = Math.max(maxActiveCount, activeCount);
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, options.delayMs?.(target) ?? 10);
+      });
+
+      activeCount -= 1;
+
+      return {
+        configPath: target.configPath,
+        status: options.status ?? 0,
+      };
+    },
+  };
+}
+
 function createLiminaConfig(rootDir: string): ResolvedLiminaConfig {
   return {
     config: {
       checkers: {
         svelte: {
-          include: ['tsconfig.svelte.json'],
+          include: ['svelte/tsconfig.json'],
           preset: 'svelte-check',
         },
         typescript: {
@@ -118,7 +155,7 @@ function createLiminaConfig(rootDir: string): ResolvedLiminaConfig {
           preset: 'tsc',
         },
         vue: {
-          include: ['tsconfig.vue.json'],
+          include: ['vue/tsconfig.json'],
           preset: 'vue-tsc',
         },
       },
@@ -160,6 +197,114 @@ describe('runCheckerBuild', () => {
           'false',
         ],
       ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('runs first-class build checker entries with default concurrency', async () => {
+    const calls: TypecheckTarget[] = [];
+    const delayed = delayedRunner({
+      calls,
+      delayMs: (target) => (target.command === 'tsc' ? 30 : 10),
+    });
+    const fixture = await createFixture({
+      'tsconfig.build.json': tsconfig({ files: [] }),
+      'tsconfig.vue.build.json': tsconfig({ files: [] }),
+    });
+
+    try {
+      const result = await runCheckerBuild({
+        config: {
+          config: {
+            checkers: {
+              typescript: {
+                include: ['tsconfig.json'],
+                preset: 'tsc',
+              },
+              vue: {
+                include: ['vue/tsconfig.json'],
+                preset: 'vue-tsc',
+              },
+            },
+          },
+          configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+          rootDir: fixture.rootDir,
+        },
+        cwd: fixture.rootDir,
+        runner: delayed.runner,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
+      expect(delayed.getMaxActive()).toBe(
+        getExpectedDefaultBuildConcurrency(2),
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('runs cyclic cross-checker provider entries in the same build layer', async () => {
+    const calls: TypecheckTarget[] = [];
+    const delayed = delayedRunner({
+      calls,
+      delayMs: () => 30,
+    });
+    const fixture = await createFixture({
+      'packages/app/src/index.ts':
+        "import { themeValue } from '../../theme/src/index';\nexport const appValue = themeValue;\n",
+      'packages/app/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/theme/src/index.ts':
+        "import { appValue } from '../../app/src/index';\nexport const themeValue = appValue;\n",
+      'packages/theme/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await runCheckerBuild({
+        config: {
+          config: {
+            checkers: {
+              typescript: {
+                include: ['packages/app/tsconfig.json'],
+                preset: 'tsc',
+              },
+              vue: {
+                include: ['packages/theme/tsconfig.json'],
+                preset: 'vue-tsc',
+              },
+            },
+          },
+          configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+          rootDir: fixture.rootDir,
+        },
+        cwd: fixture.rootDir,
+        runner: delayed.runner,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
+      expect(delayed.getMaxActive()).toBe(
+        getExpectedDefaultBuildConcurrency(2),
+      );
     } finally {
       await fixture.cleanup();
     }
@@ -219,7 +364,7 @@ describe('runCheckerBuild', () => {
           config: {
             checkers: {
               vue: {
-                include: ['tsconfig.vue.json'],
+                include: ['vue/tsconfig.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -262,7 +407,7 @@ describe('runCheckerBuild', () => {
                 preset: 'tsc',
               },
               vue: {
-                include: ['tsconfig.vue.json'],
+                include: ['vue/tsconfig.json'],
                 preset: 'vue-tsc',
               },
             },
@@ -349,6 +494,64 @@ describe('runCheckerBuild', () => {
       await fixture.cleanup();
     }
   });
+
+  it('reports concurrent build checker failures in target order', async () => {
+    const calls: TypecheckTarget[] = [];
+    const errorSpy = vi
+      .spyOn(TypecheckLogger, 'error')
+      .mockImplementation(() => {});
+    const delayed = delayedRunner({
+      calls,
+      delayMs: (target) => (target.command === 'tsc' ? 30 : 10),
+      status: 1,
+    });
+    const fixture = await createFixture({
+      'tsconfig.build.json': tsconfig({ files: [] }),
+      'tsconfig.vue.build.json': tsconfig({ files: [] }),
+    });
+
+    try {
+      const result = await runCheckerBuild({
+        config: {
+          config: {
+            checkers: {
+              typescript: {
+                include: ['tsconfig.json'],
+                preset: 'tsc',
+              },
+              vue: {
+                include: ['vue/tsconfig.json'],
+                preset: 'vue-tsc',
+              },
+            },
+          },
+          configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+          rootDir: fixture.rootDir,
+        },
+        cwd: fixture.rootDir,
+        runner: delayed.runner,
+      });
+      const errorText = errorSpy.mock.calls
+        .map(([message]) => String(message))
+        .join('\n');
+      const typescriptPath =
+        '.limina/tsconfig/checkers/typescript/tsconfig.build.json';
+      const vuePath = '.limina/tsconfig/checkers/vue/tsconfig.build.json';
+
+      expect(result.passed).toBe(false);
+      expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
+      expect(delayed.getMaxActive()).toBe(
+        getExpectedDefaultBuildConcurrency(2),
+      );
+      expect(errorText.indexOf(typescriptPath)).toBeGreaterThanOrEqual(0);
+      expect(errorText.indexOf(typescriptPath)).toBeLessThan(
+        errorText.indexOf(vuePath),
+      );
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
 });
 
 describe('runBuild', () => {
@@ -415,6 +618,14 @@ describe('runBuild', () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/tsconfig.json': tsconfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
       'packages/pkg/tsconfig.lib.json': tsconfig({
         compilerOptions: {
           module: 'ESNext',
@@ -433,7 +644,7 @@ describe('runBuild', () => {
           config: {
             checkers: {
               typescript: {
-                include: ['packages/pkg/tsconfig.lib.json'],
+                include: ['packages/pkg/tsconfig.json'],
                 preset: 'tsc',
               },
             },
@@ -526,7 +737,7 @@ describe('runBuild', () => {
       .spyOn(TypecheckLogger, 'error')
       .mockImplementation(() => {});
     const fixture = await createFixture({
-      'tsconfig.svelte.json': tsconfig({
+      'svelte/tsconfig.json': tsconfig({
         compilerOptions: {
           module: 'ESNext',
           moduleResolution: 'bundler',
@@ -536,7 +747,7 @@ describe('runBuild', () => {
         },
         include: ['src/**/*.ts'],
       }),
-      'src/index.ts': 'export const value = 1;\n',
+      'svelte/src/index.ts': 'export const value = 1;\n',
     });
 
     try {
@@ -545,7 +756,7 @@ describe('runBuild', () => {
           config: {
             checkers: {
               svelte: {
-                include: ['tsconfig.svelte.json'],
+                include: ['svelte/tsconfig.json'],
                 preset: 'svelte-check',
               },
             },
@@ -554,7 +765,7 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'tsconfig.svelte.json',
+        project: 'svelte/tsconfig.json',
         runner: passingRunner(calls),
       });
 
@@ -569,9 +780,29 @@ describe('runBuild', () => {
 
   it('builds every matching build-capable checker with different presets', async () => {
     const calls: TypecheckTarget[] = [];
+    const delayed = delayedRunner({
+      calls,
+      delayMs: (target) => (target.command === 'tsgo' ? 30 : 10),
+    });
     const fixture = await createFixture({
-      'packages/pkg/src/index.ts': 'export const value = 1;\n',
-      'packages/pkg/tsconfig.json': tsconfig({
+      'packages/native/tsconfig.json': tsconfig({
+        files: [],
+        references: [
+          {
+            path: '../shared/tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/ts/tsconfig.json': tsconfig({
+        files: [],
+        references: [
+          {
+            path: '../shared/tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/shared/src/index.ts': 'export const value = 1;\n',
+      'packages/shared/tsconfig.lib.json': tsconfig({
         compilerOptions: {
           module: 'ESNext',
           moduleResolution: 'bundler',
@@ -589,11 +820,11 @@ describe('runBuild', () => {
           config: {
             checkers: {
               nativeTypescript: {
-                include: ['packages/pkg/tsconfig.json'],
+                include: ['packages/native/tsconfig.json'],
                 preset: 'tsgo',
               },
               typescript: {
-                include: ['packages/pkg/tsconfig.json'],
+                include: ['packages/ts/tsconfig.json'],
                 preset: 'tsc',
               },
             },
@@ -602,22 +833,102 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'packages/pkg',
-        runner: passingRunner(calls),
+        project: 'packages/shared/tsconfig.lib.json',
+        runner: delayed.runner,
       });
 
       expect(result.passed).toBe(true);
       expect(calls.map((target) => target.command)).toEqual(['tsgo', 'tsc']);
+      expect(delayed.getMaxActive()).toBe(
+        getExpectedDefaultBuildConcurrency(2),
+      );
       expect(calls.map((target) => target.args)).toEqual([
         [
           '-b',
-          '.limina/tsconfig/checkers/nativeTypescript/projects/packages/pkg/tsconfig.dts.json',
+          '.limina/tsconfig/checkers/nativeTypescript/projects/packages/shared/tsconfig.lib.dts.json',
           '--pretty',
           'false',
         ],
         [
           '-b',
-          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.dts.json',
+          '.limina/tsconfig/checkers/typescript/projects/packages/shared/tsconfig.lib.dts.json',
+          '--pretty',
+          'false',
+        ],
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('builds cross-checker providers before consumers', async () => {
+    const calls: TypecheckTarget[] = [];
+    const delayed = delayedRunner({
+      calls,
+      delayMs: (target) => (target.command === 'vue-tsc' ? 30 : 10),
+    });
+    const fixture = await createFixture({
+      'packages/app/src/index.ts':
+        "import { themeValue } from '../../theme/src/theme';\nexport const value = themeValue;\n",
+      'packages/app/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/theme/src/theme.ts': 'export const themeValue = 1;\n',
+      'packages/theme/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await runBuild({
+        config: {
+          config: {
+            checkers: {
+              typescript: {
+                include: ['packages/app/tsconfig.json'],
+                preset: 'tsc',
+              },
+              vue: {
+                include: ['packages/theme/tsconfig.json'],
+                preset: 'vue-tsc',
+              },
+            },
+          },
+          configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+          rootDir: fixture.rootDir,
+        },
+        cwd: fixture.rootDir,
+        project: 'packages/app',
+        runner: delayed.runner,
+      });
+
+      expect(result.passed).toBe(true);
+      expect(calls.map((target) => target.command)).toEqual(['vue-tsc', 'tsc']);
+      expect(delayed.getMaxActive()).toBe(1);
+      expect(calls.map((target) => target.args)).toEqual([
+        [
+          '-b',
+          '.limina/tsconfig/checkers/vue/projects/packages/theme/tsconfig.dts.json',
+          '--pretty',
+          'false',
+        ],
+        [
+          '-b',
+          '.limina/tsconfig/checkers/typescript/projects/packages/app/tsconfig.dts.json',
           '--pretty',
           'false',
         ],
@@ -666,7 +977,7 @@ describe('runCheckerTypecheck', () => {
           config: {
             checkers: {
               vue: {
-                include: ['tsconfig.vue.json'],
+                include: ['vue/tsconfig.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -708,7 +1019,7 @@ describe('runCheckerTypecheck', () => {
           config: {
             checkers: {
               vue: {
-                include: ['tsconfig.vue.json'],
+                include: ['vue/tsconfig.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -781,7 +1092,7 @@ describe('runCheckerTypecheck', () => {
           config: {
             checkers: {
               vue: {
-                include: ['tsconfig.vue.json'],
+                include: ['vue/tsconfig.json'],
                 preset: 'vue-tsgo',
               },
             },
@@ -820,7 +1131,7 @@ describe('runCheckerTypecheck', () => {
                 preset: 'tsc',
               },
               vue: {
-                include: ['tsconfig.vue.json'],
+                include: ['vue/tsconfig.json'],
                 preset: 'vue-tsc',
               },
             },

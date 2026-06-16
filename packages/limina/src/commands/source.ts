@@ -2,7 +2,6 @@ import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
-import { glob } from 'tinyglobby';
 import type { CheckerProjectParseContext } from '../checkers';
 import {
   getActiveCheckerExtensions,
@@ -11,6 +10,7 @@ import {
 } from '../config';
 import type { LiminaFlowReporter } from '../flow';
 import {
+  collectGeneratedSourceConfigPaths,
   type GeneratedTsconfigGraphResult,
   prepareGeneratedTsconfigGraph,
 } from '../generated-graph';
@@ -943,27 +943,6 @@ function addPackageImportProblem(options: {
   );
 }
 
-async function collectSourceGovernanceTsconfigPaths(
-  config: ResolvedLiminaConfig,
-): Promise<string[]> {
-  const paths = await glob('**/tsconfig*.json', {
-    cwd: config.rootDir,
-    absolute: true,
-    ignore: [
-      '**/.git/**',
-      '**/.tsbuild/**',
-      '**/coverage/**',
-      '**/dist/**',
-      '**/node_modules/**',
-    ],
-  });
-
-  return paths
-    .map(normalizeAbsolutePath)
-    .filter(isOrdinaryTypecheckConfigPath)
-    .sort();
-}
-
 function isEmptyFilesArray(value: unknown): boolean {
   return Array.isArray(value) && value.length === 0;
 }
@@ -1307,12 +1286,11 @@ function isIgnoredTsconfigOwnershipModule(options: {
 
 async function addTsconfigGovernanceProblems(options: {
   config: ResolvedLiminaConfig;
+  configPaths: string[];
   owners: PackageOwner[];
   problems: string[];
 }): Promise<void> {
-  const configPaths = await collectSourceGovernanceTsconfigPaths(
-    options.config,
-  );
+  const configPaths = options.configPaths;
   const context = getSourceGovernanceContext(options.config);
   const governanceUnitsByFile = new Map<
     string,
@@ -2305,6 +2283,7 @@ async function runSourceCheckInternal(
 
   await addTsconfigGovernanceProblems({
     config,
+    configPaths: collectGeneratedSourceConfigPaths(generatedGraph),
     owners: packageOwners,
     problems,
   });

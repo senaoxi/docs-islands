@@ -19,14 +19,63 @@ const defaultCheckers: NonNullable<ResolvedLiminaConfig['config']>['checkers'] =
   {
     typescript: {
       preset: 'tsc',
-      include: ['tsconfig.json', '**/tsconfig*.json'],
-      exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
+      include: ['tsconfig.json', '**/tsconfig.json'],
     },
   };
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, text);
+}
+
+function isFixtureSourceLeafConfig(relativePath: string): boolean {
+  const fileName = path.posix.basename(relativePath);
+
+  return (
+    /^tsconfig(?:\..+)?\.json$/u.test(fileName) &&
+    fileName !== 'tsconfig.json' &&
+    !/\.dts\.json$/u.test(fileName) &&
+    !/\.build\.json$/u.test(fileName) &&
+    !/\.base\.json$/u.test(fileName) &&
+    !/\.check\.json$/u.test(fileName)
+  );
+}
+
+function addFixtureEntryConfigs(
+  files: Record<string, string>,
+): Record<string, string> {
+  const output = { ...files };
+  const referencesByDirectory = new Map<string, string[]>();
+
+  for (const relativePath of Object.keys(files)) {
+    if (!isFixtureSourceLeafConfig(relativePath)) {
+      continue;
+    }
+
+    const directory = path.posix.dirname(relativePath);
+    const references = referencesByDirectory.get(directory) ?? [];
+
+    references.push(`./${path.posix.basename(relativePath)}`);
+    referencesByDirectory.set(directory, references);
+  }
+
+  for (const [directory, references] of referencesByDirectory) {
+    const entryPath =
+      directory === '.'
+        ? 'tsconfig.json'
+        : path.posix.join(directory, 'tsconfig.json');
+
+    if (Object.hasOwn(output, entryPath)) {
+      continue;
+    }
+
+    output[entryPath] = stringifyConfig({
+      files: [],
+      references: references.sort().map((reference) => ({ path: reference })),
+    });
+  }
+
+  return output;
 }
 
 async function createFixture(
@@ -43,8 +92,9 @@ async function createFixture(
   const rootDir = await realpath(
     await mkdtemp(path.join(tmpdir(), 'limina-graph-')),
   );
+  const fixtureFiles = addFixtureEntryConfigs(files);
 
-  for (const [relativePath, text] of Object.entries(files)) {
+  for (const [relativePath, text] of Object.entries(fixtureFiles)) {
     await writeText(path.join(rootDir, relativePath), text);
   }
 
@@ -1171,6 +1221,43 @@ packages:
     }
   });
 
+  it('accepts cross-checker provider edges without TypeScript project references', async () => {
+    const fixture = await createFixture(
+      {
+        'packages/app/src/index.ts':
+          "import { themeValue } from '../../theme/src/index';\nexport const value = themeValue;\n",
+        'packages/app/tsconfig.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
+        }),
+        'packages/app/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+        'packages/theme/src/index.ts': 'export const themeValue = 1;\n',
+        'packages/theme/tsconfig.json': typecheckConfig(['src/**/*.ts']),
+      },
+      undefined,
+      {
+        typescript: {
+          include: ['packages/app/tsconfig.json'],
+          preset: 'tsc',
+        },
+        vue: {
+          include: ['packages/theme/tsconfig.json'],
+          preset: 'vue-tsc',
+        },
+      },
+    );
+
+    try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('expands wildcard package exports before graph reference checks', async () => {
     const fixture = await createFixture({
       ...createWorkspacePackageFiles({
@@ -2058,8 +2145,8 @@ describe('runGraphCheck graph rules', () => {
         vue: {
           preset: 'vue-tsc',
           include: [
-            'packages/app/tsconfig.vue.json',
-            'packages/internal/tsconfig.lib.json',
+            'packages/app/tsconfig.json',
+            'packages/internal/tsconfig.json',
           ],
         },
       },
@@ -2090,8 +2177,8 @@ describe('runGraphCheck graph rules', () => {
         vue: {
           preset: 'vue-tsc',
           include: [
-            'packages/app/tsconfig.vue.json',
-            'packages/internal/tsconfig.lib.json',
+            'packages/app/tsconfig.json',
+            'packages/internal/tsconfig.json',
           ],
         },
       },
@@ -2112,9 +2199,25 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
-  it('prefers same-checker declaration owners for configs selected by multiple checkers', async () => {
+  it('allows different checker coverage through separate entries', async () => {
     const fixture = await createFixture(
       {
+        'packages/ts/tsconfig.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: '../shared/tsconfig.json',
+            },
+          ],
+        }),
+        'packages/vue/tsconfig.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: '../shared/tsconfig.json',
+            },
+          ],
+        }),
         'packages/shared/package.json': stringifyConfig({
           name: '@example/shared',
           version: '0.0.0',
@@ -2128,11 +2231,11 @@ describe('runGraphCheck graph rules', () => {
       {
         typescript: {
           preset: 'tsc',
-          include: ['packages/shared/tsconfig.json'],
+          include: ['packages/ts/tsconfig.json'],
         },
         vue: {
           preset: 'vue-tsc',
-          include: ['packages/shared/tsconfig.json'],
+          include: ['packages/vue/tsconfig.json'],
         },
       },
     );
@@ -2157,8 +2260,8 @@ describe('runGraphCheck graph rules', () => {
         vue: {
           preset: 'vue-tsc',
           include: [
-            'packages/app/tsconfig.vue.json',
-            'packages/internal/tsconfig.lib.json',
+            'packages/app/tsconfig.json',
+            'packages/internal/tsconfig.json',
           ],
         },
       },
@@ -2191,8 +2294,8 @@ describe('runGraphCheck graph rules', () => {
         vue: {
           preset: 'vue-tsc',
           include: [
-            'packages/app/tsconfig.vue.json',
-            'packages/internal/tsconfig.lib.json',
+            'packages/app/tsconfig.json',
+            'packages/internal/tsconfig.json',
           ],
         },
       },
@@ -2239,8 +2342,8 @@ describe('runGraphCheck graph rules', () => {
         vue: {
           preset: 'vue-tsc',
           include: [
-            'packages/app/tsconfig.vue.json',
-            'packages/internal/tsconfig.lib.json',
+            'packages/app/tsconfig.json',
+            'packages/internal/tsconfig.json',
           ],
         },
       },
@@ -2273,8 +2376,8 @@ describe('runGraphCheck graph rules', () => {
         vue: {
           preset: 'vue-tsc',
           include: [
-            'packages/app/tsconfig.vue.json',
-            'packages/internal/tsconfig.lib.json',
+            'packages/app/tsconfig.json',
+            'packages/internal/tsconfig.json',
           ],
         },
       },
@@ -2300,8 +2403,8 @@ describe('runGraphCheck graph rules', () => {
         vue: {
           preset: 'vue-tsc',
           include: [
-            'packages/app/tsconfig.vue.json',
-            'packages/internal/tsconfig.lib.json',
+            'packages/app/tsconfig.json',
+            'packages/internal/tsconfig.json',
           ],
         },
       },

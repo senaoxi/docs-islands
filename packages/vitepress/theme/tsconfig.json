@@ -6,5 +6,10 @@
     "isolatedDeclarations": false,
     "types": ["vite/client"],
   },
-  "include": ["./"],
+  "include": ["./", "../src/__tests__/theme/**/*.ts"],
+  "exclude": [
+    "../../../**/.tsbuild/**",
+    "../../../**/*cache",
+    "../../../**/*dist",
+  ],
 }

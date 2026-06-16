@@ -65,12 +65,7 @@ async function createFixture(
         checkers: {
           typescript: {
             preset: 'tsc',
-            include: ['tsconfig.json', '**/tsconfig*.json'],
-            exclude: [
-              '**/tsconfig*.dts.json',
-              '**/tsconfig*.build.json',
-              '**/tsconfig*.check.json',
-            ],
+            include: ['tsconfig.json', '**/tsconfig.json'],
           },
         },
         source: sourceBoundary,
@@ -1059,12 +1054,20 @@ packages:
         files: [],
         references: [
           {
-            path: './tsconfig.tools.json',
+            path: './tsconfig.lib.json',
           },
         ],
       }),
       'app/tsconfig.tools.json': typecheckConfig(['tools/**/*.ts']),
       'app/tools/build.ts': "export const tool = 'checked';\n",
+      'external/tsconfig.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: '../app/tsconfig.tools.json',
+          },
+        ],
+      }),
     });
 
     try {
@@ -1141,6 +1144,14 @@ packages:
         references: [
           {
             path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'external/tsconfig.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: '../app/tsconfig.lib.json',
           },
         ],
       }),
@@ -1272,6 +1283,17 @@ packages:
     const fixture = await createFixture({
       ...createPackageFixture({
         source: "export const sharedValue = 'shared';\n",
+      }),
+      'app/tsconfig.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+          {
+            path: './tsconfig.test.json',
+          },
+        ],
       }),
       'app/tsconfig.test.dts.json': buildConfig({
         include: ['src/index.ts'],

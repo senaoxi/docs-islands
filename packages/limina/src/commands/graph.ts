@@ -1001,6 +1001,7 @@ function addReferenceCompletenessProblems(options: {
     string,
     Map<string, ReferenceExpectation>
   >;
+  generatedGraph: GeneratedTsconfigGraphResult;
   graphRules: NormalizedGraphRules;
   problems: string[];
   projects: ProjectInfo[];
@@ -1020,6 +1021,16 @@ function addReferenceCompletenessProblems(options: {
         left.targetProjectPath.localeCompare(right.targetProjectPath),
     )) {
       if (project.references.has(expectation.targetProjectPath)) {
+        continue;
+      }
+
+      if (
+        hasProviderEdgeForReferenceExpectation({
+          expectation,
+          fromProjectPath: project.configPath,
+          generatedGraph: options.generatedGraph,
+        })
+      ) {
         continue;
       }
 
@@ -1091,6 +1102,37 @@ function addReferenceCompletenessProblems(options: {
   }
 }
 
+function hasProviderEdgeForReferenceExpectation(options: {
+  expectation: ReferenceExpectation;
+  fromProjectPath: string;
+  generatedGraph: GeneratedTsconfigGraphResult;
+}): boolean {
+  const fromChecker = getGeneratedCheckerNamespace(options.fromProjectPath);
+  const toChecker = getGeneratedCheckerNamespace(
+    options.expectation.targetProjectPath,
+  );
+  const fromConfigPath = getGeneratedSourceConfigPath(
+    options.generatedGraph,
+    options.fromProjectPath,
+  );
+  const toConfigPath = getGeneratedSourceConfigPath(
+    options.generatedGraph,
+    options.expectation.targetProjectPath,
+  );
+
+  if (!fromChecker || !toChecker || !fromConfigPath || !toConfigPath) {
+    return false;
+  }
+
+  return options.generatedGraph.providerEdges.some(
+    (edge) =>
+      edge.fromChecker === fromChecker &&
+      edge.toChecker === toChecker &&
+      edge.fromConfigPath === fromConfigPath &&
+      edge.toConfigPath === toConfigPath,
+  );
+}
+
 function collectExpectedReferences(options: {
   config: ResolvedLiminaConfig;
   fileOwnerLookup: Map<string, string[]>;
@@ -1119,7 +1161,7 @@ function collectExpectedReferences(options: {
       continue;
     }
 
-    for (const filePath of project.fileNames) {
+    for (const filePath of project.ownedFileNames) {
       for (const importRecord of collectImportsFromFile(
         filePath,
         options.config.rootDir,
@@ -1571,6 +1613,7 @@ async function runGraphCheckInternal(
   addReferenceCompletenessProblems({
     config,
     expectedReferencesByProjectPath,
+    generatedGraph,
     graphRules,
     problems,
     projects,
