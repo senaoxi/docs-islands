@@ -174,7 +174,7 @@ export interface SourceKnipEntryConfig {
 }
 
 /**
- * Explicit exception for a source module whose nearest bare tsconfig.json
+ * Explicit exception for a source module whose upward bare tsconfig.json search
  * cannot identify a unique ordinary typecheck owner.
  */
 export interface SourceTsconfigOwnershipIgnoreEntry {
@@ -187,17 +187,17 @@ export interface SourceTsconfigOwnershipIgnoreEntry {
    */
   files: string[];
   /**
-   * Why these modules may skip nearest-tsconfig ownership enforcement.
+   * Why these modules may skip upward-tsconfig ownership enforcement.
    */
   reason: string;
 }
 
 /**
- * Nearest bare tsconfig ownership settings.
+ * Bare tsconfig ownership search settings.
  */
 export interface SourceTsconfigOwnershipConfig {
   /**
-   * Package-owned source modules intentionally exempted from nearest bare
+   * Package-owned source modules intentionally exempted from upward bare
    * tsconfig ownership enforcement.
    */
   ignore?: SourceTsconfigOwnershipIgnoreEntry[];
@@ -207,6 +207,12 @@ export interface SourceTsconfigOwnershipConfig {
  * Package-level Knip source analysis config interpreted by Limina.
  */
 export interface SourceKnipWorkspaceConfig {
+  /**
+   * Workspace-relative TypeScript config file Knip should use for source-map
+   * analysis in this package. When omitted, Knip uses its default
+   * `tsconfig.json` for the workspace.
+   */
+  tsConfig?: string;
   /**
    * Additional package-owned source modules Knip should treat as reachable
    * roots. Limina disables Knip's implicit index/main/cli entry guessing by
@@ -252,7 +258,7 @@ export interface SourceCheckConfig {
    */
   knip?: boolean | SourceKnipCheckConfig;
   /**
-   * Exceptions for source modules whose nearest bare tsconfig.json cannot
+   * Exceptions for source modules whose upward bare tsconfig.json search cannot
    * resolve a unique ordinary typecheck owner.
    */
   tsconfigOwnership?: SourceTsconfigOwnershipConfig;

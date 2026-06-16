@@ -45,6 +45,7 @@ interface SourceKnipIgnoredFileConfig {
 }
 
 interface SourceKnipWorkspaceConfig {
+  tsConfig?: string;
   entry?: SourceKnipEntryConfig[];
   ignoreDependencies?: SourceKnipIgnoredDependencyConfig[];
   ignoreFiles?: SourceKnipIgnoredFileConfig[];
@@ -57,13 +58,15 @@ interface SourceKnipCheckConfig {
 
 `source.knip.workspaces` keys are package names discovered from the pnpm workspace, such as `@acme/app`. Unknown package names fail `source check`.
 
+`source.knip.workspaces[pkg].tsConfig` is a workspace-relative JSON tsconfig path passed to Knip's `--tsConfig` when analyzing that package. When omitted, Limina does not pass `--tsConfig` for that package and Knip uses its default `tsconfig.json`.
+
 ::: warning
 `knip` is an optional peer dependency of Limina. If `source.knip` is enabled but `knip` is not installed in the workspace running Limina, `source check` fails with a missing peer dependency error.
 :::
 
 Limina disables Knip's implicit `index` / `main` / `cli` entry guessing by writing `entry: []` for governed owner workspaces. Default reachability still includes package manifest entries (`exports`, `main`, `module`, `browser`, `bin`, `types`, `typings`), Knip plugin-discovered entries, package scripts, and Limina-generated virtual entries for application-style owners.
 
-Limina prepares the generated checker manifest before running source checks. When package entries point at build artifacts, Limina uses the selected source tsconfigs and generated manifest metadata to infer the source files that produced those artifacts.
+When package entries point at build artifacts, Knip needs a tsconfig with enough `rootDir` / `outDir` information to map those artifacts back to source files. Use `source.knip.workspaces[pkg].tsConfig` when the package's default `tsconfig.json` is not the config that describes emitted artifact layout.
 
 This is a general package design pattern: `package.json` describes the built files that consumers import, while the selected source tsconfig describes the source tree that writes those files. For example, `@docs-islands/utils` can expose only built files:
 
@@ -87,9 +90,9 @@ Then `utils/tsconfig.lib.json` can describe the source side:
 }
 ```
 
-As long as the selected source config explains the source and output directories, such as `rootDir: "."` and `outDir: "./dist"`, Limina can map `utils/dist/src/env.js` back to `utils/src/env.ts`. The source module is then considered reachable from the package entry even without an `exports.source` condition.
+As long as the Knip tsconfig explains the source and output directories, such as `rootDir: "."` and `outDir: "./dist"`, Knip can map `utils/dist/src/env.js` back to `utils/src/env.ts`. The source module is then considered reachable from the package entry even without an `exports.source` condition.
 
-If the source config selected by `checker.include` does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but Limina may not find the source module behind it. That source file may be reported as unused. Prefer fixing the selected source config over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
+If the Knip tsconfig does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but may not find the source module behind it. That source file may be reported as unused. Prefer configuring `source.knip.workspaces[pkg].tsConfig` over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
 
 Limina also determines Knip's `project` file set automatically from governed source modules. Users do not configure `project`.
 
@@ -156,7 +159,7 @@ Ignore entries must use a workspace-root-relative file path that stays inside th
 
 - **Type:** `Array<{ owner: string; files: string[]; reason: string }>`
 
-`source check` expects the nearest bare `tsconfig.json` for each governed module to identify one ordinary typecheck owner. The nearest `tsconfig.json` may include the module directly, or it may reach exactly one ordinary typecheck config through transitive `references`.
+`source check` searches upward from each governed module's directory for bare `tsconfig.json` files, matching the project-config lookup used by Rolldown and TypeScript's Go to Project Configuration action. A candidate may include the module directly, or it may reach exactly one ordinary typecheck config through transitive `references`. If the nearest candidate does not match the module, Limina keeps searching parent directories until the workspace root.
 
 Limina only follows ordinary typecheck configs in this search. It does not treat `tsconfig*.dts.json`, `tsconfig*.build.json`, `tsconfig*.base.json`, or `tsconfig*.check.json` as ownership configs.
 
@@ -180,4 +183,4 @@ export default defineConfig({
 });
 ```
 
-Ignore entries must use a named package owner, positive workspace-root-relative glob patterns inside that owner directory, and a non-empty reason. They only skip nearest-`tsconfig.json` owner resolution; package ownership, import authority, proof coverage, and unused-module checks still run.
+Ignore entries must use a named package owner, positive workspace-root-relative glob patterns inside that owner directory, and a non-empty reason. They only skip upward `tsconfig.json` owner resolution; package ownership, import authority, proof coverage, and unused-module checks still run.

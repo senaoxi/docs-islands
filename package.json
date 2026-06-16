@@ -53,9 +53,10 @@
     "release": "tsx scripts/release.ts",
     "changelog": "tsx scripts/changelog.ts",
     "changelog:preview": "tsx scripts/changelog.ts --dry-run",
-    "clean": "pnpm run _run clean && del-cli .tsbuild .limina .smoke .eslintcache coverage node_modules .nx",
+    "clean": "pnpm run _run clean && del-cli .tsbuild .smoke .eslintcache coverage node_modules .nx",
     "_run": "tsx scripts/run-workspace-script.ts",
     "preinstall": "npx only-allow pnpm",
+    "postinstall": "node --import tsx scripts/postinstall.ts",
     "prepare": "husky"
   },
   "dependencies": {

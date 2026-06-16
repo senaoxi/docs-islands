@@ -57,7 +57,7 @@
     "@types/semver": "catalog:dev",
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "workspace:*",
-    "@docs-islands/plugin-license": "link:../plugins/license/dist",
+    "@docs-islands/plugin-license": "workspace:*",
     "@vue/compiler-sfc": "catalog:dev",
     "@types/node": "catalog:dev",
     "@arethetypeswrong/core": "catalog:lint",

@@ -1042,7 +1042,46 @@ packages:
     }
   });
 
-  it('rejects modules whose nearest bare tsconfig reaches no owner', async () => {
+  it('continues upward when the nearest bare tsconfig does not own the module', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          source: "export const value = 'checked';\n",
+        }),
+        'app/tools/build.ts': "export const tool = 'checked';\n",
+        'app/tsconfig.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
+        }),
+        'app/tsconfig.tools.json': typecheckConfig(['tools/**/*.ts']),
+        'tsconfig.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './app/tsconfig.tools.json',
+            },
+          ],
+        }),
+      },
+      {
+        source: {
+          knip: false,
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects modules when upward tsconfig search reaches no owner', async () => {
     const errorSpy = vi
       .spyOn(SourceLogger, 'error')
       .mockImplementation(() => {});
@@ -1075,9 +1114,11 @@ packages:
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain(
-        'Nearest tsconfig cannot determine module owner:',
+        'Tsconfig search cannot determine module owner:',
       );
-      expect(errors).toContain('nearest tsconfig: app/tsconfig.json');
+      expect(errors).toContain('resolver tsconfig: app/tsconfig.json');
+      expect(errors).toContain('searched tsconfigs:');
+      expect(errors).toContain('    - app/tsconfig.json');
       expect(errors).toContain('matched owner tsconfigs:');
       expect(errors).toContain('    (none)');
     } finally {
@@ -1113,7 +1154,7 @@ packages:
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain(
-        'nearest tsconfig.json reaches multiple ordinary typecheck configs that include the module',
+        'the first matching tsconfig.json reaches multiple ordinary typecheck configs that include the module',
       );
       expect(errors).toContain('    - app/tsconfig.lib.json');
       expect(errors).toContain('    - app/tsconfig.test.json');
@@ -1162,7 +1203,7 @@ packages:
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain(
-        'Nearest tsconfig cannot determine module owner:',
+        'Tsconfig search cannot determine module owner:',
       );
       expect(errors).toContain('    (none)');
       expect(errors).not.toContain('    - app/tsconfig.lib.json');
@@ -1749,32 +1790,141 @@ packages:
     }
   });
 
-  it('accepts source modules reachable from exported build artifacts through tsconfig source maps', async () => {
+  it('accepts source modules reachable from exported build artifacts through configured workspace tsConfig source maps', async () => {
+    const fixture = await createFixture(
+      {
+        ...createWorkspacePackageFiles({
+          appManifest: {
+            exports: {
+              '.': './dist/index.js',
+            },
+          },
+          appSource: "export { internalValue } from '@example/internal';\n",
+        }),
+        'packages/app/tsconfig.dts.json': buildConfig({
+          compilerOptions: {
+            outDir: './dist',
+            rootDir: './src',
+          },
+          include: ['src/**/*.ts'],
+          tsBuildInfoFile: './dist/.tsbuildinfo',
+        }),
+      },
+      {
+        source: {
+          knip: {
+            workspaces: {
+              '@example/app': {
+                tsConfig: 'tsconfig.dts.json',
+              },
+            },
+          },
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('uses Knip default tsconfig.json when workspace tsConfig is omitted', async () => {
     const fixture = await createFixture({
       ...createWorkspacePackageFiles({
         appManifest: {
           exports: {
-            '.': './dist/src/index.js',
+            '.': './dist/index.js',
           },
         },
         appSource: "export { internalValue } from '@example/internal';\n",
       }),
-      'packages/app/tsconfig.build.json': stringifyConfig({
-        files: [],
-        references: [
-          {
-            path: './tsconfig.lib.dts.json',
-          },
-        ],
-      }),
-      'packages/app/tsconfig.lib.dts.json': buildConfig({
+      'packages/app/tsconfig.json': buildConfig({
         compilerOptions: {
           outDir: './dist',
+          rootDir: './src',
         },
         include: ['src/**/*.ts'],
         tsBuildInfoFile: './dist/.tsbuildinfo',
       }),
     });
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('merges Knip results for workspaces using different tsConfig files', async () => {
+    const fixture = await createFixture(
+      {
+        ...createWorkspacePackageFiles({
+          appManifest: {
+            exports: {
+              '.': './dist/index.js',
+            },
+          },
+          appSource: "export { internalValue } from '@example/internal';\n",
+        }),
+        'packages/app/tsconfig.dts.json': buildConfig({
+          compilerOptions: {
+            outDir: './dist',
+            rootDir: './src',
+          },
+          include: ['src/**/*.ts'],
+          tsBuildInfoFile: './dist/.tsbuildinfo',
+        }),
+        'packages/tool/package.json': stringifyConfig({
+          dependencies: {
+            '@example/internal': 'workspace:*',
+          },
+          exports: {
+            '.': './lib/index.js',
+          },
+          name: '@example/tool',
+          type: 'module',
+        }),
+        'packages/tool/src/index.ts':
+          "export { internalValue } from '@example/internal';\n",
+        'packages/tool/tsconfig.custom.json': buildConfig({
+          compilerOptions: {
+            outDir: './lib',
+            rootDir: './src',
+          },
+          include: ['src/**/*.ts'],
+          tsBuildInfoFile: './lib/.tsbuildinfo',
+        }),
+        'packages/tool/tsconfig.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
+        }),
+        'packages/tool/tsconfig.lib.dts.json': buildConfig({
+          include: ['src/**/*.ts'],
+          tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+        }),
+        'packages/tool/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+      },
+      {
+        source: {
+          knip: {
+            workspaces: {
+              '@example/app': {
+                tsConfig: 'tsconfig.dts.json',
+              },
+              '@example/tool': {
+                tsConfig: 'tsconfig.custom.json',
+              },
+            },
+          },
+        },
+      },
+    );
 
     try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
@@ -1989,6 +2139,53 @@ packages:
       );
       expect(errors).toContain(
         'file patterns must stay inside the keyed package directory',
+      );
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects invalid workspace tsConfig configs', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture(
+      createWorkspacePackageFiles({
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+      {
+        source: {
+          knip: {
+            workspaces: {
+              '@example/app': {
+                tsConfig: '../tsconfig.dts.json',
+              },
+              '@example/internal': {
+                tsConfig: ['tsconfig.dts.json'],
+              } as unknown as SourceKnipWorkspaceConfig,
+            },
+          },
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain('Invalid source Knip tsConfig config:');
+      expect(errors).toContain(
+        'source.knip.workspaces["@example/app"].tsConfig',
+      );
+      expect(errors).toContain(
+        'source.knip.workspaces["@example/internal"].tsConfig',
+      );
+      expect(errors).toContain(
+        'tsConfig must be a non-empty workspace-relative JSON file path',
+      );
+      expect(errors).toContain(
+        'tsConfig must be a workspace-relative JSON file path without globs',
       );
     } finally {
       errorSpy.mockRestore();

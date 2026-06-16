@@ -2,9 +2,9 @@ import typescriptESlintParser from '@typescript-eslint/parser';
 import vitest from '@vitest/eslint-plugin';
 import type { defineConfig } from 'eslint/config';
 import { globalIgnores } from 'eslint/config';
-import { untypedTypeScriptRules } from '../config';
-import { supportedEcmaVersion } from '../config/constants';
-import eslintGeneralConfig from '../general';
+import { supportedEcmaVersion } from '../config/constants.js';
+import { untypedTypeScriptRules } from '../config/index.js';
+import eslintGeneralConfig from '../general.js';
 
 type Config = ReturnType<typeof defineConfig>;
 

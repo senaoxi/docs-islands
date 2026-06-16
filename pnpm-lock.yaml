@@ -664,9 +664,6 @@ importers:
         specifier: catalog:prod
         version: 0.2.15
     devDependencies:
-      '@docs-islands/utils':
-        specifier: workspace:*
-        version: link:../../utils
       '@eslint/js':
         specifier: catalog:lint
         version: 9.39.2
@@ -739,12 +736,6 @@ importers:
       prettier:
         specifier: catalog:format
         version: 3.5.3
-      rolldown:
-        specifier: catalog:dev
-        version: 1.0.0-rc.4
-      rolldown-plugin-dts:
-        specifier: catalog:dev
-        version: 0.23.1(@typescript/native-preview@7.0.0-dev.20260527.1)(oxc-resolver@11.20.0)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       typescript:
         specifier: catalog:dev
         version: 5.9.3
@@ -786,8 +777,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/plugin-license':
-        specifier: link:../plugins/license/dist
-        version: link:../plugins/license/dist
+        specifier: workspace:*
+        version: link:../plugins/license
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:../../utils
@@ -938,8 +929,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/plugin-license':
-        specifier: link:../plugins/license/dist
-        version: link:../plugins/license/dist
+        specifier: workspace:*
+        version: link:../plugins/license
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:../../utils
@@ -1058,10 +1049,6 @@ importers:
         version: 5.106.2(@swc/core@1.13.5(@swc/helpers@0.5.17))(esbuild@0.27.3)
 
   packages/plugins/license:
-    dependencies:
-      logaria:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
       '@docs-islands/eslint-config':
         specifier: workspace:*
@@ -1078,12 +1065,12 @@ importers:
       limina:
         specifier: workspace:*
         version: link:../../limina
+      logaria:
+        specifier: catalog:prod
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       rolldown:
         specifier: catalog:dev
         version: 1.0.0-rc.4
-      rolldown-plugin-dts:
-        specifier: catalog:dev
-        version: 0.23.1(@typescript/native-preview@7.0.0-dev.20260527.1)(oxc-resolver@11.20.0)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       rollup-plugin-license:
         specifier: catalog:dev
         version: 3.6.0(picomatch@4.0.4)(rollup@4.59.0)
@@ -1122,8 +1109,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/plugin-license':
-        specifier: link:../plugins/license/dist
-        version: link:../plugins/license/dist
+        specifier: workspace:*
+        version: link:../plugins/license
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:../../utils

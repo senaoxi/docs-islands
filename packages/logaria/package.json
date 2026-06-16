@@ -52,7 +52,7 @@
     "@babel/traverse": "catalog:dev",
     "@babel/types": "catalog:dev",
     "limina": "workspace:*",
-    "@docs-islands/plugin-license": "link:../plugins/license/dist",
+    "@docs-islands/plugin-license": "workspace:*",
     "es-module-lexer": "catalog:dev",
     "globals": "catalog:test",
     "magic-string": "catalog:dev",

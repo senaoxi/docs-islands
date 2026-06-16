@@ -11,7 +11,6 @@ import {
 import type { LiminaFlowReporter } from '../flow';
 import {
   collectGeneratedSourceConfigPaths,
-  type GeneratedTsconfigGraphResult,
   prepareGeneratedTsconfigGraph,
 } from '../generated-graph';
 import {
@@ -30,6 +29,7 @@ import { isNodeBuiltinSpecifier } from '../graph-rules';
 import {
   collectKnipSourceIssues,
   type KnipOwnerProject,
+  type KnipSourceAnalysisGroup,
   type KnipSourceIssues,
 } from '../knip';
 import { clearCliScreen, formatErrorMessage, SourceLogger } from '../logger';
@@ -127,6 +127,13 @@ type ResolvedPackageTarget =
   | {
       kind: 'unowned';
     };
+
+interface TsconfigOwnershipResolution {
+  matchedOwnerConfigPaths: string[];
+  searchedTsconfigPaths: string[];
+  status: 'matched' | 'missing' | 'multiple' | 'unmatched';
+  tsconfigPath: string | null;
+}
 
 const dependencySectionNames: DependencySectionName[] = [
   'dependencies',
@@ -441,6 +448,123 @@ function collectSourceKnipWorkspaceConfigs(options: {
   }
 
   return workspaceConfigs;
+}
+
+function hasGlobSyntax(value: string): boolean {
+  return /[*?[\]{}]/u.test(value);
+}
+
+function readKnipWorkspaceTsConfig(options: {
+  problems: string[];
+  workspaceConfig: SourceKnipWorkspaceConfigRecord | undefined;
+  workspacePackage: WorkspacePackage;
+}): string | undefined {
+  const rawTsConfig = options.workspaceConfig?.tsConfig;
+
+  if (rawTsConfig === undefined) {
+    return undefined;
+  }
+
+  const field = `${formatSourceKnipWorkspaceField(options.workspacePackage.name)}.tsConfig`;
+
+  if (typeof rawTsConfig !== 'string' || rawTsConfig.trim().length === 0) {
+    options.problems.push(
+      [
+        'Invalid source Knip tsConfig config:',
+        `  field: ${field}`,
+        `  value: ${formatUnknownValue(rawTsConfig)}`,
+        '  reason: tsConfig must be a non-empty workspace-relative JSON file path.',
+      ].join('\n'),
+    );
+    return undefined;
+  }
+
+  const tsConfigFile = normalizeWorkspacePattern(rawTsConfig);
+
+  if (
+    isInvalidWorkspacePattern(tsConfigFile) ||
+    hasGlobSyntax(tsConfigFile) ||
+    !tsConfigFile.endsWith('.json')
+  ) {
+    options.problems.push(
+      [
+        'Invalid source Knip tsConfig config:',
+        `  field: ${field}`,
+        `  value: ${formatUnknownValue(rawTsConfig)}`,
+        '  reason: tsConfig must be a workspace-relative JSON file path without globs.',
+      ].join('\n'),
+    );
+    return undefined;
+  }
+
+  const tsConfigPath = normalizeAbsolutePath(
+    path.resolve(options.workspacePackage.directory, tsConfigFile),
+  );
+
+  if (
+    !isPathInsideDirectory(tsConfigPath, options.workspacePackage.directory)
+  ) {
+    options.problems.push(
+      [
+        'Invalid source Knip tsConfig config:',
+        `  field: ${field}`,
+        `  file: ${tsConfigFile}`,
+        '  reason: tsConfig must resolve inside the keyed package directory.',
+      ].join('\n'),
+    );
+    return undefined;
+  }
+
+  if (!existsSync(tsConfigPath)) {
+    options.problems.push(
+      [
+        'Invalid source Knip tsConfig config:',
+        `  field: ${field}`,
+        `  file: ${tsConfigFile}`,
+        '  reason: tsConfig must point to an existing file inside the keyed package directory.',
+      ].join('\n'),
+    );
+    return undefined;
+  }
+
+  return tsConfigFile;
+}
+
+function createKnipSourceAnalysisGroups(options: {
+  knipWorkspaceConfigs: Map<string, SourceKnipWorkspaceConfigRecord>;
+  problems: string[];
+  workspacePackages: WorkspacePackage[];
+}): KnipSourceAnalysisGroup[] {
+  if (options.workspacePackages.length === 0) {
+    return [{}];
+  }
+
+  const groupsByTsConfig = new Map<string | undefined, string[]>();
+
+  for (const workspacePackage of options.workspacePackages) {
+    const tsConfigFile = readKnipWorkspaceTsConfig({
+      problems: options.problems,
+      workspaceConfig: options.knipWorkspaceConfigs.get(workspacePackage.name),
+      workspacePackage,
+    });
+    const workspaceNames = groupsByTsConfig.get(tsConfigFile) ?? [];
+
+    workspaceNames.push(workspacePackage.name);
+    groupsByTsConfig.set(tsConfigFile, workspaceNames);
+  }
+
+  const hasConfiguredTsConfig = [...groupsByTsConfig.keys()].some(Boolean);
+
+  if (!hasConfiguredTsConfig) {
+    return [{}];
+  }
+
+  return [...groupsByTsConfig.entries()]
+    .filter(([, workspaceNames]) => workspaceNames.length > 0)
+    .map(([tsConfigFile, workspaceNames]) => ({
+      ...(tsConfigFile ? { tsConfigFile } : {}),
+      workspaceNames: workspaceNames.sort(),
+    }));
 }
 
 function createPackageDependencyIssueKey(
@@ -975,10 +1099,11 @@ function getSourceGovernanceContext(
   };
 }
 
-function findNearestBareTsconfigPath(options: {
+function collectBareTsconfigPathCandidates(options: {
   filePath: string;
   rootDir: string;
-}): string | null {
+}): string[] {
+  const candidates: string[] = [];
   let currentDir = normalizeAbsolutePath(path.dirname(options.filePath));
   const rootDir = normalizeAbsolutePath(options.rootDir);
 
@@ -988,23 +1113,23 @@ function findNearestBareTsconfigPath(options: {
     );
 
     if (existsSync(candidate)) {
-      return candidate;
+      candidates.push(candidate);
     }
 
     if (currentDir === rootDir) {
-      return null;
+      break;
     }
 
     const parentDir = normalizeAbsolutePath(path.dirname(currentDir));
 
     if (parentDir === currentDir) {
-      return null;
+      break;
     }
 
     currentDir = parentDir;
   }
 
-  return null;
+  return candidates;
 }
 
 function collectReachableOrdinaryTypecheckConfigPaths(options: {
@@ -1038,6 +1163,81 @@ function collectReachableOrdinaryTypecheckConfigPaths(options: {
   return reachablePaths;
 }
 
+function collectTsconfigOwnershipMatches(options: {
+  config: ResolvedLiminaConfig;
+  fileName: string;
+  getProjectFileSet: (configPath: string) => Set<string>;
+  rootConfigPath: string;
+}): string[] {
+  if (options.getProjectFileSet(options.rootConfigPath).has(options.fileName)) {
+    return [options.rootConfigPath];
+  }
+
+  return collectReachableOrdinaryTypecheckConfigPaths({
+    config: options.config,
+    rootConfigPath: options.rootConfigPath,
+  }).filter((configPath) =>
+    options.getProjectFileSet(configPath).has(options.fileName),
+  );
+}
+
+function resolveTsconfigOwnership(options: {
+  config: ResolvedLiminaConfig;
+  fileName: string;
+  getProjectFileSet: (configPath: string) => Set<string>;
+}): TsconfigOwnershipResolution {
+  const candidatePaths = collectBareTsconfigPathCandidates({
+    filePath: options.fileName,
+    rootDir: options.config.rootDir,
+  });
+  const searchedTsconfigPaths: string[] = [];
+
+  if (candidatePaths.length === 0) {
+    return {
+      matchedOwnerConfigPaths: [],
+      searchedTsconfigPaths,
+      status: 'missing',
+      tsconfigPath: null,
+    };
+  }
+
+  for (const candidatePath of candidatePaths) {
+    searchedTsconfigPaths.push(candidatePath);
+
+    const matchedOwnerConfigPaths = collectTsconfigOwnershipMatches({
+      config: options.config,
+      fileName: options.fileName,
+      getProjectFileSet: options.getProjectFileSet,
+      rootConfigPath: candidatePath,
+    });
+
+    if (matchedOwnerConfigPaths.length === 1) {
+      return {
+        matchedOwnerConfigPaths,
+        searchedTsconfigPaths,
+        status: 'matched',
+        tsconfigPath: candidatePath,
+      };
+    }
+
+    if (matchedOwnerConfigPaths.length > 1) {
+      return {
+        matchedOwnerConfigPaths,
+        searchedTsconfigPaths,
+        status: 'multiple',
+        tsconfigPath: candidatePath,
+      };
+    }
+  }
+
+  return {
+    matchedOwnerConfigPaths: [],
+    searchedTsconfigPaths,
+    status: 'unmatched',
+    tsconfigPath: searchedTsconfigPaths.at(-1) ?? null,
+  };
+}
+
 function formatConfigPathList(
   config: ResolvedLiminaConfig,
   configPaths: string[],
@@ -1059,23 +1259,26 @@ function addNearestTsconfigOwnershipProblem(options: {
   config: ResolvedLiminaConfig;
   fileName: string;
   matchedOwnerConfigPaths: string[];
-  nearestTsconfigPath: string | null;
   problems: string[];
   reason: string;
+  searchedTsconfigPaths: string[];
+  tsconfigPath: string | null;
 }): void {
   options.problems.push(
     [
-      'Nearest tsconfig cannot determine module owner:',
+      'Tsconfig search cannot determine module owner:',
       `  file: ${toRelativePath(options.config.rootDir, options.fileName)}`,
-      ...(options.nearestTsconfigPath
+      ...(options.tsconfigPath
         ? [
-            `  nearest tsconfig: ${toRelativePath(options.config.rootDir, options.nearestTsconfigPath)}`,
+            `  resolver tsconfig: ${toRelativePath(options.config.rootDir, options.tsconfigPath)}`,
           ]
         : []),
+      '  searched tsconfigs:',
+      ...formatConfigPathList(options.config, options.searchedTsconfigPaths),
       '  matched owner tsconfigs:',
       ...formatConfigPathList(options.config, options.matchedOwnerConfigPaths),
       `  reason: ${options.reason}`,
-      '  fix: make the nearest tsconfig.json include the module, make its ordinary typecheck references reach exactly one owner tsconfig, or add a scoped source.tsconfigOwnership.ignore entry with a reason.',
+      '  fix: make one tsconfig.json between the module directory and workspace root include the module, or make its ordinary typecheck references reach exactly one owner tsconfig. If this module is intentionally loaded outside that shape, add a scoped source.tsconfigOwnership.ignore entry with a reason.',
     ].join('\n'),
   );
 }
@@ -1393,43 +1596,36 @@ async function addTsconfigGovernanceProblems(options: {
         ignoreRules: tsconfigOwnershipIgnoreRules,
       })
     ) {
-      const nearestTsconfigPath = findNearestBareTsconfigPath({
-        filePath: fileName,
-        rootDir: options.config.rootDir,
+      const ownershipResolution = resolveTsconfigOwnership({
+        config: options.config,
+        fileName,
+        getProjectFileSet,
       });
 
-      if (!nearestTsconfigPath) {
+      if (ownershipResolution.status === 'missing') {
         addNearestTsconfigOwnershipProblem({
           config: options.config,
           fileName,
-          matchedOwnerConfigPaths: [],
-          nearestTsconfigPath,
+          matchedOwnerConfigPaths: ownershipResolution.matchedOwnerConfigPaths,
           problems: options.problems,
           reason:
-            'every source module governed by an ordinary typecheck tsconfig must have a nearest tsconfig.json owner resolver.',
+            'no tsconfig.json was found between the module directory and the workspace root.',
+          searchedTsconfigPaths: ownershipResolution.searchedTsconfigPaths,
+          tsconfigPath: ownershipResolution.tsconfigPath,
         });
-      } else if (!getProjectFileSet(nearestTsconfigPath).has(fileName)) {
-        const matchedOwnerConfigPaths =
-          collectReachableOrdinaryTypecheckConfigPaths({
-            config: options.config,
-            rootConfigPath: nearestTsconfigPath,
-          }).filter((configPath) =>
-            getProjectFileSet(configPath).has(fileName),
-          );
-
-        if (matchedOwnerConfigPaths.length !== 1) {
-          addNearestTsconfigOwnershipProblem({
-            config: options.config,
-            fileName,
-            matchedOwnerConfigPaths,
-            nearestTsconfigPath,
-            problems: options.problems,
-            reason:
-              matchedOwnerConfigPaths.length === 0
-                ? 'nearest tsconfig.json neither includes the module nor reaches an ordinary typecheck config that includes it.'
-                : 'nearest tsconfig.json reaches multiple ordinary typecheck configs that include the module.',
-          });
-        }
+      } else if (ownershipResolution.status !== 'matched') {
+        addNearestTsconfigOwnershipProblem({
+          config: options.config,
+          fileName,
+          matchedOwnerConfigPaths: ownershipResolution.matchedOwnerConfigPaths,
+          problems: options.problems,
+          reason:
+            ownershipResolution.status === 'unmatched'
+              ? 'no tsconfig.json between the module directory and workspace root includes the module or reaches one ordinary typecheck config that includes it.'
+              : 'the first matching tsconfig.json reaches multiple ordinary typecheck configs that include the module.',
+          searchedTsconfigPaths: ownershipResolution.searchedTsconfigPaths,
+          tsconfigPath: ownershipResolution.tsconfigPath,
+        });
       }
     }
 
@@ -2145,7 +2341,6 @@ function addUnusedModuleProblems(options: {
 
 async function addKnipBackedSourceProblems(options: {
   config: ResolvedLiminaConfig;
-  generatedGraph: GeneratedTsconfigGraphResult;
   ownerModuleSets: OwnerSourceModuleSet[];
   problems: string[];
   workspacePackages: WorkspacePackage[];
@@ -2174,6 +2369,11 @@ async function addKnipBackedSourceProblems(options: {
     ownerModuleSets: options.ownerModuleSets,
     problems: options.problems,
   });
+  const analysisGroups = createKnipSourceAnalysisGroups({
+    knipWorkspaceConfigs,
+    problems: options.problems,
+    workspacePackages: options.workspacePackages,
+  });
   const includeFiles = options.ownerModuleSets.length > 0;
   const needsDependencyAnalysis =
     options.workspacePackages.length > 0 && declarations.length > 0;
@@ -2189,11 +2389,11 @@ async function addKnipBackedSourceProblems(options: {
   }
 
   const knipIssues = await collectKnipSourceIssues({
+    analysisGroups,
     config: options.config,
     ignoredKeys: ignoredDependencies,
     includeFiles,
     ownerProjects: needsDependencyAnalysis || includeFiles ? ownerProjects : [],
-    tsConfigFile: getKnipTsConfigFile(options.config, options.generatedGraph),
     workspacePackages: options.workspacePackages,
   });
 
@@ -2214,17 +2414,6 @@ async function addKnipBackedSourceProblems(options: {
       problems: options.problems,
     });
   }
-}
-
-function getKnipTsConfigFile(
-  config: ResolvedLiminaConfig,
-  generatedGraph: GeneratedTsconfigGraphResult,
-): string | undefined {
-  const entryPath =
-    generatedGraph.checkerEntries.get('typescript') ??
-    generatedGraph.checkerEntries.values().next().value;
-
-  return entryPath ? toRelativePath(config.rootDir, entryPath) : undefined;
 }
 
 function createSourceProjectEntries(
@@ -2289,7 +2478,6 @@ async function runSourceCheckInternal(
   });
   await addKnipBackedSourceProblems({
     config,
-    generatedGraph,
     ownerModuleSets,
     problems,
     workspacePackages: packages,

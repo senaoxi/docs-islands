@@ -30,6 +30,11 @@ export interface KnipSourceIssues {
   unusedWorkspaceDependencies: KnipUnusedWorkspaceDependencyIssue[];
 }
 
+export interface KnipSourceAnalysisGroup {
+  tsConfigFile?: string;
+  workspaceNames?: string[];
+}
+
 interface KnipJsonDependencyItem {
   name: string;
 }
@@ -84,6 +89,7 @@ function runKnipCli(options: {
   include: KnipSourceIssueType[];
   rootDir: string;
   tsConfigFile?: string;
+  workspaceNames?: string[];
 }): Promise<string> {
   return new Promise((resolve, reject) => {
     const args = [
@@ -94,6 +100,10 @@ function runKnipCli(options: {
       options.configPath,
       ...options.include.flatMap((issueType) => ['--include', issueType]),
       ...(options.tsConfigFile ? ['--tsConfig', options.tsConfigFile] : []),
+      ...(options.workspaceNames ?? []).flatMap((workspaceName) => [
+        '--workspace',
+        workspaceName,
+      ]),
       '--reporter',
       'json',
       '--no-exit-code',
@@ -490,7 +500,7 @@ export function collectUnusedWorkspaceDependencyIssues(options: {
   rootDir: string;
   workspacePackageNames: Set<string>;
 }): KnipUnusedWorkspaceDependencyIssue[] {
-  const issues: KnipUnusedWorkspaceDependencyIssue[] = [];
+  const issuesByKey = new Map<string, KnipUnusedWorkspaceDependencyIssue>();
 
   for (const entry of options.report.issues) {
     const file = entry.file;
@@ -518,15 +528,20 @@ export function collectUnusedWorkspaceDependencyIssues(options: {
           continue;
         }
 
-        issues.push({
+        const issue = {
           dependencyName: dependency.name,
           packageJsonPath,
-        });
+        };
+
+        issuesByKey.set(
+          `${issue.packageJsonPath}\0${issue.dependencyName}`,
+          issue,
+        );
       }
     }
   }
 
-  return issues.sort((left, right) => {
+  return [...issuesByKey.values()].sort((left, right) => {
     if (left.packageJsonPath !== right.packageJsonPath) {
       return left.packageJsonPath.localeCompare(right.packageJsonPath);
     }
@@ -604,12 +619,32 @@ function createKnipConfigForSourceAnalysis(options: {
   return knipConfig;
 }
 
+function normalizeAnalysisGroups(
+  analysisGroups: KnipSourceAnalysisGroup[] | undefined,
+): KnipSourceAnalysisGroup[] {
+  const groups = analysisGroups ?? [{}];
+  const nonEmptyGroups = groups.filter(
+    (group) => !group.workspaceNames || group.workspaceNames.length > 0,
+  );
+
+  return nonEmptyGroups.length > 0 ? nonEmptyGroups : [{}];
+}
+
+function mergeKnipReports(reports: JSONReport[]): JSONReport {
+  const [firstReport] = reports;
+
+  return {
+    ...firstReport,
+    issues: reports.flatMap((report) => report.issues),
+  };
+}
+
 export async function collectKnipSourceIssues(options: {
+  analysisGroups?: KnipSourceAnalysisGroup[];
   config: ResolvedLiminaConfig;
   ignoredKeys: Set<string>;
   includeFiles: boolean;
   ownerProjects: KnipOwnerProject[];
-  tsConfigFile?: string;
   workspacePackages: WorkspacePackage[];
 }): Promise<KnipSourceIssues> {
   const include: KnipSourceIssueType[] = options.includeFiles
@@ -629,15 +664,25 @@ export async function collectKnipSourceIssues(options: {
         options.config.rootDir,
         async () =>
           withTemporaryKnipConfig(knipConfig, async (configPath) =>
-            parseKnipJsonReport(
-              await runKnipCli({
-                configPath,
-                include,
-                rootDir: options.config.rootDir,
-                ...(options.tsConfigFile
-                  ? { tsConfigFile: options.tsConfigFile }
-                  : {}),
-              }),
+            mergeKnipReports(
+              await Promise.all(
+                normalizeAnalysisGroups(options.analysisGroups).map(
+                  async (analysisGroup) =>
+                    parseKnipJsonReport(
+                      await runKnipCli({
+                        configPath,
+                        include,
+                        rootDir: options.config.rootDir,
+                        ...(analysisGroup.tsConfigFile
+                          ? { tsConfigFile: analysisGroup.tsConfigFile }
+                          : {}),
+                        ...(analysisGroup.workspaceNames
+                          ? { workspaceNames: analysisGroup.workspaceNames }
+                          : {}),
+                      }),
+                    ),
+                ),
+              ),
             ),
           ),
       );

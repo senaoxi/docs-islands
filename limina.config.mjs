@@ -116,6 +116,12 @@ export default defineConfig({
             },
           ],
         },
+        '@docs-islands/eslint-config': {
+          tsConfig: 'tsconfig.dts.json',
+        },
+        '@docs-islands/plugin-license': {
+          tsConfig: 'tsconfig.dts.json',
+        },
       },
     },
     tsconfigOwnership: {
