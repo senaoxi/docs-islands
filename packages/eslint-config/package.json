@@ -3,9 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "del-cli dist && tsc -b tsconfig.dts.json",
+    "build": "del-cli dist && limina build tsconfig.dts.json",
     "build:watch": "tsc -b tsconfig.dts.json -w",
-    "typecheck": "limina checker build",
     "lint": "eslint . --config ./dist/general.js --fix --cache",
     "test": "vitest run",
     "test:watch": "vitest",

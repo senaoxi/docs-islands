@@ -120,6 +120,161 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
+  it('generates per-package Knip tsconfig entries from static package build scripts', async () => {
+    const fixture = await createFixture({
+      'package.json': json({
+        name: '@example/root',
+        private: true,
+        workspaces: ['packages/*'],
+      }),
+      'packages/pkg/package.json': json({
+        name: '@example/pkg',
+        scripts: {
+          build: 'limina build tsconfig.json',
+        },
+        type: 'module',
+      }),
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+      const generatedPath = '.limina/knip/packages/pkg/tsconfig.knip.json';
+      const generatedConfig = JSON.parse(
+        await readFile(path.join(fixture.rootDir, generatedPath), 'utf8'),
+      ) as {
+        files?: unknown[];
+        include?: unknown;
+        references?: { path: string }[];
+      };
+
+      expect(generatedConfig.files).toEqual([]);
+      expect(generatedConfig.include).toBeUndefined();
+      expect(generatedConfig.references).toEqual([
+        {
+          path: '../../../../packages/pkg/tsconfig.json',
+        },
+      ]);
+      expect(result.manifest.knip.packages).toEqual([
+        {
+          configPath: generatedPath,
+          packageDirectory: 'packages/pkg',
+          packageJsonPath: 'packages/pkg/package.json',
+          packageName: '@example/pkg',
+          references: ['packages/pkg/tsconfig.json'],
+          scripts: [
+            {
+              command: 'limina build tsconfig.json',
+              configPath: 'packages/pkg/tsconfig.json',
+              mode: 'managed',
+              name: 'build',
+            },
+          ],
+        },
+      ]);
+      expect(result.generatedKnipConfigs[0]?.configPath).toBe(
+        path.join(fixture.rootDir, generatedPath),
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('records diagnostics for dynamic package build scripts without generating Knip configs', async () => {
+    const fixture = await createFixture({
+      'package.json': json({
+        name: '@example/root',
+        private: true,
+        workspaces: ['packages/*'],
+      }),
+      'packages/pkg/package.json': json({
+        name: '@example/pkg',
+        scripts: {
+          build: 'limina build $CONFIG',
+        },
+        type: 'module',
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+
+      expect(result.manifest.knip.packages).toEqual([]);
+      expect(result.manifest.knip.diagnostics).toEqual([
+        expect.objectContaining({
+          command: 'limina build $CONFIG',
+          packageJsonPath: 'packages/pkg/package.json',
+          packageName: '@example/pkg',
+          scriptName: 'build',
+        }),
+      ]);
+      expect(result.manifest.knip.diagnostics[0]?.reason).toContain(
+        'static limina build scripts',
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('records diagnostics for raw package build scripts that leave the package owner', async () => {
+    const fixture = await createFixture({
+      'package.json': json({
+        name: '@example/root',
+        private: true,
+        workspaces: ['packages/*'],
+      }),
+      'packages/app/package.json': json({
+        name: '@example/app',
+        scripts: {
+          build: 'limina build ../internal/tsconfig.raw.json',
+        },
+        type: 'module',
+      }),
+      'packages/internal/package.json': json({
+        name: '@example/internal',
+        type: 'module',
+      }),
+      'packages/internal/tsconfig.raw.json': json({
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+
+      expect(result.manifest.knip.packages).toEqual([]);
+      expect(result.manifest.knip.diagnostics[0]).toMatchObject({
+        command: 'limina build ../internal/tsconfig.raw.json',
+        packageJsonPath: 'packages/app/package.json',
+        packageName: '@example/app',
+        scriptName: 'build',
+      });
+      expect(result.manifest.knip.diagnostics[0]?.reason).toContain(
+        'raw build configs from package scripts must resolve inside the owning package directory',
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('rejects checker include patterns that match non-entry tsconfig files', async () => {
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',

@@ -13,7 +13,7 @@
     "link-guard": "./bin/link-guard.js"
   },
   "scripts": {
-    "build": "del-cli dist && tsc -b tsconfig.dts.json",
+    "build": "del-cli dist && limina build tsconfig.dts.json --checker tsgo",
     "build:watch": "tsc -b tsconfig.dts.json -w",
     "test": "vitest run",
     "typecheck": "limina checker build",

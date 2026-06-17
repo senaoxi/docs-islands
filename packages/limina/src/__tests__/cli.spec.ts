@@ -140,7 +140,6 @@ describe('limina CLI', () => {
           '--config',
           path.join(rootDir, 'limina.config.mjs'),
           'build',
-          '-p',
           'packages/pkg/tsconfig.lib.json',
         ],
         {
@@ -169,7 +168,7 @@ describe('limina CLI', () => {
     }
   }, 15_000);
 
-  it('rejects positional build targets from the public command', async () => {
+  it('rejects conflicting positional and project build targets from the public command', async () => {
     const cliPath = fileURLToPath(
       new URL('../../bin/limina.js', import.meta.url),
     );
@@ -179,10 +178,12 @@ describe('limina CLI', () => {
         cliPath,
         'build',
         'packages/pkg/tsconfig.lib.json',
+        '-p',
+        'packages/other/tsconfig.lib.json',
       ]),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining(
-        'limina build does not accept positional arguments',
+        'Conflicting limina build config arguments',
       ),
     });
   });
@@ -232,6 +233,9 @@ describe('limina CLI', () => {
         path.join(rootDir, 'app/package.json'),
         stringifyConfig({
           name: '@example/app',
+          scripts: {
+            build: 'limina build tsconfig.json',
+          },
           type: 'module',
         }),
       );

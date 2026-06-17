@@ -88,6 +88,10 @@ export type BuiltinCheckerPreset =
   | 'vue-tsgo';
 
 export type CheckerPreset = BuiltinCheckerPreset;
+export type BuildCheckerPreset = Extract<
+  BuiltinCheckerPreset,
+  'tsc' | 'tsgo' | 'vue-tsc'
+>;
 
 export type CheckerExecutionKind = 'build' | 'typecheck';
 
@@ -207,12 +211,6 @@ export interface SourceTsconfigOwnershipConfig {
  * Package-level Knip source analysis config interpreted by Limina.
  */
 export interface SourceKnipWorkspaceConfig {
-  /**
-   * Workspace-relative TypeScript config file Knip should use for source-map
-   * analysis in this package. When omitted, Knip uses its default
-   * `tsconfig.json` for the workspace.
-   */
-  tsConfig?: string;
   /**
    * Additional package-owned source modules Knip should treat as reachable
    * roots. Limina disables Knip's implicit index/main/cli entry guessing by

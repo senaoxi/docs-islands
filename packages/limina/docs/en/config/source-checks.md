@@ -45,7 +45,6 @@ interface SourceKnipIgnoredFileConfig {
 }
 
 interface SourceKnipWorkspaceConfig {
-  tsConfig?: string;
   entry?: SourceKnipEntryConfig[];
   ignoreDependencies?: SourceKnipIgnoredDependencyConfig[];
   ignoreFiles?: SourceKnipIgnoredFileConfig[];
@@ -58,7 +57,19 @@ interface SourceKnipCheckConfig {
 
 `source.knip.workspaces` keys are package names discovered from the pnpm workspace, such as `@acme/app`. Unknown package names fail `source check`.
 
-`source.knip.workspaces[pkg].tsConfig` is a workspace-relative JSON tsconfig path passed to Knip's `--tsConfig` when analyzing that package. When omitted, Limina does not pass `--tsConfig` for that package and Knip uses its default `tsconfig.json`.
+`source.knip.workspaces[pkg]` only configures extra reachability and ignore rules. It does not accept `tsConfig`. Limina derives the Knip tsconfig for each analyzed package from static package scripts that call `limina build <config>`, for example:
+
+```json
+{
+  "scripts": {
+    "build:types": "limina build tsconfig.json"
+  }
+}
+```
+
+The `<config>` path is resolved from the package directory. Limina supports static forms such as `limina build tsconfig.json`, `limina build --checker vue-tsc tsconfig.json`, `pnpm limina build tsconfig.json`, and `pnpm exec limina build tsconfig.json`. Dynamic shell scripts such as `limina build $CONFIG` are not used as Knip tsconfig sources.
+
+If a package participates in Knip-backed source or dependency analysis but Limina cannot statically derive a build config from its package scripts, `source check` reports `Missing generated Knip tsconfig source`.
 
 ::: warning
 `knip` is an optional peer dependency of Limina. If `source.knip` is enabled but `knip` is not installed in the workspace running Limina, `source check` fails with a missing peer dependency error.
@@ -66,7 +77,7 @@ interface SourceKnipCheckConfig {
 
 Limina disables Knip's implicit `index` / `main` / `cli` entry guessing by writing `entry: []` for governed owner workspaces. Default reachability still includes package manifest entries (`exports`, `main`, `module`, `browser`, `bin`, `types`, `typings`), Knip plugin-discovered entries, package scripts, and Limina-generated virtual entries for application-style owners.
 
-When package entries point at build artifacts, Knip needs a tsconfig with enough `rootDir` / `outDir` information to map those artifacts back to source files. Use `source.knip.workspaces[pkg].tsConfig` when the package's default `tsconfig.json` is not the config that describes emitted artifact layout.
+When package entries point at build artifacts, Knip needs a tsconfig with enough `rootDir` / `outDir` information to map those artifacts back to source files. Point a static `limina build <config>` package script at the config that describes emitted artifact layout.
 
 This is a general package design pattern: `package.json` describes the built files that consumers import, while the selected source tsconfig describes the source tree that writes those files. For example, `@docs-islands/utils` can expose only built files:
 
@@ -78,7 +89,7 @@ This is a general package design pattern: `package.json` describes the built fil
 }
 ```
 
-Then `utils/tsconfig.lib.json` can describe the source side:
+Then `utils/tsconfig.dts.json` can describe the source side:
 
 ```json
 {
@@ -92,7 +103,17 @@ Then `utils/tsconfig.lib.json` can describe the source side:
 
 As long as the Knip tsconfig explains the source and output directories, such as `rootDir: "."` and `outDir: "./dist"`, Knip can map `utils/dist/src/env.js` back to `utils/src/env.ts`. The source module is then considered reachable from the package entry even without an `exports.source` condition.
 
-If the Knip tsconfig does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but may not find the source module behind it. That source file may be reported as unused. Prefer configuring `source.knip.workspaces[pkg].tsConfig` over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
+Expose that intent through a static package script:
+
+```json
+{
+  "scripts": {
+    "build:types": "limina build tsconfig.dts.json"
+  }
+}
+```
+
+If the derived Knip tsconfig does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but may not find the source module behind it. That source file may be reported as unused. Prefer pointing `limina build <config>` at the right package-local config over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
 
 Limina also determines Knip's `project` file set automatically from governed source modules. Users do not configure `project`.
 

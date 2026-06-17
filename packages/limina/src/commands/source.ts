@@ -11,6 +11,7 @@ import {
 import type { LiminaFlowReporter } from '../flow';
 import {
   collectGeneratedSourceConfigPaths,
+  type GeneratedTsconfigGraphResult,
   prepareGeneratedTsconfigGraph,
 } from '../generated-graph';
 import {
@@ -444,127 +445,73 @@ function collectSourceKnipWorkspaceConfigs(options: {
       continue;
     }
 
+    if (Object.hasOwn(rawWorkspaceConfig, 'tsConfig')) {
+      options.problems.push(
+        [
+          'Unsupported source Knip workspace config:',
+          `  field: ${field}.tsConfig`,
+          '  reason: tsConfig is no longer supported. Limina generates Knip tsconfig entries from package.json limina build scripts.',
+          '  fix: remove tsConfig and add a static package script such as "build": "limina build tsconfig.json".',
+        ].join('\n'),
+      );
+    }
+
     workspaceConfigs.set(packageName, rawWorkspaceConfig);
   }
 
   return workspaceConfigs;
 }
 
-function hasGlobSyntax(value: string): boolean {
-  return /[*?[\]{}]/u.test(value);
-}
-
-function readKnipWorkspaceTsConfig(options: {
-  problems: string[];
-  workspaceConfig: SourceKnipWorkspaceConfigRecord | undefined;
-  workspacePackage: WorkspacePackage;
-}): string | undefined {
-  const rawTsConfig = options.workspaceConfig?.tsConfig;
-
-  if (rawTsConfig === undefined) {
-    return undefined;
-  }
-
-  const field = `${formatSourceKnipWorkspaceField(options.workspacePackage.name)}.tsConfig`;
-
-  if (typeof rawTsConfig !== 'string' || rawTsConfig.trim().length === 0) {
-    options.problems.push(
-      [
-        'Invalid source Knip tsConfig config:',
-        `  field: ${field}`,
-        `  value: ${formatUnknownValue(rawTsConfig)}`,
-        '  reason: tsConfig must be a non-empty workspace-relative JSON file path.',
-      ].join('\n'),
-    );
-    return undefined;
-  }
-
-  const tsConfigFile = normalizeWorkspacePattern(rawTsConfig);
-
-  if (
-    isInvalidWorkspacePattern(tsConfigFile) ||
-    hasGlobSyntax(tsConfigFile) ||
-    !tsConfigFile.endsWith('.json')
-  ) {
-    options.problems.push(
-      [
-        'Invalid source Knip tsConfig config:',
-        `  field: ${field}`,
-        `  value: ${formatUnknownValue(rawTsConfig)}`,
-        '  reason: tsConfig must be a workspace-relative JSON file path without globs.',
-      ].join('\n'),
-    );
-    return undefined;
-  }
-
-  const tsConfigPath = normalizeAbsolutePath(
-    path.resolve(options.workspacePackage.directory, tsConfigFile),
-  );
-
-  if (
-    !isPathInsideDirectory(tsConfigPath, options.workspacePackage.directory)
-  ) {
-    options.problems.push(
-      [
-        'Invalid source Knip tsConfig config:',
-        `  field: ${field}`,
-        `  file: ${tsConfigFile}`,
-        '  reason: tsConfig must resolve inside the keyed package directory.',
-      ].join('\n'),
-    );
-    return undefined;
-  }
-
-  if (!existsSync(tsConfigPath)) {
-    options.problems.push(
-      [
-        'Invalid source Knip tsConfig config:',
-        `  field: ${field}`,
-        `  file: ${tsConfigFile}`,
-        '  reason: tsConfig must point to an existing file inside the keyed package directory.',
-      ].join('\n'),
-    );
-    return undefined;
-  }
-
-  return tsConfigFile;
-}
-
 function createKnipSourceAnalysisGroups(options: {
-  knipWorkspaceConfigs: Map<string, SourceKnipWorkspaceConfigRecord>;
+  config: ResolvedLiminaConfig;
+  generatedGraph: GeneratedTsconfigGraphResult;
   problems: string[];
+  requiredWorkspaceNames: Set<string>;
   workspacePackages: WorkspacePackage[];
 }): KnipSourceAnalysisGroup[] {
   if (options.workspacePackages.length === 0) {
     return [{}];
   }
 
-  const groupsByTsConfig = new Map<string | undefined, string[]>();
+  const generatedConfigByPackageName = new Map(
+    options.generatedGraph.generatedKnipConfigs.flatMap((entry) =>
+      entry.packageName ? [[entry.packageName, entry] as const] : [],
+    ),
+  );
+  const groups: KnipSourceAnalysisGroup[] = [];
 
   for (const workspacePackage of options.workspacePackages) {
-    const tsConfigFile = readKnipWorkspaceTsConfig({
-      problems: options.problems,
-      workspaceConfig: options.knipWorkspaceConfigs.get(workspacePackage.name),
-      workspacePackage,
+    if (!options.requiredWorkspaceNames.has(workspacePackage.name)) {
+      continue;
+    }
+
+    const generatedConfig = generatedConfigByPackageName.get(
+      workspacePackage.name,
+    );
+
+    if (!generatedConfig) {
+      options.problems.push(
+        [
+          'Missing generated Knip tsconfig source:',
+          `  package: ${workspacePackage.name}`,
+          `  package manifest: ${toRelativePath(options.config.rootDir, path.join(workspacePackage.directory, 'package.json'))}`,
+          '  reason: Limina could not statically derive a Knip tsconfig from package.json scripts.',
+          `  fix: add a static package script such as "build": "limina build tsconfig.json", or add source.knip.workspaces["${workspacePackage.name}"].entry for additional reachable roots.`,
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    groups.push({
+      tsConfigFile: toRelativePath(
+        workspacePackage.directory,
+        generatedConfig.configPath,
+      ),
+      workspaceNames: [workspacePackage.name],
     });
-    const workspaceNames = groupsByTsConfig.get(tsConfigFile) ?? [];
-
-    workspaceNames.push(workspacePackage.name);
-    groupsByTsConfig.set(tsConfigFile, workspaceNames);
   }
 
-  const hasConfiguredTsConfig = [...groupsByTsConfig.keys()].some(Boolean);
-
-  if (!hasConfiguredTsConfig) {
-    return [{}];
-  }
-
-  return [...groupsByTsConfig.entries()]
-    .filter(([, workspaceNames]) => workspaceNames.length > 0)
-    .map(([tsConfigFile, workspaceNames]) => ({
-      ...(tsConfigFile ? { tsConfigFile } : {}),
-      workspaceNames: workspaceNames.sort(),
-    }));
+  return groups;
 }
 
 function createPackageDependencyIssueKey(
@@ -2341,6 +2288,7 @@ function addUnusedModuleProblems(options: {
 
 async function addKnipBackedSourceProblems(options: {
   config: ResolvedLiminaConfig;
+  generatedGraph: GeneratedTsconfigGraphResult;
   ownerModuleSets: OwnerSourceModuleSet[];
   problems: string[];
   workspacePackages: WorkspacePackage[];
@@ -2357,6 +2305,22 @@ async function addKnipBackedSourceProblems(options: {
     problems: options.problems,
     workspacePackages: options.workspacePackages,
   });
+
+  for (const diagnostic of options.generatedGraph.generatedKnipDiagnostics) {
+    options.problems.push(
+      [
+        'Unsupported package build script for generated Knip tsconfig:',
+        `  package: ${diagnostic.packageName ?? '<unnamed>'}`,
+        `  package manifest: ${toRelativePath(options.config.rootDir, diagnostic.packageJsonPath)}`,
+        ...(diagnostic.scriptName
+          ? [`  script: ${diagnostic.scriptName}`]
+          : []),
+        ...(diagnostic.command ? [`  command: ${diagnostic.command}`] : []),
+        `  reason: ${diagnostic.reason}`,
+      ].join('\n'),
+    );
+  }
+
   const ignoredDependencies = collectUnusedDependencyIgnore({
     declarations,
     knipWorkspaceConfigs,
@@ -2369,11 +2333,25 @@ async function addKnipBackedSourceProblems(options: {
     ownerModuleSets: options.ownerModuleSets,
     problems: options.problems,
   });
+  const requiredWorkspaceNames = new Set([
+    ...declarations.map((declaration) => declaration.importer.name),
+    ...options.ownerModuleSets.flatMap((moduleSet) =>
+      moduleSet.owner.name ? [moduleSet.owner.name] : [],
+    ),
+    ...knipWorkspaceConfigs.keys(),
+  ]);
   const analysisGroups = createKnipSourceAnalysisGroups({
-    knipWorkspaceConfigs,
+    config: options.config,
+    generatedGraph: options.generatedGraph,
     problems: options.problems,
+    requiredWorkspaceNames,
     workspacePackages: options.workspacePackages,
   });
+
+  if (options.problems.length > 0) {
+    return;
+  }
+
   const includeFiles = options.ownerModuleSets.length > 0;
   const needsDependencyAnalysis =
     options.workspacePackages.length > 0 && declarations.length > 0;
@@ -2478,6 +2456,7 @@ async function runSourceCheckInternal(
   });
   await addKnipBackedSourceProblems({
     config,
+    generatedGraph,
     ownerModuleSets,
     problems,
     workspacePackages: packages,

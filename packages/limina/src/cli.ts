@@ -17,6 +17,7 @@ import {
   runCheckerTypecheck,
 } from './commands/typecheck';
 import {
+  type BuildCheckerPreset,
   type LiminaCommand,
   loadConfig,
   type PackageAttwProfile,
@@ -51,6 +52,7 @@ type CheckerFlags = GlobalFlags;
 
 interface BuildFlags extends GlobalFlags {
   '--'?: string[];
+  checker?: string;
   project?: string;
 }
 
@@ -96,11 +98,27 @@ function parsePackageTool(
   );
 }
 
-function formatUnexpectedBuildArguments(args: string[]): string {
+function parseBuildChecker(
+  checker: string | undefined,
+): BuildCheckerPreset | undefined {
+  if (!checker) {
+    return undefined;
+  }
+
+  if (checker === 'tsc' || checker === 'vue-tsc' || checker === 'tsgo') {
+    return checker;
+  }
+
+  throw new Error(
+    `Invalid build --checker "${checker}". Expected one of: tsc, vue-tsc, tsgo.`,
+  );
+}
+
+function formatMissingBuildConfig(): string {
   return [
-    'limina build does not accept positional arguments.',
-    `  received: ${args.join(' ')}`,
-    '  fix: pass the source tsconfig or directory with -p, --project <path>.',
+    'Missing limina build config.',
+    '  reason: limina build requires a source or raw JSON config path.',
+    '  fix: run limina build <config>, or temporarily pass -p, --project <config>.',
   ].join('\n');
 }
 
@@ -314,24 +332,25 @@ async function main(): Promise<void> {
     });
 
   cli
-    .command('build', 'Build the nearest or selected Limina tsconfig target')
+    .command('build [config]', 'Build a Limina-managed or raw JSON config')
+    .option('--checker <checker>', 'Build checker: tsc, vue-tsc, or tsgo')
     .option(
       '-p, --project <path>',
       'Source tsconfig file or directory to build',
     )
-    .action(async (flags: BuildFlags) => {
-      const positionalArgs = [...cli.args, ...(flags['--'] ?? [])];
-
-      if (positionalArgs.length > 0) {
-        throw new Error(formatUnexpectedBuildArguments(positionalArgs));
+    .action(async (configPath: string | undefined, flags: BuildFlags) => {
+      if (!configPath && !flags.project) {
+        throw new Error(formatMissingBuildConfig());
       }
 
       const flow = createCliFlow();
       flow.intro('limina build');
       const config = await load(flags, 'build');
       const result = await runBuild({
+        checker: parseBuildChecker(flags.checker),
         clearScreen: false,
         config,
+        configPath,
         cwd: process.cwd(),
         flow,
         project: flags.project,

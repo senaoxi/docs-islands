@@ -4,6 +4,7 @@ export {
   getActiveCheckers,
   loadConfig,
   validateLiminaConfig,
+  type BuildCheckerPreset,
   type BuiltinCheckerPreset,
   type BuiltinTaskName,
   type CheckerConfig,

@@ -11,6 +11,13 @@ import {
 } from './checkers';
 import { getActiveCheckers, type ResolvedLiminaConfig } from './config';
 import {
+  type GeneratedKnipPackageConfig,
+  type GeneratedKnipPackageDiagnostic,
+  prepareGeneratedKnipPackageConfigs,
+  resolveGeneratedKnipPackageConfigs,
+  resolveGeneratedKnipPackageDiagnostics,
+} from './generated-knip';
+import {
   collectImportsFromFile,
   createFileOwnerLookup,
   createImportAnalysisContext,
@@ -30,6 +37,7 @@ import {
   toPosixPath,
   toRelativePath,
 } from './utils/path';
+import { collectWorkspacePackages } from './workspace';
 
 const generatedRootDirName = '.limina';
 const generatedTsconfigDir = path.join(generatedRootDirName, 'tsconfig');
@@ -91,6 +99,10 @@ export interface GeneratedTsconfigGraphManifest {
   version: 1;
   generatedBy: 'limina';
   checkers: Record<string, GeneratedCheckerManifest>;
+  knip: {
+    diagnostics: GeneratedKnipPackageDiagnostic[];
+    packages: GeneratedKnipPackageConfig[];
+  };
   providerEdges: GeneratedProviderEdgeManifest[];
 }
 
@@ -101,6 +113,8 @@ export interface GeneratedTsconfigGraphResult {
   sourceToBuild: Map<string, Map<string, GeneratedBuildModule>>;
   sourceToDts: Map<string, Map<string, string>>;
   dtsToSource: Map<string, Map<string, string>>;
+  generatedKnipConfigs: GeneratedKnipPackageConfig[];
+  generatedKnipDiagnostics: GeneratedKnipPackageDiagnostic[];
   providerEdges: GeneratedProviderEdge[];
   manifest: GeneratedTsconfigGraphManifest;
 }
@@ -1486,7 +1500,11 @@ async function removeStaleGeneratedFiles(
   context: GeneratedGraphWriteContext,
 ): Promise<void> {
   const generatedFiles = await glob(
-    [`${generatedTsconfigDir}/**/*.json`, `${generatedManifestPath}`],
+    [
+      `${generatedTsconfigDir}/**/*.json`,
+      `${generatedRootDirName}/knip/**/*.json`,
+      `${generatedManifestPath}`,
+    ],
     {
       absolute: true,
       cwd: context.rootDir,
@@ -1507,6 +1525,8 @@ async function removeStaleGeneratedFiles(
 function createManifest(options: {
   checkerEntries: Map<string, string>;
   checkers: ReturnType<typeof getActiveCheckers>;
+  generatedKnipDiagnostics: GeneratedKnipPackageDiagnostic[];
+  generatedKnipPackageConfigs: GeneratedKnipPackageConfig[];
   projectsByChecker: Map<string, SourceProject[]>;
   providerEdges: GeneratedProviderEdge[];
   rootDir: string;
@@ -1573,6 +1593,10 @@ function createManifest(options: {
     version: 1,
     generatedBy: 'limina',
     checkers: manifestCheckers,
+    knip: {
+      diagnostics: options.generatedKnipDiagnostics,
+      packages: options.generatedKnipPackageConfigs,
+    },
     providerEdges: options.providerEdges.map((edge) => ({
       file: edge.file,
       fromChecker: edge.fromChecker,
@@ -1670,6 +1694,14 @@ function createResult(options: {
     sourceToBuild,
     sourceToDts,
     dtsToSource,
+    generatedKnipConfigs: resolveGeneratedKnipPackageConfigs({
+      configs: options.manifest.knip?.packages ?? [],
+      rootDir: options.rootDir,
+    }),
+    generatedKnipDiagnostics: resolveGeneratedKnipPackageDiagnostics({
+      diagnostics: options.manifest.knip?.diagnostics ?? [],
+      rootDir: options.rootDir,
+    }),
     providerEdges,
     manifest: options.manifest,
   };
@@ -2085,6 +2117,13 @@ export async function prepareGeneratedTsconfigGraph(
     );
   }
 
+  const workspacePackages = await collectWorkspacePackages(config);
+  const generatedKnip = prepareGeneratedKnipPackageConfigs({
+    config,
+    sourceToBuildByChecker,
+    workspacePackages,
+  });
+
   await Promise.all(
     checkers.map(async (checker) => {
       const checkerName = checker.name;
@@ -2126,9 +2165,19 @@ export async function prepareGeneratedTsconfigGraph(
     }),
   );
 
+  await Promise.all(
+    generatedKnip.configs.map((entry) =>
+      writeGeneratedJson(writeContext, entry.configPath, entry.content),
+    ),
+  );
+
   const manifest = createManifest({
     checkerEntries,
     checkers,
+    generatedKnipDiagnostics: generatedKnip.diagnostics,
+    generatedKnipPackageConfigs: generatedKnip.configs.map(
+      (entry) => entry.config,
+    ),
     projectsByChecker,
     providerEdges,
     rootDir: config.rootDir,

@@ -141,14 +141,16 @@ function createPackageFixture(options: {
   source: string;
 }): Record<string, string> {
   return {
-    'app/package.json': stringifyConfig({
-      exports: {
-        '.': './src/index.ts',
-      },
-      name: '@example/app',
-      type: 'module',
-      ...options.manifest,
-    }),
+    'app/package.json': stringifyConfig(
+      withDefaultBuildScript({
+        exports: {
+          '.': './src/index.ts',
+        },
+        name: '@example/app',
+        type: 'module',
+        ...options.manifest,
+      }),
+    ),
     'app/src/index.ts': options.source,
     'app/tsconfig.json': stringifyConfig({
       files: [],
@@ -203,19 +205,38 @@ function createWorkspaceRootFiles(
   };
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function withDefaultBuildScript(
+  manifest: Record<string, unknown>,
+  command = 'limina build tsconfig.json',
+): Record<string, unknown> {
+  const scripts = isPlainRecord(manifest.scripts) ? manifest.scripts : {};
+
+  return {
+    ...manifest,
+    scripts: {
+      build: command,
+      ...scripts,
+    },
+  };
+}
+
 function createWorkspacePackageFiles(options: {
   appManifest?: Record<string, unknown>;
   appSource: string;
   internalManifest?: Record<string, unknown>;
 }): Record<string, string> {
-  const internalPackageManifest = {
+  const internalPackageManifest = withDefaultBuildScript({
     exports: {
       '.': './src/index.ts',
     },
     name: '@example/internal',
     type: 'module',
     ...options.internalManifest,
-  };
+  });
 
   return {
     ...createWorkspaceRootFiles(),
@@ -223,17 +244,19 @@ function createWorkspacePackageFiles(options: {
     'node_modules/@example/internal/package.json': stringifyConfig(
       internalPackageManifest,
     ),
-    'packages/app/package.json': stringifyConfig({
-      dependencies: {
-        '@example/internal': 'workspace:*',
-      },
-      exports: {
-        '.': './src/index.ts',
-      },
-      name: '@example/app',
-      type: 'module',
-      ...options.appManifest,
-    }),
+    'packages/app/package.json': stringifyConfig(
+      withDefaultBuildScript({
+        dependencies: {
+          '@example/internal': 'workspace:*',
+        },
+        exports: {
+          '.': './src/index.ts',
+        },
+        name: '@example/app',
+        type: 'module',
+        ...options.appManifest,
+      }),
+    ),
     'packages/app/src/index.ts': options.appSource,
     'packages/app/tsconfig.json': stringifyConfig({
       files: [],
@@ -288,25 +311,29 @@ function createRootWorkspaceDependencyFiles(options: {
   rootTsconfigInclude?: string[];
 }): Record<string, string> {
   return {
-    'package.json': stringifyConfig({
-      devDependencies: options.rootDependencies ?? {
-        '@example/internal': 'workspace:*',
-      },
-      exports: {
-        '.': './scripts/index.ts',
-      },
-      name: '@example/root',
-      private: true,
-      type: 'module',
-      workspaces: ['packages/*'],
-    }),
-    'packages/internal/package.json': stringifyConfig({
-      exports: {
-        '.': './src/index.ts',
-      },
-      name: '@example/internal',
-      type: 'module',
-    }),
+    'package.json': stringifyConfig(
+      withDefaultBuildScript({
+        devDependencies: options.rootDependencies ?? {
+          '@example/internal': 'workspace:*',
+        },
+        exports: {
+          '.': './scripts/index.ts',
+        },
+        name: '@example/root',
+        private: true,
+        type: 'module',
+        workspaces: ['packages/*'],
+      }),
+    ),
+    'packages/internal/package.json': stringifyConfig(
+      withDefaultBuildScript({
+        exports: {
+          '.': './src/index.ts',
+        },
+        name: '@example/internal',
+        type: 'module',
+      }),
+    ),
     'packages/internal/src/index.ts':
       'export type InternalValue = number;\nexport const internalValue = 1;\n',
     'packages/internal/tsconfig.json': stringifyConfig({
@@ -991,11 +1018,15 @@ packages:
 
   it('allows nearest bare tsconfig files to own modules directly', async () => {
     const fixture = await createFixture({
+      ...createWorkspaceRootFiles(['app']),
       'app/package.json': stringifyConfig({
         exports: {
           '.': './src/index.ts',
         },
         name: '@example/app',
+        scripts: {
+          build: 'limina build tsconfig.json',
+        },
         type: 'module',
       }),
       'app/src/index.ts': "export const value = 'checked';\n",
@@ -1790,38 +1821,28 @@ packages:
     }
   });
 
-  it('accepts source modules reachable from exported build artifacts through configured workspace tsConfig source maps', async () => {
-    const fixture = await createFixture(
-      {
-        ...createWorkspacePackageFiles({
-          appManifest: {
-            exports: {
-              '.': './dist/index.js',
-            },
+  it('accepts source modules reachable from exported build artifacts through package build script source maps', async () => {
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appManifest: {
+          exports: {
+            '.': './dist/index.js',
           },
-          appSource: "export { internalValue } from '@example/internal';\n",
-        }),
-        'packages/app/tsconfig.dts.json': buildConfig({
-          compilerOptions: {
-            outDir: './dist',
-            rootDir: './src',
-          },
-          include: ['src/**/*.ts'],
-          tsBuildInfoFile: './dist/.tsbuildinfo',
-        }),
-      },
-      {
-        source: {
-          knip: {
-            workspaces: {
-              '@example/app': {
-                tsConfig: 'tsconfig.dts.json',
-              },
-            },
+          scripts: {
+            build: 'limina build tsconfig.dts.json',
           },
         },
-      },
-    );
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+      'packages/app/tsconfig.dts.json': buildConfig({
+        compilerOptions: {
+          outDir: './dist',
+          rootDir: './src',
+        },
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './dist/.tsbuildinfo',
+      }),
+    });
 
     try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
@@ -1830,7 +1851,7 @@ packages:
     }
   });
 
-  it('uses Knip default tsconfig.json when workspace tsConfig is omitted', async () => {
+  it('uses generated package Knip tsconfig from static build scripts', async () => {
     const fixture = await createFixture({
       ...createWorkspacePackageFiles({
         appManifest: {
@@ -1857,74 +1878,95 @@ packages:
     }
   });
 
-  it('merges Knip results for workspaces using different tsConfig files', async () => {
-    const fixture = await createFixture(
-      {
-        ...createWorkspacePackageFiles({
-          appManifest: {
-            exports: {
-              '.': './dist/index.js',
-            },
-          },
-          appSource: "export { internalValue } from '@example/internal';\n",
-        }),
-        'packages/app/tsconfig.dts.json': buildConfig({
-          compilerOptions: {
-            outDir: './dist',
-            rootDir: './src',
-          },
-          include: ['src/**/*.ts'],
-          tsBuildInfoFile: './dist/.tsbuildinfo',
-        }),
-        'packages/tool/package.json': stringifyConfig({
-          dependencies: {
-            '@example/internal': 'workspace:*',
-          },
+  it('reports packages missing a statically derived Knip tsconfig source', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      'app/package.json': stringifyConfig({
+        exports: {
+          '.': './src/index.ts',
+        },
+        name: '@example/app',
+        type: 'module',
+      }),
+      'app/src/index.ts': 'export const value = 1;\n',
+      'app/tsconfig.json': typecheckConfig(['src/**/*.ts']),
+    });
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain('Missing generated Knip tsconfig source:');
+      expect(errors).toContain('package: @example/app');
+      expect(errors).toContain(
+        'fix: add a static package script such as "build": "limina build tsconfig.json"',
+      );
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('merges Knip results for workspaces using different generated Knip tsconfigs', async () => {
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appManifest: {
           exports: {
-            '.': './lib/index.js',
+            '.': './dist/index.js',
           },
-          name: '@example/tool',
-          type: 'module',
-        }),
-        'packages/tool/src/index.ts':
-          "export { internalValue } from '@example/internal';\n",
-        'packages/tool/tsconfig.custom.json': buildConfig({
-          compilerOptions: {
-            outDir: './lib',
-            rootDir: './src',
-          },
-          include: ['src/**/*.ts'],
-          tsBuildInfoFile: './lib/.tsbuildinfo',
-        }),
-        'packages/tool/tsconfig.json': stringifyConfig({
-          files: [],
-          references: [
-            {
-              path: './tsconfig.lib.json',
-            },
-          ],
-        }),
-        'packages/tool/tsconfig.lib.dts.json': buildConfig({
-          include: ['src/**/*.ts'],
-          tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
-        }),
-        'packages/tool/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
-      },
-      {
-        source: {
-          knip: {
-            workspaces: {
-              '@example/app': {
-                tsConfig: 'tsconfig.dts.json',
-              },
-              '@example/tool': {
-                tsConfig: 'tsconfig.custom.json',
-              },
-            },
+          scripts: {
+            build: 'limina build tsconfig.dts.json',
           },
         },
-      },
-    );
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+      'packages/app/tsconfig.dts.json': buildConfig({
+        compilerOptions: {
+          outDir: './dist',
+          rootDir: './src',
+        },
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './dist/.tsbuildinfo',
+      }),
+      'packages/tool/package.json': stringifyConfig({
+        dependencies: {
+          '@example/internal': 'workspace:*',
+        },
+        exports: {
+          '.': './lib/index.js',
+        },
+        name: '@example/tool',
+        scripts: {
+          build: 'limina build tsconfig.custom.json',
+        },
+        type: 'module',
+      }),
+      'packages/tool/src/index.ts':
+        "export { internalValue } from '@example/internal';\n",
+      'packages/tool/tsconfig.custom.json': buildConfig({
+        compilerOptions: {
+          outDir: './lib',
+          rootDir: './src',
+        },
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './lib/.tsbuildinfo',
+      }),
+      'packages/tool/tsconfig.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/tool/tsconfig.lib.dts.json': buildConfig({
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+      }),
+      'packages/tool/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+    });
 
     try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
@@ -2146,7 +2188,7 @@ packages:
     }
   });
 
-  it('rejects invalid workspace tsConfig configs', async () => {
+  it('rejects unsupported workspace tsConfig configs', async () => {
     const errorSpy = vi
       .spyOn(SourceLogger, 'error')
       .mockImplementation(() => {});
@@ -2166,7 +2208,7 @@ packages:
               } as unknown as SourceKnipWorkspaceConfig,
             },
           },
-        },
+        } as unknown as SourceCheckConfig,
       },
     );
 
@@ -2174,7 +2216,7 @@ packages:
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
-      expect(errors).toContain('Invalid source Knip tsConfig config:');
+      expect(errors).toContain('Unsupported source Knip workspace config:');
       expect(errors).toContain(
         'source.knip.workspaces["@example/app"].tsConfig',
       );
@@ -2182,10 +2224,7 @@ packages:
         'source.knip.workspaces["@example/internal"].tsConfig',
       );
       expect(errors).toContain(
-        'tsConfig must be a non-empty workspace-relative JSON file path',
-      );
-      expect(errors).toContain(
-        'tsConfig must be a workspace-relative JSON file path without globs',
+        'tsConfig is no longer supported. Limina generates Knip tsconfig entries from package.json limina build scripts.',
       );
     } finally {
       errorSpy.mockRestore();
