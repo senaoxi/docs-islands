@@ -323,7 +323,7 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsc',
-        include: ['app/tsconfig.lib.json'],
+        include: ['app/tsconfig.json'],
       },
     },
     source: {
@@ -415,6 +415,10 @@ export function installConsumerDependencies(options: {
     'typescript',
     options.manifest.peerDependencies?.typescript,
   );
+  const knipVersion = resolveInstalledPackageVersion(
+    'knip',
+    options.manifest.peerDependencies?.knip,
+  );
 
   runPnpm(
     [
@@ -424,6 +428,7 @@ export function installConsumerDependencies(options: {
       '--ignore-scripts',
       options.tarballPath,
       `typescript@${typescriptVersion}`,
+      `knip@${knipVersion}`,
     ],
     {
       cwd: options.fixtureDir,
