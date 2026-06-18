@@ -83,15 +83,15 @@
     "vitest": "catalog:test"
   },
   "peerDependencies": {
-    "@arethetypeswrong/core": "^0.18.2",
-    "@typescript/native-preview": "7.0.0-dev.20260527.1",
-    "@vue/compiler-sfc": "^3.5.28",
+    "@arethetypeswrong/core": "^0.18.0",
+    "@typescript/native-preview": ">=7.0.0-dev.20260527.1 <7.0.0",
+    "@vue/compiler-sfc": "^3.5.0",
     "knip": "^6.15.0",
-    "publint": "^0.3.17",
-    "svelte-check": "^4.4.7",
-    "typescript": "~5.9.3",
-    "vue-tsc": "~3.2.4",
-    "vue-tsgo": "0.2.2"
+    "publint": "^0.3.0",
+    "svelte-check": "^4.4.0",
+    "typescript": "^5.9.0",
+    "vue-tsc": "^3.2.4",
+    "vue-tsgo": "^0.2.2"
   },
   "peerDependenciesMeta": {
     "@arethetypeswrong/core": {

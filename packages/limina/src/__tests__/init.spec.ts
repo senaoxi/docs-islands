@@ -312,7 +312,7 @@ describe('runInit', () => {
         type: 'module',
       });
       expect(rootManifest.devDependencies?.limina).toMatch(/^\^/u);
-      expect(rootManifest.devDependencies?.typescript).toBe('~5.9.3');
+      expect(rootManifest.devDependencies?.typescript).toBe('^5.9.0');
     } finally {
       await fixture.cleanup();
     }

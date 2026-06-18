@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,8 +28,6 @@ interface PackedDistTarball {
   cleanup: () => Promise<void>;
   tarballPath: string;
 }
-
-const require = createRequire(import.meta.url);
 
 export const PACKAGE_ROOT_DIR = fileURLToPath(new URL('..', import.meta.url));
 export const DIST_DIR = path.join(PACKAGE_ROOT_DIR, 'dist');
@@ -113,51 +110,19 @@ export function runNodeScript(options: {
   });
 }
 
-export function resolveInstalledPackageVersion(
+function getPeerDependencyRange(
+  manifest: DistPackageJson,
   packageName: string,
-  fallbackVersion?: string,
 ): string {
-  try {
-    let currentDir = path.dirname(require.resolve(packageName));
-    let packageJsonPath: string | undefined;
+  const range = manifest.peerDependencies?.[packageName];
 
-    for (;;) {
-      const candidatePath = path.join(currentDir, 'package.json');
-
-      if (existsSync(candidatePath)) {
-        packageJsonPath = candidatePath;
-        break;
-      }
-
-      const parentDir = path.dirname(currentDir);
-
-      if (parentDir === currentDir) {
-        break;
-      }
-
-      currentDir = parentDir;
-    }
-
-    if (!packageJsonPath) {
-      throw new Error(`Unable to locate package.json for "${packageName}".`);
-    }
-
-    const packageJson = readJsonFile<{ version?: string }>(packageJsonPath);
-
-    if (packageJson.version) {
-      return packageJson.version;
-    }
-  } catch {
-    // Fall back to the published peer dependency range when local resolution fails.
-  }
-
-  if (!fallbackVersion) {
+  if (!range) {
     throw new Error(
-      `Unable to resolve an installed version for "${packageName}".`,
+      `Expected dist package.json to declare peerDependencies.${packageName}.`,
     );
   }
 
-  return fallbackVersion;
+  return range;
 }
 
 export function readDistManifest(): DistPackageJson {
@@ -268,7 +233,10 @@ async function writeConsumerPackageManagerConfig(
   const trustPolicy = readCurrentPnpmConfig<string>('trust-policy');
   const trustPolicyExcludes =
     readCurrentPnpmConfig<string[]>('trust-policy-exclude') ?? [];
-  const lines: string[] = [];
+  const lines: string[] = [
+    'auto-install-peers=false',
+    'strict-peer-dependencies=true',
+  ];
 
   if (trustPolicy) {
     lines.push(`trust-policy=${trustPolicy}`);
@@ -411,14 +379,11 @@ export function installConsumerDependencies(options: {
   manifest: DistPackageJson;
   tarballPath: string;
 }): void {
-  const typescriptVersion = resolveInstalledPackageVersion(
+  const typescriptRange = getPeerDependencyRange(
+    options.manifest,
     'typescript',
-    options.manifest.peerDependencies?.typescript,
   );
-  const knipVersion = resolveInstalledPackageVersion(
-    'knip',
-    options.manifest.peerDependencies?.knip,
-  );
+  const knipRange = getPeerDependencyRange(options.manifest, 'knip');
 
   runPnpm(
     [
@@ -427,8 +392,8 @@ export function installConsumerDependencies(options: {
       '--prefer-offline',
       '--ignore-scripts',
       options.tarballPath,
-      `typescript@${typescriptVersion}`,
-      `knip@${knipVersion}`,
+      `typescript@${typescriptRange}`,
+      `knip@${knipRange}`,
     ],
     {
       cwd: options.fixtureDir,
