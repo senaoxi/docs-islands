@@ -1417,6 +1417,189 @@ describe('runBuild', () => {
     }
   });
 
+  it('rejects cross-checker providers with unsupported root files before running builds', async () => {
+    const calls: TypecheckTarget[] = [];
+    const errorSpy = vi
+      .spyOn(TypecheckLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      'packages/app/src/index.ts':
+        "import { themeValue } from '../../theme/src/theme';\nexport const value = themeValue;\n",
+      'packages/app/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/theme/src/Theme.vue':
+        '<script setup lang="ts">const value = 1;</script>\n',
+      'packages/theme/src/theme.ts': 'export const themeValue = 1;\n',
+      'packages/theme/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts', 'src/**/*.vue'],
+      }),
+    });
+
+    try {
+      let thrown: unknown;
+
+      try {
+        await runBuild({
+          config: {
+            config: {
+              checkers: {
+                typescript: {
+                  include: ['packages/app/tsconfig.json'],
+                  preset: 'tsc',
+                },
+                vue: {
+                  include: ['packages/theme/tsconfig.json'],
+                  preset: 'vue-tsc',
+                },
+              },
+            },
+            configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+            rootDir: fixture.rootDir,
+          },
+          cwd: fixture.rootDir,
+          project: 'packages/app',
+          runner: passingRunner(calls),
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(String(thrown)).toContain(
+        'Unsupported cross-checker declaration provider',
+      );
+      expect(String(thrown)).toContain('consumer checker: typescript (tsc)');
+      expect(String(thrown)).toContain('provider checker: vue (vue-tsc)');
+      expect(String(thrown)).toContain('extension: .vue');
+      expect(String(thrown)).toContain('packages/theme/src/Theme.vue');
+      expect(calls).toEqual([]);
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects unsupported files in cyclic provider reference closures', async () => {
+    const calls: TypecheckTarget[] = [];
+    const errorSpy = vi
+      .spyOn(TypecheckLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      'packages/app/src/index.ts':
+        "import { themeValue } from '../../theme/src/theme';\nexport const value = themeValue;\n",
+      'packages/app/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/theme/src/theme.ts': 'export const themeValue = 1;\n',
+      'packages/theme/tsconfig.json': tsconfig({
+        liminaOptions: {
+          implicitRefs: [
+            {
+              path: '../widgets/tsconfig.json',
+              reason: 'Widgets are loaded by a generated theme manifest.',
+            },
+          ],
+        },
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/widgets/src/Widget.vue':
+        '<script setup lang="ts">const value = 1;</script>\n',
+      'packages/widgets/src/widget.ts': 'export const widgetValue = 1;\n',
+      'packages/widgets/tsconfig.json': tsconfig({
+        liminaOptions: {
+          implicitRefs: [
+            {
+              path: '../theme/tsconfig.json',
+              reason: 'Theme metadata is loaded by generated widgets.',
+            },
+          ],
+        },
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts', 'src/**/*.vue'],
+      }),
+    });
+
+    try {
+      let thrown: unknown;
+
+      try {
+        await runBuild({
+          config: {
+            config: {
+              checkers: {
+                typescript: {
+                  include: ['packages/app/tsconfig.json'],
+                  preset: 'tsc',
+                },
+                vue: {
+                  include: [
+                    'packages/theme/tsconfig.json',
+                    'packages/widgets/tsconfig.json',
+                  ],
+                  preset: 'vue-tsc',
+                },
+              },
+            },
+            configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+            rootDir: fixture.rootDir,
+          },
+          cwd: fixture.rootDir,
+          project: 'packages/app',
+          runner: passingRunner(calls),
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(String(thrown)).toContain(
+        'Unsupported cross-checker declaration provider',
+      );
+      expect(String(thrown)).toContain(
+        '.limina/tsconfig/checkers/vue/projects/packages/widgets/tsconfig.dts.json',
+      );
+      expect(String(thrown)).toContain('extension: .vue');
+      expect(String(thrown)).toContain('packages/widgets/src/Widget.vue');
+      expect(calls).toEqual([]);
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
   it('builds cross-checker providers before consumers', async () => {
     const calls: TypecheckTarget[] = [];
     const delayed = delayedRunner({

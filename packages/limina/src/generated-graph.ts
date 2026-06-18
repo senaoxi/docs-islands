@@ -5,6 +5,7 @@ import { glob } from 'tinyglobby';
 import type ts from 'typescript';
 import {
   type CheckerProjectParseContext,
+  getBuildCheckerSupportedExtensions,
   getCheckerAdapter,
   parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
@@ -1056,6 +1057,185 @@ function selectProviderProject(options: {
   return providerProjects[0] ?? null;
 }
 
+interface UnsupportedCrossCheckerProviderFile {
+  extension: string;
+  fileName: string;
+  generatedConfigPath: string;
+  sourceConfigPath: string;
+}
+
+function createSourceProjectKey(
+  checkerName: string,
+  configPath: string,
+): string {
+  return JSON.stringify([checkerName, configPath]);
+}
+
+function collectGeneratedDtsProjectClosure(options: {
+  projectByDtsConfigPath: Map<string, SourceProject>;
+  rootProject: SourceProject;
+}): SourceProject[] {
+  const closure: SourceProject[] = [];
+  const seen = new Set<string>();
+  const queue = [options.rootProject];
+
+  for (;;) {
+    const project = queue.shift();
+
+    if (!project) {
+      break;
+    }
+
+    if (seen.has(project.dtsConfigPath)) {
+      continue;
+    }
+
+    seen.add(project.dtsConfigPath);
+    closure.push(project);
+
+    for (const referencePath of project.references) {
+      const referenceProject =
+        options.projectByDtsConfigPath.get(referencePath);
+
+      if (!referenceProject || seen.has(referenceProject.dtsConfigPath)) {
+        continue;
+      }
+
+      queue.push(referenceProject);
+    }
+  }
+
+  return closure;
+}
+
+function collectUnsupportedCrossCheckerProviderFiles(options: {
+  consumerProject: SourceProject;
+  projectByDtsConfigPath: Map<string, SourceProject>;
+  providerProject: SourceProject;
+}): UnsupportedCrossCheckerProviderFile[] {
+  const consumerPreset = options.consumerProject.context.checkerPresets[0];
+  const supportedExtensions = new Set(
+    consumerPreset
+      ? [
+          ...getBuildCheckerSupportedExtensions(consumerPreset),
+          ...options.consumerProject.context.extensions,
+        ]
+      : options.consumerProject.context.extensions,
+  );
+  const unsupportedFiles: UnsupportedCrossCheckerProviderFile[] = [];
+
+  for (const project of collectGeneratedDtsProjectClosure({
+    projectByDtsConfigPath: options.projectByDtsConfigPath,
+    rootProject: options.providerProject,
+  })) {
+    for (const fileName of project.fileNames) {
+      const extension = getFileExtension(fileName);
+
+      if (!extension || supportedExtensions.has(extension)) {
+        continue;
+      }
+
+      unsupportedFiles.push({
+        extension,
+        fileName,
+        generatedConfigPath: project.dtsConfigPath,
+        sourceConfigPath: project.configPath,
+      });
+    }
+  }
+
+  return unsupportedFiles.sort(
+    (left, right) =>
+      left.generatedConfigPath.localeCompare(right.generatedConfigPath) ||
+      left.extension.localeCompare(right.extension) ||
+      left.fileName.localeCompare(right.fileName),
+  );
+}
+
+function formatUnsupportedCrossCheckerProviderProblem(options: {
+  config: ResolvedLiminaConfig;
+  consumerProject: SourceProject;
+  edge: GeneratedProviderEdge;
+  providerProject: SourceProject;
+  unsupportedFiles: UnsupportedCrossCheckerProviderFile[];
+}): string {
+  const consumerPreset =
+    options.consumerProject.context.checkerPresets[0] ?? 'unknown';
+  const providerPreset =
+    options.providerProject.context.checkerPresets[0] ?? 'unknown';
+  const unsupportedLines = options.unsupportedFiles.map((file) => [
+    `  - generated config: ${toRelativePath(options.config.rootDir, file.generatedConfigPath)}`,
+    `    source config: ${toRelativePath(options.config.rootDir, file.sourceConfigPath)}`,
+    `    extension: ${file.extension}`,
+    `    example: ${toRelativePath(options.config.rootDir, file.fileName)}`,
+  ]);
+
+  return [
+    'Unsupported cross-checker declaration provider:',
+    `  consumer checker: ${options.consumerProject.checkerName} (${consumerPreset})`,
+    `  consumer config: ${toRelativePath(options.config.rootDir, options.consumerProject.configPath)}`,
+    `  provider checker: ${options.providerProject.checkerName} (${providerPreset})`,
+    `  provider config: ${toRelativePath(options.config.rootDir, options.providerProject.configPath)}`,
+    `  file: ${options.edge.file}`,
+    `  imported specifier: ${options.edge.importedSpecifier}`,
+    `  resolved file: ${toRelativePath(options.config.rootDir, options.edge.resolvedFilePath)}`,
+    '  unsupported provider files:',
+    ...unsupportedLines.flat(),
+    '  reason: cross-checker provider references must be buildable by the consumer checker across the entire generated declaration reference tree.',
+    '  fix: cover the target source config with the consumer checker, or expose a TypeScript-only boundary that the consumer checker can build.',
+  ].join('\n');
+}
+
+function addCrossCheckerProviderCompatibilityProblems(options: {
+  config: ResolvedLiminaConfig;
+  problems: string[];
+  projects: SourceProject[];
+  providerEdges: GeneratedProviderEdge[];
+}): void {
+  const projectBySourceKey = new Map(
+    options.projects.map((project) => [
+      createSourceProjectKey(project.checkerName, project.configPath),
+      project,
+    ]),
+  );
+  const projectByDtsConfigPath = new Map(
+    options.projects.map((project) => [project.dtsConfigPath, project]),
+  );
+
+  for (const edge of options.providerEdges) {
+    const consumerProject = projectBySourceKey.get(
+      createSourceProjectKey(edge.fromChecker, edge.fromConfigPath),
+    );
+    const providerProject = projectBySourceKey.get(
+      createSourceProjectKey(edge.toChecker, edge.toConfigPath),
+    );
+
+    if (!consumerProject || !providerProject) {
+      continue;
+    }
+
+    const unsupportedFiles = collectUnsupportedCrossCheckerProviderFiles({
+      consumerProject,
+      projectByDtsConfigPath,
+      providerProject,
+    });
+
+    if (unsupportedFiles.length === 0) {
+      continue;
+    }
+
+    options.problems.push(
+      formatUnsupportedCrossCheckerProviderProblem({
+        config: options.config,
+        consumerProject,
+        edge,
+        providerProject,
+        unsupportedFiles,
+      }),
+    );
+  }
+}
+
 function formatMissingCrossCheckerProviderProblem(options: {
   config: ResolvedLiminaConfig;
   importRecord: ReturnType<typeof collectImportsFromFile>[number];
@@ -2097,6 +2277,13 @@ export async function prepareGeneratedTsconfigGraph(
     problems.push(...collection.problems);
     providerEdges.push(...collection.providerEdges);
   }
+
+  addCrossCheckerProviderCompatibilityProblems({
+    config,
+    problems,
+    projects: allProjects,
+    providerEdges,
+  });
 
   providerEdges.sort(
     (left, right) =>

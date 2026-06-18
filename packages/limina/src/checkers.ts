@@ -78,6 +78,22 @@ function getNativeTypeScriptProjectExtensions(): string[] {
   );
 }
 
+export function getBuildCheckerSupportedExtensions(
+  preset: CheckerPreset,
+): string[] {
+  const adapter = getCheckerAdapter(preset);
+
+  if (!adapter || adapter.execution !== 'build') {
+    return [];
+  }
+
+  const nativeExtensions = getNativeTypeScriptProjectExtensions();
+
+  return preset === 'vue-tsc'
+    ? normalizeExtensions([...nativeExtensions, '.vue'])
+    : nativeExtensions;
+}
+
 function getSvelteCheckerExtensions(): string[] {
   return normalizeExtensions([...getTypeScriptCheckerExtensions(), '.svelte']);
 }

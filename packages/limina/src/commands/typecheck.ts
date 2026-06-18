@@ -1184,7 +1184,7 @@ function formatBuildCheckerCombinationWarning(options: {
   return [
     'Potentially incompatible build checker combination:',
     '  reason: these checker presets can reach the same generated declaration config but do not safely share underlying build cache semantics.',
-    '  fix: use a single cache-compatible build checker path for this generated config, or use the compatible tsc + vue-tsc combination.',
+    '  fix: use a single cache-compatible build checker path for this generated config, or use a file-compatible tsc + vue-tsc combination.',
     ...warningGroups.flatMap(([generatedConfigPath, entries]) => [
       `  generated config: ${toRelativePath(options.projectRootDir, generatedConfigPath)}`,
       `  source config: ${toRelativePath(options.projectRootDir, entries[0]!.sourceConfigPath)}`,
