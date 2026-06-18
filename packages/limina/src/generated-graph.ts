@@ -7,10 +7,15 @@ import {
   type CheckerProjectParseContext,
   getBuildCheckerSupportedExtensions,
   getCheckerAdapter,
+  getCheckerExtensions,
   parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
 } from './checkers';
-import { getActiveCheckers, type ResolvedLiminaConfig } from './config';
+import {
+  getActiveCheckers,
+  type ResolvedCheckerConfig,
+  type ResolvedLiminaConfig,
+} from './config';
 import {
   type GeneratedKnipPackageConfig,
   type GeneratedKnipPackageDiagnostic,
@@ -109,6 +114,7 @@ export interface GeneratedTsconfigGraphManifest {
 
 export interface GeneratedTsconfigGraphResult {
   changed: boolean;
+  checkers: ResolvedCheckerConfig[];
   manifestPath: string;
   checkerEntries: Map<string, string>;
   sourceToBuild: Map<string, Map<string, GeneratedBuildModule>>;
@@ -172,6 +178,21 @@ interface PreparedCheckerGraph {
 interface InferredProjectReferenceCollection {
   problems: string[];
   providerEdges: GeneratedProviderEdge[];
+}
+
+type AutoCheckerPreset = 'tsc' | 'vue-tsc';
+
+interface AutoScopeProject {
+  configPath: string;
+  context: CheckerProjectParseContext;
+  fileNames: string[];
+  options: ts.CompilerOptions;
+}
+
+interface AutoScope {
+  collection: CheckerSourceConfigCollection;
+  entryConfigPath: string;
+  projects: AutoScopeProject[];
 }
 
 function normalizeWorkspaceGlob(value: string): string {
@@ -923,6 +944,391 @@ async function collectCheckerSourceConfigs(
   ].sort();
 
   return collection;
+}
+
+function isAutoCheckerMode(config: ResolvedLiminaConfig): boolean {
+  return (
+    config.config?.checkers === undefined || config.config.checkers === 'auto'
+  );
+}
+
+function createResolvedChecker(options: {
+  include: string[];
+  name: string;
+  preset: AutoCheckerPreset;
+  rootDir: string;
+}): ResolvedCheckerConfig {
+  return {
+    exclude: [],
+    extensions: getCheckerExtensions(
+      {
+        include: options.include,
+        preset: options.preset,
+      },
+      {
+        projectRootDir: options.rootDir,
+      },
+    ),
+    include: options.include,
+    name: options.name,
+    preset: options.preset,
+  };
+}
+
+async function collectAutoEntryConfigPaths(
+  config: ResolvedLiminaConfig,
+): Promise<string[]> {
+  const paths = await glob('**/tsconfig.json', {
+    absolute: true,
+    cwd: config.rootDir,
+    ignore: sourceDiscoveryIgnore,
+    onlyFiles: true,
+  });
+
+  return paths
+    .map(normalizeAbsolutePath)
+    .filter(isDefaultSourceTsconfigPath)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function createAutoScopeProject(
+  config: ResolvedLiminaConfig,
+  configPath: string,
+): AutoScopeProject {
+  const context: CheckerProjectParseContext = {
+    checkerPresets: ['tsc'],
+    extensions: capabilityDiscoveryExtensions,
+  };
+  const parsed = parseCheckerProjectConfigForContext({
+    configPath,
+    context,
+    projectRootDir: config.rootDir,
+  });
+
+  return {
+    configPath,
+    context,
+    fileNames: parsed.fileNames.map(normalizeAbsolutePath).sort(),
+    options: parsed.options,
+  };
+}
+
+function collectAutoScope(
+  config: ResolvedLiminaConfig,
+  entryConfigPath: string,
+): AutoScope | null {
+  const collection: CheckerSourceConfigCollection = {
+    buildModulesBySourcePath: new Map(),
+    entryConfigPaths: new Set([entryConfigPath]),
+    projectConfigPaths: new Set(),
+    rootConfigPaths: [],
+    solutionConfigPaths: new Set(),
+    solutionReferencesBySourcePath: new Map(),
+  };
+  const problems: string[] = [];
+
+  collectCheckerSourceConfigModules({
+    checkerName: '__auto__',
+    collection,
+    config,
+    excludedConfigPaths: new Set(),
+    problems,
+    sourceConfigPath: entryConfigPath,
+    seenConfigs: new Set(),
+  });
+
+  if (problems.length > 0) {
+    throw new Error(
+      formatProblemList(problems, 'Failed to collect auto checker scope.'),
+    );
+  }
+
+  collection.rootConfigPaths = collection.buildModulesBySourcePath.has(
+    entryConfigPath,
+  )
+    ? [entryConfigPath]
+    : [];
+
+  if (
+    collection.projectConfigPaths.size === 0 &&
+    collection.solutionConfigPaths.size === 0
+  ) {
+    return null;
+  }
+
+  return {
+    collection,
+    entryConfigPath,
+    projects: [...collection.projectConfigPaths]
+      .sort((left, right) => left.localeCompare(right))
+      .map((sourceConfigPath) =>
+        createAutoScopeProject(config, sourceConfigPath),
+      ),
+  };
+}
+
+function formatUnsupportedAutoScopeExtensionProblem(options: {
+  config: ResolvedLiminaConfig;
+  entryConfigPath: string;
+  extension: string;
+  fileName: string;
+}): string {
+  return [
+    'Unsupported auto checker source file extension:',
+    `  scope: ${toRelativePath(options.config.rootDir, options.entryConfigPath)}`,
+    `  extension: ${options.extension}`,
+    `  example: ${toRelativePath(options.config.rootDir, options.fileName)}`,
+    '  reason: auto checker mode can only route TypeScript, JavaScript, JSON, and Vue source scopes.',
+    '  fix: move this file to an explicit checker scope or configure config.checkers manually.',
+  ].join('\n');
+}
+
+function classifyAutoScope(
+  config: ResolvedLiminaConfig,
+  scope: AutoScope,
+): AutoCheckerPreset {
+  const typescriptExtensions = new Set(
+    getBuildCheckerSupportedExtensions('tsc'),
+  );
+  const vueExtensions = new Set(getBuildCheckerSupportedExtensions('vue-tsc'));
+  let hasVueOnlyFile = false;
+
+  for (const project of scope.projects) {
+    for (const fileName of project.fileNames) {
+      const extension = getFileExtension(fileName);
+
+      if (!extension) {
+        continue;
+      }
+
+      if (!vueExtensions.has(extension)) {
+        throw new Error(
+          formatUnsupportedAutoScopeExtensionProblem({
+            config,
+            entryConfigPath: scope.entryConfigPath,
+            extension,
+            fileName,
+          }),
+        );
+      }
+
+      if (!typescriptExtensions.has(extension)) {
+        hasVueOnlyFile = true;
+      }
+    }
+  }
+
+  return hasVueOnlyFile ? 'vue-tsc' : 'tsc';
+}
+
+function isAutoRelativeSpecifier(specifier: string): boolean {
+  return (
+    specifier === '.' ||
+    specifier === '..' ||
+    specifier.startsWith('./') ||
+    specifier.startsWith('../')
+  );
+}
+
+function collectAutoImportCandidatePaths(options: {
+  containingFile: string;
+  resolvedFilePath: string | null;
+  specifier: string;
+}): string[] {
+  const candidates = new Set<string>();
+
+  if (options.resolvedFilePath) {
+    candidates.add(normalizeAbsolutePath(options.resolvedFilePath));
+  }
+
+  if (!isAutoRelativeSpecifier(options.specifier)) {
+    return [...candidates];
+  }
+
+  const basePath = path.resolve(
+    path.dirname(options.containingFile),
+    options.specifier,
+  );
+
+  if (path.extname(basePath)) {
+    candidates.add(normalizeAbsolutePath(basePath));
+    return [...candidates];
+  }
+
+  for (const extension of capabilityDiscoveryExtensions) {
+    candidates.add(normalizeAbsolutePath(`${basePath}${extension}`));
+    candidates.add(
+      normalizeAbsolutePath(path.join(basePath, `index${extension}`)),
+    );
+  }
+
+  return [...candidates];
+}
+
+function collectAutoScopeDependencies(
+  config: ResolvedLiminaConfig,
+  scopes: AutoScope[],
+): Map<string, Set<string>> {
+  const dependenciesByEntry = new Map(
+    scopes.map((scope) => [scope.entryConfigPath, new Set<string>()]),
+  );
+  const scopeEntries = new Set(scopes.map((scope) => scope.entryConfigPath));
+  const entryPathsByFileName = new Map<string, Set<string>>();
+  const importAnalysis = createImportAnalysisContext();
+
+  for (const scope of scopes) {
+    for (const project of scope.projects) {
+      for (const fileName of project.fileNames) {
+        const entries = entryPathsByFileName.get(fileName) ?? new Set<string>();
+
+        entries.add(scope.entryConfigPath);
+        entryPathsByFileName.set(fileName, entries);
+      }
+    }
+  }
+
+  for (const scope of scopes) {
+    const dependencies =
+      dependenciesByEntry.get(scope.entryConfigPath) ?? new Set<string>();
+
+    for (const references of scope.collection.solutionReferencesBySourcePath.values()) {
+      for (const referencePath of references) {
+        if (
+          scopeEntries.has(referencePath) &&
+          referencePath !== scope.entryConfigPath
+        ) {
+          dependencies.add(referencePath);
+        }
+      }
+    }
+
+    for (const project of scope.projects) {
+      for (const fileName of project.fileNames) {
+        for (const importRecord of collectImportsFromFile(
+          fileName,
+          config.rootDir,
+          importAnalysis,
+        )) {
+          const resolvedFilePath = resolveInternalImport(
+            importRecord.specifier,
+            fileName,
+            project.options,
+            {
+              ...project.context,
+              configPath: project.configPath,
+              resolverConfigPath: project.configPath,
+            },
+            importAnalysis,
+          );
+
+          for (const candidatePath of collectAutoImportCandidatePaths({
+            containingFile: fileName,
+            resolvedFilePath,
+            specifier: importRecord.specifier,
+          })) {
+            for (const targetEntryPath of entryPathsByFileName.get(
+              candidatePath,
+            ) ?? []) {
+              if (targetEntryPath !== scope.entryConfigPath) {
+                dependencies.add(targetEntryPath);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return dependenciesByEntry;
+}
+
+function promoteAutoScopes(
+  kindsByEntry: Map<string, AutoCheckerPreset>,
+  dependenciesByEntry: Map<string, Set<string>>,
+): void {
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const [entryConfigPath, dependencies] of dependenciesByEntry) {
+      if (kindsByEntry.get(entryConfigPath) !== 'tsc') {
+        continue;
+      }
+
+      for (const dependencyPath of dependencies) {
+        if (kindsByEntry.get(dependencyPath) !== 'vue-tsc') {
+          continue;
+        }
+
+        kindsByEntry.set(entryConfigPath, 'vue-tsc');
+        changed = true;
+        break;
+      }
+    }
+  }
+}
+
+async function resolveAutoCheckers(
+  config: ResolvedLiminaConfig,
+): Promise<ResolvedCheckerConfig[]> {
+  const entryConfigPaths = await collectAutoEntryConfigPaths(config);
+  const scopes = entryConfigPaths
+    .map((entryConfigPath) => collectAutoScope(config, entryConfigPath))
+    .filter((scope): scope is AutoScope => Boolean(scope));
+  const kindsByEntry = new Map(
+    scopes.map((scope) => [
+      scope.entryConfigPath,
+      classifyAutoScope(config, scope),
+    ]),
+  );
+
+  promoteAutoScopes(kindsByEntry, collectAutoScopeDependencies(config, scopes));
+
+  const entriesByPreset = new Map<AutoCheckerPreset, string[]>();
+
+  for (const [entryConfigPath, preset] of kindsByEntry) {
+    entriesByPreset.set(preset, [
+      ...(entriesByPreset.get(preset) ?? []),
+      toPosixPath(toRelativePath(config.rootDir, entryConfigPath)),
+    ]);
+  }
+
+  const checkers: ResolvedCheckerConfig[] = [];
+  const typescriptEntries = entriesByPreset.get('tsc')?.sort() ?? [];
+  const vueEntries = entriesByPreset.get('vue-tsc')?.sort() ?? [];
+
+  if (typescriptEntries.length > 0) {
+    checkers.push(
+      createResolvedChecker({
+        include: typescriptEntries,
+        name: 'typescript',
+        preset: 'tsc',
+        rootDir: config.rootDir,
+      }),
+    );
+  }
+
+  if (vueEntries.length > 0) {
+    checkers.push(
+      createResolvedChecker({
+        include: vueEntries,
+        name: 'vue',
+        preset: 'vue-tsc',
+        rootDir: config.rootDir,
+      }),
+    );
+  }
+
+  return checkers;
+}
+
+async function resolveGeneratedGraphCheckers(
+  config: ResolvedLiminaConfig,
+): Promise<ResolvedCheckerConfig[]> {
+  return isAutoCheckerMode(config)
+    ? resolveAutoCheckers(config)
+    : getActiveCheckers(config);
 }
 
 function createSourceProject(options: {
@@ -1795,6 +2201,7 @@ function createManifest(options: {
 
 function createResult(options: {
   changed: boolean;
+  checkers: ResolvedCheckerConfig[];
   manifest: GeneratedTsconfigGraphManifest;
   manifestPath: string;
   rootDir: string;
@@ -1869,6 +2276,7 @@ function createResult(options: {
 
   return {
     changed: options.changed,
+    checkers: options.checkers,
     manifestPath: options.manifestPath,
     checkerEntries,
     sourceToBuild,
@@ -2147,7 +2555,7 @@ function addUnsupportedSourceConfigExtensionProblems(options: {
 export async function prepareGeneratedTsconfigGraph(
   config: ResolvedLiminaConfig,
 ): Promise<GeneratedTsconfigGraphResult> {
-  const checkers = getActiveCheckers(config);
+  const checkers = await resolveGeneratedGraphCheckers(config);
   const checkerCollectionsByName = new Map<
     string,
     CheckerSourceConfigCollection
@@ -2379,6 +2787,7 @@ export async function prepareGeneratedTsconfigGraph(
 
   return createResult({
     changed: writeContext.changed,
+    checkers,
     manifest,
     manifestPath,
     rootDir: config.rootDir,

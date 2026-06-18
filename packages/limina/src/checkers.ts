@@ -1148,12 +1148,12 @@ export function getCheckerExtensions(
 }
 
 export function getResolvedCheckers(config: {
-  config?: { checkers?: Record<string, CheckerConfig> };
+  config?: { checkers?: 'auto' | Record<string, CheckerConfig> };
   rootDir?: string;
 }): ResolvedCheckerConfig[] {
   const checkers = config.config?.checkers;
 
-  if (!checkers) {
+  if (!checkers || checkers === 'auto') {
     return [];
   }
 

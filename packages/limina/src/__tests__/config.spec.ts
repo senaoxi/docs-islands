@@ -104,9 +104,11 @@ describe('defineConfig', () => {
       },
     });
 
-    expect(config.config?.checkers?.typescript?.include).toEqual([
-      'tsconfig.custom.json',
-    ]);
+    expect(
+      typeof config.config?.checkers === 'object'
+        ? config.config.checkers.typescript?.include
+        : undefined,
+    ).toEqual(['tsconfig.custom.json']);
     expect(config.config?.source?.include).toEqual(['src/**/*.ts']);
     expect(config.config?.source?.exclude).toEqual(['dist']);
     expect(config.pipelines?.package).toEqual(['package:check']);
@@ -552,9 +554,11 @@ export default defineConfig(async ({ mode }) => ({
 
       expect(config.configPath).toBe(path.join(rootDir, 'limina.config.mjs'));
       expect(config.rootDir).toBe(rootDir);
-      expect(config.config?.checkers?.typescript?.include).toEqual([
-        'tsconfig.ci.json',
-      ]);
+      expect(
+        typeof config.config?.checkers === 'object'
+          ? config.config.checkers.typescript?.include
+          : undefined,
+      ).toEqual(['tsconfig.ci.json']);
     } finally {
       await rm(rootDir, {
         force: true,
@@ -917,7 +921,21 @@ export default {
     }
   });
 
-  it('rejects non-object checker maps', async () => {
+  it('accepts auto checker mode', () => {
+    expect(
+      defineConfig({
+        config: {
+          checkers: 'auto',
+        },
+      }),
+    ).toEqual({
+      config: {
+        checkers: 'auto',
+      },
+    });
+  });
+
+  it('rejects invalid checker maps', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
 
     try {
@@ -937,7 +955,7 @@ export default {
       );
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
-        /config\.checkers must be an object keyed by checker name/u,
+        /config\.checkers must be "auto" or an object keyed by checker name/u,
       );
     } finally {
       await rm(rootDir, {

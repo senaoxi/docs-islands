@@ -6,12 +6,12 @@ import { glob } from 'tinyglobby';
 import type ts from 'typescript';
 import {
   type CheckerProjectParseContext,
+  getCheckerExtensions,
   normalizeExtensions,
   parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
 } from '../checkers';
 import {
-  getActiveCheckerExtensions,
   getActiveCheckers,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
@@ -76,6 +76,7 @@ export interface RunProofCheckOptions {
   clearScreen?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
 }
 
 interface ConfigFileOwner {
@@ -158,12 +159,15 @@ function getCheckerCoverageExtensions(
 
 function getActiveCheckerContext(
   config: ResolvedLiminaConfig,
+  generatedGraph?: GeneratedTsconfigGraphResult,
 ): CheckerProjectParseContext {
+  const checkers = generatedGraph?.checkers ?? getActiveCheckers(config);
+
   return {
-    checkerPresets: [
-      ...new Set(getActiveCheckers(config).map((checker) => checker.preset)),
-    ],
-    extensions: getActiveCheckerExtensions(config),
+    checkerPresets: [...new Set(checkers.map((checker) => checker.preset))],
+    extensions: normalizeExtensions(
+      checkers.flatMap((checker) => checker.extensions),
+    ),
   };
 }
 
@@ -233,9 +237,23 @@ function normalizeSourceExcludePattern(pattern: string): string[] {
 }
 
 function defaultSourceExtensions(config: ResolvedLiminaConfig): string[] {
-  const checkerExtensions = getActiveCheckerExtensions(config).filter(
-    (extension) => !defaultSourceIncludeExtensionSet.has(extension),
-  );
+  const activeCheckers = getActiveCheckers(config);
+  const autoCheckerExtensions =
+    config.config?.checkers === undefined || config.config.checkers === 'auto'
+      ? getCheckerExtensions(
+          {
+            include: [],
+            preset: 'vue-tsc',
+          },
+          {
+            projectRootDir: config.rootDir,
+          },
+        )
+      : [];
+  const checkerExtensions = normalizeExtensions([
+    ...activeCheckers.flatMap((checker) => checker.extensions),
+    ...autoCheckerExtensions,
+  ]).filter((extension) => !defaultSourceIncludeExtensionSet.has(extension));
 
   return [...defaultSourceIncludeExtensions, ...checkerExtensions];
 }
@@ -304,7 +322,7 @@ function collectCheckerCoverageTargets(
   const problems: string[] = [];
   const targets: CheckerCoverageTarget[] = [];
 
-  for (const checker of getActiveCheckers(config)) {
+  for (const checker of generatedGraph.checkers) {
     const configPath = generatedGraph.checkerEntries.get(checker.name);
 
     if (!configPath) {
@@ -1415,11 +1433,15 @@ function addDuplicateGraphCoverageProblems(options: {
 
 function addDuplicateTypecheckOwnershipProblems(options: {
   config: ResolvedLiminaConfig;
+  generatedGraph: GeneratedTsconfigGraphResult;
   ordinaryConfigPaths: string[];
   problems: string[];
 }): void {
   const fileOwners = new Map<string, string[]>();
-  const context = getActiveCheckerContext(options.config);
+  const context = getActiveCheckerContext(
+    options.config,
+    options.generatedGraph,
+  );
 
   for (const configPath of options.ordinaryConfigPaths) {
     const configObject = readJsonConfig(options.config, configPath);
@@ -1583,10 +1605,15 @@ function addSourceBoundaryMismatchProblems(options: {
 
 async function runProofCheckInternal(
   config: ResolvedLiminaConfig,
-  options: { logSuccess?: boolean } = {},
+  options: {
+    generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+    logSuccess?: boolean;
+  } = {},
 ): Promise<boolean> {
   const problems: string[] = [];
-  const generatedGraph = await prepareGeneratedTsconfigGraph(config);
+  const generatedGraph = options.generatedGraphProvider
+    ? await options.generatedGraphProvider()
+    : await prepareGeneratedTsconfigGraph(config);
   const graphRouteCollection = collectGraphProjectRoutes(
     config,
     generatedGraph,
@@ -1650,6 +1677,7 @@ async function runProofCheckInternal(
 
   addDuplicateTypecheckOwnershipProblems({
     config,
+    generatedGraph,
     ordinaryConfigPaths: ordinaryTypecheckConfigPaths,
     problems,
   });
@@ -1776,7 +1804,10 @@ export async function runProofCheck(
 
   try {
     const logSuccess = !options.flow?.interactive;
-    const passed = await runProofCheckInternal(config, { logSuccess });
+    const passed = await runProofCheckInternal(config, {
+      generatedGraphProvider: options.generatedGraphProvider,
+      logSuccess,
+    });
 
     if (passed) {
       if (logSuccess) {

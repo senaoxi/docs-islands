@@ -2,12 +2,11 @@ import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
-import type { CheckerProjectParseContext } from '../checkers';
 import {
-  getActiveCheckerExtensions,
-  getActiveCheckers,
-  type ResolvedLiminaConfig,
-} from '../config';
+  type CheckerProjectParseContext,
+  normalizeExtensions,
+} from '../checkers';
+import { getActiveCheckers, type ResolvedLiminaConfig } from '../config';
 import type { LiminaFlowReporter } from '../flow';
 import {
   collectGeneratedSourceConfigPaths,
@@ -61,6 +60,7 @@ export interface RunSourceCheckOptions {
   clearScreen?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   knipRunner?: KnipCliRunner;
 }
 
@@ -479,6 +479,7 @@ function createKnipSourceAnalysisGroups(options: {
       entry.packageName ? [[entry.packageName, entry] as const] : [],
     ),
   );
+  const defaultWorkspaceNames: string[] = [];
   const groups: KnipSourceAnalysisGroup[] = [];
 
   for (const workspacePackage of options.workspacePackages) {
@@ -491,9 +492,7 @@ function createKnipSourceAnalysisGroups(options: {
     );
 
     if (!generatedConfig) {
-      groups.push({
-        workspaceNames: [workspacePackage.name],
-      });
+      defaultWorkspaceNames.push(workspacePackage.name);
       continue;
     }
 
@@ -506,7 +505,16 @@ function createKnipSourceAnalysisGroups(options: {
     });
   }
 
-  return groups;
+  return [
+    ...(defaultWorkspaceNames.length > 0
+      ? [
+          {
+            workspaceNames: defaultWorkspaceNames,
+          },
+        ]
+      : []),
+    ...groups,
+  ];
 }
 
 function createPackageDependencyIssueKey(
@@ -1032,12 +1040,15 @@ function shouldSkipGovernedTsconfig(
 
 function getSourceGovernanceContext(
   config: ResolvedLiminaConfig,
+  generatedGraph?: GeneratedTsconfigGraphResult,
 ): CheckerProjectParseContext {
+  const checkers = generatedGraph?.checkers ?? getActiveCheckers(config);
+
   return {
-    checkerPresets: [
-      ...new Set(getActiveCheckers(config).map((checker) => checker.preset)),
-    ],
-    extensions: getActiveCheckerExtensions(config),
+    checkerPresets: [...new Set(checkers.map((checker) => checker.preset))],
+    extensions: normalizeExtensions(
+      checkers.flatMap((checker) => checker.extensions),
+    ),
   };
 }
 
@@ -1432,11 +1443,15 @@ function isIgnoredTsconfigOwnershipModule(options: {
 async function addTsconfigGovernanceProblems(options: {
   config: ResolvedLiminaConfig;
   configPaths: string[];
+  generatedGraph: GeneratedTsconfigGraphResult;
   owners: PackageOwner[];
   problems: string[];
 }): Promise<void> {
   const configPaths = options.configPaths;
-  const context = getSourceGovernanceContext(options.config);
+  const context = getSourceGovernanceContext(
+    options.config,
+    options.generatedGraph,
+  );
   const governanceUnitsByFile = new Map<
     string,
     Map<string, { configPaths: string[]; owner: PackageOwner }>
@@ -2419,9 +2434,15 @@ function createSourceProjectEntries(
 
 async function runSourceCheckInternal(
   config: ResolvedLiminaConfig,
-  options: { knipRunner?: KnipCliRunner; logSuccess?: boolean } = {},
+  options: {
+    generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+    knipRunner?: KnipCliRunner;
+    logSuccess?: boolean;
+  } = {},
 ): Promise<boolean> {
-  const generatedGraph = await prepareGeneratedTsconfigGraph(config);
+  const generatedGraph = options.generatedGraphProvider
+    ? await options.generatedGraphProvider()
+    : await prepareGeneratedTsconfigGraph(config);
   const graphRoute = collectSourceGraphProjectExtensions(
     config,
     generatedGraph,
@@ -2447,6 +2468,7 @@ async function runSourceCheckInternal(
   await addTsconfigGovernanceProblems({
     config,
     configPaths: collectGeneratedSourceConfigPaths(generatedGraph),
+    generatedGraph,
     owners: packageOwners,
     problems,
   });
@@ -2694,6 +2716,7 @@ export async function runSourceCheck(
   try {
     const logSuccess = !options.flow?.interactive;
     const passed = await runSourceCheckInternal(config, {
+      generatedGraphProvider: options.generatedGraphProvider,
       knipRunner: options.knipRunner,
       logSuccess,
     });

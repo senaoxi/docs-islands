@@ -23,7 +23,7 @@ export default defineConfig(({ command, mode }) => ({
 Function configs are useful when local, CI, or release workflows need different checkers, rules, or package entries. The environment-specific differences stay in one reviewable config file.
 
 ::: tip
-The bulk of a config lives under `config.checkers`. See [Checker Entries](./checkers.md) for the entries shared by graph, source, proof, and checker commands.
+If `config.checkers` is omitted, Limina uses auto checker discovery. See [Checker Entries](./checkers.md) when you need explicit checker routing.
 :::
 
 ## mode

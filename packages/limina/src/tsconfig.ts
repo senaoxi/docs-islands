@@ -478,7 +478,7 @@ export function collectGraphProjectRoutes(
   const routes: CheckerGraphProjectRoute[] = [];
   const problems: string[] = [];
 
-  for (const checker of getActiveCheckers(config)) {
+  for (const checker of generatedGraph?.checkers ?? getActiveCheckers(config)) {
     const adapter = getCheckerAdapter(checker.preset);
 
     if (!adapter?.sourceGraph) {
@@ -537,7 +537,7 @@ export function collectCheckerEntryProjectRoutes(
   const routes: CheckerGraphProjectRoute[] = [];
   const problems: string[] = [];
 
-  for (const checker of getActiveCheckers(config)) {
+  for (const checker of generatedGraph?.checkers ?? getActiveCheckers(config)) {
     const rootConfigPath = generatedGraph?.checkerEntries.get(checker.name);
 
     if (!rootConfigPath) {

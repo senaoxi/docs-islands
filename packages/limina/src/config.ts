@@ -113,6 +113,8 @@ export interface CheckerConfig {
   exclude?: string[];
 }
 
+export type CheckerConfigMode = 'auto' | Record<string, CheckerConfig>;
+
 export interface ResolvedCheckerConfig {
   exclude: string[];
   extensions: string[];
@@ -303,7 +305,7 @@ export interface SharedLiminaConfig {
   /**
    * Checker capabilities shared by graph, proof, and tsc tasks.
    */
-  checkers?: Record<string, CheckerConfig>;
+  checkers?: CheckerConfigMode;
   /**
    * Global source file boundary used by proof checks.
    */
@@ -862,12 +864,41 @@ const checkerConfigShapeSchema = z
     }
   });
 
+function isPlainConfigRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 const sharedLiminaConfigShapeSchema = z
-  .looseObject({
-    checkers: z.record(z.string(), checkerConfigShapeSchema).optional(),
-  })
+  .looseObject({})
   .superRefine((sharedConfig, ctx) => {
+    const checkers = sharedConfig.checkers;
     const source = sharedConfig.source;
+
+    if (checkers !== undefined && checkers !== 'auto') {
+      if (isPlainConfigRecord(checkers)) {
+        for (const [checkerName, checker] of Object.entries(checkers)) {
+          const result = checkerConfigShapeSchema.safeParse(checker);
+
+          if (result.success) {
+            continue;
+          }
+
+          for (const issue of result.error.issues) {
+            ctx.addIssue({
+              ...issue,
+              path: ['checkers', checkerName, ...issue.path],
+            });
+          }
+        }
+      } else {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'config.checkers must be "auto" or an object keyed by checker name.',
+          path: ['checkers'],
+        });
+      }
+    }
 
     if (source === null || source === undefined || typeof source !== 'object') {
       return;
@@ -1030,7 +1061,7 @@ function formatLiminaConfigShapeIssue(
       'Invalid Limina checker config:',
       '  field: config.checkers',
       `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
-      '  reason: config.checkers must be an object keyed by checker name.',
+      '  reason: config.checkers must be "auto" or an object keyed by checker name.',
     ].join('\n');
   }
 

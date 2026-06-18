@@ -1,12 +1,15 @@
 # 检查器入口
 
-检查器入口用来告诉 Limina：每个检查器应该接管哪些源码入口 `tsconfig.json`。Limina 会从这些入口出发，继续跟随 solution references，再把声明图、检查器构建入口、声明输出目录、tsbuildinfo 和产物清单生成到 `.limina/`。
+检查器入口用来告诉 Limina：每个检查器应该接管哪些源码入口 `tsconfig.json`。如果没有配置 `config.checkers`，Limina 会使用 auto 模式：自动发现普通 `tsconfig.json` 源码作用域，根据每个作用域实际包含的文件选择 `tsc` 或 `vue-tsc`，并把依赖 Vue 作用域的 TypeScript 作用域提升到 `vue-tsc`，让首次接入不需要手写路由。
+
+需要使用 `tsgo`、第二类 checker、更小的 Vue 覆盖范围，或迁移期 include / exclude 规则时，再改用显式 checker 对象。Limina 会从这些入口出发，继续跟随 solution references，再把声明图、检查器构建入口、声明输出目录、tsbuildinfo 和产物清单生成到 `.limina/`。
 
 ```js
 import { defineConfig } from 'limina';
 
 export default defineConfig({
   config: {
+    // 可选。快速接入时可以省略这个字段，或写成 checkers: 'auto'。
     checkers: {
       typescript: {
         preset: 'tsc',
@@ -21,6 +24,17 @@ export default defineConfig({
   },
 });
 ```
+
+## auto
+
+- **类型：** `'auto'`
+- **默认值：** 省略 `config.checkers` 时使用
+
+auto 模式把每个普通 `tsconfig.json` 当作源码作用域。只包含 TypeScript、JavaScript 和 JSON 的作用域会交给 `tsc`；包含 `.vue` 文件的作用域会交给 `vue-tsc`。solution-style `tsconfig.json` 仍然兼容，Limina 会根据它引用到的源码叶子判断能力。
+
+如果 TypeScript 作用域 import 到 Vue 作用域，auto 模式会把这个 TypeScript 作用域提升到 `vue-tsc`。提升会沿依赖链重复执行，所以生成的 checker 输出不会出现 `tsc` consumer 依赖 `vue-tsc` provider 的情况。
+
+auto 模式只会在 `tsc` 和 `vue-tsc` 之间选择。需要其他 preset 或更细的拆分时，改用显式 checker 对象。
 
 ## \<name\>
 

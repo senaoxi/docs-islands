@@ -23,7 +23,7 @@ export default defineConfig(({ command, mode }) => ({
 本地、CI、发布前需要使用不同检查器、规则或包条目时，可以用函数配置返回不同内容。环境差异会留在一个可审查的配置文件里。
 
 ::: tip
-配置的主体位于 `config.checkers` 下。图、源码、覆盖证明和检查器命令共享的入口请参见[检查器入口](./checkers.md)。
+省略 `config.checkers` 时，Limina 会自动发现 checker。需要显式控制 checker 路由时，再看[检查器入口](./checkers.md)。
 :::
 
 ## mode

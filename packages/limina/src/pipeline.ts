@@ -14,18 +14,29 @@ import {
 import type {
   BuiltinTaskName,
   PipelineStep,
+  ResolvedCheckerConfig,
   ResolvedLiminaConfig,
 } from './config';
 import { getActiveCheckers } from './config';
 import type { LiminaFlowReporter } from './flow';
+import {
+  type GeneratedTsconfigGraphResult,
+  prepareGeneratedTsconfigGraph,
+} from './generated-graph';
 
 interface RunPipelineOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
+  generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   packageNames?: readonly string[];
 }
 
 type NormalizedPipelineStep = Exclude<PipelineStep, string>;
+
+interface PipelineGeneratedGraphContext {
+  get: () => Promise<GeneratedTsconfigGraphResult>;
+  reset: () => void;
+}
 
 const builtInTaskNames = new Set<string>([
   'checker:build',
@@ -46,9 +57,30 @@ const defaultCheckPipeline: PipelineStep[] = [
   'checker:typecheck',
 ];
 
+function createPipelineGeneratedGraphContext(
+  config: ResolvedLiminaConfig,
+  options: RunPipelineOptions,
+): PipelineGeneratedGraphContext {
+  let promise: Promise<GeneratedTsconfigGraphResult> | undefined;
+
+  return {
+    get: () => {
+      promise ??= options.generatedGraphProvider
+        ? options.generatedGraphProvider()
+        : prepareGeneratedTsconfigGraph(config);
+
+      return promise;
+    },
+    reset: () => {
+      promise = undefined;
+    },
+  };
+}
+
 function reportCheckerCapabilities(
   config: ResolvedLiminaConfig,
   flow: LiminaFlowReporter | undefined,
+  checkers: ResolvedCheckerConfig[] = getActiveCheckers(config),
 ): void {
   if (!flow) {
     return;
@@ -59,7 +91,7 @@ function reportCheckerCapabilities(
   const sourceGraph: string[] = [];
   const noSourceGraph: string[] = [];
 
-  for (const checker of getActiveCheckers(config)) {
+  for (const checker of checkers) {
     const adapter = getCheckerAdapter(checker.preset);
     const label = `${checker.name} (${checker.preset})`;
 
@@ -90,6 +122,12 @@ function reportCheckerCapabilities(
         : []),
     ].join('\n'),
     { depth: 1 },
+  );
+}
+
+function usesAutoCheckers(config: ResolvedLiminaConfig): boolean {
+  return (
+    config.config?.checkers === undefined || config.config.checkers === 'auto'
   );
 }
 
@@ -193,6 +231,7 @@ export async function runBuiltinTask(
         clearScreen: false,
         flow: options.flow,
         flowDepth: 1,
+        generatedGraphProvider: options.generatedGraphProvider,
       });
     }
     case 'graph:prepare': {
@@ -200,6 +239,7 @@ export async function runBuiltinTask(
         clearScreen: false,
         flow: options.flow,
         flowDepth: 1,
+        generatedGraphProvider: options.generatedGraphProvider,
       });
     }
     case 'proof:check': {
@@ -207,6 +247,7 @@ export async function runBuiltinTask(
         clearScreen: false,
         flow: options.flow,
         flowDepth: 1,
+        generatedGraphProvider: options.generatedGraphProvider,
       });
     }
     case 'source:check': {
@@ -214,6 +255,7 @@ export async function runBuiltinTask(
         clearScreen: false,
         flow: options.flow,
         flowDepth: 1,
+        generatedGraphProvider: options.generatedGraphProvider,
       });
     }
     case 'package:check': {
@@ -243,6 +285,7 @@ export async function runBuiltinTask(
         cwd: config.rootDir,
         flow: options.flow,
         flowDepth: 1,
+        generatedGraphProvider: options.generatedGraphProvider,
       });
 
       return result.passed;
@@ -254,6 +297,7 @@ export async function runBuiltinTask(
         cwd: config.rootDir,
         flow: options.flow,
         flowDepth: 1,
+        generatedGraphProvider: options.generatedGraphProvider,
       });
 
       return result.passed;
@@ -384,12 +428,23 @@ export async function runPipeline(
   const pipelineTask = options.flow?.start(`pipeline: ${pipelineName}`, {
     collapseOnSuccess: false,
   });
+  const generatedGraphContext = createPipelineGeneratedGraphContext(
+    config,
+    options,
+  );
+  const taskOptions = {
+    ...options,
+    generatedGraphProvider: generatedGraphContext.get,
+  };
 
   for (const [stepIndex, step] of normalizedSteps.entries()) {
-    const passed =
-      step.type === 'task'
-        ? await runBuiltinTask(config, step.name, options)
-        : await runCommandStep(config, step, options);
+    const passed = await (step.type === 'task'
+      ? runBuiltinTask(config, step.name, taskOptions)
+      : runCommandStep(config, step, options));
+
+    if (step.type === 'command') {
+      generatedGraphContext.reset();
+    }
 
     if (!passed) {
       const label = getPipelineStepLabel(step);
@@ -419,14 +474,27 @@ export async function runDefaultCheck(
   const pipelineTask = options.flow?.start('default check', {
     collapseOnSuccess: false,
   });
+  const generatedGraphContext = createPipelineGeneratedGraphContext(
+    config,
+    options,
+  );
+  const taskOptions = {
+    ...options,
+    generatedGraphProvider: generatedGraphContext.get,
+  };
 
-  reportCheckerCapabilities(config, options.flow);
+  if (!usesAutoCheckers(config)) {
+    reportCheckerCapabilities(config, options.flow);
+  }
 
   for (const [stepIndex, step] of normalizedSteps.entries()) {
-    const passed =
-      step.type === 'task'
-        ? await runBuiltinTask(config, step.name, options)
-        : await runCommandStep(config, step, options);
+    const passed = await (step.type === 'task'
+      ? runBuiltinTask(config, step.name, taskOptions)
+      : runCommandStep(config, step, options));
+
+    if (step.type === 'command') {
+      generatedGraphContext.reset();
+    }
 
     if (!passed) {
       const label = getPipelineStepLabel(step);
@@ -440,6 +508,16 @@ export async function runDefaultCheck(
       }
 
       return false;
+    }
+
+    if (usesAutoCheckers(config) && step.type === 'task') {
+      if (step.name === 'graph:check' || step.name === 'graph:prepare') {
+        reportCheckerCapabilities(
+          config,
+          options.flow,
+          (await generatedGraphContext.get()).checkers,
+        );
+      }
     }
   }
 

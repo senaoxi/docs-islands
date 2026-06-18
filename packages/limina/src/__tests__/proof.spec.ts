@@ -682,7 +682,9 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              ...fixture.config.config?.checkers,
+              ...(typeof fixture.config.config?.checkers === 'object'
+                ? fixture.config.config.checkers
+                : {}),
               typescript: {
                 include: ['tsconfig.json'],
                 preset: 'tsc',
@@ -710,7 +712,9 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              ...fixture.config.config?.checkers,
+              ...(typeof fixture.config.config?.checkers === 'object'
+                ? fixture.config.config.checkers
+                : {}),
               vue: {
                 include: ['packages/pkg/tsconfig.missing.json'],
                 preset: 'vue-tsc',

@@ -1,12 +1,15 @@
 # Checker Entries
 
-Checker entries tell Limina which source `tsconfig.json` entry files belong to each checker. Limina starts from those entries, follows their solution references, and then generates the declaration graph, checker build entries, declaration output directories, tsbuildinfo paths, and manifest under `.limina/`.
+Checker entries tell Limina which source `tsconfig.json` entry files belong to each checker. When `config.checkers` is omitted, Limina uses auto mode: it discovers ordinary `tsconfig.json` source scopes, chooses `tsc` or `vue-tsc` from the files each scope contains, and promotes TypeScript scopes that depend on Vue scopes so setup can pass without hand-written routing.
+
+Use an explicit checker object when you need `tsgo`, second-class checkers, smaller Vue coverage, or migration-specific include / exclude rules. Limina starts from those entries, follows their solution references, and then generates the declaration graph, checker build entries, declaration output directories, tsbuildinfo paths, and manifest under `.limina/`.
 
 ```js
 import { defineConfig } from 'limina';
 
 export default defineConfig({
   config: {
+    // Optional. Omit this field or set checkers: 'auto' for quick setup.
     checkers: {
       typescript: {
         preset: 'tsc',
@@ -21,6 +24,17 @@ export default defineConfig({
   },
 });
 ```
+
+## auto
+
+- **Type:** `'auto'`
+- **Default:** used when `config.checkers` is omitted
+
+Auto mode treats every ordinary `tsconfig.json` as a source scope. A scope with only TypeScript, JavaScript, and JSON files is routed to `tsc`. A scope containing `.vue` files is routed to `vue-tsc`. Solution-style `tsconfig.json` files are still accepted for compatibility; Limina classifies them from the referenced source leaves.
+
+If a TypeScript scope imports a Vue scope, auto mode promotes the TypeScript scope to `vue-tsc`. Promotion repeats through dependency chains, so generated checker output avoids `tsc` consumers depending on `vue-tsc` providers.
+
+Auto mode only chooses between `tsc` and `vue-tsc`. Switch to an explicit checker object when you need another preset or a tighter split.
 
 ## \<name\>
 

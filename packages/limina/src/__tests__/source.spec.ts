@@ -2010,6 +2010,27 @@ packages:
         tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
       }),
       'packages/tool/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+      'packages/cli/package.json': stringifyConfig({
+        exports: {
+          '.': './src/index.ts',
+        },
+        name: '@example/cli',
+        type: 'module',
+      }),
+      'packages/cli/src/index.ts': 'export const cliValue = 1;\n',
+      'packages/cli/tsconfig.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/cli/tsconfig.lib.dts.json': buildConfig({
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+      }),
+      'packages/cli/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
     });
 
     try {
@@ -2022,19 +2043,21 @@ packages:
         }),
       ).resolves.toBe(true);
 
-      const invocationByWorkspace = new Map(
-        invocations.map((invocation) => [
-          invocation.workspaceNames?.[0],
-          invocation,
-        ]),
+      const generatedInvocation = invocations.find(
+        (invocation) => invocation.tsConfigFile,
+      );
+      const defaultInvocation = invocations.find(
+        (invocation) => !invocation.tsConfigFile,
       );
 
-      expect(invocationByWorkspace.get('@example/app')?.tsConfigFile).toContain(
-        'tsconfig.knip.json',
-      );
-      expect(
-        invocationByWorkspace.get('@example/tool')?.tsConfigFile,
-      ).toBeUndefined();
+      expect(invocations).toHaveLength(2);
+      expect(generatedInvocation?.workspaceNames).toEqual(['@example/app']);
+      expect(generatedInvocation?.tsConfigFile).toContain('tsconfig.knip.json');
+      expect(defaultInvocation?.tsConfigFile).toBeUndefined();
+      expect([...(defaultInvocation?.workspaceNames ?? [])].sort()).toEqual([
+        '@example/cli',
+        '@example/tool',
+      ]);
     } finally {
       await fixture.cleanup();
     }

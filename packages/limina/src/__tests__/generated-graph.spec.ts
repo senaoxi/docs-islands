@@ -56,6 +56,343 @@ function json(value: unknown): string {
 }
 
 describe('prepareGeneratedTsconfigGraph', () => {
+  it('uses auto checkers when config.checkers is omitted', async () => {
+    const fixture = await createFixture({
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {},
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          include: ['packages/pkg/tsconfig.json'],
+          name: 'typescript',
+          preset: 'tsc',
+        },
+      ]);
+      expect(Object.keys(result.manifest.checkers)).toEqual(['typescript']);
+      expect(result.manifest.checkers.typescript?.sourceToDts).toMatchObject({
+        'packages/pkg/tsconfig.json':
+          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.dts.json',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('routes Vue auto scopes to vue-tsc', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/App.vue':
+        '<script setup lang="ts">const value = 1;</script>\n',
+      'packages/app/src/index.ts': 'export const value = 1;\n',
+      'packages/app/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: 'auto',
+        },
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          include: ['packages/app/tsconfig.json'],
+          name: 'vue',
+          preset: 'vue-tsc',
+        },
+      ]);
+      expect(Object.keys(result.manifest.checkers)).toEqual(['vue']);
+      expect(result.manifest.checkers.vue?.sourceToDts).toMatchObject({
+        'packages/app/tsconfig.json':
+          '.limina/tsconfig/checkers/vue/projects/packages/app/tsconfig.dts.json',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('promotes TypeScript auto consumers that import Vue auto scopes', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/index.ts':
+        "import { themeValue } from '../../theme/src/theme';\nexport const value = themeValue;\n",
+      'packages/app/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/theme/src/Theme.vue':
+        '<script setup lang="ts">const value = 1;</script>\n',
+      'packages/theme/src/theme.ts': 'export const themeValue = 1;\n',
+      'packages/theme/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: 'auto',
+        },
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          include: [
+            'packages/app/tsconfig.json',
+            'packages/theme/tsconfig.json',
+          ],
+          name: 'vue',
+          preset: 'vue-tsc',
+        },
+      ]);
+      expect(Object.keys(result.manifest.checkers)).toEqual(['vue']);
+      expect(result.manifest.providerEdges).toEqual([]);
+      expect(result.manifest.checkers.vue?.sourceToDts).toMatchObject({
+        'packages/app/tsconfig.json':
+          '.limina/tsconfig/checkers/vue/projects/packages/app/tsconfig.dts.json',
+        'packages/theme/tsconfig.json':
+          '.limina/tsconfig/checkers/vue/projects/packages/theme/tsconfig.dts.json',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('promotes TypeScript auto consumers transitively through dependency chains', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/index.ts':
+        "import { sharedValue } from '../../shared/src/index';\nexport const value = sharedValue;\n",
+      'packages/app/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/shared/src/index.ts':
+        "import { themeValue } from '../../theme/src/theme';\nexport const sharedValue = themeValue;\n",
+      'packages/shared/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/theme/src/Theme.vue':
+        '<script setup lang="ts">const value = 1;</script>\n',
+      'packages/theme/src/theme.ts': 'export const themeValue = 1;\n',
+      'packages/theme/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: 'auto',
+        },
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          include: [
+            'packages/app/tsconfig.json',
+            'packages/shared/tsconfig.json',
+            'packages/theme/tsconfig.json',
+          ],
+          name: 'vue',
+          preset: 'vue-tsc',
+        },
+      ]);
+      expect(Object.keys(result.manifest.checkers)).toEqual(['vue']);
+      expect(result.manifest.providerEdges).toEqual([]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps TypeScript-only auto scopes under tsc', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/index.ts':
+        "import { sharedValue } from '../../shared/src/index';\nexport const value = sharedValue;\n",
+      'packages/app/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/shared/src/index.ts': 'export const sharedValue = 1;\n',
+      'packages/shared/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: 'auto',
+        },
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          include: [
+            'packages/app/tsconfig.json',
+            'packages/shared/tsconfig.json',
+          ],
+          name: 'typescript',
+          preset: 'tsc',
+        },
+      ]);
+      expect(Object.keys(result.manifest.checkers)).toEqual(['typescript']);
+      expect(result.manifest.providerEdges).toEqual([]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('classifies solution-style auto scopes from referenced leaves', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/App.vue':
+        '<script setup lang="ts">const value = 1;</script>\n',
+      'packages/app/tsconfig.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/app/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: 'auto',
+        },
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          include: ['packages/app/tsconfig.json'],
+          name: 'vue',
+          preset: 'vue-tsc',
+        },
+      ]);
+      expect(result.manifest.checkers.vue?.sourceToDts).toMatchObject({
+        'packages/app/tsconfig.lib.json':
+          '.limina/tsconfig/checkers/vue/projects/packages/app/tsconfig.lib.dts.json',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects unsupported extensions in auto scopes', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/App.svelte':
+        '<script lang="ts">const value = 1;</script>\n',
+      'packages/app/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      await expect(
+        prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: 'auto',
+          },
+        }),
+      ).rejects.toThrow('Unsupported auto checker source file extension');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('writes a manifest and generated declaration leaf for source configs', async () => {
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',

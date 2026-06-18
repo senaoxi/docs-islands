@@ -587,6 +587,7 @@ export interface RunCheckerBuildOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
   tscCommand?: string;
@@ -626,6 +627,7 @@ export interface RunCheckerTypecheckOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
   tscCommand?: string;
@@ -642,8 +644,10 @@ async function runCheckerBuildInternal(
 ): Promise<RunCheckerBuildResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
-  const allCheckers = getActiveCheckers(options.config);
-  const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
+  const generatedGraph = options.generatedGraphProvider
+    ? await options.generatedGraphProvider()
+    : await prepareGeneratedTsconfigGraph(options.config);
+  const allCheckers = generatedGraph.checkers;
   const checkers = getExecutionCheckers({
     checkers: allCheckers,
     executionKind: 'build',
@@ -1093,8 +1097,8 @@ async function resolveBuildTarget(
     project: options.project,
     rootDir: projectRootDir,
   });
-  const allCheckers = getActiveCheckers(options.config);
   const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
+  const allCheckers = generatedGraph.checkers;
   const managedTargets = isOrdinarySourceTypecheckConfigPath(targetConfigPath)
     ? collectManagedBuildTargets({
         allCheckers,
@@ -1852,7 +1856,9 @@ async function runCheckerTypecheckInternal(
     };
   }
 
-  const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
+  const generatedGraph = options.generatedGraphProvider
+    ? await options.generatedGraphProvider()
+    : await prepareGeneratedTsconfigGraph(options.config);
   const targets = checkers.map((checker) => {
     const configPath = generatedGraph.checkerEntries.get(checker.name);
 

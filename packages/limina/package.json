@@ -122,7 +122,7 @@
       "optional": true
     }
   },
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": "./src/index.ts",
     "./config": "./src/config.ts",

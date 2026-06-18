@@ -72,12 +72,14 @@ export interface RunGraphCheckOptions {
   clearScreen?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
 }
 
 export interface RunGraphPrepareOptions {
   clearScreen?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
 }
 
 export interface RunGraphExportOptions {
@@ -1740,9 +1742,14 @@ function createGeneratedGraphPathAliases(
 
 async function runGraphCheckInternal(
   config: ResolvedLiminaConfig,
-  options: { logSuccess?: boolean } = {},
+  options: {
+    generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+    logSuccess?: boolean;
+  } = {},
 ): Promise<boolean> {
-  const generatedGraph = await prepareGeneratedTsconfigGraph(config);
+  const generatedGraph = options.generatedGraphProvider
+    ? await options.generatedGraphProvider()
+    : await prepareGeneratedTsconfigGraph(config);
   const graphRoute = collectSourceGraphProjectExtensions(
     config,
     generatedGraph,
@@ -1876,7 +1883,9 @@ export async function runGraphPrepare(
   GraphLogger.info('graph prepare started');
 
   try {
-    const result = await prepareGeneratedTsconfigGraph(config);
+    const result = options.generatedGraphProvider
+      ? await options.generatedGraphProvider()
+      : await prepareGeneratedTsconfigGraph(config);
 
     if (!options.flow?.interactive) {
       GraphLogger.success(
@@ -1916,7 +1925,10 @@ export async function runGraphCheck(
 
   try {
     const logSuccess = !options.flow?.interactive;
-    const passed = await runGraphCheckInternal(config, { logSuccess });
+    const passed = await runGraphCheckInternal(config, {
+      generatedGraphProvider: options.generatedGraphProvider,
+      logSuccess,
+    });
 
     if (passed) {
       if (logSuccess) {
