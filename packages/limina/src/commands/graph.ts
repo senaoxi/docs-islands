@@ -65,6 +65,7 @@ import {
   createWorkspaceExportsResolutionIndex,
   type WorkspaceExportsResolutionIndex,
   type WorkspaceExportsResolutionProfile,
+  type WorkspacePackageExportResolution,
 } from '../workspace-exports';
 
 export interface RunGraphCheckOptions {
@@ -175,6 +176,42 @@ function isSameGeneratedCheckerNamespace(
 interface ReferenceExpectation {
   importRecords: ImportRecord[];
   targetProjectPath: string;
+}
+
+type ExpectedReferencesByProjectPath = Map<
+  string,
+  Map<string, ReferenceExpectation>
+>;
+
+interface ExpectedReferenceCollectionOptions {
+  config: ResolvedLiminaConfig;
+  fileOwnerLookup: Map<string, string[]>;
+  generatedGraph: GeneratedTsconfigGraphResult;
+  graphRules: NormalizedGraphRules;
+  importers: ImporterInfo[];
+  packages: WorkspacePackage[];
+  problems: string[];
+  projectPaths: string[];
+  projects: ProjectInfo[];
+  projectsByPath: Map<string, ProjectInfo>;
+  selectedProjectPaths?: Set<string>;
+  workspaceExports: WorkspaceExportsResolutionIndex;
+}
+
+interface ExpectedReferenceCollectionContext
+  extends ExpectedReferenceCollectionOptions {
+  expectedReferencesByProjectPath: ExpectedReferencesByProjectPath;
+  importAnalysis: ReturnType<typeof createImportAnalysisContext>;
+}
+
+interface GraphImportResolution {
+  graphResolvedFilePath: string;
+  importer: ImporterInfo | null;
+  resolvedFilePath: string;
+  targetPackage: WorkspacePackage | null;
+  targetPackageForGraph: WorkspacePackage | null;
+  targetWorkspacePackageForResolved: WorkspacePackage | null;
+  workspaceExportResolution: WorkspacePackageExportResolution | null;
 }
 
 interface CustomConditionSubtreeSummary {
@@ -1133,317 +1170,506 @@ function hasProviderEdgeForReferenceExpectation(options: {
   );
 }
 
-function collectExpectedReferences(options: {
-  config: ResolvedLiminaConfig;
-  fileOwnerLookup: Map<string, string[]>;
-  generatedGraph: GeneratedTsconfigGraphResult;
-  graphRules: NormalizedGraphRules;
-  importers: ImporterInfo[];
-  packages: WorkspacePackage[];
-  problems: string[];
-  projectPaths: string[];
-  projects: ProjectInfo[];
-  projectsByPath: Map<string, ProjectInfo>;
-  selectedProjectPaths?: Set<string>;
-  workspaceExports: WorkspaceExportsResolutionIndex;
-}): Map<string, Map<string, ReferenceExpectation>> {
-  const importAnalysis = createImportAnalysisContext();
-  const expectedReferencesByProjectPath = new Map<
-    string,
-    Map<string, ReferenceExpectation>
-  >();
+function createExpectedReferenceCollectionContext(
+  options: ExpectedReferenceCollectionOptions,
+): ExpectedReferenceCollectionContext {
+  return {
+    ...options,
+    expectedReferencesByProjectPath: new Map(),
+    importAnalysis: createImportAnalysisContext(),
+  };
+}
 
-  for (const project of options.projects) {
-    if (
-      options.selectedProjectPaths &&
-      !options.selectedProjectPaths.has(project.configPath)
-    ) {
-      continue;
-    }
+function collectExpectedReferences(
+  options: ExpectedReferenceCollectionOptions,
+): ExpectedReferencesByProjectPath {
+  const context = createExpectedReferenceCollectionContext(options);
 
-    for (const filePath of project.ownedFileNames) {
-      for (const importRecord of collectImportsFromFile(
-        filePath,
-        options.config.rootDir,
-        importAnalysis,
-      )) {
-        const rawDeniedDepRule = getDeniedDepRuleForSpecifier(
-          options.graphRules,
-          project.labels,
-          importRecord.specifier,
-        );
-
-        if (rawDeniedDepRule) {
-          addDeniedDepImportProblem({
-            config: options.config,
-            importRecord,
-            problems: options.problems,
-            project,
-            rule: rawDeniedDepRule,
-          });
-          continue;
-        }
-
-        const targetPackage = findPackageForSpecifier(
-          importRecord.specifier,
-          options.packages,
-        );
-        const importer = findImporterForFile(
-          importRecord.filePath,
-          options.importers,
-        );
-        const workspaceExportResolution =
-          targetPackage &&
-          options.workspaceExports.hasExports(targetPackage.name)
-            ? options.workspaceExports.get(
-                project.configPath,
-                importRecord.specifier,
-              )
-            : null;
-        const internalResolvedFilePath = resolveInternalImport(
-          importRecord.specifier,
-          filePath,
-          project.options,
-          project,
-          importAnalysis,
-        );
-        const useWorkspaceExportResolution = shouldUseWorkspaceExportResolution(
-          {
-            resolvedFilePath: internalResolvedFilePath,
-            targetPackage,
-          },
-        );
-        const resolvedFilePath =
-          (useWorkspaceExportResolution
-            ? workspaceExportResolution?.oxcResolvedFileName
-            : null) ?? internalResolvedFilePath;
-
-        if (!resolvedFilePath) {
-          if (!targetPackage) {
-            continue;
-          }
-
-          options.problems.push(
-            [
-              'Unresolved workspace import:',
-              `  importing project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
-              `  file: ${formatImportRecordLocation(options.config.rootDir, importRecord)}`,
-              `  imported specifier: ${importRecord.specifier}`,
-              `  matched workspace package: ${targetPackage.name}`,
-              `  current references: ${formatReferences(options.config.rootDir, project.references)}`,
-            ].join('\n'),
-          );
-          continue;
-        }
-
-        const graphResolvedFilePath =
-          (useWorkspaceExportResolution
-            ? workspaceExportResolution?.typeScriptResolvedFileName
-            : null) ?? resolvedFilePath;
-
-        if (!graphResolvedFilePath) {
-          if (!targetPackage) {
-            continue;
-          }
-
-          options.problems.push(
-            [
-              'Unresolved workspace import in TypeScript:',
-              `  importing project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
-              `  file: ${formatImportRecordLocation(options.config.rootDir, importRecord)}`,
-              `  imported specifier: ${importRecord.specifier}`,
-              `  matched workspace package: ${targetPackage.name}`,
-              `  current references: ${formatReferences(options.config.rootDir, project.references)}`,
-            ].join('\n'),
-          );
-          continue;
-        }
-
-        const targetWorkspacePackageForResolved = getResolvedWorkspacePackage(
-          graphResolvedFilePath,
-          options.packages,
-        );
-        const targetPackageForGraph = useWorkspaceExportResolution
-          ? targetPackage
-          : targetWorkspacePackageForResolved &&
-              targetPackage &&
-              targetWorkspacePackageForResolved.name === targetPackage.name
-            ? targetPackage
-            : null;
-        const resolvedPackageName = getResolvedPackageName(
-          resolvedFilePath,
-          options.packages,
-        );
-        const deniedDepRule = resolvedPackageName
-          ? getDeniedDepRuleForPackage(
-              options.graphRules,
-              project.labels,
-              resolvedPackageName,
-            )
-          : null;
-
-        if (deniedDepRule) {
-          addDeniedDepImportProblem({
-            config: options.config,
-            importRecord,
-            problems: options.problems,
-            project,
-            rule: deniedDepRule,
-          });
-          continue;
-        }
-
-        if (
-          targetPackageForGraph &&
-          shouldResolveThroughGraph(importer, targetPackageForGraph) &&
-          workspaceExportResolution &&
-          !options.fileOwnerLookup.has(graphResolvedFilePath)
-        ) {
-          continue;
-        }
-
-        if (
-          targetPackageForGraph &&
-          shouldResolveThroughGraph(importer, targetPackageForGraph) &&
-          !workspaceExportResolution &&
-          !options.fileOwnerLookup.has(resolvedFilePath)
-        ) {
-          const referencedProjectPath = inferPackageProject(
-            resolvedFilePath,
-            targetPackageForGraph,
-            options.projectPaths,
-          );
-          const hasProjectReference =
-            referencedProjectPath &&
-            project.references.has(referencedProjectPath);
-
-          options.problems.push(
-            [
-              hasProjectReference
-                ? 'Referenced workspace dependency resolves through package exports to a build artifact:'
-                : 'Workspace source dependency resolved outside the source graph:',
-              `  importing project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
-              ...(referencedProjectPath
-                ? [
-                    `  referenced project: ${toRelativePath(options.config.rootDir, referencedProjectPath)}`,
-                    `  project reference present: ${hasProjectReference ? 'yes' : 'no'}`,
-                  ]
-                : []),
-              `  file: ${formatImportRecordLocation(options.config.rootDir, importRecord)}`,
-              `  imported specifier: ${importRecord.specifier}`,
-              `  resolved file: ${toRelativePath(options.config.rootDir, resolvedFilePath)}`,
-              '  reason: this import resolved to a file not owned by the source graph, so it is not a source project-reference edge.',
-              `  fix: point the dependency package export at source files, or treat this relationship as artifact consumption; ${formatArtifactDependencyPolicy(targetPackageForGraph)}`,
-            ].join('\n'),
-          );
-          continue;
-        }
-
-        let targetProjectPath = findTargetProject({
-          fileOwnerLookup: options.fileOwnerLookup,
-          packages: options.packages,
-          projectPaths: options.projectPaths,
-          resolvedFilePath: graphResolvedFilePath,
-          specifier: importRecord.specifier,
-        });
-
-        if (!targetProjectPath) {
-          if (!targetPackageForGraph) {
-            continue;
-          }
-
-          if (graphResolvedFilePath.includes('/dist/')) {
-            continue;
-          }
-
-          if (!targetWorkspacePackageForResolved) {
-            if (shouldResolveThroughGraph(importer, targetPackageForGraph)) {
-              options.problems.push(
-                [
-                  'Workspace source import resolved outside the workspace graph:',
-                  `  importing project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
-                  `  file: ${formatImportRecordLocation(options.config.rootDir, importRecord)}`,
-                  `  imported specifier: ${importRecord.specifier}`,
-                  `  resolved file: ${toRelativePath(options.config.rootDir, graphResolvedFilePath)}`,
-                  `  reason: source dependency edges must resolve to files owned by the source graph; ${formatArtifactDependencyPolicy(targetPackageForGraph)}`,
-                ].join('\n'),
-              );
-            }
-            continue;
-          }
-
-          options.problems.push(
-            [
-              'Unable to map workspace import to a graph project:',
-              `  importing project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
-              `  file: ${formatImportRecordLocation(options.config.rootDir, importRecord)}`,
-              `  imported specifier: ${importRecord.specifier}`,
-              `  resolved file: ${toRelativePath(options.config.rootDir, graphResolvedFilePath)}`,
-              `  current references: ${formatReferences(options.config.rootDir, project.references)}`,
-            ].join('\n'),
-          );
-          continue;
-        }
-
-        targetProjectPath = getPreferredGeneratedTargetProjectPath({
-          generatedGraph: options.generatedGraph,
-          importingProjectPath: project.configPath,
-          targetProjectPath,
-        });
-
-        if (targetProjectPath === project.configPath) {
-          continue;
-        }
-
-        const deniedRefRule = getDeniedRefRule(
-          options.graphRules,
-          project.labels,
-          targetProjectPath,
-        );
-
-        if (deniedRefRule) {
-          addDeniedRefImportProblem({
-            config: options.config,
-            importRecord,
-            problems: options.problems,
-            project,
-            rule: deniedRefRule,
-            targetProjectPath,
-          });
-          continue;
-        }
-
-        if (
-          targetPackageForGraph &&
-          !shouldResolveThroughGraph(importer, targetPackageForGraph)
-        ) {
-          continue;
-        }
-
-        if (!options.projectsByPath.has(targetProjectPath)) {
-          options.problems.push(
-            [
-              'Expected graph target is not reachable from any checker entry:',
-              `  importing project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
-              `  file: ${formatImportRecordLocation(options.config.rootDir, importRecord)}`,
-              `  imported specifier: ${importRecord.specifier}`,
-              `  expected graph project: ${toRelativePath(options.config.rootDir, targetProjectPath)}`,
-            ].join('\n'),
-          );
-          continue;
-        }
-
-        addExpectedReference({
-          expectedReferencesByProjectPath,
-          importRecord,
-          project,
-          targetProjectPath,
-        });
-      }
-    }
+  for (const project of context.projects) {
+    collectExpectedReferencesForProject(context, project);
   }
 
-  return expectedReferencesByProjectPath;
+  return context.expectedReferencesByProjectPath;
+}
+
+function collectExpectedReferencesForProject(
+  context: ExpectedReferenceCollectionContext,
+  project: ProjectInfo,
+): void {
+  if (
+    context.selectedProjectPaths &&
+    !context.selectedProjectPaths.has(project.configPath)
+  ) {
+    return;
+  }
+
+  for (const filePath of project.ownedFileNames) {
+    for (const importRecord of collectImportsFromFile(
+      filePath,
+      context.config.rootDir,
+      context.importAnalysis,
+    )) {
+      collectExpectedReferenceForImport({
+        context,
+        filePath,
+        importRecord,
+        project,
+      });
+    }
+  }
+}
+
+function collectExpectedReferenceForImport(options: {
+  context: ExpectedReferenceCollectionContext;
+  filePath: string;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+}): void {
+  const rawDeniedDepRule = getDeniedDepRuleForSpecifier(
+    options.context.graphRules,
+    options.project.labels,
+    options.importRecord.specifier,
+  );
+
+  if (rawDeniedDepRule) {
+    addDeniedDepImportProblem({
+      config: options.context.config,
+      importRecord: options.importRecord,
+      problems: options.context.problems,
+      project: options.project,
+      rule: rawDeniedDepRule,
+    });
+    return;
+  }
+
+  const resolution = resolveImportForReferenceExpectation(options);
+
+  if (!resolution) {
+    return;
+  }
+
+  const targetProjectPath = findExpectedReferenceTargetProjectPath({
+    context: options.context,
+    importRecord: options.importRecord,
+    project: options.project,
+    resolution,
+  });
+
+  if (!targetProjectPath) {
+    return;
+  }
+
+  addExpectedReferenceForTarget({
+    context: options.context,
+    importRecord: options.importRecord,
+    project: options.project,
+    resolution,
+    targetProjectPath,
+  });
+}
+
+function resolveImportForReferenceExpectation(options: {
+  context: ExpectedReferenceCollectionContext;
+  filePath: string;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+}): GraphImportResolution | null {
+  const targetPackage = findPackageForSpecifier(
+    options.importRecord.specifier,
+    options.context.packages,
+  );
+  const importer = findImporterForFile(
+    options.importRecord.filePath,
+    options.context.importers,
+  );
+  const workspaceExportResolution = getWorkspaceExportResolution({
+    context: options.context,
+    importRecord: options.importRecord,
+    project: options.project,
+    targetPackage,
+  });
+  const internalResolvedFilePath = resolveInternalImport(
+    options.importRecord.specifier,
+    options.filePath,
+    options.project.options,
+    options.project,
+    options.context.importAnalysis,
+  );
+  const useWorkspaceExportResolution = shouldUseWorkspaceExportResolution({
+    resolvedFilePath: internalResolvedFilePath,
+    targetPackage,
+  });
+  const resolvedFilePath =
+    (useWorkspaceExportResolution
+      ? workspaceExportResolution?.oxcResolvedFileName
+      : null) ?? internalResolvedFilePath;
+
+  if (!resolvedFilePath) {
+    addUnresolvedWorkspaceImportProblem({
+      context: options.context,
+      importRecord: options.importRecord,
+      project: options.project,
+      targetPackage,
+      title: 'Unresolved workspace import:',
+    });
+    return null;
+  }
+
+  const graphResolvedFilePath =
+    (useWorkspaceExportResolution
+      ? workspaceExportResolution?.typeScriptResolvedFileName
+      : null) ?? resolvedFilePath;
+
+  if (!graphResolvedFilePath) {
+    addUnresolvedWorkspaceImportProblem({
+      context: options.context,
+      importRecord: options.importRecord,
+      project: options.project,
+      targetPackage,
+      title: 'Unresolved workspace import in TypeScript:',
+    });
+    return null;
+  }
+
+  const targetWorkspacePackageForResolved = getResolvedWorkspacePackage(
+    graphResolvedFilePath,
+    options.context.packages,
+  );
+  const targetPackageForGraph = getTargetPackageForGraph({
+    targetPackage,
+    targetWorkspacePackageForResolved,
+    useWorkspaceExportResolution,
+  });
+  const deniedDepRule = getDeniedDepRuleForResolvedPackage({
+    context: options.context,
+    project: options.project,
+    resolvedFilePath,
+  });
+
+  if (deniedDepRule) {
+    addDeniedDepImportProblem({
+      config: options.context.config,
+      importRecord: options.importRecord,
+      problems: options.context.problems,
+      project: options.project,
+      rule: deniedDepRule,
+    });
+    return null;
+  }
+
+  return {
+    graphResolvedFilePath,
+    importer,
+    resolvedFilePath,
+    targetPackage,
+    targetPackageForGraph,
+    targetWorkspacePackageForResolved,
+    workspaceExportResolution,
+  };
+}
+
+function getWorkspaceExportResolution(options: {
+  context: ExpectedReferenceCollectionContext;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  targetPackage: WorkspacePackage | null;
+}): WorkspacePackageExportResolution | null {
+  if (
+    !options.targetPackage ||
+    !options.context.workspaceExports.hasExports(options.targetPackage.name)
+  ) {
+    return null;
+  }
+
+  return options.context.workspaceExports.get(
+    options.project.configPath,
+    options.importRecord.specifier,
+  );
+}
+
+function getTargetPackageForGraph(options: {
+  targetPackage: WorkspacePackage | null;
+  targetWorkspacePackageForResolved: WorkspacePackage | null;
+  useWorkspaceExportResolution: boolean;
+}): WorkspacePackage | null {
+  if (options.useWorkspaceExportResolution) {
+    return options.targetPackage;
+  }
+
+  if (
+    options.targetPackage &&
+    options.targetWorkspacePackageForResolved?.name ===
+      options.targetPackage.name
+  ) {
+    return options.targetPackage;
+  }
+
+  return null;
+}
+
+function getDeniedDepRuleForResolvedPackage(options: {
+  context: ExpectedReferenceCollectionContext;
+  project: ProjectInfo;
+  resolvedFilePath: string;
+}): GraphRuleDepDeny | null {
+  const resolvedPackageName = getResolvedPackageName(
+    options.resolvedFilePath,
+    options.context.packages,
+  );
+
+  if (!resolvedPackageName) {
+    return null;
+  }
+
+  return getDeniedDepRuleForPackage(
+    options.context.graphRules,
+    options.project.labels,
+    resolvedPackageName,
+  );
+}
+
+function addUnresolvedWorkspaceImportProblem(options: {
+  context: ExpectedReferenceCollectionContext;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  targetPackage: WorkspacePackage | null;
+  title: string;
+}): void {
+  if (!options.targetPackage) {
+    return;
+  }
+
+  options.context.problems.push(
+    [
+      options.title,
+      `  importing project: ${toRelativePath(options.context.config.rootDir, options.project.configPath)}`,
+      `  file: ${formatImportRecordLocation(options.context.config.rootDir, options.importRecord)}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  matched workspace package: ${options.targetPackage.name}`,
+      `  current references: ${formatReferences(options.context.config.rootDir, options.project.references)}`,
+    ].join('\n'),
+  );
+}
+
+function findExpectedReferenceTargetProjectPath(options: {
+  context: ExpectedReferenceCollectionContext;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  resolution: GraphImportResolution;
+}): string | null {
+  if (shouldSkipWorkspaceExportResolvedOutsideGraph(options)) {
+    return null;
+  }
+
+  if (addBuildArtifactImportProblem(options)) {
+    return null;
+  }
+
+  const targetProjectPath = findTargetProject({
+    fileOwnerLookup: options.context.fileOwnerLookup,
+    packages: options.context.packages,
+    projectPaths: options.context.projectPaths,
+    resolvedFilePath: options.resolution.graphResolvedFilePath,
+    specifier: options.importRecord.specifier,
+  });
+
+  if (!targetProjectPath) {
+    addUnmappedWorkspaceImportProblem(options);
+    return null;
+  }
+
+  return getPreferredGeneratedTargetProjectPath({
+    generatedGraph: options.context.generatedGraph,
+    importingProjectPath: options.project.configPath,
+    targetProjectPath,
+  });
+}
+
+function shouldSkipWorkspaceExportResolvedOutsideGraph(options: {
+  context: ExpectedReferenceCollectionContext;
+  resolution: GraphImportResolution;
+}): boolean {
+  return Boolean(
+    options.resolution.targetPackageForGraph &&
+      shouldResolveThroughGraph(
+        options.resolution.importer,
+        options.resolution.targetPackageForGraph,
+      ) &&
+      options.resolution.workspaceExportResolution &&
+      !options.context.fileOwnerLookup.has(
+        options.resolution.graphResolvedFilePath,
+      ),
+  );
+}
+
+function addBuildArtifactImportProblem(options: {
+  context: ExpectedReferenceCollectionContext;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  resolution: GraphImportResolution;
+}): boolean {
+  if (
+    !options.resolution.targetPackageForGraph ||
+    !shouldResolveThroughGraph(
+      options.resolution.importer,
+      options.resolution.targetPackageForGraph,
+    ) ||
+    options.resolution.workspaceExportResolution ||
+    options.context.fileOwnerLookup.has(options.resolution.resolvedFilePath)
+  ) {
+    return false;
+  }
+
+  const referencedProjectPath = inferPackageProject(
+    options.resolution.resolvedFilePath,
+    options.resolution.targetPackageForGraph,
+    options.context.projectPaths,
+  );
+  const hasProjectReference = Boolean(
+    referencedProjectPath &&
+      options.project.references.has(referencedProjectPath),
+  );
+
+  options.context.problems.push(
+    [
+      hasProjectReference
+        ? 'Referenced workspace dependency resolves through package exports to a build artifact:'
+        : 'Workspace source dependency resolved outside the source graph:',
+      `  importing project: ${toRelativePath(options.context.config.rootDir, options.project.configPath)}`,
+      ...(referencedProjectPath
+        ? [
+            `  referenced project: ${toRelativePath(options.context.config.rootDir, referencedProjectPath)}`,
+            `  project reference present: ${hasProjectReference ? 'yes' : 'no'}`,
+          ]
+        : []),
+      `  file: ${formatImportRecordLocation(options.context.config.rootDir, options.importRecord)}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  resolved file: ${toRelativePath(options.context.config.rootDir, options.resolution.resolvedFilePath)}`,
+      '  reason: this import resolved to a file not owned by the source graph, so it is not a source project-reference edge.',
+      `  fix: point the dependency package export at source files, or treat this relationship as artifact consumption; ${formatArtifactDependencyPolicy(options.resolution.targetPackageForGraph)}`,
+    ].join('\n'),
+  );
+
+  return true;
+}
+
+function addUnmappedWorkspaceImportProblem(options: {
+  context: ExpectedReferenceCollectionContext;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  resolution: GraphImportResolution;
+}): void {
+  if (!options.resolution.targetPackageForGraph) {
+    return;
+  }
+
+  if (options.resolution.graphResolvedFilePath.includes('/dist/')) {
+    return;
+  }
+
+  if (!options.resolution.targetWorkspacePackageForResolved) {
+    addOutsideWorkspaceGraphProblem(options);
+    return;
+  }
+
+  options.context.problems.push(
+    [
+      'Unable to map workspace import to a graph project:',
+      `  importing project: ${toRelativePath(options.context.config.rootDir, options.project.configPath)}`,
+      `  file: ${formatImportRecordLocation(options.context.config.rootDir, options.importRecord)}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  resolved file: ${toRelativePath(options.context.config.rootDir, options.resolution.graphResolvedFilePath)}`,
+      `  current references: ${formatReferences(options.context.config.rootDir, options.project.references)}`,
+    ].join('\n'),
+  );
+}
+
+function addOutsideWorkspaceGraphProblem(options: {
+  context: ExpectedReferenceCollectionContext;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  resolution: GraphImportResolution;
+}): void {
+  const targetPackage = options.resolution.targetPackageForGraph;
+
+  if (
+    !targetPackage ||
+    !shouldResolveThroughGraph(options.resolution.importer, targetPackage)
+  ) {
+    return;
+  }
+
+  options.context.problems.push(
+    [
+      'Workspace source import resolved outside the workspace graph:',
+      `  importing project: ${toRelativePath(options.context.config.rootDir, options.project.configPath)}`,
+      `  file: ${formatImportRecordLocation(options.context.config.rootDir, options.importRecord)}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  resolved file: ${toRelativePath(options.context.config.rootDir, options.resolution.graphResolvedFilePath)}`,
+      `  reason: source dependency edges must resolve to files owned by the source graph; ${formatArtifactDependencyPolicy(targetPackage)}`,
+    ].join('\n'),
+  );
+}
+
+function addExpectedReferenceForTarget(options: {
+  context: ExpectedReferenceCollectionContext;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  resolution: GraphImportResolution;
+  targetProjectPath: string;
+}): void {
+  if (options.targetProjectPath === options.project.configPath) {
+    return;
+  }
+
+  const deniedRefRule = getDeniedRefRule(
+    options.context.graphRules,
+    options.project.labels,
+    options.targetProjectPath,
+  );
+
+  if (deniedRefRule) {
+    addDeniedRefImportProblem({
+      config: options.context.config,
+      importRecord: options.importRecord,
+      problems: options.context.problems,
+      project: options.project,
+      rule: deniedRefRule,
+      targetProjectPath: options.targetProjectPath,
+    });
+    return;
+  }
+
+  if (
+    options.resolution.targetPackageForGraph &&
+    !shouldResolveThroughGraph(
+      options.resolution.importer,
+      options.resolution.targetPackageForGraph,
+    )
+  ) {
+    return;
+  }
+
+  if (!options.context.projectsByPath.has(options.targetProjectPath)) {
+    options.context.problems.push(
+      [
+        'Expected graph target is not reachable from any checker entry:',
+        `  importing project: ${toRelativePath(options.context.config.rootDir, options.project.configPath)}`,
+        `  file: ${formatImportRecordLocation(options.context.config.rootDir, options.importRecord)}`,
+        `  imported specifier: ${options.importRecord.specifier}`,
+        `  expected graph project: ${toRelativePath(options.context.config.rootDir, options.targetProjectPath)}`,
+      ].join('\n'),
+    );
+    return;
+  }
+
+  addExpectedReference({
+    expectedReferencesByProjectPath:
+      options.context.expectedReferencesByProjectPath,
+    importRecord: options.importRecord,
+    project: options.project,
+    targetProjectPath: options.targetProjectPath,
+  });
 }
 
 function getGeneratedSourceConfigPath(
