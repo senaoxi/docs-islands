@@ -10,6 +10,7 @@ import type {
   SourceCheckConfig,
   SourceKnipWorkspaceConfig,
 } from '../config';
+import type { KnipCliInvocation } from '../knip';
 import { SourceLogger } from '../logger';
 
 async function writeText(filePath: string, text: string): Promise<void> {
@@ -1878,10 +1879,8 @@ packages:
     }
   });
 
-  it('reports packages missing a statically derived Knip tsconfig source', async () => {
-    const errorSpy = vi
-      .spyOn(SourceLogger, 'error')
-      .mockImplementation(() => {});
+  it('falls back to Knip default tsconfig when package build scripts do not declare a Knip tsconfig source', async () => {
+    const invocations: KnipCliInvocation[] = [];
     const fixture = await createFixture({
       'app/package.json': stringifyConfig({
         exports: {
@@ -1895,16 +1894,148 @@ packages:
     });
 
     try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+      await expect(
+        runSourceCheck(fixture.config, {
+          knipRunner: async (options) => {
+            invocations.push(options);
+            return '{"issues":[]}';
+          },
+        }),
+      ).resolves.toBe(true);
+
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0]).toMatchObject({
+        workspaceNames: ['@example/app'],
+      });
+      expect(invocations[0]?.tsConfigFile).toBeUndefined();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects unsupported package build scripts instead of falling back to Knip default tsconfig', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      'app/package.json': stringifyConfig({
+        exports: {
+          '.': './src/index.ts',
+        },
+        name: '@example/app',
+        scripts: {
+          build: 'limina build $CONFIG',
+        },
+        type: 'module',
+      }),
+      'app/src/index.ts': 'export const value = 1;\n',
+      'app/tsconfig.json': typecheckConfig(['src/**/*.ts']),
+    });
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          knipRunner: async () => {
+            throw new Error('Knip should not run after script diagnostics.');
+          },
+        }),
+      ).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
-      expect(errors).toContain('Missing generated Knip tsconfig source:');
-      expect(errors).toContain('package: @example/app');
       expect(errors).toContain(
-        'fix: add a static package script such as "build": "limina build tsconfig.json"',
+        'Unsupported package build script for generated Knip tsconfig:',
       );
+      expect(errors).toContain('command: limina build $CONFIG');
+      expect(errors).toContain('static limina build scripts');
     } finally {
       errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('mixes generated Knip tsconfig groups with default Knip tsconfig fallback groups', async () => {
+    const invocations: KnipCliInvocation[] = [];
+    const fixture = await createFixture({
+      ...createWorkspaceRootFiles(),
+      'packages/app/package.json': stringifyConfig({
+        exports: {
+          '.': './dist/index.js',
+        },
+        name: '@example/app',
+        scripts: {
+          build: 'limina build tsconfig.dts.json',
+        },
+        type: 'module',
+      }),
+      'packages/app/src/index.ts': 'export const appValue = 1;\n',
+      'packages/app/tsconfig.dts.json': buildConfig({
+        compilerOptions: {
+          outDir: './dist',
+          rootDir: './src',
+        },
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './dist/.tsbuildinfo',
+      }),
+      'packages/app/tsconfig.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/app/tsconfig.lib.dts.json': buildConfig({
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+      }),
+      'packages/app/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+      'packages/tool/package.json': stringifyConfig({
+        exports: {
+          '.': './src/index.ts',
+        },
+        name: '@example/tool',
+        type: 'module',
+      }),
+      'packages/tool/src/index.ts': 'export const toolValue = 1;\n',
+      'packages/tool/tsconfig.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/tool/tsconfig.lib.dts.json': buildConfig({
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+      }),
+      'packages/tool/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+    });
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          knipRunner: async (options) => {
+            invocations.push(options);
+            return '{"issues":[]}';
+          },
+        }),
+      ).resolves.toBe(true);
+
+      const invocationByWorkspace = new Map(
+        invocations.map((invocation) => [
+          invocation.workspaceNames?.[0],
+          invocation,
+        ]),
+      );
+
+      expect(invocationByWorkspace.get('@example/app')?.tsConfigFile).toContain(
+        'tsconfig.knip.json',
+      );
+      expect(
+        invocationByWorkspace.get('@example/tool')?.tsConfigFile,
+      ).toBeUndefined();
+    } finally {
       await fixture.cleanup();
     }
   });
@@ -2224,7 +2355,7 @@ packages:
         'source.knip.workspaces["@example/internal"].tsConfig',
       );
       expect(errors).toContain(
-        'tsConfig is no longer supported. Limina generates Knip tsconfig entries from package.json limina build scripts.',
+        'tsConfig is no longer supported. Limina uses Knip default tsconfig behavior unless a package has a static limina build script.',
       );
     } finally {
       errorSpy.mockRestore();

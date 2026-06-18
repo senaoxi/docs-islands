@@ -35,6 +35,18 @@ export interface KnipSourceAnalysisGroup {
   workspaceNames?: string[];
 }
 
+type KnipSourceIssueType = 'dependencies' | 'files';
+
+export interface KnipCliInvocation {
+  configPath: string;
+  include: KnipSourceIssueType[];
+  rootDir: string;
+  tsConfigFile?: string;
+  workspaceNames?: string[];
+}
+
+export type KnipCliRunner = (options: KnipCliInvocation) => Promise<string>;
+
 interface KnipJsonDependencyItem {
   name: string;
 }
@@ -59,8 +71,6 @@ const knipJsonIssueFields = [
   'optionalPeerDependencies',
 ] as const;
 
-type KnipSourceIssueType = 'dependencies' | 'files';
-
 export function resolveKnipCliPath(
   resolvePackage: (
     specifier: string,
@@ -84,13 +94,7 @@ export function resolveKnipCliPath(
   }
 }
 
-function runKnipCli(options: {
-  configPath: string;
-  include: KnipSourceIssueType[];
-  rootDir: string;
-  tsConfigFile?: string;
-  workspaceNames?: string[];
-}): Promise<string> {
+function runKnipCli(options: KnipCliInvocation): Promise<string> {
   return new Promise((resolve, reject) => {
     const args = [
       resolveKnipCliPath(),
@@ -644,6 +648,7 @@ export async function collectKnipSourceIssues(options: {
   config: ResolvedLiminaConfig;
   ignoredKeys: Set<string>;
   includeFiles: boolean;
+  knipRunner?: KnipCliRunner;
   ownerProjects: KnipOwnerProject[];
   workspacePackages: WorkspacePackage[];
 }): Promise<KnipSourceIssues> {
@@ -669,7 +674,7 @@ export async function collectKnipSourceIssues(options: {
                 normalizeAnalysisGroups(options.analysisGroups).map(
                   async (analysisGroup) =>
                     parseKnipJsonReport(
-                      await runKnipCli({
+                      await (options.knipRunner ?? runKnipCli)({
                         configPath,
                         include,
                         rootDir: options.config.rootDir,

@@ -54,6 +54,7 @@ interface BuildFlags extends GlobalFlags {
   '--'?: string[];
   checker?: string;
   project?: string;
+  watch?: boolean;
 }
 
 interface GraphFlags extends GlobalFlags {
@@ -338,6 +339,7 @@ async function main(): Promise<void> {
       '-p, --project <path>',
       'Source tsconfig file or directory to build',
     )
+    .option('-w, --watch', 'Watch input files and rebuild on changes')
     .action(async (configPath: string | undefined, flags: BuildFlags) => {
       if (!configPath && !flags.project) {
         throw new Error(formatMissingBuildConfig());
@@ -354,6 +356,7 @@ async function main(): Promise<void> {
         cwd: process.cwd(),
         flow,
         project: flags.project,
+        watch: flags.watch,
       });
 
       if (!result.passed) {

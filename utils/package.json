@@ -13,8 +13,8 @@
     "link-guard": "./bin/link-guard.js"
   },
   "scripts": {
-    "build": "del-cli dist && limina build tsconfig.dts.json --checker tsgo",
-    "build:watch": "tsc -b tsconfig.dts.json -w",
+    "build": "limina build tsconfig.dts.json --checker tsgo",
+    "build:watch": "limina build tsconfig.dts.json --checker tsgo -w",
     "test": "vitest run",
     "typecheck": "limina checker build",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",

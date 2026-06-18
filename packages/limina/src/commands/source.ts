@@ -29,6 +29,7 @@ import {
 import { isNodeBuiltinSpecifier } from '../graph-rules';
 import {
   collectKnipSourceIssues,
+  type KnipCliRunner,
   type KnipOwnerProject,
   type KnipSourceAnalysisGroup,
   type KnipSourceIssues,
@@ -60,6 +61,7 @@ export interface RunSourceCheckOptions {
   clearScreen?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  knipRunner?: KnipCliRunner;
 }
 
 interface SourceProjectEntry {
@@ -450,8 +452,8 @@ function collectSourceKnipWorkspaceConfigs(options: {
         [
           'Unsupported source Knip workspace config:',
           `  field: ${field}.tsConfig`,
-          '  reason: tsConfig is no longer supported. Limina generates Knip tsconfig entries from package.json limina build scripts.',
-          '  fix: remove tsConfig and add a static package script such as "build": "limina build tsconfig.json".',
+          '  reason: tsConfig is no longer supported. Limina uses Knip default tsconfig behavior unless a package has a static limina build script.',
+          '  fix: remove tsConfig, or add a static package script such as "build": "limina build tsconfig.json" when this package needs a specific Knip tsconfig source.',
         ].join('\n'),
       );
     }
@@ -465,7 +467,6 @@ function collectSourceKnipWorkspaceConfigs(options: {
 function createKnipSourceAnalysisGroups(options: {
   config: ResolvedLiminaConfig;
   generatedGraph: GeneratedTsconfigGraphResult;
-  problems: string[];
   requiredWorkspaceNames: Set<string>;
   workspacePackages: WorkspacePackage[];
 }): KnipSourceAnalysisGroup[] {
@@ -490,15 +491,9 @@ function createKnipSourceAnalysisGroups(options: {
     );
 
     if (!generatedConfig) {
-      options.problems.push(
-        [
-          'Missing generated Knip tsconfig source:',
-          `  package: ${workspacePackage.name}`,
-          `  package manifest: ${toRelativePath(options.config.rootDir, path.join(workspacePackage.directory, 'package.json'))}`,
-          '  reason: Limina could not statically derive a Knip tsconfig from package.json scripts.',
-          `  fix: add a static package script such as "build": "limina build tsconfig.json", or add source.knip.workspaces["${workspacePackage.name}"].entry for additional reachable roots.`,
-        ].join('\n'),
-      );
+      groups.push({
+        workspaceNames: [workspacePackage.name],
+      });
       continue;
     }
 
@@ -2289,6 +2284,7 @@ function addUnusedModuleProblems(options: {
 async function addKnipBackedSourceProblems(options: {
   config: ResolvedLiminaConfig;
   generatedGraph: GeneratedTsconfigGraphResult;
+  knipRunner?: KnipCliRunner;
   ownerModuleSets: OwnerSourceModuleSet[];
   problems: string[];
   workspacePackages: WorkspacePackage[];
@@ -2343,7 +2339,6 @@ async function addKnipBackedSourceProblems(options: {
   const analysisGroups = createKnipSourceAnalysisGroups({
     config: options.config,
     generatedGraph: options.generatedGraph,
-    problems: options.problems,
     requiredWorkspaceNames,
     workspacePackages: options.workspacePackages,
   });
@@ -2371,6 +2366,7 @@ async function addKnipBackedSourceProblems(options: {
     config: options.config,
     ignoredKeys: ignoredDependencies,
     includeFiles,
+    knipRunner: options.knipRunner,
     ownerProjects: needsDependencyAnalysis || includeFiles ? ownerProjects : [],
     workspacePackages: options.workspacePackages,
   });
@@ -2423,7 +2419,7 @@ function createSourceProjectEntries(
 
 async function runSourceCheckInternal(
   config: ResolvedLiminaConfig,
-  options: { logSuccess?: boolean } = {},
+  options: { knipRunner?: KnipCliRunner; logSuccess?: boolean } = {},
 ): Promise<boolean> {
   const generatedGraph = await prepareGeneratedTsconfigGraph(config);
   const graphRoute = collectSourceGraphProjectExtensions(
@@ -2457,6 +2453,7 @@ async function runSourceCheckInternal(
   await addKnipBackedSourceProblems({
     config,
     generatedGraph,
+    knipRunner: options.knipRunner,
     ownerModuleSets,
     problems,
     workspacePackages: packages,
@@ -2696,7 +2693,10 @@ export async function runSourceCheck(
 
   try {
     const logSuccess = !options.flow?.interactive;
-    const passed = await runSourceCheckInternal(config, { logSuccess });
+    const passed = await runSourceCheckInternal(config, {
+      knipRunner: options.knipRunner,
+      logSuccess,
+    });
 
     if (passed) {
       if (logSuccess) {

@@ -198,6 +198,64 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
+  it('accepts watch flags in static package build scripts', async () => {
+    const fixture = await createFixture({
+      'package.json': json({
+        name: '@example/root',
+        private: true,
+        workspaces: ['packages/*'],
+      }),
+      'packages/pkg/package.json': json({
+        name: '@example/pkg',
+        scripts: {
+          'build:watch': 'limina build tsconfig.json --checker tsgo -w',
+        },
+        type: 'module',
+      }),
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+
+      expect(result.manifest.knip.diagnostics).toEqual([]);
+      expect(result.manifest.knip.packages).toEqual([
+        expect.objectContaining({
+          references: ['packages/pkg/tsconfig.json'],
+          scripts: [
+            {
+              checker: 'tsgo',
+              command: 'limina build tsconfig.json --checker tsgo -w',
+              configPath: 'packages/pkg/tsconfig.json',
+              mode: 'managed',
+              name: 'build:watch',
+            },
+          ],
+        }),
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('records diagnostics for dynamic package build scripts without generating Knip configs', async () => {
     const fixture = await createFixture({
       'package.json': json({

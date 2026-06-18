@@ -57,7 +57,9 @@ interface SourceKnipCheckConfig {
 
 `source.knip.workspaces` 的 key 是 pnpm workspace 中发现的包名，例如 `@acme/app`。如果 key 对应不到工作区包名，`source check` 会直接失败。
 
-`source.knip.workspaces[pkg]` 只配置额外可达入口和忽略规则，不再接受 `tsConfig`。Limina 会从包自己的静态 scripts 中推导 Knip 要用的 tsconfig，也就是形如 `limina build <config>` 的脚本：
+`source.knip.workspaces[pkg]` 只配置额外可达入口和忽略规则，不再接受 `tsConfig`。如果某个包没有声明静态的 `limina build <config>` 脚本，Limina 会在分析这个包时不传 `--tsConfig`，交给 Knip 使用自己的默认 tsconfig 行为。
+
+静态 package script 可以覆盖这个默认行为，让 Limina 为这个包推导专用的 Knip tsconfig 来源：
 
 ```json
 {
@@ -67,9 +69,7 @@ interface SourceKnipCheckConfig {
 }
 ```
 
-`<config>` 会从这个包目录解析。Limina 支持 `limina build tsconfig.json`、`limina build --checker vue-tsc tsconfig.json`、`pnpm limina build tsconfig.json`、`pnpm exec limina build tsconfig.json` 这类静态写法。像 `limina build $CONFIG` 这样的动态 shell 脚本不会作为 Knip tsconfig 来源。
-
-如果某个包参与 Knip 驱动的源码或依赖分析，但 Limina 无法从 package scripts 静态推导出构建配置，`source check` 会报 `Missing generated Knip tsconfig source`。
+`<config>` 会从这个包目录解析。Limina 支持 `limina build tsconfig.json`、`limina build --checker vue-tsc tsconfig.json`、`pnpm limina build tsconfig.json`、`pnpm exec limina build tsconfig.json` 这类静态写法。像 `limina build $CONFIG` 这样的动态 shell 脚本会被报告为不支持，而不是静默退回 Knip 默认行为。
 
 ::: warning
 `knip` 是 Limina 的 optional peer dependency。如果启用了 `source.knip`，但运行 Limina 的工作区没有安装 `knip`，`source check` 会直接报缺失 peer dependency。
@@ -77,7 +77,7 @@ interface SourceKnipCheckConfig {
 
 Limina 会为受治理的 owner workspace 写入 `entry: []`，从而关闭 Knip 隐式的 `index` / `main` / `cli` 入口猜测。默认可达性仍然包含 package manifest 入口（`exports`、`main`、`module`、`browser`、`bin`、`types`、`typings`）、Knip 插件推断入口、package scripts，以及 Limina 为 application-style owner 生成的 virtual entries。
 
-当 package 入口指向构建产物时，Knip 需要一个能说明 `rootDir` / `outDir` 的 tsconfig，才能把这些产物映射回源码文件。这时让包里的静态 `limina build <config>` 脚本指向描述产物布局的配置。
+当 package 入口指向构建产物时，Knip 可能需要一个能说明 `rootDir` / `outDir` 的 tsconfig，才能把这些产物映射回源码文件。这时让包里的静态 `limina build <config>` 脚本指向描述产物布局的配置。
 
 这是一种通用的包设计方式：`package.json` 面向消费者，只暴露构建后的 `dist` 文件；被选中的源码 tsconfig 描述会产出这些文件的源码树。例如 `@docs-islands/utils` 可以只写：
 
@@ -101,7 +101,7 @@ Limina 会为受治理的 owner workspace 写入 `entry: []`，从而关闭 Knip
 }
 ```
 
-只要给 Knip 使用的 tsconfig 能说明源码目录和输出目录（例如 `rootDir: "."`、`outDir: "./dist"`），Knip 就能把 `utils/dist/src/env.js` 反推成 `utils/src/env.ts`。这样源码模块虽然没有出现在 `exports.source` 里，也仍然会被视为从包入口可达。
+只要给 Knip 使用的 tsconfig（无论是 Knip 默认选择的，还是 Limina 推导出来的）能说明源码目录和输出目录（例如 `rootDir: "."`、`outDir: "./dist"`），Knip 就能把 `utils/dist/src/env.js` 反推成 `utils/src/env.ts`。这样源码模块虽然没有出现在 `exports.source` 里，也仍然会被视为从包入口可达。
 
 然后用静态 package script 暴露这个意图：
 

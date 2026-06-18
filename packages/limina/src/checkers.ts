@@ -94,6 +94,7 @@ export interface CheckerCommandTargetOptions {
   configPath: string;
   executionKind: CheckerExecutionKind;
   projectRootDir: string;
+  watch?: boolean;
 }
 
 export interface CheckerProjectConfigParseOptions {
@@ -841,9 +842,15 @@ function createTscCommandTarget(
   );
 
   return {
-    args: ['-b', relativeConfigPath, '--pretty', 'false'],
+    args: [
+      '-b',
+      relativeConfigPath,
+      '--pretty',
+      'false',
+      ...(options.watch ? ['--watch', '--preserveWatchOutput'] : []),
+    ],
     command: options.commandOverride ?? 'tsc',
-    label: `tsc -b ${relativeConfigPath}`,
+    label: `tsc -b ${relativeConfigPath}${options.watch ? ' --watch' : ''}`,
   };
 }
 
@@ -856,9 +863,15 @@ function createTsgoCommandTarget(
   );
 
   return {
-    args: ['-b', relativeConfigPath, '--pretty', 'false'],
+    args: [
+      '-b',
+      relativeConfigPath,
+      '--pretty',
+      'false',
+      ...(options.watch ? ['--watch', '--preserveWatchOutput'] : []),
+    ],
     command: 'tsgo',
-    label: `tsgo -b ${relativeConfigPath}`,
+    label: `tsgo -b ${relativeConfigPath}${options.watch ? ' --watch' : ''}`,
   };
 }
 
@@ -871,9 +884,15 @@ function createVueTscCommandTarget(
   );
 
   return {
-    args: ['-b', relativeConfigPath, '--pretty', 'false'],
+    args: [
+      '-b',
+      relativeConfigPath,
+      '--pretty',
+      'false',
+      ...(options.watch ? ['--watch', '--preserveWatchOutput'] : []),
+    ],
     command: 'vue-tsc',
-    label: `${options.checker.name}: vue-tsc -b ${relativeConfigPath}`,
+    label: `${options.checker.name}: vue-tsc -b ${relativeConfigPath}${options.watch ? ' --watch' : ''}`,
   };
 }
 

@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "del-cli dist && limina build tsconfig.dts.json",
-    "build:watch": "tsc -b tsconfig.dts.json -w",
+    "build": "limina build tsconfig.dts.json",
+    "build:watch": "limina build tsconfig.dts.json -w",
     "lint": "del-cli .eslintcache || true && eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },

@@ -57,7 +57,9 @@ interface SourceKnipCheckConfig {
 
 `source.knip.workspaces` keys are package names discovered from the pnpm workspace, such as `@acme/app`. Unknown package names fail `source check`.
 
-`source.knip.workspaces[pkg]` only configures extra reachability and ignore rules. It does not accept `tsConfig`. Limina derives the Knip tsconfig for each analyzed package from static package scripts that call `limina build <config>`, for example:
+`source.knip.workspaces[pkg]` only configures extra reachability and ignore rules. It does not accept `tsConfig`. If a package does not declare a static `limina build <config>` script, Limina runs Knip for that package without `--tsConfig`, so Knip uses its own default tsconfig behavior.
+
+A static package script can override that default and give Limina a package-specific Knip tsconfig source:
 
 ```json
 {
@@ -67,9 +69,7 @@ interface SourceKnipCheckConfig {
 }
 ```
 
-The `<config>` path is resolved from the package directory. Limina supports static forms such as `limina build tsconfig.json`, `limina build --checker vue-tsc tsconfig.json`, `pnpm limina build tsconfig.json`, and `pnpm exec limina build tsconfig.json`. Dynamic shell scripts such as `limina build $CONFIG` are not used as Knip tsconfig sources.
-
-If a package participates in Knip-backed source or dependency analysis but Limina cannot statically derive a build config from its package scripts, `source check` reports `Missing generated Knip tsconfig source`.
+The `<config>` path is resolved from the package directory. Limina supports static forms such as `limina build tsconfig.json`, `limina build --checker vue-tsc tsconfig.json`, `pnpm limina build tsconfig.json`, and `pnpm exec limina build tsconfig.json`. Dynamic shell scripts such as `limina build $CONFIG` are reported as unsupported instead of silently falling back to Knip defaults.
 
 ::: warning
 `knip` is an optional peer dependency of Limina. If `source.knip` is enabled but `knip` is not installed in the workspace running Limina, `source check` fails with a missing peer dependency error.
@@ -77,7 +77,7 @@ If a package participates in Knip-backed source or dependency analysis but Limin
 
 Limina disables Knip's implicit `index` / `main` / `cli` entry guessing by writing `entry: []` for governed owner workspaces. Default reachability still includes package manifest entries (`exports`, `main`, `module`, `browser`, `bin`, `types`, `typings`), Knip plugin-discovered entries, package scripts, and Limina-generated virtual entries for application-style owners.
 
-When package entries point at build artifacts, Knip needs a tsconfig with enough `rootDir` / `outDir` information to map those artifacts back to source files. Point a static `limina build <config>` package script at the config that describes emitted artifact layout.
+When package entries point at build artifacts, Knip may need a tsconfig with enough `rootDir` / `outDir` information to map those artifacts back to source files. In that case, point a static `limina build <config>` package script at the config that describes emitted artifact layout.
 
 This is a general package design pattern: `package.json` describes the built files that consumers import, while the selected source tsconfig describes the source tree that writes those files. For example, `@docs-islands/utils` can expose only built files:
 
@@ -101,7 +101,7 @@ Then `utils/tsconfig.dts.json` can describe the source side:
 }
 ```
 
-As long as the Knip tsconfig explains the source and output directories, such as `rootDir: "."` and `outDir: "./dist"`, Knip can map `utils/dist/src/env.js` back to `utils/src/env.ts`. The source module is then considered reachable from the package entry even without an `exports.source` condition.
+As long as the Knip tsconfig, whether Knip's default or Limina's derived one, explains the source and output directories, such as `rootDir: "."` and `outDir: "./dist"`, Knip can map `utils/dist/src/env.js` back to `utils/src/env.ts`. The source module is then considered reachable from the package entry even without an `exports.source` condition.
 
 Expose that intent through a static package script:
 

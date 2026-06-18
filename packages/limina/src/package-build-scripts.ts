@@ -172,6 +172,10 @@ function parsePackageBuildScript(options: {
   for (let index = argumentOffset; index < tokens.length; index += 1) {
     const token = tokens[index]!;
 
+    if (token === '-w' || token === '--watch') {
+      continue;
+    }
+
     if (token === '--checker') {
       const parsedChecker = parseChecker(tokens[index + 1]);
 
@@ -213,7 +217,7 @@ function parsePackageBuildScript(options: {
         packageJsonPath: options.packageJsonPath,
         packageName: options.packageName,
         reason:
-          'Limina build script analysis only supports --checker plus one config argument.',
+          'Limina build script analysis only supports --checker, -w/--watch, plus one config argument.',
         scriptName: options.scriptName,
       });
     }

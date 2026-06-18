@@ -160,6 +160,33 @@ describe('limina CLI', () => {
       expect(tscArgs).toContain(
         '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json',
       );
+
+      await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'build',
+          'packages/pkg/tsconfig.lib.json',
+          '-w',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+
+      const watchTscArgs = await readFile(
+        path.join(rootDir, 'tsc-args.txt'),
+        'utf8',
+      );
+
+      expect(watchTscArgs).toContain('--watch');
+      expect(watchTscArgs).toContain('--preserveWatchOutput');
     } finally {
       await rm(rootDir, {
         force: true,

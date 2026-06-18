@@ -94,6 +94,7 @@ function createCheckerTarget(options: {
   configPath: string;
   executionKind: CheckerExecutionKind;
   projectRootDir: string;
+  watch?: boolean;
 }): TypecheckTarget {
   const adapter = getCheckerAdapter(options.checker.preset);
 
@@ -558,15 +559,19 @@ async function runBuildTargets(
       result: TypecheckTargetResult,
     ) => void;
     onTargetStart?: (target: TypecheckTarget) => void;
+    watch?: boolean;
   } = {},
 ): Promise<TypecheckTargetResult[]> {
   const results: TypecheckTargetResult[] = [];
+  const layers = options.watch
+    ? [targets]
+    : createBuildDependencyLayers(targets, providerEdges);
 
-  for (const layer of createBuildDependencyLayers(targets, providerEdges)) {
+  for (const layer of layers) {
     results.push(
       ...(await runWithConcurrency(
         layer,
-        getDefaultBuildConcurrency(layer.length),
+        options.watch ? layer.length : getDefaultBuildConcurrency(layer.length),
         runner,
         options,
       )),
@@ -605,6 +610,7 @@ export interface RunBuildOptions {
   project?: string;
   runner?: TypecheckRunner;
   tscCommand?: string;
+  watch?: boolean;
 }
 
 export interface RunBuildResult {
@@ -1503,6 +1509,7 @@ async function runBuildInternal(
         configPath: resolvedTarget.targetConfigPath,
         executionKind: 'build',
         projectRootDir,
+        watch: options.watch,
       }),
       sourceConfigPath: resolvedTarget.targetConfigPath,
     };
@@ -1556,6 +1563,7 @@ async function runBuildInternal(
             ),
           );
         },
+        watch: options.watch,
       },
     );
     const failedResults = results.filter((result) => result.status !== 0);
@@ -1647,6 +1655,7 @@ async function runBuildInternal(
           configPath: buildModule.path,
           executionKind: 'build',
           projectRootDir,
+          watch: options.watch,
         }),
         sourceConfigPath,
       };
@@ -1708,6 +1717,7 @@ async function runBuildInternal(
           ),
         );
       },
+      watch: options.watch,
     },
   );
   const failedResults = results.filter((result) => result.status !== 0);
