@@ -48,12 +48,12 @@ interface PackageFlags extends GlobalFlags, PackageSelectionFlags {
   tool?: string;
 }
 
-type CheckerFlags = GlobalFlags;
-
-interface BuildFlags extends GlobalFlags {
+interface CheckerFlags extends GlobalFlags {
   '--'?: string[];
-  checker?: string;
-  project?: string;
+  checker?: unknown;
+  preset?: string;
+  project?: unknown;
+  w?: boolean;
   watch?: boolean;
 }
 
@@ -99,28 +99,53 @@ function parsePackageTool(
   );
 }
 
-function parseBuildChecker(
-  checker: string | undefined,
+function parseBuildPreset(
+  preset: string | undefined,
 ): BuildCheckerPreset | undefined {
-  if (!checker) {
+  if (!preset) {
     return undefined;
   }
 
-  if (checker === 'tsc' || checker === 'vue-tsc' || checker === 'tsgo') {
-    return checker;
+  if (preset === 'tsc' || preset === 'vue-tsc' || preset === 'tsgo') {
+    return preset;
   }
 
   throw new Error(
-    `Invalid build --checker "${checker}". Expected one of: tsc, vue-tsc, tsgo.`,
+    `Invalid checker build --preset "${preset}". Expected one of: tsc, vue-tsc, tsgo.`,
   );
 }
 
-function formatMissingBuildConfig(): string {
-  return [
-    'Missing limina build config.',
-    '  reason: limina build requires a source or raw JSON config path.',
-    '  fix: run limina build <config>, or temporarily pass -p, --project <config>.',
-  ].join('\n');
+function rejectUnknownCheckerOptions(flags: CheckerFlags): void {
+  if (flags.checker !== undefined) {
+    throw new Error('Unknown option: --checker. Use --preset instead.');
+  }
+
+  if (flags.project !== undefined) {
+    throw new Error(
+      'Unknown option: --project. Pass the config as a positional argument.',
+    );
+  }
+
+  const knownOptions = new Set([
+    '--',
+    'config',
+    'mode',
+    'preset',
+    'w',
+    'watch',
+    'checker',
+    'project',
+  ]);
+
+  for (const option of Object.keys(flags)) {
+    if (!knownOptions.has(option)) {
+      throw new Error(`Unknown option: --${option}.`);
+    }
+  }
+}
+
+function getCheckerWatchFlag(flags: CheckerFlags): boolean | undefined {
+  return flags.watch ?? flags.w;
 }
 
 function parsePackageAttwProfile(
@@ -333,57 +358,90 @@ async function main(): Promise<void> {
     });
 
   cli
-    .command('build [config]', 'Build a Limina-managed or raw JSON config')
-    .option('--checker <checker>', 'Build checker: tsc, vue-tsc, or tsgo')
-    .option(
-      '-p, --project <path>',
-      'Source tsconfig file or directory to build',
-    )
-    .option('-w, --watch', 'Watch input files and rebuild on changes')
-    .action(async (configPath: string | undefined, flags: BuildFlags) => {
-      if (!configPath && !flags.project) {
-        throw new Error(formatMissingBuildConfig());
-      }
-
-      const flow = createCliFlow();
-      flow.intro('limina build');
-      const config = await load(flags, 'build');
-      const result = await runBuild({
-        checker: parseBuildChecker(flags.checker),
-        clearScreen: false,
-        config,
-        configPath,
-        cwd: process.cwd(),
-        flow,
-        project: flags.project,
-        watch: flags.watch,
-      });
-
-      if (!result.passed) {
-        process.exitCode = 1;
-      }
-
-      flow.outro(result.passed ? 'limina build passed' : 'limina build failed');
-    });
-
-  cli
     .command(
-      'checker <action>',
-      'Run configured checker build or typecheck entries',
+      'checker <action> [config]',
+      'Run checker build or typecheck entries',
     )
-    .action(async (action: string, flags: CheckerFlags) => {
-      if (action !== 'typecheck' && action !== 'build') {
-        throw new Error(
-          `Unknown checker action "${action}". Expected build or typecheck.`,
-        );
-      }
+    .option('--preset <preset>', 'Build checker preset: tsc, vue-tsc, or tsgo')
+    .option('-w, --watch', 'Watch input files and rebuild on changes')
+    .allowUnknownOptions()
+    .action(
+      async (
+        action: string,
+        configPath: string | undefined,
+        flags: CheckerFlags,
+      ) => {
+        rejectUnknownCheckerOptions(flags);
 
-      const flow = createCliFlow();
-      flow.intro(`limina checker ${action}`);
+        if (action !== 'typecheck' && action !== 'build') {
+          throw new Error(
+            `Unknown checker action "${action}". Expected build or typecheck.`,
+          );
+        }
 
-      if (action === 'build') {
+        const flow = createCliFlow();
+        flow.intro(`limina checker ${action}`);
+
+        if (action === 'build') {
+          const watch = getCheckerWatchFlag(flags);
+
+          if (!configPath && flags.preset) {
+            throw new Error(
+              'checker build --preset requires a config argument.',
+            );
+          }
+
+          if (!configPath && watch) {
+            throw new Error(
+              'checker build --watch requires a config argument.',
+            );
+          }
+
+          const config = await load(flags, configPath ? 'build' : 'check');
+          const result = configPath
+            ? await runBuild({
+                checker: parseBuildPreset(flags.preset),
+                clearScreen: false,
+                config,
+                configPath,
+                cwd: process.cwd(),
+                flow,
+                watch,
+              })
+            : await runCheckerBuild({
+                clearScreen: false,
+                config,
+                cwd: process.cwd(),
+                flow,
+              });
+
+          if (!result.passed) {
+            process.exitCode = 1;
+          }
+
+          flow.outro(
+            result.passed ? 'limina checker passed' : 'limina checker failed',
+          );
+
+          return;
+        }
+
+        if (configPath) {
+          throw new Error(
+            'checker typecheck does not accept a config argument.',
+          );
+        }
+
+        if (flags.preset) {
+          throw new Error('checker typecheck does not accept --preset.');
+        }
+
+        if (getCheckerWatchFlag(flags)) {
+          throw new Error('checker typecheck does not accept --watch.');
+        }
+
         const config = await load(flags, 'check');
-        const result = await runCheckerBuild({
+        const result = await runCheckerTypecheck({
           clearScreen: false,
           config,
           cwd: process.cwd(),
@@ -397,26 +455,8 @@ async function main(): Promise<void> {
         flow.outro(
           result.passed ? 'limina checker passed' : 'limina checker failed',
         );
-
-        return;
-      }
-
-      const config = await load(flags, 'check');
-      const result = await runCheckerTypecheck({
-        clearScreen: false,
-        config,
-        cwd: process.cwd(),
-        flow,
-      });
-
-      if (!result.passed) {
-        process.exitCode = 1;
-      }
-
-      flow.outro(
-        result.passed ? 'limina checker passed' : 'limina checker failed',
-      );
-    });
+      },
+    );
 
   cli
     .command('package <action>', 'Check configured published package outputs')

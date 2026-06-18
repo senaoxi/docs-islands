@@ -30,10 +30,13 @@ For what each task detects, with examples, see [Built-in Tasks](./built-in-tasks
 
 ## Checkers
 
-| Command                    | Description                                                             |
-| -------------------------- | ----------------------------------------------------------------------- |
-| `limina checker build`     | Run build execution for checker entries that support it.                |
-| `limina checker typecheck` | Run second-class checker entries such as `vue-tsgo` and `svelte-check`. |
+| Command                                      | Description                                                             |
+| -------------------------------------------- | ----------------------------------------------------------------------- |
+| `limina checker build`                       | Run build execution for checker entries that support it.                |
+| `limina checker build <config>`              | Run checker build for one source or raw tsconfig.                       |
+| `limina checker build <config> --preset <p>` | Select the build preset: `tsc`, `vue-tsc`, or `tsgo`.                   |
+| `limina checker build <config> --watch`      | Watch input files and rebuild one selected config.                      |
+| `limina checker typecheck`                   | Run second-class checker entries such as `vue-tsgo` and `svelte-check`. |
 
 ## Package and Release
 

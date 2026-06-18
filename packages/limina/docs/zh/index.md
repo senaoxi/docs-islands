@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Limina
-  text: 项目引用图编译器与架构治理 CLI
-  tagline: 用显式项目引用管理 TypeScript 的构建边界。
+  text: TypeScript 项目引用图编译器与架构治理 CLI
+  tagline: 先接入可增量的 build，再逐步打开完整架构治理。
   image:
     src: /logo.svg
     alt: Limina
@@ -21,13 +21,13 @@ hero:
 
 features:
   - icon: 🧭
-    title: 零配置发现项目图
-    details: 从现有 workspace、tsconfig 与源码导入中发现项目边界，推导真实的项目依赖关系，让普通 TypeScript monorepo 也能直接接入类型图治理。
+    title: 低摩擦接入增量 build
+    details: limina init 添加 limina:build，从现有 tsconfig 和源码导入生成 TypeScript 项目引用构建图，让用户先获得 tsc -b、tsgo 或 vue-tsc 的增量构建收益。
     link: /zh/getting-started
-    linkText: 开始接入
+    linkText: 开始 build-first 接入
   - icon: 🕸️
     title: 自动生成类型图
-    details: 为 TypeScript、Vue、Svelte 等检查器生成独立的类型检查图，让不同技术栈在统一模型下完成构建、检查与诊断。
+    details: 为 TypeScript、Vue、Svelte 等检查器生成类型图，让不同技术栈在统一模型下完成构建、检查与诊断。
     link: /zh/config/checkers
     linkText: 配置检查器
   - icon: 🧱

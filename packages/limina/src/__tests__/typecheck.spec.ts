@@ -766,7 +766,7 @@ describe('runBuild', () => {
     }
   });
 
-  it('builds a selected source leaf with --project', async () => {
+  it('builds a selected source leaf from an explicit config path', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
@@ -805,7 +805,7 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'packages/pkg/tsconfig.lib.json',
+        configPath: 'packages/pkg/tsconfig.lib.json',
         runner: passingRunner(calls),
       });
 
@@ -865,7 +865,7 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'packages/lib/tsconfig.json',
+        configPath: 'packages/lib/tsconfig.json',
         runner: passingRunner(calls),
       });
 
@@ -921,7 +921,7 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'packages/app/tsconfig.raw.json',
+        configPath: 'packages/app/tsconfig.raw.json',
         runner: passingRunner(calls),
         watch: true,
       });
@@ -988,7 +988,7 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'packages/app/tsconfig.raw.json',
+        configPath: 'packages/app/tsconfig.raw.json',
         runner: passingRunner(calls),
       });
 
@@ -1036,7 +1036,7 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'svelte/tsconfig.json',
+        configPath: 'svelte/tsconfig.json',
         runner: passingRunner(calls),
       });
 
@@ -1107,7 +1107,7 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'packages/shared/tsconfig.lib.json',
+        configPath: 'packages/shared/tsconfig.lib.json',
         runner: delayed.runner,
       });
       expect(result.passed).toBe(true);
@@ -1242,14 +1242,14 @@ describe('runBuild', () => {
           rootDir: fixture.rootDir,
         },
         cwd: fixture.rootDir,
-        project: 'packages/app/tsconfig.json',
+        configPath: 'packages/app/tsconfig.json',
         runner: passingRunner(calls),
       });
 
       expect(result.passed).toBe(false);
       expect(calls).toHaveLength(0);
       expect(errorSpy.mock.calls.join('\n')).toContain(
-        'Invalid Limina build checker selection',
+        'Invalid Limina checker build preset',
       );
     } finally {
       errorSpy.mockRestore();

@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "limina build tsconfig.dts.json",
-    "build:watch": "limina build tsconfig.dts.json -w",
+    "build": "limina checker build tsconfig.dts.json",
+    "build:watch": "limina checker build tsconfig.dts.json -w",
     "lint": "eslint . --config ./dist/general.js --fix --cache",
     "test": "vitest run",
     "test:watch": "vitest",

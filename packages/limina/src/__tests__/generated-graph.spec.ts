@@ -467,7 +467,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
       'packages/pkg/package.json': json({
         name: '@example/pkg',
         scripts: {
-          build: 'limina build tsconfig.json',
+          build: 'limina checker build tsconfig.json',
         },
         type: 'module',
       }),
@@ -519,7 +519,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
           references: ['packages/pkg/tsconfig.json'],
           scripts: [
             {
-              command: 'limina build tsconfig.json',
+              command: 'limina checker build tsconfig.json',
               configPath: 'packages/pkg/tsconfig.json',
               mode: 'managed',
               name: 'build',
@@ -545,7 +545,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
       'packages/pkg/package.json': json({
         name: '@example/pkg',
         scripts: {
-          'build:watch': 'limina build tsconfig.json --checker tsgo -w',
+          'build:watch': 'limina checker build tsconfig.json --preset tsgo -w',
         },
         type: 'module',
       }),
@@ -580,7 +580,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
           scripts: [
             {
               checker: 'tsgo',
-              command: 'limina build tsconfig.json --checker tsgo -w',
+              command: 'limina checker build tsconfig.json --preset tsgo -w',
               configPath: 'packages/pkg/tsconfig.json',
               mode: 'managed',
               name: 'build:watch',
@@ -588,6 +588,32 @@ describe('prepareGeneratedTsconfigGraph', () => {
           ],
         }),
       ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('ignores global checker build package scripts without Knip config sources', async () => {
+    const fixture = await createFixture({
+      'package.json': json({
+        name: '@example/root',
+        private: true,
+        workspaces: ['packages/*'],
+      }),
+      'packages/pkg/package.json': json({
+        name: '@example/pkg',
+        scripts: {
+          typecheck: 'limina checker build',
+        },
+        type: 'module',
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+
+      expect(result.manifest.knip.packages).toEqual([]);
+      expect(result.manifest.knip.diagnostics).toEqual([]);
     } finally {
       await fixture.cleanup();
     }
@@ -603,7 +629,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
       'packages/pkg/package.json': json({
         name: '@example/pkg',
         scripts: {
-          build: 'limina build $CONFIG',
+          build: 'limina checker build $CONFIG',
         },
         type: 'module',
       }),
@@ -615,14 +641,56 @@ describe('prepareGeneratedTsconfigGraph', () => {
       expect(result.manifest.knip.packages).toEqual([]);
       expect(result.manifest.knip.diagnostics).toEqual([
         expect.objectContaining({
-          command: 'limina build $CONFIG',
+          command: 'limina checker build $CONFIG',
           packageJsonPath: 'packages/pkg/package.json',
           packageName: '@example/pkg',
           scriptName: 'build',
         }),
       ]);
       expect(result.manifest.knip.diagnostics[0]?.reason).toContain(
-        'static limina build scripts',
+        'static limina checker build scripts',
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('records diagnostics for legacy package build scripts without generating Knip configs', async () => {
+    const fixture = await createFixture({
+      'package.json': json({
+        name: '@example/root',
+        private: true,
+        workspaces: ['packages/*'],
+      }),
+      'packages/pkg/package.json': json({
+        name: '@example/pkg',
+        scripts: {
+          build: 'limina build tsconfig.json',
+          'build:checker': 'limina checker build tsconfig.json --checker tsgo',
+        },
+        type: 'module',
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+
+      expect(result.manifest.knip.packages).toEqual([]);
+      expect(result.manifest.knip.diagnostics).toEqual([
+        expect.objectContaining({
+          command: 'limina build tsconfig.json',
+          packageName: '@example/pkg',
+          scriptName: 'build',
+        }),
+        expect.objectContaining({
+          command: 'limina checker build tsconfig.json --checker tsgo',
+          packageName: '@example/pkg',
+          reason: 'Unknown option: --checker. Use --preset instead.',
+          scriptName: 'build:checker',
+        }),
+      ]);
+      expect(result.manifest.knip.diagnostics[0]?.reason).toContain(
+        'limina checker build',
       );
     } finally {
       await fixture.cleanup();
@@ -639,7 +707,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
       'packages/app/package.json': json({
         name: '@example/app',
         scripts: {
-          build: 'limina build ../internal/tsconfig.raw.json',
+          build: 'limina checker build ../internal/tsconfig.raw.json',
         },
         type: 'module',
       }),
@@ -657,7 +725,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
 
       expect(result.manifest.knip.packages).toEqual([]);
       expect(result.manifest.knip.diagnostics[0]).toMatchObject({
-        command: 'limina build ../internal/tsconfig.raw.json',
+        command: 'limina checker build ../internal/tsconfig.raw.json',
         packageJsonPath: 'packages/app/package.json',
         packageName: '@example/app',
         scriptName: 'build',

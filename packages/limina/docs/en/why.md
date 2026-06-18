@@ -21,11 +21,12 @@ Limina does not bundle code, run tests, or schedule every repository task. It so
 A project can run Limina alongside the rest of its workflow:
 
 ```sh
+pnpm exec limina checker build
 pnpm exec limina check
 pnpm exec limina graph export --view artifact --output .limina/dependency-graph.json
 ```
 
-Here the surrounding workflow still owns ordinary execution concerns. Limina owns whether workspace package exports resolve correctly, whether imports are authorized by the nearest `package.json`, whether project references match source-owned imports, whether artifact imports are visible in the scoped dependency graph, whether source configs have valid graph companions, whether source files are covered by checkers, whether client / shared / node runtime boundaries hold, and whether published `dist` artifacts are usable by consumers.
+For a first trial, start with `limina checker build` to get a Limina-managed incremental type build entry. Once that build path is stable, put `limina check` into pull requests or CI. The surrounding workflow still owns ordinary execution concerns. Limina owns whether workspace package exports resolve correctly, whether imports are authorized by the nearest `package.json`, whether project references match source-owned imports, whether artifact imports are visible in the scoped dependency graph, whether source configs have valid graph companions, whether source files are covered by checkers, whether client / shared / node runtime boundaries hold, and whether published `dist` artifacts are usable by consumers.
 
 Some tools also offer module-boundary and conformance capabilities, for example declaring dependency constraints through project metadata. The difference is that limina's rules are not generic project-dependency policies:
 

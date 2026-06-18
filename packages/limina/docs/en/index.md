@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Limina
-  text: Project reference graph compiler and architecture governance CLI
-  tagline: Make your TypeScript build graph reflect architecture, not incidental imports.
+  text: TypeScript project-reference graph compiler and architecture governance CLI
+  tagline: Start with incremental build, then turn on architecture governance.
   image:
     src: /logo.svg
     alt: Limina
@@ -21,13 +21,13 @@ hero:
 
 features:
   - icon: 🧭
-    title: Zero-config project graph discovery
-    details: Discover project boundaries from existing workspaces, tsconfig files, and source imports, then infer the actual project dependency graph so regular TypeScript monorepos can adopt type graph governance directly.
+    title: Low-friction incremental build
+    details: limina init adds limina:build, then Limina generates a TypeScript project-reference build graph from existing tsconfig files and source imports so users can first get tsc -b, tsgo, or vue-tsc incremental builds.
     link: /getting-started
-    linkText: Get started
+    linkText: Start build-first
   - icon: 🕸️
     title: Generate type graphs automatically
-    details: Generate dedicated type-check graphs for TypeScript, Vue, Svelte, and other checkers, allowing different stacks to build, check, and diagnose under one unified model.
+    details: Generate type graphs for TypeScript, Vue, Svelte, and other checkers, allowing different stacks to build, check, and diagnose under one unified model.
     link: /config/checkers
     linkText: Configure checkers
   - icon: 🧱

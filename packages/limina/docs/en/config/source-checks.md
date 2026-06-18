@@ -57,19 +57,19 @@ interface SourceKnipCheckConfig {
 
 `source.knip.workspaces` keys are package names discovered from the pnpm workspace, such as `@acme/app`. Unknown package names fail `source check`.
 
-`source.knip.workspaces[pkg]` only configures extra reachability and ignore rules. It does not accept `tsConfig`. If a package does not declare a static `limina build <config>` script, Limina runs Knip for that package without `--tsConfig`, so Knip uses its own default tsconfig behavior.
+`source.knip.workspaces[pkg]` only configures extra reachability and ignore rules. It does not accept `tsConfig`. If a package does not declare a static `limina checker build <config>` script, Limina runs Knip for that package without `--tsConfig`, so Knip uses its own default tsconfig behavior.
 
 A static package script can override that default and give Limina a package-specific Knip tsconfig source:
 
 ```json
 {
   "scripts": {
-    "build:types": "limina build tsconfig.json"
+    "build:types": "limina checker build tsconfig.json"
   }
 }
 ```
 
-The `<config>` path is resolved from the package directory. Limina supports static forms such as `limina build tsconfig.json`, `limina build --checker vue-tsc tsconfig.json`, `pnpm limina build tsconfig.json`, and `pnpm exec limina build tsconfig.json`. Dynamic shell scripts such as `limina build $CONFIG` are reported as unsupported instead of silently falling back to Knip defaults.
+The `<config>` path is resolved from the package directory. Limina supports static forms such as `limina checker build tsconfig.json`, `limina checker build tsconfig.json --preset vue-tsc`, `pnpm limina checker build tsconfig.json`, and `pnpm exec limina checker build tsconfig.json`. Dynamic shell scripts such as `limina checker build $CONFIG` are reported as unsupported instead of silently falling back to Knip defaults.
 
 ::: warning
 `knip` is an optional peer dependency of Limina. If `source.knip` is enabled but `knip` is not installed in the workspace running Limina, `source check` fails with a missing peer dependency error.
@@ -77,7 +77,7 @@ The `<config>` path is resolved from the package directory. Limina supports stat
 
 Limina disables Knip's implicit `index` / `main` / `cli` entry guessing by writing `entry: []` for governed owner workspaces. Default reachability still includes package manifest entries (`exports`, `main`, `module`, `browser`, `bin`, `types`, `typings`), Knip plugin-discovered entries, package scripts, and Limina-generated virtual entries for application-style owners.
 
-When package entries point at build artifacts, Knip may need a tsconfig with enough `rootDir` / `outDir` information to map those artifacts back to source files. In that case, point a static `limina build <config>` package script at the config that describes emitted artifact layout.
+When package entries point at build artifacts, Knip may need a tsconfig with enough `rootDir` / `outDir` information to map those artifacts back to source files. In that case, point a static `limina checker build <config>` package script at the config that describes emitted artifact layout.
 
 This is a general package design pattern: `package.json` describes the built files that consumers import, while the selected source tsconfig describes the source tree that writes those files. For example, `@docs-islands/utils` can expose only built files:
 
@@ -108,12 +108,12 @@ Expose that intent through a static package script:
 ```json
 {
   "scripts": {
-    "build:types": "limina build tsconfig.dts.json"
+    "build:types": "limina checker build tsconfig.dts.json"
   }
 }
 ```
 
-If the derived Knip tsconfig does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but may not find the source module behind it. That source file may be reported as unused. Prefer pointing `limina build <config>` at the right package-local config over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
+If the derived Knip tsconfig does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but may not find the source module behind it. That source file may be reported as unused. Prefer pointing `limina checker build <config>` at the right package-local config over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
 
 Limina also determines Knip's `project` file set automatically from governed source modules. Users do not configure `project`.
 

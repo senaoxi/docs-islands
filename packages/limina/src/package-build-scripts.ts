@@ -27,7 +27,11 @@ export interface PackageBuildScriptCollection {
 
 const supportedBuildCheckers = new Set(['tsc', 'vue-tsc', 'tsgo']);
 
-function hasLiminaBuildIntent(command: string): boolean {
+function hasLiminaCheckerBuildIntent(command: string): boolean {
+  return /\blimina\s+checker\s+build\b/u.test(command);
+}
+
+function hasLegacyLiminaBuildIntent(command: string): boolean {
   return /\blimina\s+build\b/u.test(command);
 }
 
@@ -79,22 +83,32 @@ function tokenizeStaticCommand(command: string): string[] | null {
   return tokens;
 }
 
-function getLiminaBuildArgumentOffset(tokens: string[]): number | null {
-  if (tokens[0] === 'limina' && tokens[1] === 'build') {
-    return 2;
+function getLiminaCheckerBuildArgumentOffset(tokens: string[]): number | null {
+  if (
+    tokens[0] === 'limina' &&
+    tokens[1] === 'checker' &&
+    tokens[2] === 'build'
+  ) {
+    return 3;
   }
 
-  if (tokens[0] === 'pnpm' && tokens[1] === 'limina' && tokens[2] === 'build') {
-    return 3;
+  if (
+    tokens[0] === 'pnpm' &&
+    tokens[1] === 'limina' &&
+    tokens[2] === 'checker' &&
+    tokens[3] === 'build'
+  ) {
+    return 4;
   }
 
   if (
     tokens[0] === 'pnpm' &&
     tokens[1] === 'exec' &&
     tokens[2] === 'limina' &&
-    tokens[3] === 'build'
+    tokens[3] === 'checker' &&
+    tokens[4] === 'build'
   ) {
-    return 4;
+    return 5;
   }
 
   return null;
@@ -123,7 +137,10 @@ function parsePackageBuildScript(options: {
   packageDirectory: string;
   scriptName: string;
 }): PackageBuildScript | PackageBuildScriptDiagnostic | null {
-  if (!hasLiminaBuildIntent(options.command)) {
+  if (
+    !hasLiminaCheckerBuildIntent(options.command) &&
+    !hasLegacyLiminaBuildIntent(options.command)
+  ) {
     return null;
   }
 
@@ -136,7 +153,7 @@ function parsePackageBuildScript(options: {
       packageJsonPath: options.packageJsonPath,
       packageName: options.packageName,
       reason:
-        'Limina only derives Knip source configs from static limina build scripts without shell control operators or dynamic expansion.',
+        'Limina only derives Knip source configs from static limina checker build scripts without shell control operators or dynamic expansion.',
       scriptName: options.scriptName,
     });
   }
@@ -153,7 +170,7 @@ function parsePackageBuildScript(options: {
     });
   }
 
-  const argumentOffset = getLiminaBuildArgumentOffset(tokens);
+  const argumentOffset = getLiminaCheckerBuildArgumentOffset(tokens);
 
   if (argumentOffset === null) {
     return createDiagnostic({
@@ -161,22 +178,35 @@ function parsePackageBuildScript(options: {
       packageJsonPath: options.packageJsonPath,
       packageName: options.packageName,
       reason:
-        'Limina only recognizes limina build, pnpm limina build, and pnpm exec limina build.',
+        'Limina only recognizes limina checker build, pnpm limina checker build, and pnpm exec limina checker build.',
       scriptName: options.scriptName,
     });
   }
 
   let checker: BuildCheckerPreset | undefined;
   let configPath: string | undefined;
+  let sawTargetOption = false;
 
   for (let index = argumentOffset; index < tokens.length; index += 1) {
     const token = tokens[index]!;
 
     if (token === '-w' || token === '--watch') {
+      sawTargetOption = true;
       continue;
     }
 
-    if (token === '--checker') {
+    if (token === '--checker' || token.startsWith('--checker=')) {
+      return createDiagnostic({
+        command: options.command,
+        packageJsonPath: options.packageJsonPath,
+        packageName: options.packageName,
+        reason: 'Unknown option: --checker. Use --preset instead.',
+        scriptName: options.scriptName,
+      });
+    }
+
+    if (token === '--preset') {
+      sawTargetOption = true;
       const parsedChecker = parseChecker(tokens[index + 1]);
 
       if (!parsedChecker) {
@@ -184,7 +214,7 @@ function parsePackageBuildScript(options: {
           command: options.command,
           packageJsonPath: options.packageJsonPath,
           packageName: options.packageName,
-          reason: '--checker must be one of: tsc, vue-tsc, tsgo.',
+          reason: '--preset must be one of: tsc, vue-tsc, tsgo.',
           scriptName: options.scriptName,
         });
       }
@@ -194,15 +224,16 @@ function parsePackageBuildScript(options: {
       continue;
     }
 
-    if (token.startsWith('--checker=')) {
-      const parsedChecker = parseChecker(token.slice('--checker='.length));
+    if (token.startsWith('--preset=')) {
+      sawTargetOption = true;
+      const parsedChecker = parseChecker(token.slice('--preset='.length));
 
       if (!parsedChecker) {
         return createDiagnostic({
           command: options.command,
           packageJsonPath: options.packageJsonPath,
           packageName: options.packageName,
-          reason: '--checker must be one of: tsc, vue-tsc, tsgo.',
+          reason: '--preset must be one of: tsc, vue-tsc, tsgo.',
           scriptName: options.scriptName,
         });
       }
@@ -217,7 +248,7 @@ function parsePackageBuildScript(options: {
         packageJsonPath: options.packageJsonPath,
         packageName: options.packageName,
         reason:
-          'Limina build script analysis only supports --checker, -w/--watch, plus one config argument.',
+          'Limina checker build script analysis only supports --preset, -w/--watch, plus one config argument.',
         scriptName: options.scriptName,
       });
     }
@@ -227,7 +258,8 @@ function parsePackageBuildScript(options: {
         command: options.command,
         packageJsonPath: options.packageJsonPath,
         packageName: options.packageName,
-        reason: 'Limina build script analysis found multiple config arguments.',
+        reason:
+          'Limina checker build script analysis found multiple config arguments.',
         scriptName: options.scriptName,
       });
     }
@@ -236,11 +268,16 @@ function parsePackageBuildScript(options: {
   }
 
   if (!configPath) {
+    if (!sawTargetOption) {
+      return null;
+    }
+
     return createDiagnostic({
       command: options.command,
       packageJsonPath: options.packageJsonPath,
       packageName: options.packageName,
-      reason: 'Limina build script analysis requires a config argument.',
+      reason:
+        'Limina checker build script analysis requires a config argument.',
       scriptName: options.scriptName,
     });
   }

@@ -30,10 +30,13 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 
 ## 检查器
 
-| 命令                       | 说明                                                     |
-| -------------------------- | -------------------------------------------------------- |
-| `limina checker build`     | 运行支持构建模式的检查器入口。                           |
-| `limina checker typecheck` | 运行 `vue-tsgo`、`svelte-check` 这类二等公民检查器入口。 |
+| 命令                                         | 说明                                                     |
+| -------------------------------------------- | -------------------------------------------------------- |
+| `limina checker build`                       | 运行支持构建模式的检查器入口。                           |
+| `limina checker build <config>`              | 为一个源码或 raw tsconfig 运行 checker build。           |
+| `limina checker build <config> --preset <p>` | 选择构建预设：`tsc`、`vue-tsc` 或 `tsgo`。               |
+| `limina checker build <config> --watch`      | 监听输入文件，并重建选中的一个 config。                  |
+| `limina checker typecheck`                   | 运行 `vue-tsgo`、`svelte-check` 这类二等公民检查器入口。 |
 
 ## 包与发布
 

@@ -212,7 +212,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 function withDefaultBuildScript(
   manifest: Record<string, unknown>,
-  command = 'limina build tsconfig.json',
+  command = 'limina checker build tsconfig.json',
 ): Record<string, unknown> {
   const scripts = isPlainRecord(manifest.scripts) ? manifest.scripts : {};
 
@@ -1026,7 +1026,7 @@ packages:
         },
         name: '@example/app',
         scripts: {
-          build: 'limina build tsconfig.json',
+          build: 'limina checker build tsconfig.json',
         },
         type: 'module',
       }),
@@ -1830,7 +1830,7 @@ packages:
             '.': './dist/index.js',
           },
           scripts: {
-            build: 'limina build tsconfig.dts.json',
+            build: 'limina checker build tsconfig.dts.json',
           },
         },
         appSource: "export { internalValue } from '@example/internal';\n",
@@ -1924,7 +1924,7 @@ packages:
         },
         name: '@example/app',
         scripts: {
-          build: 'limina build $CONFIG',
+          build: 'limina checker build $CONFIG',
         },
         type: 'module',
       }),
@@ -1945,8 +1945,8 @@ packages:
       expect(errors).toContain(
         'Unsupported package build script for generated Knip tsconfig:',
       );
-      expect(errors).toContain('command: limina build $CONFIG');
-      expect(errors).toContain('static limina build scripts');
+      expect(errors).toContain('command: limina checker build $CONFIG');
+      expect(errors).toContain('static limina checker build scripts');
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -1963,7 +1963,7 @@ packages:
         },
         name: '@example/app',
         scripts: {
-          build: 'limina build tsconfig.dts.json',
+          build: 'limina checker build tsconfig.dts.json',
         },
         type: 'module',
       }),
@@ -2071,7 +2071,7 @@ packages:
             '.': './dist/index.js',
           },
           scripts: {
-            build: 'limina build tsconfig.dts.json',
+            build: 'limina checker build tsconfig.dts.json',
           },
         },
         appSource: "export { internalValue } from '@example/internal';\n",
@@ -2093,7 +2093,7 @@ packages:
         },
         name: '@example/tool',
         scripts: {
-          build: 'limina build tsconfig.custom.json',
+          build: 'limina checker build tsconfig.custom.json',
         },
         type: 'module',
       }),
@@ -2378,7 +2378,7 @@ packages:
         'source.knip.workspaces["@example/internal"].tsConfig',
       );
       expect(errors).toContain(
-        'tsConfig is no longer supported. Limina uses Knip default tsconfig behavior unless a package has a static limina build script.',
+        'tsConfig is no longer supported. Limina uses Knip default tsconfig behavior unless a package has a static limina checker build script.',
       );
     } finally {
       errorSpy.mockRestore();

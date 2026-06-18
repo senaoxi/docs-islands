@@ -53,14 +53,15 @@ describe('limina CLI', () => {
       '--help',
     ]);
 
-    expect(rootHelp.stdout).toContain('build');
+    expect(rootHelp.stdout).toContain('checker <action> [config]');
+    expect(rootHelp.stdout).not.toContain('build [config]');
     expect(rootHelp.stdout).toContain('graph <action>');
     expect(rootHelp.stdout).not.toContain('nx <action>');
     expect(graphHelp.stdout).toContain('--view <view>');
     expect(graphHelp.stdout).toContain('--output <path>');
   });
 
-  it('runs build with a selected source project from the public command', async () => {
+  it('runs checker build globally and for a selected source config from the public command', async () => {
     const rootDir = await realpath(
       await mkdtemp(path.join(tmpdir(), 'limina-cli-build-')),
     );
@@ -108,6 +109,30 @@ describe('limina CLI', () => {
         }),
       );
       await writeText(
+        path.join(rootDir, 'node_modules/.bin/vue-tsc'),
+        [
+          '#!/usr/bin/env sh',
+          'printf "%s\\n" "$@" > "$PWD/vue-tsc-args.txt"',
+          'exit 0',
+          '',
+        ].join('\n'),
+      );
+      await chmod(path.join(rootDir, 'node_modules/.bin/vue-tsc'), 0o755);
+      await writeText(
+        path.join(rootDir, 'node_modules/vue-tsc/package.json'),
+        stringifyConfig({
+          name: 'vue-tsc',
+          version: '0.0.0-test',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'node_modules/@vue/compiler-sfc/package.json'),
+        stringifyConfig({
+          name: '@vue/compiler-sfc',
+          version: '0.0.0-test',
+        }),
+      );
+      await writeText(
         path.join(rootDir, 'packages/pkg/src/index.ts'),
         'export const value = 1;\n',
       );
@@ -139,6 +164,7 @@ describe('limina CLI', () => {
           cliPath,
           '--config',
           path.join(rootDir, 'limina.config.mjs'),
+          'checker',
           'build',
           'packages/pkg/tsconfig.lib.json',
         ],
@@ -155,8 +181,8 @@ describe('limina CLI', () => {
         'utf8',
       );
 
-      expect(result.stdout).toContain('limina build');
-      expect(result.stdout).toContain('limina build passed');
+      expect(result.stdout).toContain('limina checker build');
+      expect(result.stdout).toContain('limina checker passed');
       expect(tscArgs).toContain(
         '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json',
       );
@@ -167,6 +193,77 @@ describe('limina CLI', () => {
           cliPath,
           '--config',
           path.join(rootDir, 'limina.config.mjs'),
+          'checker',
+          'build',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+
+      const globalTscArgs = await readFile(
+        path.join(rootDir, 'tsc-args.txt'),
+        'utf8',
+      );
+
+      expect(globalTscArgs).toContain(
+        '.limina/tsconfig/checkers/typescript/tsconfig.build.json',
+      );
+
+      await writeText(
+        path.join(rootDir, 'packages/raw/src/index.vue'),
+        '<script setup lang="ts"></script>\n',
+      );
+      await writeText(
+        path.join(rootDir, 'packages/raw/tsconfig.raw.json'),
+        stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['src/**/*.vue'],
+        }),
+      );
+
+      await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'checker',
+          'build',
+          'packages/raw/tsconfig.raw.json',
+          '--preset',
+          'vue-tsc',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+
+      const vueTscArgs = await readFile(
+        path.join(rootDir, 'vue-tsc-args.txt'),
+        'utf8',
+      );
+
+      expect(vueTscArgs).toContain('packages/raw/tsconfig.raw.json');
+
+      await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'checker',
           'build',
           'packages/pkg/tsconfig.lib.json',
           '-w',
@@ -179,7 +276,6 @@ describe('limina CLI', () => {
           },
         },
       );
-
       const watchTscArgs = await readFile(
         path.join(rootDir, 'tsc-args.txt'),
         'utf8',
@@ -195,7 +291,7 @@ describe('limina CLI', () => {
     }
   }, 15_000);
 
-  it('rejects conflicting positional and project build targets from the public command', async () => {
+  it('rejects removed and invalid checker build options from the public command', async () => {
     const cliPath = fileURLToPath(
       new URL('../../bin/limina.js', import.meta.url),
     );
@@ -203,15 +299,62 @@ describe('limina CLI', () => {
     await expect(
       execFileAsync(process.execPath, [
         cliPath,
+        'checker',
         'build',
-        'packages/pkg/tsconfig.lib.json',
-        '-p',
-        'packages/other/tsconfig.lib.json',
+        '--preset',
+        'vue-tsc',
       ]),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining(
-        'Conflicting limina build config arguments',
+        'checker build --preset requires a config argument.',
       ),
+    });
+
+    await expect(
+      execFileAsync(process.execPath, [cliPath, 'checker', 'build', '--watch']),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        'checker build --watch requires a config argument.',
+      ),
+    });
+
+    await expect(
+      execFileAsync(process.execPath, [
+        cliPath,
+        'checker',
+        'build',
+        'packages/pkg/tsconfig.lib.json',
+        '--checker',
+        'vue-tsc',
+      ]),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        'Unknown option: --checker. Use --preset instead.',
+      ),
+    });
+
+    await expect(
+      execFileAsync(process.execPath, [
+        cliPath,
+        'checker',
+        'build',
+        '--project',
+        'packages/pkg/tsconfig.lib.json',
+      ]),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        'Unknown option: --project. Pass the config as a positional argument.',
+      ),
+    });
+
+    await expect(
+      execFileAsync(process.execPath, [
+        cliPath,
+        'build',
+        'packages/pkg/tsconfig.lib.json',
+      ]),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining('Unknown command "build".'),
     });
   });
 
@@ -261,7 +404,7 @@ describe('limina CLI', () => {
         stringifyConfig({
           name: '@example/app',
           scripts: {
-            build: 'limina build tsconfig.json',
+            build: 'limina checker build tsconfig.json',
           },
           type: 'module',
         }),

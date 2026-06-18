@@ -1,0 +1,231 @@
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import path from 'pathe';
+
+import {
+  type CheckerPackageResolver,
+  collectMissingCheckerPeerDependencies,
+  formatMissingCheckerPeerDependencies,
+  getCheckerAdapter,
+} from '../checkers';
+import type { CheckerExecutionKind, ResolvedCheckerConfig } from '../config';
+import { collectGraphProjectRouteFromRoot } from '../tsconfig';
+
+export interface TypecheckTarget {
+  args: string[];
+  checkerName?: string;
+  configPath: string;
+  cwd: string;
+  command: string;
+  executionKind?: CheckerExecutionKind;
+  label?: string;
+  sourceConfigPath?: string;
+}
+
+export interface TypecheckTargetResult {
+  configPath: string;
+  error?: Error;
+  status: number;
+}
+
+export type TypecheckRunner = (
+  target: TypecheckTarget,
+) => Promise<TypecheckTargetResult> | TypecheckTargetResult;
+
+export function getExecutionCheckers(options: {
+  checkers: ResolvedCheckerConfig[];
+  executionKind: CheckerExecutionKind;
+}): ResolvedCheckerConfig[] {
+  return options.checkers.filter((checker) => {
+    const adapter = getCheckerAdapter(checker.preset);
+
+    return adapter?.execution === options.executionKind;
+  });
+}
+
+export function collectCheckerPeerDependencyProblems(options: {
+  checkers: ResolvedCheckerConfig[];
+  projectRootDir: string;
+  resolvePackage?: CheckerPackageResolver;
+}): string[] {
+  const missingDependencies = collectMissingCheckerPeerDependencies({
+    checkers: options.checkers,
+    projectRootDir: options.projectRootDir,
+    resolvePackage: options.resolvePackage,
+  });
+
+  return missingDependencies.length === 0
+    ? []
+    : [formatMissingCheckerPeerDependencies(missingDependencies)];
+}
+
+export function createCheckerTarget(options: {
+  checker: ResolvedCheckerConfig;
+  commandOverride?: string;
+  configPath: string;
+  executionKind: CheckerExecutionKind;
+  projectRootDir: string;
+  watch?: boolean;
+}): TypecheckTarget {
+  const adapter = getCheckerAdapter(options.checker.preset);
+
+  if (!adapter) {
+    throw new Error(
+      `Checker "${options.checker.name}" uses unsupported preset "${options.checker.preset}".`,
+    );
+  }
+
+  const commandTarget = adapter.createCommandTarget(options);
+
+  return {
+    ...commandTarget,
+    checkerName: options.checker.name,
+    configPath: options.configPath,
+    cwd: options.projectRootDir,
+    executionKind: options.executionKind,
+  };
+}
+
+function createCheckerProcessEnvironment(
+  target: TypecheckTarget,
+): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PATH: [path.join(target.cwd, 'node_modules/.bin'), process.env.PATH]
+      .filter(Boolean)
+      .join(path.delimiter),
+  };
+}
+
+function findNearestPackageDir(startDir: string): string | null {
+  let currentDir = startDir;
+
+  for (;;) {
+    if (existsSync(path.join(currentDir, 'package.json'))) {
+      return currentDir;
+    }
+
+    const parentDir = path.dirname(currentDir);
+
+    if (parentDir === currentDir) {
+      return null;
+    }
+
+    currentDir = parentDir;
+  }
+}
+
+function createVueTsgoCachePath(configPath: string): string | null {
+  const packageDir = findNearestPackageDir(path.dirname(configPath));
+
+  if (!packageDir) {
+    return null;
+  }
+
+  const configHash = createHash('sha256')
+    .update(configPath)
+    .digest('hex')
+    .slice(0, 8);
+
+  return path.join(packageDir, 'node_modules/.cache/vue-tsgo', configHash);
+}
+
+function collectVueTsgoConfigPaths(target: TypecheckTarget): string[] {
+  const configPaths = new Set([target.configPath]);
+
+  try {
+    const route = collectGraphProjectRouteFromRoot({
+      rootConfigPath: target.configPath,
+      rootDir: target.cwd,
+    });
+
+    for (const projectPath of route.projectPaths) {
+      configPaths.add(projectPath);
+    }
+  } catch {
+    // Best effort cache cleanup must not mask the checker process result.
+  }
+
+  return [...configPaths];
+}
+
+function isVueTsgoCommand(command: string): boolean {
+  const commandName = path.basename(command).toLowerCase();
+
+  return commandName === 'vue-tsgo' || commandName === 'vue-tsgo.cmd';
+}
+
+/**
+ * vue-tsgo generates a transient virtual TS workspace under
+ * node_modules/.cache/vue-tsgo/<hash>. In project graphs where multiple
+ * references converge on the same config, vue-tsgo can create duplicate
+ * Project instances with the same targetRoot. Leaving a previous targetRoot
+ * in place may race rm()/writeFile() during Project.generate() and fail with
+ * ENOENT, so Limina clears reachable vue-tsgo workspaces before launching it.
+ */
+export async function prepareVueTsgoCache(
+  target: TypecheckTarget,
+): Promise<void> {
+  if (!isVueTsgoCommand(target.command)) {
+    return;
+  }
+
+  const cachePaths = collectVueTsgoConfigPaths(target)
+    .map((configPath) => createVueTsgoCachePath(configPath))
+    .filter((cachePath): cachePath is string => Boolean(cachePath));
+
+  await Promise.all(
+    [...new Set(cachePaths)].map((cachePath) =>
+      rm(cachePath, {
+        force: true,
+        maxRetries: 3,
+        recursive: true,
+        retryDelay: 50,
+      }),
+    ),
+  );
+}
+
+export function createDefaultRunner(): TypecheckRunner {
+  return async (target) => {
+    await prepareVueTsgoCache(target);
+
+    const processEnvironment = createCheckerProcessEnvironment(target);
+
+    return await new Promise<TypecheckTargetResult>((resolve) => {
+      let settled = false;
+      const finalize = (result: TypecheckTargetResult): void => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        resolve(result);
+      };
+
+      const child = spawn(target.command, target.args, {
+        cwd: target.cwd,
+        env: processEnvironment,
+        shell: process.platform === 'win32',
+        stdio: 'inherit',
+      });
+
+      child.on('error', (error) => {
+        finalize({
+          configPath: target.configPath,
+          error,
+          status: 1,
+        });
+      });
+
+      child.on('close', (code) => {
+        finalize({
+          configPath: target.configPath,
+          status: code ?? 1,
+        });
+      });
+    });
+  };
+}
