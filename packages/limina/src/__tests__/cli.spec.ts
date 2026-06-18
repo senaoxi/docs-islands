@@ -961,7 +961,10 @@ describe('limina CLI', () => {
       expect(result.stdout).toContain('limina init finished');
       expect(
         await readFile(path.join(rootDir, 'limina.config.mjs'), 'utf8'),
-      ).toContain('include:');
+      ).toContain("checkers: 'auto'");
+      expect(
+        await readFile(path.join(rootDir, 'limina.config.mjs'), 'utf8'),
+      ).not.toContain('include:');
       expect(
         await readFile(path.join(rootDir, '.gitignore'), 'utf8'),
       ).toContain('.limina/');

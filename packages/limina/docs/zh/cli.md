@@ -14,7 +14,7 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 
 | 命令                      | 说明                                                                                      |
 | ------------------------- | ----------------------------------------------------------------------------------------- |
-| `limina init [--yes]`     | 生成 `limina.config.mjs`、确保忽略 `.limina/`，并为 pnpm 工作区添加 `limina:check` 脚本。 |
+| `limina init [--yes]`     | 生成 `limina.config.mjs`、确保忽略 `.limina/`，并为 pnpm 工作区添加 `limina:build` 脚本。 |
 | `limina check`            | 运行默认流水线：图、源码、覆盖证明、检查器构建和检查器类型检查。                          |
 | `limina check <pipeline>` | 运行 `pipelines` 中的用户命名流水线。                                                     |
 

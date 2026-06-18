@@ -21,9 +21,9 @@ pnpm add -D limina typescript
 
 ## Pick an Adoption Path
 
-If your workspace does not yet have a Limina config, start with `limina init`. It writes a source-selector based `limina.config.mjs`, adds the root script, and ensures `.limina/` is ignored.
+If your workspace does not yet have a Limina config, start with `limina init`. It writes an auto-first `limina.config.mjs`, adds the root script, ensures `.limina/` is ignored, and can install the optional Limina agent skill for this project.
 
-If your repository already has a clear tsconfig convention, write the minimal `limina.config.mjs` directly. Limina generates its declaration graph from the source configs selected by `checker.include`. See [Checker Entries](./config/checkers.md) and [Config File](./config/config-file.md) for the full shape of these settings.
+If your repository already has a clear tsconfig convention, write the minimal `limina.config.mjs` directly. Auto checker discovery is enough for many workspaces; use [Checker Entries](./config/checkers.md) when you need explicit checker routing.
 
 ## Initialize an Existing Workspace
 
@@ -41,12 +41,18 @@ For non-interactive environments, use:
 pnpm exec limina init --yes
 ```
 
+`--yes` accepts the core init confirmations but skips the optional skill installation. To install the skill manually later, run:
+
+```sh
+npx --yes skills add senaoxi/docs-islands --skill limina
+```
+
 Initialization can create or update:
 
 - a root `limina.config.mjs`;
 - a root `.gitignore` entry for `.limina/`;
-- a root `limina:check` script;
-- a missing root `limina` dev dependency.
+- a root `limina:build` script;
+- missing root `limina` and `typescript` dev dependencies.
 
 ::: warning
 Generated checker graphs are written later under `.limina/` by `limina graph prepare` and by graph-consuming commands.
@@ -58,7 +64,7 @@ After initialization, run:
 
 ```sh
 pnpm i
-pnpm limina:check
+pnpm limina:build
 ```
 
 ::: tip
@@ -74,12 +80,7 @@ import { defineConfig } from 'limina';
 
 export default defineConfig({
   config: {
-    checkers: {
-      typescript: {
-        preset: 'tsc',
-        include: ['packages/**/tsconfig.json'],
-      },
-    },
+    checkers: 'auto',
   },
 });
 ```
@@ -89,7 +90,7 @@ Add a root script:
 ```json
 {
   "scripts": {
-    "typecheck": "limina check"
+    "limina:build": "limina checker build"
   }
 }
 ```
@@ -97,10 +98,10 @@ Add a root script:
 Run it:
 
 ```sh
-pnpm typecheck
+pnpm limina:build
 ```
 
-The default check pipeline runs:
+This build-first entry prepares Limina's generated checker graph and runs the build-capable checker entries. When you are ready to turn on the full governance flow, run `pnpm exec limina check`. The default check pipeline runs:
 
 1. `graph:check` (which prepares the generated graph first)
 2. `source:check`
@@ -116,7 +117,7 @@ The first failure usually tells you which layer to inspect:
 - `checker:build` means a first-class build execution checker such as `tsc`, `tsgo`, or `vue-tsc` found type errors;
 - `checker:typecheck` means a second-class typecheck execution checker such as `vue-tsgo` or `svelte-check` found type errors.
 
-For example, if `@acme/app` adds an import from `@acme/core` and the first `pnpm typecheck` fails in graph checking, start with the importing file and source tsconfig shown in the report. Re-run the same command after the fix to confirm graph, source ownership, coverage proof, and checker execution together.
+For example, if `@acme/app` adds an import from `@acme/core` and the first `pnpm exec limina check` fails in graph checking, start with the importing file and source tsconfig shown in the report. Re-run the same command after the fix to confirm graph, source ownership, coverage proof, and checker execution together.
 
 ## Add Framework Checkers
 

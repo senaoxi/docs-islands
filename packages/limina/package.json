@@ -125,7 +125,6 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./config": "./src/config.ts",
     "./schemas/tsconfig-schema.json": "./schemas/tsconfig-schema.json",
     "./package.json": "./package.json"
   },

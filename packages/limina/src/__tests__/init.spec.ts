@@ -9,8 +9,22 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInit } from '../commands/init';
+import { LiminaFlowReporter } from '../flow';
+import { InitLogger } from '../logger';
+
+const confirmMock = vi.hoisted(() => vi.fn());
+const execFileMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@clack/prompts', () => ({
+  confirm: confirmMock,
+  isCancel: (value: unknown) => value === 'cancel',
+}));
+
+vi.mock('node:child_process', () => ({
+  execFile: execFileMock,
+}));
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -55,6 +69,100 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function mockExecFileWithNpxResult(error: Error | null = null): void {
+  execFileMock.mockImplementation(
+    (
+      command: string,
+      _args: string[],
+      _options: unknown,
+      callback: (error: Error | null) => void,
+    ) => {
+      if (command === 'npx') {
+        callback(error);
+        return {};
+      }
+
+      callback(new Error('pnpm list unavailable'));
+      return {};
+    },
+  );
+}
+
+function findNpxCall():
+  | [
+      command: string,
+      args: string[],
+      options: { cwd?: string },
+      callback: unknown,
+    ]
+  | undefined {
+  return execFileMock.mock.calls.find(([command]) => command === 'npx') as
+    | [
+        command: string,
+        args: string[],
+        options: { cwd?: string },
+        callback: unknown,
+      ]
+    | undefined;
+}
+
+function setTty(value: boolean): () => void {
+  const stdinDescriptor = Object.getOwnPropertyDescriptor(
+    process.stdin,
+    'isTTY',
+  );
+  const stdoutDescriptor = Object.getOwnPropertyDescriptor(
+    process.stdout,
+    'isTTY',
+  );
+
+  Object.defineProperty(process.stdin, 'isTTY', {
+    configurable: true,
+    value,
+  });
+  Object.defineProperty(process.stdout, 'isTTY', {
+    configurable: true,
+    value,
+  });
+
+  return () => {
+    if (stdinDescriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', stdinDescriptor);
+    } else {
+      delete (process.stdin as Partial<typeof process.stdin>).isTTY;
+    }
+    if (stdoutDescriptor) {
+      Object.defineProperty(process.stdout, 'isTTY', stdoutDescriptor);
+    } else {
+      delete (process.stdout as Partial<typeof process.stdout>).isTTY;
+    }
+  };
+}
+
+function createBufferedFlow(): {
+  chunks: string[];
+  flow: LiminaFlowReporter;
+} {
+  const chunks: string[] = [];
+
+  return {
+    chunks,
+    flow: new LiminaFlowReporter({
+      env: {
+        CI: 'true',
+      },
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        isTTY: false,
+      },
+    }),
+  };
 }
 
 const compilerOptions = {
@@ -131,6 +239,16 @@ function createWorkspaceFixture(): Record<string, string> {
 }
 
 describe('runInit', () => {
+  beforeEach(() => {
+    confirmMock.mockReset();
+    execFileMock.mockReset();
+    mockExecFileWithNpxResult();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('fails when no pnpm workspace root can be found', async () => {
     const fixture = await createFixture({
       'package.json': '{}\n',
@@ -149,7 +267,7 @@ describe('runInit', () => {
     }
   });
 
-  it('fails when reserved Limina tsconfig names already exist', async () => {
+  it('allows generated graph tsconfig names during init', async () => {
     const fixture = await createFixture({
       'package.json': stringifyConfig({
         name: 'root',
@@ -168,7 +286,15 @@ describe('runInit', () => {
           cwd: fixture.rootDir,
           yes: true,
         }),
-      ).rejects.toThrow(/reserved Limina tsconfig names/u);
+      ).resolves.toMatchObject({
+        rootDir: fixture.rootDir,
+      });
+      expect(
+        await fileExists(path.join(fixture.rootDir, 'tsconfig.build.json')),
+      ).toBe(true);
+      expect(
+        await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
+      ).toContain("checkers: 'auto'");
     } finally {
       await fixture.cleanup();
     }
@@ -245,7 +371,7 @@ describe('runInit', () => {
           yes: true,
         }),
       ).resolves.toMatchObject({
-        checkCommand: 'pnpm limina:check',
+        buildCommand: 'pnpm limina:build',
       });
     } finally {
       await fixture.cleanup();
@@ -276,7 +402,7 @@ describe('runInit', () => {
           yes: true,
         }),
       ).resolves.toMatchObject({
-        checkCommand: 'pnpm limina:check',
+        buildCommand: 'pnpm limina:build',
       });
     } finally {
       await fixture.cleanup();
@@ -307,12 +433,128 @@ describe('runInit', () => {
       expect(rootManifest).toMatchObject({
         private: true,
         scripts: {
-          'limina:check': 'limina check',
+          'limina:build': 'limina checker build',
         },
         type: 'module',
       });
       expect(rootManifest.devDependencies?.limina).toMatch(/^\^/u);
       expect(rootManifest.devDependencies?.typescript).toBe('^5.9.0');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('adds missing minimum dependencies without changing existing ranges', async () => {
+    const fixture = await createFixture({
+      'package.json': stringifyConfig({
+        dependencies: {
+          limina: 'workspace:*',
+        },
+        name: 'root',
+        private: true,
+        scripts: {
+          'limina:build': 'limina checker build',
+        },
+        type: 'module',
+      }),
+      'pnpm-workspace.yaml': 'packages: []\n',
+    });
+
+    try {
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+        yes: true,
+      });
+      const rootManifest = await readJson<{
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      }>(path.join(fixture.rootDir, 'package.json'));
+
+      expect(result.installRequired).toBe(true);
+      expect(rootManifest.dependencies?.limina).toBe('workspace:*');
+      expect(rootManifest.devDependencies?.limina).toBeUndefined();
+      expect(rootManifest.devDependencies?.typescript).toBe('^5.9.0');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('migrates the legacy default check script to the build script', async () => {
+    const fixture = await createFixture({
+      'package.json': stringifyConfig({
+        devDependencies: {
+          limina: '^1.0.0',
+          typescript: '^5.9.0',
+        },
+        name: 'root',
+        private: true,
+        scripts: {
+          'limina:check': 'limina check',
+        },
+        type: 'module',
+      }),
+      'pnpm-workspace.yaml': 'packages: []\n',
+    });
+
+    try {
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+        yes: true,
+      });
+      const rootManifest = await readJson<{
+        scripts?: Record<string, string>;
+      }>(path.join(fixture.rootDir, 'package.json'));
+
+      expect(result.installRequired).toBe(false);
+      expect(rootManifest.scripts).toMatchObject({
+        'limina:build': 'limina checker build',
+      });
+      expect(rootManifest.scripts?.['limina:check']).toBeUndefined();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not rewrite package.json when scripts and dependencies already match', async () => {
+    const fixture = await createFixture({
+      'package.json': stringifyConfig({
+        dependencies: {
+          limina: 'workspace:*',
+        },
+        name: 'root',
+        peerDependencies: {
+          typescript: '^5.8.0',
+        },
+        private: true,
+        scripts: {
+          'limina:build': 'limina checker build',
+        },
+        type: 'module',
+      }),
+      'pnpm-workspace.yaml': 'packages: []\n',
+    });
+
+    try {
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+        yes: true,
+      });
+      const rootManifest = await readJson<{
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+        peerDependencies?: Record<string, string>;
+      }>(path.join(fixture.rootDir, 'package.json'));
+
+      expect(result.installRequired).toBe(false);
+      expect(result.writtenFiles).not.toContain(
+        path.join(fixture.rootDir, 'package.json'),
+      );
+      expect(rootManifest.dependencies?.limina).toBe('workspace:*');
+      expect(rootManifest.peerDependencies?.typescript).toBe('^5.8.0');
+      expect(rootManifest.devDependencies).toBeUndefined();
     } finally {
       await fixture.cleanup();
     }
@@ -355,7 +597,10 @@ describe('runInit', () => {
       ).toBe(false);
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
-      ).toContain('include:');
+      ).toContain("checkers: 'auto'");
+      expect(
+        await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
+      ).not.toContain('include:');
       expect(
         await readFile(path.join(fixture.rootDir, '.gitignore'), 'utf8'),
       ).toContain('.limina/');
@@ -397,7 +642,10 @@ describe('runInit', () => {
       ).resolves.toBe(false);
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
-      ).toContain('include:');
+      ).toContain("checkers: 'auto'");
+      expect(
+        await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
+      ).not.toContain('include:');
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
       ).not.toContain('entry:');
@@ -410,10 +658,274 @@ describe('runInit', () => {
         scripts?: Record<string, string>;
       }>(path.join(fixture.rootDir, 'package.json'));
 
-      expect(rootManifest.scripts?.['limina:check']).toBe('limina check');
+      expect(rootManifest.scripts?.['limina:build']).toBe(
+        'limina checker build',
+      );
       expect(rootManifest.devDependencies?.limina).toMatch(/^\^/u);
+      expect(rootManifest.devDependencies?.typescript).toBe('^5.9.0');
     } finally {
       await fixture.cleanup();
     }
   }, 30_000);
+
+  it('is idempotent when generated files already match', async () => {
+    const liminaConfig = `import { defineConfig } from 'limina';
+
+export default defineConfig({
+  config: {
+    checkers: 'auto',
+  },
+});
+`;
+    const fixture = await createFixture({
+      '.gitignore': '.limina/\n',
+      'limina.config.mjs': liminaConfig,
+      'package.json': stringifyConfig({
+        devDependencies: {
+          limina: '^1.0.0',
+          typescript: '^5.9.0',
+        },
+        name: 'root',
+        private: true,
+        scripts: {
+          'limina:build': 'limina checker build',
+        },
+        type: 'module',
+      }),
+      'pnpm-workspace.yaml': 'packages: []\n',
+    });
+
+    try {
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+        yes: true,
+      });
+
+      expect(result.writtenFiles).toEqual([]);
+      expect(result.removedPaths).toEqual([]);
+      expect(result.skillInstallStatus).toBe('skipped');
+      expect(findNpxCall()).toBeUndefined();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports init flow steps with skipped reasons', async () => {
+    const liminaConfig = `import { defineConfig } from 'limina';
+
+export default defineConfig({
+  config: {
+    checkers: 'auto',
+  },
+});
+`;
+    const fixture = await createFixture({
+      '.gitignore': '.limina/\n',
+      'limina.config.mjs': liminaConfig,
+      'package.json': stringifyConfig({
+        devDependencies: {
+          limina: '^1.0.0',
+          typescript: '^5.9.0',
+        },
+        name: 'root',
+        private: true,
+        scripts: {
+          'limina:build': 'limina checker build',
+        },
+        type: 'module',
+      }),
+      'pnpm-workspace.yaml': 'packages: []\n',
+    });
+    const { chunks, flow } = createBufferedFlow();
+
+    try {
+      await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+        flow,
+        yes: true,
+      });
+
+      const output = chunks.join('');
+
+      expect(output).toContain('  [start] resolve workspace root\n');
+      expect(output).toMatch(
+        / {2}\[pass\] workspace root confirmed: .+ \(\d+ms\)\n/u,
+      );
+      expect(output).toMatch(
+        / {2}\[skip\] root \.limina \(skipped: not present\) \(\d+ms\)\n/u,
+      );
+      expect(output).toMatch(
+        / {2}\[skip\] limina\.config\.mjs \(skipped: already up to date\) \(\d+ms\)\n/u,
+      );
+      expect(output).toMatch(
+        / {2}\[skip\] \.gitignore \(skipped: \.limina\/ already ignored\) \(\d+ms\)\n/u,
+      );
+      expect(output).toMatch(
+        / {2}\[skip\] package\.json \(skipped: script and dependencies already present\) \(\d+ms\)\n/u,
+      );
+      expect(output).toMatch(
+        / {2}\[skip\] limina skill \(skipped: --yes; run npx --yes skills add senaoxi\/docs-islands --skill limina\) \(\d+ms\)\n/u,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('removes only the root .limina directory without generating graph files', async () => {
+    const fixture = await createFixture({
+      '.limina/manifest.json': '{}\n',
+      'package.json': stringifyConfig({
+        name: 'root',
+        private: true,
+        type: 'module',
+      }),
+      'packages/pkg/.limina/manifest.json': '{}\n',
+      'packages/pkg/package.json': stringifyConfig({
+        name: 'pkg',
+      }),
+      'pnpm-workspace.yaml': 'packages:\n  - packages/*\n',
+    });
+
+    try {
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+        yes: true,
+      });
+
+      expect(result.removedPaths).toEqual([
+        path.join(fixture.rootDir, '.limina'),
+      ]);
+      await expect(
+        fileExists(path.join(fixture.rootDir, '.limina/manifest.json')),
+      ).resolves.toBe(false);
+      await expect(
+        fileExists(path.join(fixture.rootDir, '.limina/tsconfig')),
+      ).resolves.toBe(false);
+      await expect(
+        fileExists(
+          path.join(fixture.rootDir, 'packages/pkg/.limina/manifest.json'),
+        ),
+      ).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('installs the Limina skill when the interactive prompt is accepted', async () => {
+    const restoreTty = setTty(true);
+    const fixture = await createFixture({
+      'package.json': stringifyConfig({
+        devDependencies: {
+          limina: '^1.0.0',
+          typescript: '^5.9.0',
+        },
+        name: 'root',
+        private: true,
+        scripts: {
+          'limina:build': 'limina checker build',
+        },
+        type: 'module',
+      }),
+      'pnpm-workspace.yaml': 'packages: []\n',
+    });
+    confirmMock.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+    mockExecFileWithNpxResult();
+
+    try {
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+      });
+      const npxCall = findNpxCall();
+
+      expect(result.skillInstallStatus).toBe('installed');
+      expect(npxCall?.[0]).toBe('npx');
+      expect(npxCall?.[1]).toEqual([
+        '--yes',
+        'skills',
+        'add',
+        'senaoxi/docs-islands',
+        '--skill',
+        'limina',
+      ]);
+      expect(npxCall?.[2].cwd).toBe(fixture.rootDir);
+    } finally {
+      restoreTty();
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not install the Limina skill when the prompt is rejected', async () => {
+    const restoreTty = setTty(true);
+    const fixture = await createFixture({
+      'package.json': stringifyConfig({
+        devDependencies: {
+          limina: '^1.0.0',
+          typescript: '^5.9.0',
+        },
+        name: 'root',
+        private: true,
+        scripts: {
+          'limina:build': 'limina checker build',
+        },
+        type: 'module',
+      }),
+      'pnpm-workspace.yaml': 'packages: []\n',
+    });
+    confirmMock.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    try {
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+      });
+
+      expect(result.skillInstallStatus).toBe('skipped');
+      expect(findNpxCall()).toBeUndefined();
+    } finally {
+      restoreTty();
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps init successful when Limina skill installation fails', async () => {
+    const restoreTty = setTty(true);
+    const fixture = await createFixture({
+      'package.json': stringifyConfig({
+        devDependencies: {
+          limina: '^1.0.0',
+          typescript: '^5.9.0',
+        },
+        name: 'root',
+        private: true,
+        scripts: {
+          'limina:build': 'limina checker build',
+        },
+        type: 'module',
+      }),
+      'pnpm-workspace.yaml': 'packages: []\n',
+    });
+    const warn = vi.spyOn(InitLogger, 'warn').mockImplementation(() => {});
+    confirmMock.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+    mockExecFileWithNpxResult(new Error('network unavailable'));
+
+    try {
+      const result = await runInit({
+        clearScreen: false,
+        cwd: fixture.rootDir,
+      });
+
+      expect(result.skillInstallStatus).toBe('failed');
+      expect(result.buildCommand).toBe('pnpm limina:build');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('limina skill install failed'),
+      );
+    } finally {
+      restoreTty();
+      await fixture.cleanup();
+    }
+  });
 });

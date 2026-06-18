@@ -20,28 +20,26 @@ When `--config` is omitted, Limina walks upward from cwd looking for `limina.con
 
 ## `limina init [--yes]`
 
-Bootstrap declaration graph, aggregators, root config, and the `limina:check` script for a workspace that has not yet adopted Limina conventions.
+Bootstrap root config, ignored generated directory, dependencies, and the `limina:check` script for a workspace that has not yet adopted Limina conventions.
 
-| Flag    | Effect                                                                                                                                                                          |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--yes` | Accept all confirmations (root selection, missing root `package.json`, overwriting an existing `limina.config.mjs` or `limina:check` script). Required in non-TTY environments. |
+| Flag    | Effect                                                                                                                                                                                                                |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--yes` | Accept core confirmations (root selection, missing root `package.json`, overwriting an existing `limina.config.mjs` or `limina:check` script) and skip optional skill installation. Required in non-TTY environments. |
 
 What it does:
 
 1. Locates the pnpm workspace root (`pnpm-workspace.yaml`).
-2. Refuses to run if any `tsconfig*.build.json` or `tsconfig*.dts.json` files already exist (these names are reserved init outputs).
-3. Scans ordinary `tsconfig*.json` files and classifies each as either a leaf or an aggregator (mutually exclusive; both = error).
-4. For every leaf, creates a paired `tsconfig*.dts.json` with strict declaration emit options. Adds inferred `references` derived from TypeScript's resolution of real imports.
-5. Writes a `tsconfig.build.json` per workspace that has declaration leaves, and a root `tsconfig.build.json` referencing those plus root-owned leaves. Empty aggregators are omitted.
-6. Writes a minimal `limina.config.mjs`.
-7. Updates root `package.json` to add `"limina:check": "limina check"` and a `limina` devDependency.
+2. Confirms the workspace root.
+3. Writes an auto-first `limina.config.mjs` with `config.checkers: 'auto'`.
+4. Ensures `.limina/` is ignored in the root `.gitignore`.
+5. Creates or updates the root `package.json` with `"limina:check": "limina check"` and missing `limina` / `typescript` devDependencies.
+6. Deletes an existing root `.limina` file or directory, but does not create `.limina` graph files.
+7. In interactive mode, asks whether to install the Limina skill for the current project. `--yes` skips skill installation and prints the manual command.
 
 Refusal conditions:
 
-- Reserved `tsconfig*.build.json` / `tsconfig*.dts.json` already exist.
-- A `tsconfig.json` has BOTH `references` and source files.
-- A `tsconfig.<scope>.json` has `references`.
-- A `workspace:*` import cannot be mapped to an ordinary `tsconfig*.json` leaf.
+- No `pnpm-workspace.yaml` exists in the current directory or its parents.
+- Workspace packages are missing required `name` fields.
 
 Exit code: non-zero on any refusal or write error.
 

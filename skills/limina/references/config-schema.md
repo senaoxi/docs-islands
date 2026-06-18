@@ -336,10 +336,10 @@ import {
 - `getActiveCheckers(config)` — returns sorted `ResolvedCheckerConfig[]` (`{ name, entry, preset, extensions }`).
 - `getActiveCheckerExtensions(config)` — deduped, length-then-locale-sorted extensions list across all checkers.
 
-For pure type-only imports without paying the runtime cost, import from the `limina/config` subpath:
+For type-only imports, use the root entry:
 
 ```ts
-import type { LiminaConfig } from 'limina/config';
+import type { LiminaConfig } from 'limina';
 ```
 
 ## Validation behavior

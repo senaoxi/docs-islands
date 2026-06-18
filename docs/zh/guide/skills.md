@@ -1,6 +1,6 @@
 # Agent Skills
 
-Docs Islands 提供了可选的 agent skills，用来帮助 AI coding agent 正确使用项目里的包。这些 skills 会把 `logaria` 和 `@docs-islands/vitepress` 的实践规则打包起来，让 agent 在修改 logger 调用、VitePress 配置、Markdown islands、渲染策略、诊断和集成代码时加载更聚焦的上下文。
+Docs Islands 提供了可选的 agent skills，用来帮助 AI coding agent 正确使用项目里的包。这些 skills 会把 `limina`、`logaria` 和 `@docs-islands/vitepress` 的实践规则打包起来，让 agent 在修改 Limina 配置、logger 调用、VitePress 配置、Markdown islands、渲染策略、诊断和集成代码时加载更聚焦的上下文。
 
 ## 安装
 
@@ -16,18 +16,25 @@ npx skills add senaoxi/docs-islands --list
 npx skills add senaoxi/docs-islands --skill logaria
 ```
 
+安装 Limina skill：
+
+```bash
+npx skills add senaoxi/docs-islands --skill limina
+```
+
 安装 VitePress skill：
 
 ```bash
 npx skills add senaoxi/docs-islands --skill docs-islands-vitepress
 ```
 
-将两个 skills 全局安装到 Codex：
+将这些 skills 全局安装到 Codex：
 
 ```bash
 npx skills add senaoxi/docs-islands \
   --global \
   --agent codex \
+  --skill limina \
   --skill logaria \
   --skill docs-islands-vitepress
 ```
@@ -42,6 +49,7 @@ Docs Islands 使用带命名空间的 skill 名称：
 
 | Skill                    | 对应辅助的包              |
 | ------------------------ | ------------------------- |
+| `limina`                 | `limina`                  |
 | `logaria`                | `logaria`                 |
 | `docs-islands-vitepress` | `@docs-islands/vitepress` |
 
@@ -58,4 +66,5 @@ Docs Islands 使用带命名空间的 skill 名称：
 ```bash
 npx skills update logaria
 npx skills update docs-islands-vitepress
+npx skills update limina
 ```

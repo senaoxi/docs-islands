@@ -14,7 +14,7 @@ For what each task detects, with examples, see [Built-in Tasks](./built-in-tasks
 
 | Command                   | Description                                                                                                       |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `limina init [--yes]`     | Generate `limina.config.mjs`, ensure `.limina/` is ignored, and add a `limina:check` script for a pnpm workspace. |
+| `limina init [--yes]`     | Generate `limina.config.mjs`, ensure `.limina/` is ignored, and add a `limina:build` script for a pnpm workspace. |
 | `limina check`            | Run the default pipeline: graph, source, proof, checker build, and checker typecheck.                             |
 | `limina check <pipeline>` | Run a named user pipeline from `pipelines`.                                                                       |
 

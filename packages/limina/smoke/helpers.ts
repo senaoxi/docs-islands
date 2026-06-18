@@ -37,8 +37,6 @@ const REQUIRED_DIST_FILES = [
   'cli.js',
   'index.js',
   'index.d.ts',
-  'config.js',
-  'config.d.ts',
   'schemas/tsconfig-schema.json',
 ] as const;
 
@@ -349,7 +347,6 @@ export default defineConfig({
 import { fileURLToPath } from 'node:url';
 
 const publicApi = await import('limina');
-const configApi = await import('limina/config');
 const schemaPath = fileURLToPath(import.meta.resolve('limina/schemas/tsconfig-schema.json'));
 const packageJsonPath = fileURLToPath(import.meta.resolve('limina/package.json'));
 const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
@@ -358,8 +355,18 @@ const manifest = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 if (typeof publicApi.defineConfig !== 'function') {
   throw new Error('limina root export did not expose defineConfig.');
 }
-if (typeof configApi.defineConfig !== 'function') {
-  throw new Error('limina/config export did not expose defineConfig.');
+let configExportRejected = false;
+try {
+  await import('limina/config');
+} catch (error) {
+  configExportRejected =
+    Boolean(error) &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED';
+}
+if (!configExportRejected) {
+  throw new Error('limina/config export should not be exposed.');
 }
 if (manifest.name !== 'limina') {
   throw new Error('limina/package.json did not resolve to the installed package.');
