@@ -1,9 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'pathe';
-import type { ResolvedLiminaConfig } from '../config/runner';
-import { createLiminaCore, type LiminaCore } from '../core';
-import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
-import type { ImportAnalysisContext } from '../core/import-analysis/runner';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import { createLiminaCore, type LiminaCore } from '#core';
+import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
+import type { ImportAnalysisContext } from '#core/import-analysis/runner';
 import {
   collectImportsFromFile,
   createFileOwnerLookup,
@@ -19,16 +17,28 @@ import {
   type ProjectInfo,
   resolveInternalImport,
   shouldResolveThroughGraph,
-} from '../core/import-graph/context';
+} from '#core/import-graph/context';
 import {
   collectSourceGraphProjectExtensions,
   formatReferences,
-} from '../core/tsconfig/actions';
+} from '#core/tsconfig/actions';
 import {
   findPackageForSpecifier,
   type ImporterInfo,
+  isNamedWorkspacePackage,
   type WorkspacePackage,
-} from '../core/workspace/actions';
+} from '#core/workspace/actions';
+import { toRelativePath } from '#utils/path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'pathe';
+import {
+  type CheckIssueReportOptions,
+  formatCheckIssueHumanReport,
+} from '../check-reporting/human';
+import {
+  createTaskFailureIssue,
+  type LiminaCheckIssue,
+} from '../check-reporting/snapshot';
 import {
   createWorkspaceExportsResolutionIndex,
   type WorkspaceExportsResolutionIndex,
@@ -43,7 +53,6 @@ import {
 } from '../dependency-graph/runner';
 import type { LiminaFlowReporter } from '../flow';
 import { GraphLogger } from '../logger';
-import { toRelativePath } from '../utils/path';
 import {
   addConditionDomainProblems,
   addDefaultCustomConditionProblems,
@@ -70,6 +79,7 @@ export interface RunGraphCheckOptions {
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  report?: CheckIssueReportOptions;
 }
 
 export interface RunGraphPrepareOptions {
@@ -151,6 +161,138 @@ interface GraphImportResolution {
   workspaceExportResolution: WorkspacePackageExportResolution | null;
 }
 
+function getGraphProblemTitle(problem: string): string {
+  const firstLine = problem.split('\n')[0]?.trim() || 'Graph check issue';
+
+  return firstLine.replace(/:+$/u, '');
+}
+
+function getGraphProblemCode(title: string): string {
+  if (title.startsWith('Missing project reference')) {
+    return 'LIMINA_GRAPH_REFERENCE_MISSING';
+  }
+
+  if (title.startsWith('Extra project reference')) {
+    return 'LIMINA_GRAPH_REFERENCE_EXTRA';
+  }
+
+  if (title.startsWith('Denied graph access')) {
+    return 'LIMINA_GRAPH_ACCESS_DENIED';
+  }
+
+  if (title.includes('without a declared dependency')) {
+    return 'LIMINA_GRAPH_WORKSPACE_DEPENDENCY_UNDECLARED';
+  }
+
+  if (title.includes('without package identity')) {
+    return 'LIMINA_GRAPH_WORKSPACE_PACKAGE_NAME_MISSING';
+  }
+
+  if (title.startsWith('Unresolved workspace import')) {
+    return 'LIMINA_GRAPH_WORKSPACE_IMPORT_UNRESOLVED';
+  }
+
+  if (
+    title.includes('outside the source graph') ||
+    title.includes('outside the workspace graph') ||
+    title.includes('build artifact')
+  ) {
+    return 'LIMINA_GRAPH_WORKSPACE_IMPORT_OUTSIDE_GRAPH';
+  }
+
+  if (title.startsWith('Unable to map workspace import')) {
+    return 'LIMINA_GRAPH_IMPORT_TARGET_UNMAPPED';
+  }
+
+  if (title.startsWith('Expected graph target is not reachable')) {
+    return 'LIMINA_GRAPH_TARGET_UNREACHABLE';
+  }
+
+  if (
+    title.startsWith('Invalid graph') ||
+    title.startsWith('Invalid declaration') ||
+    title.startsWith('Missing declaration') ||
+    title.startsWith('Missing typecheck') ||
+    title.startsWith('Typecheck option') ||
+    title.startsWith('Declaration leaf')
+  ) {
+    return 'LIMINA_GRAPH_CONFIG_INVALID';
+  }
+
+  if (title.startsWith('Custom conditions mismatch')) {
+    return 'LIMINA_GRAPH_CONDITION_DOMAIN_MISMATCH';
+  }
+
+  return 'LIMINA_GRAPH_CHECK_FAILED';
+}
+
+function getProblemLineValue(
+  problem: string,
+  label: string,
+): string | undefined {
+  const escapedLabel = label.replaceAll(
+    /[.*+?^${}()|[\]\\]/gu,
+    String.raw`\$&`,
+  );
+  const match = new RegExp(String.raw`^\s*${escapedLabel}:\s*(.+)$`, 'mu').exec(
+    problem,
+  );
+
+  return match?.[1]?.trim();
+}
+
+function getProblemFilePath(problem: string): string | undefined {
+  const rawFile =
+    getProblemLineValue(problem, 'file') ??
+    getProblemLineValue(problem, 'resolved file') ??
+    getProblemLineValue(problem, 'project') ??
+    getProblemLineValue(problem, 'importing project') ??
+    getProblemLineValue(problem, 'referencing project');
+
+  return rawFile?.replace(/:\d+(?::\d+)?(?:\s+\(.+\))?$/u, '');
+}
+
+function createGraphCheckIssue(options: {
+  config: ResolvedLiminaConfig;
+  problem: string;
+}): LiminaCheckIssue {
+  const title = getGraphProblemTitle(options.problem);
+  const reason =
+    getProblemLineValue(options.problem, 'reason') ??
+    'Graph check found architecture, dependency, resolver, or config violations.';
+
+  return createTaskFailureIssue({
+    code: getGraphProblemCode(title),
+    detailLines: options.problem.split('\n'),
+    filePath: getProblemFilePath(options.problem),
+    fix: getProblemLineValue(options.problem, 'fix'),
+    packageManifestPath: getProblemLineValue(
+      options.problem,
+      'package manifest',
+    ),
+    packageName:
+      getProblemLineValue(options.problem, 'referencing package') ??
+      getProblemLineValue(options.problem, 'matched workspace package') ??
+      getProblemLineValue(options.problem, 'package'),
+    reason,
+    rootDir: options.config.rootDir,
+    task: 'graph:check',
+    title,
+  });
+}
+
+function createGraphCheckIssues(options: {
+  config: ResolvedLiminaConfig;
+  problems: readonly string[];
+}): LiminaCheckIssue[] {
+  return options.problems.map((problem) =>
+    createGraphCheckIssue({
+      config: options.config,
+      problem,
+    }),
+  );
+}
+
 function addDeniedReferenceProblems(options: {
   config: ResolvedLiminaConfig;
   packages: WorkspacePackage[];
@@ -174,7 +316,7 @@ function addDeniedReferenceProblems(options: {
       referencePath,
     );
     const targetPackage = findPackageForFile(referencePath, options.packages);
-    const deniedDepRule = targetPackage
+    const deniedDepRule = targetPackage?.name
       ? getDeniedDepRuleForPackage(
           options.rules,
           options.project.labels,
@@ -285,6 +427,26 @@ function getResolvedPackageName(
   );
 }
 
+function addNamelessWorkspaceReferenceProblem(options: {
+  config: ResolvedLiminaConfig;
+  packageRole: 'referencing' | 'referenced';
+  problems: string[];
+  project: ProjectInfo;
+  referencePath: string;
+  workspacePackage: WorkspacePackage;
+}): void {
+  options.problems.push(
+    [
+      'Project reference crosses workspace package without package identity:',
+      `  ${options.packageRole} package.json: ${toRelativePath(options.config.rootDir, path.join(options.workspacePackage.directory, 'package.json'))}`,
+      `  referencing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
+      `  referenced project: ${toRelativePath(options.config.rootDir, options.referencePath)}`,
+      '  reason: cross-package graph references need non-empty package.json names so Limina can validate dependency identity.',
+      '  fix: add a non-empty package.json name when this workspace package should participate in package dependency graph checks.',
+    ].join('\n'),
+  );
+}
+
 function getResolvedWorkspacePackage(
   filePath: string,
   packages: WorkspacePackage[],
@@ -335,7 +497,31 @@ function addWorkspaceReferenceDependencyProblems(
 
     const targetPackage = findPackageForFile(referencePath, packages);
 
-    if (!targetPackage || targetPackage.name === sourcePackage.name) {
+    if (!targetPackage || targetPackage.directory === sourcePackage.directory) {
+      continue;
+    }
+
+    if (!isNamedWorkspacePackage(sourcePackage)) {
+      addNamelessWorkspaceReferenceProblem({
+        config,
+        packageRole: 'referencing',
+        problems,
+        project,
+        referencePath,
+        workspacePackage: sourcePackage,
+      });
+      continue;
+    }
+
+    if (!isNamedWorkspacePackage(targetPackage)) {
+      addNamelessWorkspaceReferenceProblem({
+        config,
+        packageRole: 'referenced',
+        problems,
+        project,
+        referencePath,
+        workspacePackage: targetPackage,
+      });
       continue;
     }
 
@@ -755,6 +941,7 @@ function getWorkspaceExportResolution(options: {
 }): WorkspacePackageExportResolution | null {
   if (
     !options.targetPackage ||
+    !options.targetPackage.name ||
     !options.context.workspaceExports.hasExports(options.targetPackage.name)
   ) {
     return null;
@@ -776,7 +963,7 @@ function getTargetPackageForGraph(options: {
   }
 
   if (
-    options.targetPackage &&
+    options.targetPackage?.name &&
     options.targetWorkspacePackageForResolved?.name ===
       options.targetPackage.name
   ) {
@@ -1122,7 +1309,9 @@ export async function runGraphCheckImpl(
   options: {
     core?: LiminaCore;
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+    issues?: LiminaCheckIssue[];
     logSuccess?: boolean;
+    report?: CheckIssueReportOptions;
   } = {},
 ): Promise<boolean> {
   const core = options.core ?? createLiminaCore(config);
@@ -1235,7 +1424,20 @@ export async function runGraphCheckImpl(
   });
 
   if (problems.length > 0) {
-    GraphLogger.error(problems.join('\n\n'));
+    const issues = createGraphCheckIssues({
+      config,
+      problems,
+    });
+
+    options.issues?.push(...issues);
+    GraphLogger.error(
+      formatCheckIssueHumanReport({
+        command: options.report?.command ?? 'limina graph check',
+        issues,
+        title: 'Graph check summary',
+        verbose: options.report?.verbose,
+      }),
+    );
     return false;
   }
 

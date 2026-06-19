@@ -1,11 +1,10 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
+import { normalizeAbsolutePath } from '#utils/path';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'pathe';
 import { glob } from 'tinyglobby';
-import type { ResolvedLiminaConfig } from '../../config/runner';
-import { normalizeAbsolutePath, toRelativePath } from '../../utils/path';
 
-const pnpmWorkspaceFileName = 'pnpm-workspace.yaml';
 const pnpmWorkspaceListTimeoutMs = 3000;
 
 export interface PackageManifest {
@@ -27,8 +26,12 @@ export interface PackageManifest {
 export interface WorkspacePackage {
   directory: string;
   manifest: PackageManifest;
-  name: string;
+  name?: string;
 }
+
+export type NamedWorkspacePackage = WorkspacePackage & {
+  name: string;
+};
 
 export interface PackageOwner {
   directory: string;
@@ -59,7 +62,7 @@ export interface DependencySection {
 }
 
 export function readJsonFile<T>(filePath: string): T {
-  return JSON.parse(readFileSync(filePath, 'utf8')) as T;
+  return JSON.parse(readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '')) as T;
 }
 
 function stripYamlQuotes(value: string): string {
@@ -112,7 +115,13 @@ export function collectPnpmWorkspacePatterns(source: string): string[] {
 export function parsePnpmWorkspaceListJson(
   source: string,
 ): PnpmWorkspaceListEntry[] {
-  const parsed = JSON.parse(source) as unknown;
+  const trimmedSource = source.trim();
+
+  if (trimmedSource.length === 0) {
+    return [];
+  }
+
+  const parsed = JSON.parse(trimmedSource) as unknown;
 
   if (!Array.isArray(parsed)) {
     return [];
@@ -144,6 +153,12 @@ function getManifestPackageName(manifest: PackageManifest): string | null {
     : null;
 }
 
+export function isNamedWorkspacePackage(
+  workspacePackage: WorkspacePackage,
+): workspacePackage is NamedWorkspacePackage {
+  return Boolean(workspacePackage.name);
+}
+
 function readWorkspacePackage(options: {
   config: ResolvedLiminaConfig;
   packageJsonPath: string;
@@ -152,49 +167,11 @@ function readWorkspacePackage(options: {
   const manifest = readJsonFile<PackageManifest>(packageJsonPath);
   const name = getManifestPackageName(manifest);
 
-  if (!name) {
-    throw new Error(
-      [
-        'Workspace package package.json must declare a non-empty name:',
-        `  package.json: ${toRelativePath(options.config.rootDir, packageJsonPath)}`,
-        '  field: name',
-        '  reason: Limina requires every workspace package to have a package.json name so package ownership, dependency edges, and workspace filters are unambiguous.',
-      ].join('\n'),
-    );
-  }
-
   return {
     directory: normalizeAbsolutePath(path.dirname(packageJsonPath)),
     manifest,
-    name,
+    ...(name ? { name } : {}),
   };
-}
-
-function collectWorkspacePatterns(config: ResolvedLiminaConfig): string[] {
-  const rootPackageJsonPath = path.join(config.rootDir, 'package.json');
-  const patterns = new Set<string>();
-
-  if (existsSync(rootPackageJsonPath)) {
-    const rootPackageJson = readJsonFile<PackageManifest>(rootPackageJsonPath);
-
-    if (Array.isArray(rootPackageJson.workspaces)) {
-      for (const pattern of rootPackageJson.workspaces) {
-        patterns.add(pattern);
-      }
-    }
-  }
-
-  const workspacePath = path.join(config.rootDir, pnpmWorkspaceFileName);
-
-  if (existsSync(workspacePath)) {
-    for (const pattern of collectPnpmWorkspacePatterns(
-      readFileSync(workspacePath, 'utf8'),
-    )) {
-      patterns.add(pattern);
-    }
-  }
-
-  return [...patterns].sort();
 }
 
 function runTextCommand(
@@ -263,13 +240,24 @@ function getPnpmCommandCandidates(): {
   });
 }
 
+function formatCommandError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function collectPnpmListedPackages(
   config: ResolvedLiminaConfig,
 ): Promise<WorkspacePackage[]> {
   const args = ['recursive', 'list', '--depth', '-1', '--json'];
+  const failures: string[] = [];
+  let hasSuccessfulListCommand = false;
 
   for (const candidate of getPnpmCommandCandidates()) {
     let entries: PnpmWorkspaceListEntry[];
+    const commandLabel = [
+      candidate.command,
+      ...candidate.argsPrefix,
+      ...args,
+    ].join(' ');
 
     try {
       const source = await runTextCommand(
@@ -278,8 +266,9 @@ async function collectPnpmListedPackages(
         config.rootDir,
       );
       entries = parsePnpmWorkspaceListJson(source);
-    } catch {
-      // Fall through to the next pnpm launcher, then to glob-based discovery.
+      hasSuccessfulListCommand = true;
+    } catch (error) {
+      failures.push(`${commandLabel}: ${formatCommandError(error)}`);
       continue;
     }
 
@@ -310,42 +299,20 @@ async function collectPnpmListedPackages(
     }
   }
 
-  return [];
-}
-
-async function collectWorkspacePackagesFromPatterns(
-  config: ResolvedLiminaConfig,
-): Promise<WorkspacePackage[]> {
-  const workspacePatterns = collectWorkspacePatterns(config);
-  const includePatterns = workspacePatterns
-    .filter((pattern) => !pattern.startsWith('!'))
-    .map((pattern) => `${pattern.replace(/\/$/u, '')}/package.json`);
-  const ignorePatterns = workspacePatterns
-    .filter((pattern) => pattern.startsWith('!'))
-    .map((pattern) => `${pattern.slice(1).replace(/\/$/u, '')}/**`);
-  const packageJsonPaths = new Set<string>(
-    await glob(includePatterns, {
-      cwd: config.rootDir,
-      absolute: false,
-      ignore: ['**/node_modules/**', '**/dist/**', ...ignorePatterns],
-    }),
-  );
-
-  if (existsSync(path.join(config.rootDir, 'package.json'))) {
-    packageJsonPaths.add('package.json');
+  if (hasSuccessfulListCommand) {
+    return [];
   }
 
-  const packages: WorkspacePackage[] = [];
-
-  for (const packageJsonPath of [...new Set(packageJsonPaths)].sort()) {
-    packages.push(
-      readWorkspacePackage({
-        config,
-        packageJsonPath: path.join(config.rootDir, packageJsonPath),
-      }),
+  if (failures.length > 0) {
+    throw new Error(
+      [
+        'Failed to collect workspace packages via pnpm recursive list.',
+        ...failures.map((failure) => `  - ${failure}`),
+      ].join('\n'),
     );
   }
-  return packages;
+
+  return [];
 }
 
 function mergeWorkspacePackages(
@@ -357,20 +324,28 @@ function mergeWorkspacePackages(
     byDirectory.set(workspacePackage.directory, workspacePackage);
   }
 
-  return [...byDirectory.values()].sort((left, right) =>
-    left.name.localeCompare(right.name),
-  );
+  return [...byDirectory.values()].sort((left, right) => {
+    const leftHasName = isNamedWorkspacePackage(left);
+    const rightHasName = isNamedWorkspacePackage(right);
+
+    if (leftHasName !== rightHasName) {
+      return leftHasName ? -1 : 1;
+    }
+
+    const leftKey = left.name ?? left.directory;
+    const rightKey = right.name ?? right.directory;
+    const keyOrder = leftKey.localeCompare(rightKey);
+
+    return keyOrder === 0
+      ? left.directory.localeCompare(right.directory)
+      : keyOrder;
+  });
 }
 
 export async function collectWorkspacePackages(
   config: ResolvedLiminaConfig,
 ): Promise<WorkspacePackage[]> {
-  const [pnpmPackages, patternPackages] = await Promise.all([
-    collectPnpmListedPackages(config),
-    collectWorkspacePackagesFromPatterns(config),
-  ]);
-
-  return mergeWorkspacePackages([...pnpmPackages, ...patternPackages]);
+  return mergeWorkspacePackages(await collectPnpmListedPackages(config));
 }
 
 export async function collectPackageOwners(
@@ -396,11 +371,12 @@ export async function collectPackageOwners(
         path.join(config.rootDir, packageJsonPath),
       );
       const manifest = readJsonFile<PackageManifest>(absolutePackageJsonPath);
+      const name = getManifestPackageName(manifest);
 
       return {
         directory: normalizeAbsolutePath(path.dirname(absolutePackageJsonPath)),
         manifest,
-        name: manifest.name,
+        ...(name ? { name } : {}),
         packageJsonPath: absolutePackageJsonPath,
       };
     })
@@ -465,13 +441,13 @@ export function getPackageRootSpecifier(specifier: string): string {
 export function findPackageForSpecifier(
   specifier: string,
   packages: WorkspacePackage[],
-): WorkspacePackage | null {
+): NamedWorkspacePackage | null {
   const packageName = getPackageRootSpecifier(specifier);
 
   return (
-    packages.find(
-      (workspacePackage) => workspacePackage.name === packageName,
-    ) ?? null
+    packages
+      .filter(isNamedWorkspacePackage)
+      .find((workspacePackage) => workspacePackage.name === packageName) ?? null
   );
 }
 
@@ -480,7 +456,9 @@ export function collectImporters(
   packages: WorkspacePackage[],
 ): ImporterInfo[] {
   const workspacePackageNames = new Set(
-    packages.map((workspacePackage) => workspacePackage.name),
+    packages
+      .filter(isNamedWorkspacePackage)
+      .map((workspacePackage) => workspacePackage.name),
   );
   const importerDirectories = new Set<string>([
     config.rootDir,

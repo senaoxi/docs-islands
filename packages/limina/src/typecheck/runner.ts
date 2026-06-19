@@ -1,35 +1,37 @@
-import { existsSync, statSync } from 'node:fs';
-import path from 'pathe';
 import {
   type CheckerPackageResolver,
   getCheckerAdapter,
   getCheckerExtensions,
-} from '../checkers';
+} from '#checkers';
 import {
   type BuildCheckerPreset,
   getActiveCheckers,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
-} from '../config/runner';
-import { createLiminaCore, type LiminaCore } from '../core';
+} from '#config/runner';
+import { createLiminaCore, type LiminaCore } from '#core';
 import type {
   GeneratedBuildModule,
   GeneratedTsconfigGraphResult,
-} from '../core/build-graph/generated/runner';
+} from '#core/build-graph/runner';
 import {
   collectGraphProjectRouteFromRoot,
   getRawReferencePathsForConfig,
   isDtsConfigPath,
   isOrdinarySourceTypecheckConfigPath,
   resolveProjectConfigPath,
-} from '../core/tsconfig/actions';
-import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
-import { formatErrorMessage, TypecheckLogger } from '../logger';
+} from '#core/tsconfig/actions';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   toRelativePath,
-} from '../utils/path';
+} from '#utils/path';
+import { existsSync, statSync } from 'node:fs';
+import path from 'pathe';
+import type { CheckIssueReportOptions } from '../check-reporting/human';
+import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
+import { formatErrorMessage, TypecheckLogger } from '../logger';
+import { formatCheckIssueSummaryReport } from '../reporting';
 import { runBuildTargets } from './build-plan';
 import { runWithConcurrency } from './concurrency';
 import {
@@ -38,6 +40,8 @@ import {
   createDefaultRunner,
   getExecutionCheckers,
   type TypecheckRunner,
+  type TypecheckTarget,
+  type TypecheckTargetResult,
 } from './targets';
 
 export interface RunCheckerBuildOptions {
@@ -48,12 +52,21 @@ export interface RunCheckerBuildOptions {
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  report?: CheckIssueReportOptions;
   checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
   tscCommand?: string;
 }
 
+export interface CheckerFailureTarget {
+  checkerName?: string;
+  configPath: string;
+  exitCode: number;
+  message?: string;
+}
+
 export interface RunCheckerBuildResult {
+  failedTargets: CheckerFailureTarget[];
   passed: boolean;
   projectRootDir: string;
   rootConfigPaths: string[];
@@ -68,6 +81,7 @@ export interface RunBuildOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  report?: CheckIssueReportOptions;
   checkerPackageResolver?: CheckerPackageResolver;
   project?: string;
   runner?: TypecheckRunner;
@@ -76,6 +90,7 @@ export interface RunBuildOptions {
 }
 
 export interface RunBuildResult {
+  failedTargets: CheckerFailureTarget[];
   passed: boolean;
   projectRootDir: string;
   rootConfigPaths: string[];
@@ -90,15 +105,80 @@ export interface RunCheckerTypecheckOptions {
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  report?: CheckIssueReportOptions;
   checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
   tscCommand?: string;
 }
 
 export interface RunCheckerTypecheckResult {
+  failedTargets: CheckerFailureTarget[];
   passed: boolean;
   projectRootDir: string;
   rootConfigPaths: string[];
+}
+
+function formatTypecheckProblemSummaryReport(options: {
+  pluralIssueLabel: string;
+  problems: readonly string[];
+  singularIssueLabel: string;
+  title: string;
+}): string {
+  return formatCheckIssueSummaryReport({
+    details: options.problems.join('\n\n'),
+    issueCount: options.problems.length,
+    pluralIssueLabel: options.pluralIssueLabel,
+    singularIssueLabel: options.singularIssueLabel,
+    title: options.title,
+  });
+}
+
+function formatFailedTargetSummaryReport(options: {
+  failedResults: readonly TypecheckTargetResult[];
+  heading: string;
+  pluralIssueLabel: string;
+  projectRootDir: string;
+  singularIssueLabel: string;
+  title: string;
+}): string {
+  return formatCheckIssueSummaryReport({
+    details: [
+      options.heading,
+      ...options.failedResults.map((result) => {
+        const suffix = result.error
+          ? `: ${formatErrorMessage(result.error)}`
+          : ` exited with code ${result.status}`;
+
+        return `  ${toRelativePath(options.projectRootDir, result.configPath)}${suffix}`;
+      }),
+    ].join('\n'),
+    issueCount: options.failedResults.length,
+    pluralIssueLabel: options.pluralIssueLabel,
+    singularIssueLabel: options.singularIssueLabel,
+    title: options.title,
+  });
+}
+
+function collectFailedCheckerTargets(
+  targets: readonly TypecheckTarget[],
+  results: readonly TypecheckTargetResult[],
+): CheckerFailureTarget[] {
+  const targetsByConfigPath = new Map(
+    targets.map((target) => [target.configPath, target]),
+  );
+
+  return results
+    .filter((result) => result.status !== 0)
+    .map((result) => {
+      const target = targetsByConfigPath.get(result.configPath);
+
+      return {
+        checkerName: target?.checkerName,
+        configPath: result.configPath,
+        exitCode: result.status,
+        message: result.error ? formatErrorMessage(result.error) : undefined,
+      };
+    });
 }
 
 export async function runCheckerBuildImpl(
@@ -128,9 +208,17 @@ export async function runCheckerBuildImpl(
     options.flow?.fail('checker dependency preflight failed', {
       depth: flowDepth + 1,
     });
-    TypecheckLogger.error(problems.join('\n\n'));
+    TypecheckLogger.error(
+      formatTypecheckProblemSummaryReport({
+        pluralIssueLabel: 'checker build issues',
+        problems,
+        singularIssueLabel: 'checker build issue',
+        title: 'Checker build summary',
+      }),
+    );
 
     return {
+      failedTargets: [],
       passed: false,
       projectRootDir,
       rootConfigPaths,
@@ -214,6 +302,7 @@ export async function runCheckerBuildImpl(
     },
   );
   const failedResults = results.filter((result) => result.status !== 0);
+  const failedTargets = collectFailedCheckerTargets(targets, failedResults);
   const passed = failedResults.length === 0;
 
   reportBuildCheckerCombinationWarning({
@@ -233,16 +322,14 @@ export async function runCheckerBuildImpl(
 
   if (!passed) {
     TypecheckLogger.error(
-      [
-        'build checks failed:',
-        ...failedResults.map((result) => {
-          const suffix = result.error
-            ? `: ${formatErrorMessage(result.error)}`
-            : ` exited with code ${result.status}`;
-
-          return `  ${toRelativePath(projectRootDir, result.configPath)}${suffix}`;
-        }),
-      ].join('\n'),
+      formatFailedTargetSummaryReport({
+        failedResults,
+        heading: 'build checks failed:',
+        pluralIssueLabel: 'failed checker build targets',
+        projectRootDir,
+        singularIssueLabel: 'failed checker build target',
+        title: 'Checker build summary',
+      }),
     );
   } else if (!options.flow?.interactive) {
     TypecheckLogger.success(
@@ -251,6 +338,7 @@ export async function runCheckerBuildImpl(
   }
 
   return {
+    failedTargets,
     passed,
     projectRootDir,
     rootConfigPaths,
@@ -924,9 +1012,17 @@ export async function runBuildImpl(
       options.flow?.fail('checker dependency preflight failed', {
         depth: flowDepth + 1,
       });
-      TypecheckLogger.error(problems.join('\n\n'));
+      TypecheckLogger.error(
+        formatTypecheckProblemSummaryReport({
+          pluralIssueLabel: 'build issues',
+          problems,
+          singularIssueLabel: 'build issue',
+          title: 'Build summary',
+        }),
+      );
 
       return {
+        failedTargets: [],
         passed: false,
         projectRootDir,
         rootConfigPaths,
@@ -1005,22 +1101,21 @@ export async function runBuildImpl(
 
     if (!passed) {
       TypecheckLogger.error(
-        [
-          'build failed:',
-          ...failedResults.map((result) => {
-            const suffix = result.error
-              ? `: ${formatErrorMessage(result.error)}`
-              : ` exited with code ${result.status}`;
-
-            return `  ${toRelativePath(projectRootDir, result.configPath)}${suffix}`;
-          }),
-        ].join('\n'),
+        formatFailedTargetSummaryReport({
+          failedResults,
+          heading: 'build failed:',
+          pluralIssueLabel: 'failed build targets',
+          projectRootDir,
+          singularIssueLabel: 'failed build target',
+          title: 'Build summary',
+        }),
       );
     } else if (!options.flow?.interactive) {
       TypecheckLogger.success('Built 1 raw target.');
     }
 
     return {
+      failedTargets: collectFailedCheckerTargets([target], failedResults),
       passed,
       projectRootDir,
       rootConfigPaths,
@@ -1030,21 +1125,28 @@ export async function runBuildImpl(
 
   if (resolvedTarget.checkerTargets.length === 0) {
     TypecheckLogger.error(
-      resolvedTarget.selectedChecker
-        ? formatManagedBuildCheckerSelectionProblem({
-            availableCheckers: resolvedTarget.availableCheckers,
-            projectRootDir,
-            selectedChecker: resolvedTarget.selectedChecker,
-            sourceConfigPath: resolvedTarget.sourceConfigPath,
-          })
-        : formatTypecheckOnlyBuildProblem({
-            checkers: resolvedTarget.matchingCheckers,
-            projectRootDir,
-            sourceConfigPath: resolvedTarget.sourceConfigPath,
-          }),
+      formatCheckIssueSummaryReport({
+        details: resolvedTarget.selectedChecker
+          ? formatManagedBuildCheckerSelectionProblem({
+              availableCheckers: resolvedTarget.availableCheckers,
+              projectRootDir,
+              selectedChecker: resolvedTarget.selectedChecker,
+              sourceConfigPath: resolvedTarget.sourceConfigPath,
+            })
+          : formatTypecheckOnlyBuildProblem({
+              checkers: resolvedTarget.matchingCheckers,
+              projectRootDir,
+              sourceConfigPath: resolvedTarget.sourceConfigPath,
+            }),
+        issueCount: 1,
+        pluralIssueLabel: 'build selection issues',
+        singularIssueLabel: 'build selection issue',
+        title: 'Build summary',
+      }),
     );
 
     return {
+      failedTargets: [],
       passed: false,
       projectRootDir,
       rootConfigPaths,
@@ -1068,9 +1170,17 @@ export async function runBuildImpl(
     options.flow?.fail('checker dependency preflight failed', {
       depth: flowDepth + 1,
     });
-    TypecheckLogger.error(problems.join('\n\n'));
+    TypecheckLogger.error(
+      formatTypecheckProblemSummaryReport({
+        pluralIssueLabel: 'checker build issues',
+        problems,
+        singularIssueLabel: 'checker build issue',
+        title: 'Checker build summary',
+      }),
+    );
 
     return {
+      failedTargets: [],
       passed: false,
       projectRootDir,
       rootConfigPaths,
@@ -1155,6 +1265,7 @@ export async function runBuildImpl(
     },
   );
   const failedResults = results.filter((result) => result.status !== 0);
+  const failedTargets = collectFailedCheckerTargets(targets, failedResults);
   const passed = failedResults.length === 0;
 
   reportBuildCheckerCombinationWarning({
@@ -1176,22 +1287,21 @@ export async function runBuildImpl(
 
   if (!passed) {
     TypecheckLogger.error(
-      [
-        'build failed:',
-        ...failedResults.map((result) => {
-          const suffix = result.error
-            ? `: ${formatErrorMessage(result.error)}`
-            : ` exited with code ${result.status}`;
-
-          return `  ${toRelativePath(projectRootDir, result.configPath)}${suffix}`;
-        }),
-      ].join('\n'),
+      formatFailedTargetSummaryReport({
+        failedResults,
+        heading: 'build failed:',
+        pluralIssueLabel: 'failed checker build targets',
+        projectRootDir,
+        singularIssueLabel: 'failed checker build target',
+        title: 'Checker build summary',
+      }),
     );
   } else if (!options.flow?.interactive) {
     TypecheckLogger.success(`Built ${targets.length} generated target(s).`);
   }
 
   return {
+    failedTargets,
     passed,
     projectRootDir,
     rootConfigPaths,
@@ -1222,6 +1332,7 @@ export async function runCheckerTypecheckImpl(
     }
 
     return {
+      failedTargets: [],
       passed: true,
       projectRootDir,
       rootConfigPaths,
@@ -1238,9 +1349,17 @@ export async function runCheckerTypecheckImpl(
     options.flow?.fail('checker dependency preflight failed', {
       depth: flowDepth + 1,
     });
-    TypecheckLogger.error(problems.join('\n\n'));
+    TypecheckLogger.error(
+      formatTypecheckProblemSummaryReport({
+        pluralIssueLabel: 'checker typecheck issues',
+        problems,
+        singularIssueLabel: 'checker typecheck issue',
+        title: 'Checker typecheck summary',
+      }),
+    );
 
     return {
+      failedTargets: [],
       passed: false,
       projectRootDir,
       rootConfigPaths,
@@ -1327,20 +1446,19 @@ export async function runCheckerTypecheckImpl(
     },
   );
   const failedResults = results.filter((result) => result.status !== 0);
+  const failedTargets = collectFailedCheckerTargets(targets, failedResults);
   const passed = failedResults.length === 0;
 
   if (!passed) {
     TypecheckLogger.error(
-      [
-        'typecheck checks failed:',
-        ...failedResults.map((result) => {
-          const suffix = result.error
-            ? `: ${formatErrorMessage(result.error)}`
-            : ` exited with code ${result.status}`;
-
-          return `  ${toRelativePath(projectRootDir, result.configPath)}${suffix}`;
-        }),
-      ].join('\n'),
+      formatFailedTargetSummaryReport({
+        failedResults,
+        heading: 'typecheck checks failed:',
+        pluralIssueLabel: 'failed checker typecheck targets',
+        projectRootDir,
+        singularIssueLabel: 'failed checker typecheck target',
+        title: 'Checker typecheck summary',
+      }),
     );
   } else if (!options.flow?.interactive) {
     TypecheckLogger.success(
@@ -1349,6 +1467,7 @@ export async function runCheckerTypecheckImpl(
   }
 
   return {
+    failedTargets,
     passed,
     projectRootDir,
     rootConfigPaths,

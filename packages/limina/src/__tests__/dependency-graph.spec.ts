@@ -1,8 +1,8 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config/runner';
 import {
   collectDependencyGraph,
   type DependencyGraphDocument,
@@ -173,6 +173,58 @@ function findEdge(
 }
 
 describe('collectDependencyGraph', () => {
+  it('allows unrelated nameless workspace packages', async () => {
+    const fixture = await createFixture({
+      'packages/a/package.json': createPackageJson('@example/a'),
+      'packages/a/src/index.ts': 'export const value = 1;\n',
+      'packages/a/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
+      'packages/fixture/package.json': stringifyConfig({
+        private: true,
+        type: 'module',
+      }),
+      'packages/fixture/src/index.ts': 'export const fixtureValue = 1;\n',
+      'packages/fixture/tsconfig.lib.json': typecheckBuildConfig([
+        'src/**/*.ts',
+      ]),
+    });
+
+    try {
+      const graph = await collectDependencyGraph(fixture.config);
+
+      expect(graph.nodes.some((node) => node.path === 'packages/fixture')).toBe(
+        false,
+      );
+      expect(graph.edges).toEqual([]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects dependency graph edges that target nameless workspace packages', async () => {
+    const fixture = await createFixture({
+      'packages/app/package.json': createPackageJson('@example/app'),
+      'packages/app/src/index.ts':
+        "import { fixtureValue } from '../../fixture/src/index';\nexport const value = fixtureValue;\n",
+      'packages/app/tsconfig.lib.json': typecheckBuildConfig(['src/**/*.ts']),
+      'packages/fixture/package.json': stringifyConfig({
+        private: true,
+        type: 'module',
+      }),
+      'packages/fixture/src/index.ts': 'export const fixtureValue = 1;\n',
+      'packages/fixture/tsconfig.lib.json': typecheckBuildConfig([
+        'src/**/*.ts',
+      ]),
+    });
+
+    try {
+      await expect(collectDependencyGraph(fixture.config)).rejects.toThrow(
+        /Dependency graph package identity requires package\.json name:[\s\S]*role: target/u,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('exports source edges when imports resolve to source entries', async () => {
     const fixture = await createFixture({
       'packages/a/package.json': createPackageJson('@example/a', {

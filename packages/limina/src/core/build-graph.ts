@@ -1,9 +1,9 @@
-import type { ResolvedLiminaConfig } from '../config/runner';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import {
   type GeneratedProviderEdge,
   type GeneratedTsconfigGraphResult,
   prepareGeneratedTsconfigGraph,
-} from './build-graph/generated/runner';
+} from '#core/build-graph/runner';
 import type { ImportCore } from './imports';
 import type { WorkspaceCore } from './workspace';
 

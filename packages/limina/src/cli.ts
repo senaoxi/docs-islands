@@ -1,6 +1,19 @@
 #!/usr/bin/env node
+import {
+  type BuildCheckerPreset,
+  type LiminaCommand,
+  loadConfig,
+  type PackageAttwProfile,
+  type PackageCheckToolSelection,
+  type ResolvedLiminaConfig,
+} from '#config/runner';
 import { cac } from 'cac';
 import path from 'pathe';
+import {
+  formatCheckIssueSnapshotInventory,
+  readCheckIssueSnapshot,
+  writeNotRunCheckIssueSnapshot,
+} from './check-reporting/snapshot';
 import {
   runGraphCheck,
   runGraphExport,
@@ -17,14 +30,6 @@ import {
   runCheckerTypecheck,
 } from './commands/typecheck';
 import {
-  type BuildCheckerPreset,
-  type LiminaCommand,
-  loadConfig,
-  type PackageAttwProfile,
-  type PackageCheckToolSelection,
-  type ResolvedLiminaConfig,
-} from './config/runner';
-import {
   type DependencyGraphView,
   stringifyDependencyGraph,
 } from './dependency-graph/runner';
@@ -32,6 +37,7 @@ import { createLiminaFlowReporter } from './flow';
 import { clearCliScreen, CliLogger, formatErrorMessage } from './logger';
 import { runDefaultCheck, runPipeline } from './pipeline/runner';
 import type { SourceIssueReportOptions } from './source-check/report';
+import { writeNotRunSourceIssueSnapshot } from './source-check/snapshot';
 
 interface GlobalFlags {
   config?: string;
@@ -49,13 +55,19 @@ interface SourceIssueSelectionFlags extends PackageSelectionFlags {
   verbose?: boolean;
 }
 
-interface CheckFlags extends GlobalFlags, SourceIssueSelectionFlags {}
+interface CheckFlags extends GlobalFlags, SourceIssueSelectionFlags {
+  checker?: string | string[];
+  issues?: boolean;
+  task?: string | string[];
+  tool?: string | string[];
+}
 
 interface SourceFlags extends GlobalFlags, SourceIssueSelectionFlags {}
 
 interface PackageFlags extends GlobalFlags, PackageSelectionFlags {
   attwProfile?: string;
   tool?: string;
+  verbose?: boolean;
 }
 
 interface CheckerFlags extends GlobalFlags {
@@ -63,13 +75,19 @@ interface CheckerFlags extends GlobalFlags {
   checker?: unknown;
   preset?: string;
   project?: unknown;
+  verbose?: boolean;
   w?: boolean;
   watch?: boolean;
 }
 
 interface GraphFlags extends GlobalFlags {
   output?: string;
+  verbose?: boolean;
   view?: string;
+}
+
+interface ProofFlags extends GlobalFlags {
+  verbose?: boolean;
 }
 
 interface InitFlags {
@@ -145,6 +163,7 @@ function rejectUnknownCheckerOptions(flags: CheckerFlags): void {
     'watch',
     'checker',
     'project',
+    'verbose',
   ]);
 
   for (const option of Object.keys(flags)) {
@@ -218,6 +237,29 @@ function createSourceIssueReportOptions(
   };
 }
 
+function assertStandaloneIssuesFlag(
+  pipeline: string | undefined,
+  flags: CheckFlags,
+): void {
+  if (!flags.issues) {
+    if (flags.task || flags.checker || flags.tool) {
+      throw new Error(
+        '`limina check --task`, `--checker`, and `--tool` require --issues.',
+      );
+    }
+
+    return;
+  }
+
+  if (pipeline) {
+    throw new Error('`limina check --issues` does not accept a pipeline name.');
+  }
+
+  if (flags.verbose) {
+    throw new Error('`limina check --issues` does not accept --verbose.');
+  }
+}
+
 function parseDependencyGraphView(
   view: string | undefined,
 ): DependencyGraphView | undefined {
@@ -271,11 +313,38 @@ async function main(): Promise<void> {
       '-p, --package <name>',
       'Run package-aware pipeline tasks for one package entry',
     )
-    .option('--verbose', 'Show full source issue details')
-    .option('--rule <code>', 'Filter source issue details by stable rule code')
-    .option('--file <path>', 'Filter source issue details by exact file path')
-    .option('--scope <glob>', 'Filter source issue details by path scope')
+    .option('--verbose', 'Show full check issue details')
+    .option('--rule <code>', 'Filter check issue details by stable rule code')
+    .option('--file <path>', 'Filter check issue details by exact file path')
+    .option('--scope <glob>', 'Filter check issue details by path scope')
+    .option('--task <name>', 'Filter last-run issue inventory by task')
+    .option('--checker <name>', 'Filter last-run issue inventory by checker')
+    .option('--tool <name>', 'Filter last-run issue inventory by package tool')
+    .option('--issues', 'Show check issue filters from the last run')
     .action(async (pipeline: string | undefined, flags: CheckFlags) => {
+      assertStandaloneIssuesFlag(pipeline, flags);
+
+      if (flags.issues) {
+        const config = await load(flags, 'check');
+        const snapshot = await readCheckIssueSnapshot(config.rootDir);
+
+        process.stdout.write(
+          `${formatCheckIssueSnapshotInventory({
+            filters: {
+              checkerNames: parseRepeatedStrings(flags.checker),
+              files: parseRepeatedStrings(flags.file),
+              packageNames: parsePackageNames(flags.package),
+              rules: parseRepeatedStrings(flags.rule),
+              scopes: parseRepeatedStrings(flags.scope),
+              tasks: parseRepeatedStrings(flags.task),
+              tools: parseRepeatedStrings(flags.tool),
+            },
+            snapshot,
+          })}\n`,
+        );
+        return;
+      }
+
       const flow = createCliFlow();
       flow.intro('limina check');
       const config = await load(flags, 'check');
@@ -284,17 +353,29 @@ async function main(): Promise<void> {
         flags,
         pipeline ? `limina check ${pipeline}` : 'limina check',
       );
+      const checkIssueReport = {
+        command: sourceIssueReport.command,
+        verbose: flags.verbose,
+      };
+
+      await writeNotRunCheckIssueSnapshot({
+        command: sourceIssueReport.command ?? 'limina check',
+        rootDir: config.rootDir,
+      });
+
       const passed = pipeline
         ? await runPipeline(config, pipeline, {
             cwd: process.cwd(),
             flow,
             packageNames,
+            checkIssueReport,
             sourceIssueReport,
           })
         : await runDefaultCheck(config, {
             cwd: process.cwd(),
             flow,
             packageNames,
+            checkIssueReport,
             sourceIssueReport,
           });
 
@@ -312,6 +393,7 @@ async function main(): Promise<void> {
     )
     .option('--view <view>', 'Dependency graph view: all, source, or artifact')
     .option('--output <path>', 'Write graph export JSON to this file')
+    .option('--verbose', 'Show full graph check issue details')
     .action(async (action: string, flags: GraphFlags) => {
       if (action !== 'check' && action !== 'prepare' && action !== 'export') {
         throw new Error(
@@ -340,9 +422,18 @@ async function main(): Promise<void> {
       const config = await load(flags, 'graph');
 
       if (action === 'check') {
+        await writeNotRunCheckIssueSnapshot({
+          command: 'limina graph check',
+          rootDir: config.rootDir,
+        });
+
         const passed = await runGraphCheck(config, {
           clearScreen: false,
           flow,
+          report: {
+            command: 'limina graph check',
+            verbose: flags.verbose,
+          },
         });
 
         if (!passed) {
@@ -352,6 +443,11 @@ async function main(): Promise<void> {
         flow.outro(passed ? 'limina graph passed' : 'limina graph failed');
         return;
       }
+
+      await writeNotRunCheckIssueSnapshot({
+        command: 'limina graph prepare',
+        rootDir: config.rootDir,
+      });
 
       const passed = await runGraphPrepare(config, {
         clearScreen: false,
@@ -367,16 +463,25 @@ async function main(): Promise<void> {
 
   cli
     .command('proof <action>', 'Check root typecheck coverage proof')
-    .action(async (action: string, flags: GlobalFlags) => {
+    .option('--verbose', 'Show full proof check issue details')
+    .action(async (action: string, flags: ProofFlags) => {
       if (action !== 'check') {
         throw new Error(`Unknown proof action "${action}". Expected check.`);
       }
       const flow = createCliFlow();
       flow.intro('limina proof check');
       const config = await load(flags, 'proof');
+      await writeNotRunCheckIssueSnapshot({
+        command: 'limina proof check',
+        rootDir: config.rootDir,
+      });
       const passed = await runProofCheck(config, {
         clearScreen: false,
         flow,
+        report: {
+          command: 'limina proof check',
+          verbose: flags.verbose,
+        },
       });
 
       if (!passed) {
@@ -400,6 +505,14 @@ async function main(): Promise<void> {
       const flow = createCliFlow();
       flow.intro('limina source check');
       const config = await load(flags, 'source');
+      await writeNotRunCheckIssueSnapshot({
+        command: 'limina source check',
+        rootDir: config.rootDir,
+      });
+      await writeNotRunSourceIssueSnapshot({
+        command: 'limina source check',
+        rootDir: config.rootDir,
+      });
       const passed = await runSourceCheck(config, {
         clearScreen: false,
         flow,
@@ -420,6 +533,7 @@ async function main(): Promise<void> {
     )
     .option('--preset <preset>', 'Build checker preset: tsc, vue-tsc, or tsgo')
     .option('-w, --watch', 'Watch input files and rebuild on changes')
+    .option('--verbose', 'Show full checker issue details')
     .allowUnknownOptions()
     .action(
       async (
@@ -454,6 +568,10 @@ async function main(): Promise<void> {
           }
 
           const config = await load(flags, configPath ? 'build' : 'check');
+          await writeNotRunCheckIssueSnapshot({
+            command: 'limina checker build',
+            rootDir: config.rootDir,
+          });
           const result = configPath
             ? await runBuild({
                 checker: parseBuildPreset(flags.preset),
@@ -462,6 +580,10 @@ async function main(): Promise<void> {
                 configPath,
                 cwd: process.cwd(),
                 flow,
+                report: {
+                  command: 'limina checker build',
+                  verbose: flags.verbose,
+                },
                 watch,
               })
             : await runCheckerBuild({
@@ -469,6 +591,10 @@ async function main(): Promise<void> {
                 config,
                 cwd: process.cwd(),
                 flow,
+                report: {
+                  command: 'limina checker build',
+                  verbose: flags.verbose,
+                },
               });
 
           if (!result.passed) {
@@ -497,11 +623,19 @@ async function main(): Promise<void> {
         }
 
         const config = await load(flags, 'check');
+        await writeNotRunCheckIssueSnapshot({
+          command: 'limina checker typecheck',
+          rootDir: config.rootDir,
+        });
         const result = await runCheckerTypecheck({
           clearScreen: false,
           config,
           cwd: process.cwd(),
           flow,
+          report: {
+            command: 'limina checker typecheck',
+            verbose: flags.verbose,
+          },
         });
 
         if (!result.passed) {
@@ -519,6 +653,7 @@ async function main(): Promise<void> {
     .option('-p, --package <name>', 'Run one package check entry')
     .option('--tool <tool>', 'Run one package check tool')
     .option('--attw-profile <profile>', 'Override the configured ATTW profile')
+    .option('--verbose', 'Show full package check issue details')
     .action(async (action: string, flags: PackageFlags) => {
       if (action !== 'check') {
         throw new Error(`Unknown package action "${action}". Expected check.`);
@@ -526,6 +661,10 @@ async function main(): Promise<void> {
       const flow = createCliFlow();
       flow.intro('limina package check');
       const config = await load(flags, 'package');
+      await writeNotRunCheckIssueSnapshot({
+        command: 'limina package check',
+        rootDir: config.rootDir,
+      });
       const passed = await runPackageCheck({
         attwProfile: parsePackageAttwProfile(flags.attwProfile),
         clearScreen: false,
@@ -533,6 +672,10 @@ async function main(): Promise<void> {
         cwd: process.cwd(),
         flow,
         packageNames: parsePackageNames(flags.package),
+        report: {
+          command: 'limina package check',
+          verbose: flags.verbose,
+        },
         tool: parsePackageTool(flags.tool),
       });
 
@@ -546,6 +689,7 @@ async function main(): Promise<void> {
   cli
     .command('release <action>', 'Check package release readiness')
     .option('-p, --package <name>', 'Run one release check package entry')
+    .option('--verbose', 'Show full release check issue details')
     .action(async (action: string, flags: CheckFlags) => {
       if (action !== 'check') {
         throw new Error(`Unknown release action "${action}". Expected check.`);
@@ -553,12 +697,20 @@ async function main(): Promise<void> {
       const flow = createCliFlow();
       flow.intro('limina release check');
       const config = await load(flags, 'release');
+      await writeNotRunCheckIssueSnapshot({
+        command: 'limina release check',
+        rootDir: config.rootDir,
+      });
       const passed = await runReleaseCheck({
         clearScreen: false,
         config,
         cwd: process.cwd(),
         flow,
         packageNames: parsePackageNames(flags.package),
+        report: {
+          command: 'limina release check',
+          verbose: flags.verbose,
+        },
       });
 
       if (!passed) {

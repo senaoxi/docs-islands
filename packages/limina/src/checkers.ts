@@ -1,15 +1,15 @@
-import { existsSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import path from 'pathe';
-import ts from 'typescript';
 import type {
   BuiltinCheckerPreset,
   CheckerConfig,
   CheckerExecutionKind,
   CheckerPreset,
   ResolvedCheckerConfig,
-} from './config/runner';
-import { normalizeAbsolutePath, toRelativePath } from './utils/path';
+} from '#config/runner';
+import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
+import { existsSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'pathe';
+import ts from 'typescript';
 
 type TypeScriptExtensionGroups = readonly (readonly string[])[];
 

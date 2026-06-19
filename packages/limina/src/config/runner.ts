@@ -1,11 +1,11 @@
+import { getResolvedCheckers, normalizeExtensions } from '#checkers';
+import { validateLiminaConfig } from '#config/schema';
+import { isPathInsideDirectory } from '#utils/path';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'pathe';
-import { getResolvedCheckers, normalizeExtensions } from '../checkers';
-import { isPathInsideDirectory } from '../utils/path';
-import { validateLiminaConfig } from './schema';
 
-export { validateLiminaConfig } from './schema';
+export { validateLiminaConfig } from '#config/schema';
 
 /**
  * Runtime label used by package boundary checks.

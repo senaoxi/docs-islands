@@ -1,14 +1,14 @@
+import {
+  type CheckerProjectParseContext,
+  normalizeExtensions,
+  resolveModuleNameWithCheckers,
+} from '#checkers';
+import { normalizeAbsolutePath } from '#utils/path';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { type ParseResult, parseSync, rawTransferSupported } from 'oxc-parser';
 import { type NapiResolveOptions, ResolverFactory } from 'oxc-resolver';
 import ts from 'typescript';
-import {
-  type CheckerProjectParseContext,
-  normalizeExtensions,
-  resolveModuleNameWithCheckers,
-} from '../../checkers';
-import { normalizeAbsolutePath } from '../../utils/path';
 import {
   buildLineStarts,
   type CollectedImportRecord,

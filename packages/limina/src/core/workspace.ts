@@ -1,17 +1,18 @@
-import type { ResolvedLiminaConfig } from '../config/runner';
-import {
-  collectWorkspaceDependencyDeclarations,
-  type WorkspaceDependencyDeclaration,
-} from './packages/authority';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import {
   collectImporters,
   collectPackageOwners,
   collectWorkspacePackages,
   findPackageForSpecifier,
   type ImporterInfo,
+  type NamedWorkspacePackage,
   type PackageOwner,
   type WorkspacePackage,
-} from './workspace/actions';
+} from '#core/workspace/actions';
+import {
+  collectWorkspaceDependencyDeclarations,
+  type WorkspaceDependencyDeclaration,
+} from './packages/authority';
 
 export class WorkspaceCore {
   readonly #config: ResolvedLiminaConfig;
@@ -100,6 +101,12 @@ function cloneWorkspacePackages(
   return packages.map(cloneWorkspacePackage);
 }
 
+function cloneNamedWorkspacePackage(
+  workspacePackage: NamedWorkspacePackage,
+): NamedWorkspacePackage {
+  return cloneWorkspacePackage(workspacePackage) as NamedWorkspacePackage;
+}
+
 function clonePackageOwner(owner: PackageOwner): PackageOwner {
   return {
     ...owner,
@@ -125,6 +132,6 @@ function cloneWorkspaceDependencyDeclaration(
 ): WorkspaceDependencyDeclaration {
   return {
     ...declaration,
-    importer: cloneWorkspacePackage(declaration.importer),
+    importer: cloneNamedWorkspacePackage(declaration.importer),
   };
 }

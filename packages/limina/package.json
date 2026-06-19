@@ -37,6 +37,15 @@
   "bin": {
     "limina": "./bin/limina.js"
   },
+  "imports": {
+    "#utils/*": "./src/utils/*.ts",
+    "#core": "./src/core/index.ts",
+    "#core/*/runner": "./src/core/*/runner.ts",
+    "#core/*/context": "./src/core/*/context.ts",
+    "#core/*/actions": "./src/core/*/actions.ts",
+    "#checkers": "./src/checkers.ts",
+    "#config/*": "./src/config/*.ts"
+  },
   "scripts": {
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
@@ -62,7 +71,8 @@
     "@types/node": "catalog:dev",
     "@arethetypeswrong/core": "catalog:lint",
     "@clack/prompts": "catalog:dev",
-    "logaria": "catalog:prod",
+    "boxen": "catalog:dev",
+    "logaria": "workspace:*",
     "@publint/pack": "catalog:lint",
     "cac": "catalog:dev",
     "es-module-lexer": "catalog:dev",

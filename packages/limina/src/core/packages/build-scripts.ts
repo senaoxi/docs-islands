@@ -1,10 +1,8 @@
+import type { BuildCheckerPreset, ResolvedLiminaConfig } from '#config/runner';
+import type { WorkspacePackage } from '#core/workspace/actions';
+import { isNamedWorkspacePackage } from '#core/workspace/actions';
+import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import path from 'pathe';
-import type {
-  BuildCheckerPreset,
-  ResolvedLiminaConfig,
-} from '../../config/runner';
-import { normalizeAbsolutePath, toRelativePath } from '../../utils/path';
-import type { WorkspacePackage } from '../workspace/actions';
 
 export interface PackageBuildScript {
   checker?: BuildCheckerPreset;
@@ -305,6 +303,10 @@ export function collectPackageBuildScripts(options: {
   const scripts: PackageBuildScript[] = [];
 
   for (const workspacePackage of options.workspacePackages) {
+    if (!isNamedWorkspacePackage(workspacePackage)) {
+      continue;
+    }
+
     const packageJsonPath = normalizeAbsolutePath(
       path.join(workspacePackage.directory, 'package.json'),
     );

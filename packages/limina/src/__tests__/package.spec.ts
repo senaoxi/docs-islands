@@ -1,8 +1,8 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config/runner';
 import { LiminaFlowReporter } from '../flow';
 
 const packageCheckMocks = vi.hoisted(() => ({
@@ -613,6 +613,35 @@ describe('runPackageCheck and runReleaseCheck', () => {
     }
   });
 
+  it('rejects output package manifests without names', async () => {
+    const pkg = await createOutputPackage(
+      {
+        'index.js': 'export const value = 1;\n',
+      },
+      {
+        name: '',
+      },
+    );
+
+    try {
+      await expect(
+        runPackageCheck({
+          config: createConfig(pkg.outDir, [
+            {
+              checks: ['boundary'],
+              outDir: pkg.outDir,
+              name: '@example/pkg',
+            },
+          ]),
+        }),
+      ).resolves.toBe(false);
+
+      expect(packageCheckMocks.packCalls).toEqual([]);
+    } finally {
+      await pkg.cleanup();
+    }
+  });
+
   it('does not run release metadata validation during package checks', async () => {
     const pkg = await createOutputPackage(
       {
@@ -770,6 +799,45 @@ describe('runPackageCheck and runReleaseCheck', () => {
           packageNames: ['@example/a'],
         }),
       ).resolves.toBe(false);
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('allows unrelated nameless workspace packages during release checks', async () => {
+    const rootDir = await createWorkspaceRoot();
+
+    try {
+      const outDir = await createWorkspacePackage(rootDir, '@example/a', {});
+
+      await writeText(
+        path.join(rootDir, 'packages/fixture/package.json'),
+        JSON.stringify({
+          private: true,
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/fixture/src/index.ts'),
+        'export const fixtureValue = 1;\n',
+      );
+
+      await expect(
+        runReleaseCheck({
+          config: createConfig(rootDir, [
+            {
+              checks: ['boundary'],
+              name: '@example/a',
+              outDir,
+            },
+          ]),
+          packageNames: ['@example/a'],
+        }),
+      ).resolves.toBe(true);
+
+      expect(packageCheckMocks.packCalls).toEqual([outDir]);
     } finally {
       await rm(rootDir, {
         force: true,

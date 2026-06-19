@@ -1,4 +1,11 @@
 import { createElapsedTimer } from 'logaria/helper';
+import { formatCheckIssueHumanReport } from '../check-reporting/human';
+import {
+  appendCheckIssues,
+  completeCheckIssueSnapshot,
+  createTaskFailureIssue,
+  type LiminaCheckIssue,
+} from '../check-reporting/snapshot';
 import { clearCliScreen, formatErrorMessage, PackageLogger } from '../logger';
 import {
   runPackageCheckImpl,
@@ -22,23 +29,89 @@ export async function runPackageCheck(
   try {
     PackageLogger.info('package check started');
 
-    const passed = await runPackageCheckImpl(options);
+    const issues: LiminaCheckIssue[] = [];
+    const passed = await runPackageCheckImpl({
+      ...options,
+      issues,
+    });
 
     if (passed) {
+      await completeCheckIssueSnapshot({
+        rootDir: options.config.rootDir,
+      });
+
       if (!options.flow?.interactive) {
         PackageLogger.success('package check finished', elapsed());
       }
 
       task?.pass();
     } else {
-      PackageLogger.error('package check finished with failures', elapsed());
+      const reportIssues =
+        issues.length > 0
+          ? issues
+          : [
+              createTaskFailureIssue({
+                code: 'LIMINA_PACKAGE_CHECK_FAILED',
+                filePath: options.config.configPath,
+                fix: 'Inspect the package check report above, then rerun `limina package check` or the package pipeline.',
+                packageName:
+                  options.packageNames?.length === 1
+                    ? options.packageNames[0]
+                    : undefined,
+                reason:
+                  'Package check found package manifest, publint, ATTW, or published boundary failures.',
+                rootDir: options.config.rootDir,
+                task: 'package:check',
+                title: 'Package check failed',
+                tool: options.tool ?? 'all',
+              }),
+            ];
+
+      await appendCheckIssues({
+        issues: reportIssues,
+        rootDir: options.config.rootDir,
+      });
+      PackageLogger.error(
+        formatCheckIssueHumanReport({
+          command: options.report?.command ?? 'limina package check',
+          issues: reportIssues,
+          title: 'Package check summary',
+          verbose: options.report?.verbose,
+        }),
+        elapsed(),
+      );
       task?.fail('package check finished with failures');
     }
 
     return passed;
   } catch (error) {
+    const issue = createTaskFailureIssue({
+      code: 'LIMINA_PACKAGE_CHECK_FAILED',
+      detailLines: [formatErrorMessage(error)],
+      filePath: options.config.configPath,
+      fix: 'Inspect the package check error above, then rerun `limina package check` or the package pipeline.',
+      packageName:
+        options.packageNames?.length === 1
+          ? options.packageNames[0]
+          : undefined,
+      reason: `Package check failed: ${formatErrorMessage(error)}.`,
+      rootDir: options.config.rootDir,
+      task: 'package:check',
+      title: 'Package check failed',
+      tool: options.tool ?? 'all',
+    });
+
+    await appendCheckIssues({
+      issues: [issue],
+      rootDir: options.config.rootDir,
+    });
     PackageLogger.error(
-      `package check failed: ${formatErrorMessage(error)}`,
+      formatCheckIssueHumanReport({
+        command: options.report?.command ?? 'limina package check',
+        issues: [issue],
+        title: 'Package check summary',
+        verbose: options.report?.verbose,
+      }),
       elapsed(),
     );
     task?.fail('package check failed', { error });

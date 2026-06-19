@@ -1,16 +1,13 @@
-import { existsSync } from 'node:fs';
-import path from 'pathe';
-import rawPicomatch from 'picomatch';
 import {
   type CheckerProjectParseContext,
   normalizeExtensions,
-} from '../checkers';
-import { getActiveCheckers, type ResolvedLiminaConfig } from '../config/runner';
-import { createLiminaCore, type LiminaCore } from '../core';
+} from '#checkers';
+import { getActiveCheckers, type ResolvedLiminaConfig } from '#config/runner';
+import { createLiminaCore, type LiminaCore } from '#core';
 import {
   collectGeneratedSourceConfigPaths,
   type GeneratedTsconfigGraphResult,
-} from '../core/build-graph/generated/runner';
+} from '#core/build-graph/runner';
 import {
   collectImportsFromFile,
   formatImportRecordLocation,
@@ -21,7 +18,27 @@ import {
   parseProject,
   type ProjectInfo,
   resolveInternalImport,
-} from '../core/import-graph/context';
+} from '#core/import-graph/context';
+import {
+  collectSourceGraphProjectExtensions,
+  getRawReferencePaths,
+  isOrdinaryTypecheckConfigPath,
+  readJsonConfig,
+} from '#core/tsconfig/actions';
+import {
+  getPackageRootSpecifier,
+  type PackageOwner,
+  type WorkspacePackage,
+} from '#core/workspace/actions';
+import {
+  isPathInsideDirectory,
+  normalizeAbsolutePath,
+  normalizeSlashes,
+  toRelativePath,
+} from '#utils/path';
+import { existsSync } from 'node:fs';
+import path from 'pathe';
+import rawPicomatch from 'picomatch';
 import {
   collectWorkspaceDependencyDeclarations,
   createWorkspaceDependencyKey,
@@ -38,26 +55,9 @@ import {
   findOwnerForFile,
   type NearestPackageInfo,
 } from '../core/packages/owners';
-import {
-  collectSourceGraphProjectExtensions,
-  getRawReferencePaths,
-  isOrdinaryTypecheckConfigPath,
-  readJsonConfig,
-} from '../core/tsconfig/actions';
-import {
-  getPackageRootSpecifier,
-  type PackageOwner,
-  type WorkspacePackage,
-} from '../core/workspace/actions';
 import type { LiminaFlowReporter } from '../flow';
 import { isNodeBuiltinSpecifier } from '../graph-check/rules';
 import { SourceLogger } from '../logger';
-import {
-  isPathInsideDirectory,
-  normalizeAbsolutePath,
-  normalizeSlashes,
-  toRelativePath,
-} from '../utils/path';
 import {
   collectKnipSourceIssues,
   type KnipCliRunner,
@@ -83,6 +83,7 @@ import {
   type SourceCheckIssue,
   type SourceIssueReportOptions,
 } from './report';
+import { writeCompletedSourceIssueSnapshot } from './snapshot';
 import {
   isInvalidWorkspacePattern,
   normalizeWorkspacePattern,
@@ -1539,6 +1540,13 @@ export async function runSourceCheckImpl(
       }
     }
   }
+
+  await writeCompletedSourceIssueSnapshot({
+    command: options.report?.command ?? 'limina source check',
+    issues: sourceIssues,
+    legacyProblems: problems,
+    rootDir: config.rootDir,
+  });
 
   if (problems.length > 0 || sourceIssues.length > 0) {
     SourceLogger.error(

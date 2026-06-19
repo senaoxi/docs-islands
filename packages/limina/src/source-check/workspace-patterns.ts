@@ -1,8 +1,8 @@
 import path from 'pathe';
 
-import type { ResolvedLiminaConfig } from '../config/runner';
-import type { PackageOwner } from '../core/workspace/actions';
-import { normalizeSlashes, toRelativePath } from '../utils/path';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import type { PackageOwner } from '#core/workspace/actions';
+import { normalizeSlashes, toRelativePath } from '#utils/path';
 
 export function normalizeWorkspacePattern(value: string): string {
   let pattern = normalizeSlashes(value.trim());

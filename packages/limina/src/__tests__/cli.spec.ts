@@ -59,6 +59,13 @@ async function createCliBuildFixture(): Promise<CliBuildFixture> {
     'packages:\n  - packages/*\n',
   );
   await writeText(
+    path.join(rootDir, 'package.json'),
+    stringifyConfig({
+      name: 'root',
+      private: true,
+    }),
+  );
+  await writeText(
     path.join(rootDir, 'limina.config.mjs'),
     `export default ${JSON.stringify(
       {
@@ -504,6 +511,279 @@ describe('limina CLI', () => {
     }
   }, 15_000);
 
+  it('prints source issue filters from the last run', async () => {
+    const rootDir = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-issues-')),
+    );
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages:\n  - app\n',
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `export default ${JSON.stringify(
+          {
+            config: {
+              checkers: {
+                typescript: {
+                  include: ['app/tsconfig.json'],
+                  preset: 'tsc',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        )};\n`,
+      );
+      await writeText(
+        path.join(rootDir, 'app/package.json'),
+        stringifyConfig({
+          exports: {
+            '.': './src/index.ts',
+          },
+          name: '@example/app',
+          scripts: {
+            build: 'limina checker build tsconfig.json',
+          },
+          type: 'module',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'app/src/index.ts'),
+        'export const value = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'app/src/theme/dead.ts'),
+        'export const deadValue = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'app/tsconfig.lib.dts.json'),
+        stringifyConfig({
+          compilerOptions: buildCompilerOptions,
+          include: ['src/**/*.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'app/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'app/tsconfig.lib.json'),
+        stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['src/**/*.ts'],
+        }),
+      );
+
+      await expect(
+        execFileAsync(
+          process.execPath,
+          [
+            cliPath,
+            '--config',
+            path.join(rootDir, 'limina.config.mjs'),
+            'source',
+            'check',
+          ],
+          {
+            cwd: rootDir,
+            env: {
+              ...process.env,
+              CI: 'true',
+            },
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: 1,
+      });
+
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+
+      expect(result.stdout).toContain('Issue filters available from last run:');
+      expect(result.stdout).toContain('tasks:\n  - source:check  1 issue');
+      expect(result.stdout).toContain('packages:\n  - @example/app  1 issue');
+      expect(result.stdout).toContain(
+        'rules:\n  - LIMINA_SOURCE_UNUSED_MODULE  1 issue',
+      );
+      expect(result.stdout).toContain('scopes:\n  - app/src/theme  1 issue');
+      expect(result.stdout).toContain('checkers:\n  (none)');
+      expect(result.stdout).toContain('tools:\n  (none)');
+
+      const ruleFilteredResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--rule',
+          'LIMINA_SOURCE_UNUSED_MODULE',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      expect(ruleFilteredResult.stdout).toContain(
+        'rules:\n  - LIMINA_SOURCE_UNUSED_MODULE  1 issue',
+      );
+
+      const packageFilteredResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--package',
+          '@example/app',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      expect(packageFilteredResult.stdout).toContain(
+        'packages:\n  - @example/app  1 issue',
+      );
+
+      const unmatchedRuleResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--rule',
+          'LIMINA_GRAPH_CHECK_FAILED',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      expect(unmatchedRuleResult.stdout).toContain(
+        'No issues matched the selected filters.',
+      );
+      expect(unmatchedRuleResult.stdout).toContain(
+        'rule: LIMINA_GRAPH_CHECK_FAILED',
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  }, 20_000);
+
+  it('reports missing and invalid check issue inventory requests', async () => {
+    const rootDir = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-issues-empty-')),
+    );
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages:\n  - packages/*\n',
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        'export default {};\n',
+      );
+
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+
+      expect(result.stdout).toContain('No check issue snapshot found.');
+      await expect(
+        execFileAsync(process.execPath, [cliPath, 'check', 'demo', '--issues']),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining(
+          '`limina check --issues` does not accept a pipeline name.',
+        ),
+      });
+      await expect(
+        execFileAsync(process.execPath, [
+          cliPath,
+          'check',
+          '--task',
+          'proof:check',
+        ]),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining(
+          '`limina check --task`, `--checker`, and `--tool` require --issues.',
+        ),
+      });
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  }, 15_000);
+
   it('runs release check with repeated package filters from the public command', async () => {
     const rootDir = await realpath(
       await mkdtemp(path.join(tmpdir(), 'limina-cli-release-')),
@@ -598,6 +878,144 @@ describe('limina CLI', () => {
 
       expect(result.stdout).toContain('limina release check');
       expect(result.stdout).toContain('limina release passed');
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  }, 30_000);
+
+  it('prints standalone graph check verbose issue details from the public command', async () => {
+    const rootDir = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-graph-verbose-')),
+    );
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages:\n  - packages/*\n',
+      );
+      await writeText(
+        path.join(rootDir, 'package.json'),
+        stringifyConfig({
+          name: 'root',
+          private: true,
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `export default ${JSON.stringify(
+          {
+            config: {
+              checkers: {
+                typescript: {
+                  include: ['packages/**/tsconfig.json'],
+                  preset: 'tsc',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        )};\n`,
+      );
+      await writeText(
+        path.join(rootDir, 'packages/a/package.json'),
+        stringifyConfig({
+          dependencies: {
+            '@example/b': 'workspace:*',
+          },
+          name: '@example/a',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/a/src/index.ts'),
+        "import { value } from '@example/b';\nexport const appValue = value;\n",
+      );
+      await writeText(
+        path.join(rootDir, 'packages/a/tsconfig.lib.json'),
+        stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['src/**/*.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/a/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [{ path: './tsconfig.lib.json' }],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/package.json'),
+        stringifyConfig({
+          exports: {
+            '.': './src/index.ts',
+          },
+          name: '@example/b',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/src/index.ts'),
+        'export const value = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/tsconfig.lib.json'),
+        stringifyConfig({
+          compilerOptions: {
+            ...buildCompilerOptions,
+            noEmit: true,
+          },
+          include: ['src/**/*.ts'],
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'packages/b/tsconfig.json'),
+        stringifyConfig({
+          files: [],
+          references: [{ path: './tsconfig.lib.json' }],
+        }),
+      );
+
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'graph',
+          'check',
+          '--verbose',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      ).then(
+        ({ stderr, stdout }) => ({
+          code: 0,
+          output: `${stdout}${stderr}`,
+        }),
+        (error: { code?: number; stderr?: string; stdout?: string }) => ({
+          code: error.code,
+          output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
+        }),
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.output).toContain('Graph check summary');
+      expect(result.output).toContain('details:');
+      expect(result.output).toContain('Missing project reference');
     } finally {
       await rm(rootDir, {
         force: true,

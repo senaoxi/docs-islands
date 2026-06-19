@@ -1,11 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'pathe';
 import type {
   PackageCheckTool,
   PackageCheckToolSelection,
   PackageEntry,
   ResolvedLiminaConfig,
-} from '../config/runner';
+} from '#config/runner';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'pathe';
 import { formatErrorMessage } from '../logger';
 
 interface PlannedPackageEntry {

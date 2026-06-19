@@ -1,13 +1,13 @@
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 
-import type { ResolvedLiminaConfig } from '../../../config/runner';
-import { normalizeAbsolutePath, toRelativePath } from '../../../utils/path';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import {
   isOrdinarySourceTypecheckConfigPath,
   readJsonConfig,
   resolveReferencePath,
-} from '../../tsconfig/actions';
+} from '#core/tsconfig/actions';
+import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 
 export interface ImplicitRef {
   path: string;

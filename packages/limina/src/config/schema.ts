@@ -1,7 +1,6 @@
+import { getCheckerAdapter } from '#checkers';
+import type { LiminaConfig } from '#config/runner';
 import { z } from 'zod';
-
-import { getCheckerAdapter } from '../checkers';
-import type { LiminaConfig } from './runner';
 
 const checkerExtensionsConfigReason =
   'checker extensions are fixed by built-in presets and cannot be configured.';

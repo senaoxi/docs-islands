@@ -1,5 +1,12 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { createElapsedTimer } from 'logaria/helper';
-import type { ResolvedLiminaConfig } from '../config/runner';
+import { formatCheckIssueHumanReport } from '../check-reporting/human';
+import {
+  appendCheckIssues,
+  completeCheckIssueSnapshot,
+  createTaskFailureIssue,
+  type LiminaCheckIssue,
+} from '../check-reporting/snapshot';
 import type { DependencyGraphDocument } from '../dependency-graph/runner';
 import {
   runGraphCheckImpl,
@@ -16,6 +23,35 @@ export type {
   RunGraphExportOptions,
   RunGraphPrepareOptions,
 } from '../graph-check/runner';
+
+function createGraphCheckErrorIssue(
+  config: ResolvedLiminaConfig,
+  errorMessage: string,
+): LiminaCheckIssue {
+  return createTaskFailureIssue({
+    code: 'LIMINA_GRAPH_CHECK_FAILED',
+    detailLines: errorMessage.split('\n'),
+    filePath: config.configPath,
+    fix: 'Inspect the graph check error above, then rerun `limina graph check` or `limina check`.',
+    reason: `Graph check failed: ${errorMessage}.`,
+    rootDir: config.rootDir,
+    task: 'graph:check',
+    title: 'Graph check failed',
+  });
+}
+
+function formatGraphCheckFailureReport(options: {
+  command?: string;
+  issue: LiminaCheckIssue;
+  verbose?: boolean;
+}): string {
+  return formatCheckIssueHumanReport({
+    command: options.command,
+    issues: [options.issue],
+    title: 'Graph check summary',
+    verbose: options.verbose,
+  });
+}
 
 export async function runGraphPrepare(
   config: ResolvedLiminaConfig,
@@ -45,8 +81,25 @@ export async function runGraphPrepare(
     }
 
     task?.pass();
+    await completeCheckIssueSnapshot({
+      rootDir: config.rootDir,
+    });
     return true;
   } catch (error) {
+    await appendCheckIssues({
+      issues: [
+        createTaskFailureIssue({
+          code: 'LIMINA_GRAPH_PREPARE_FAILED',
+          filePath: config.configPath,
+          fix: 'Inspect the graph prepare error above, then rerun `limina graph prepare` or `limina check`.',
+          reason: `Graph prepare failed: ${formatErrorMessage(error)}.`,
+          rootDir: config.rootDir,
+          task: 'graph:prepare',
+          title: 'Graph prepare failed',
+        }),
+      ],
+      rootDir: config.rootDir,
+    });
     GraphLogger.error(
       `graph prepare failed: ${formatErrorMessage(error)}`,
       elapsed(),
@@ -69,34 +122,79 @@ export async function runGraphCheck(
     depth: options.flowDepth ?? 0,
   });
 
-  GraphLogger.info('graph check started');
+  if (!options.flow) {
+    GraphLogger.info('graph check started');
+  }
 
   try {
     const logSuccess = !options.flow?.interactive;
+    const issues: LiminaCheckIssue[] = [];
     const passed = await runGraphCheckImpl(config, {
       core: options.core,
       generatedGraphProvider: options.generatedGraphProvider,
+      issues,
       logSuccess,
+      report: options.report,
     });
 
     if (passed) {
+      await completeCheckIssueSnapshot({
+        rootDir: config.rootDir,
+      });
+
       if (logSuccess) {
         GraphLogger.success('graph check finished', elapsed());
       }
 
       task?.pass();
     } else {
-      GraphLogger.error('graph check finished with failures', elapsed());
+      await appendCheckIssues({
+        issues:
+          issues.length > 0
+            ? issues
+            : [
+                createTaskFailureIssue({
+                  code: 'LIMINA_GRAPH_CHECK_FAILED',
+                  filePath: config.configPath,
+                  fix: 'Inspect the graph check report above, update the source/config/package boundary, then rerun `limina graph check` or `limina check`.',
+                  reason:
+                    'Graph check found architecture, dependency, or resolver violations.',
+                  rootDir: config.rootDir,
+                  task: 'graph:check',
+                  title: 'Graph check failed',
+                }),
+              ],
+        rootDir: config.rootDir,
+      });
+      if (!options.flow) {
+        GraphLogger.error('graph check finished with failures', elapsed());
+      }
       task?.fail('graph check finished with failures');
     }
 
     return passed;
   } catch (error) {
+    const errorMessage = formatErrorMessage(error);
+    const issue = createGraphCheckErrorIssue(config, errorMessage);
+
+    await appendCheckIssues({
+      issues: [issue],
+      rootDir: config.rootDir,
+    });
+
     GraphLogger.error(
-      `graph check failed: ${formatErrorMessage(error)}`,
-      elapsed(),
+      formatGraphCheckFailureReport({
+        command: options.report?.command ?? 'limina graph check',
+        issue,
+        verbose: options.report?.verbose,
+      }),
     );
-    task?.fail('graph check failed', { error });
+    task?.fail('graph check failed');
+
+    if (options.flow) {
+      return false;
+    }
+
     throw error;
   }
 }

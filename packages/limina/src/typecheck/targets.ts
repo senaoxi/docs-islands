@@ -9,12 +9,12 @@ import {
   collectMissingCheckerPeerDependencies,
   formatMissingCheckerPeerDependencies,
   getCheckerAdapter,
-} from '../checkers';
+} from '#checkers';
 import type {
   CheckerExecutionKind,
   ResolvedCheckerConfig,
-} from '../config/runner';
-import { collectGraphProjectRouteFromRoot } from '../core/tsconfig/actions';
+} from '#config/runner';
+import { collectGraphProjectRouteFromRoot } from '#core/tsconfig/actions';
 
 export interface TypecheckTarget {
   args: string[];

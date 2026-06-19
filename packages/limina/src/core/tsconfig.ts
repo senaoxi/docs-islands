@@ -1,18 +1,18 @@
-import path from 'pathe';
-import type { CheckerProjectParseContext } from '../checkers';
-import type { ResolvedLiminaConfig } from '../config/runner';
-import { normalizeAbsolutePath } from '../utils/path';
-import type { GeneratedTsconfigGraphResult } from './build-graph/generated/runner';
+import type { CheckerProjectParseContext } from '#checkers';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import {
   createFileOwnerLookup,
   parseProject,
   type ProjectInfo,
-} from './import-graph/context';
+} from '#core/import-graph/context';
 import {
   type CollectGraphProjectPathsResult,
   collectGraphProjectRouteFromRoot,
   collectSourceGraphProjectExtensions,
-} from './tsconfig/actions';
+} from '#core/tsconfig/actions';
+import { normalizeAbsolutePath } from '#utils/path';
+import path from 'pathe';
 
 export interface SourceGraphProjects {
   problems: string[];

@@ -1,20 +1,24 @@
-import { existsSync, statSync } from 'node:fs';
-import path from 'pathe';
-import { glob } from 'tinyglobby';
-import type ts from 'typescript';
 import {
   type CheckerProjectParseContext,
   normalizeExtensions,
   resolveModuleNameWithCheckers,
-} from '../../checkers';
-import type { ResolvedLiminaConfig } from '../../config/runner';
+} from '#checkers';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import { resolveModuleNameWithOxc } from '#core/import-analysis/runner';
+import type {
+  NamedWorkspacePackage,
+  WorkspacePackage,
+} from '#core/workspace/actions';
+import { isNamedWorkspacePackage } from '#core/workspace/actions';
 import {
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
-} from '../../utils/path';
-import { resolveModuleNameWithOxc } from '../import-analysis/runner';
-import type { WorkspacePackage } from './actions';
+} from '#utils/path';
+import { existsSync, statSync } from 'node:fs';
+import path from 'pathe';
+import { glob } from 'tinyglobby';
+import type ts from 'typescript';
 
 export interface WorkspaceExportsResolutionProfile {
   checkerPresets: CheckerProjectParseContext['checkerPresets'];
@@ -223,7 +227,7 @@ async function expandWildcardExportEntry(options: {
 }
 
 async function collectPackageExportEntries(
-  workspacePackage: WorkspacePackage,
+  workspacePackage: NamedWorkspacePackage,
 ): Promise<CollectedPackageExportEntries> {
   const exportsField = workspacePackage.manifest.exports;
   const problems: string[] = [];
@@ -485,7 +489,9 @@ export async function createWorkspaceExportsResolutionIndex(options: {
     Map<string, WorkspacePackageExportResolution>
   >();
 
-  for (const workspacePackage of options.packages) {
+  for (const workspacePackage of options.packages.filter(
+    isNamedWorkspacePackage,
+  )) {
     if (workspacePackage.manifest.exports === undefined) {
       continue;
     }

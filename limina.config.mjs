@@ -175,8 +175,8 @@ export default defineConfig({
       {
         file: 'packages/vitepress/src/shared/internal/client-runtime.d.ts',
         reason: `
-          This is a non-user-facing module that will be copied into the artifacts during the build process. 
-          Since TypeScript follows the single source file principle and cannot govern it, 
+          This is a non-user-facing module that will be copied into the artifacts during the build process.
+          Since TypeScript follows the single source file principle and cannot govern it,
           it is treated as a known reachable module here.
         `,
       },

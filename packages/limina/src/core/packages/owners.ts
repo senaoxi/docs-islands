@@ -1,12 +1,12 @@
-import { existsSync } from 'node:fs';
-import path from 'pathe';
-import { isPathInsideDirectory, normalizeAbsolutePath } from '../../utils/path';
 import {
   type PackageManifest,
   type PackageOwner,
   readJsonFile,
   type WorkspacePackage,
-} from '../workspace/actions';
+} from '#core/workspace/actions';
+import { isPathInsideDirectory, normalizeAbsolutePath } from '#utils/path';
+import { existsSync } from 'node:fs';
+import path from 'pathe';
 
 export interface NearestPackageInfo {
   directory: string;

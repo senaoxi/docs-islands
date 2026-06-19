@@ -1,12 +1,12 @@
 import {
   type CheckerProjectParseContext,
   parseCheckerProjectConfigForContext,
-} from '../../../checkers';
+} from '#checkers';
 import type {
   ResolvedCheckerConfig,
   ResolvedLiminaConfig,
-} from '../../../config/runner';
-import { normalizeAbsolutePath, toRelativePath } from '../../../utils/path';
+} from '#config/runner';
+import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import {
   capabilityDiscoveryExtensions,
   getFileExtension,

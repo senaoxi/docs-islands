@@ -1,5 +1,5 @@
-import { clearCheckerProjectConfigCache } from '../checkers';
-import type { ResolvedLiminaConfig } from '../config/runner';
+import { clearCheckerProjectConfigCache } from '#checkers';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { BuildGraphCore } from './build-graph';
 import { ImportCore } from './imports';
 import { PackageDomainCore } from './packages';

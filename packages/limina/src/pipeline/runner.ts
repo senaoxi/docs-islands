@@ -1,26 +1,33 @@
+import { getCheckerAdapter } from '#checkers';
+import type {
+  BuiltinTaskName,
+  PipelineStep,
+  ResolvedCheckerConfig,
+  ResolvedLiminaConfig,
+} from '#config/runner';
+import { getActiveCheckers } from '#config/runner';
+import { createLiminaCore, type LiminaCore } from '#core';
+import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'pathe';
-import { getCheckerAdapter } from '../checkers';
+import type { CheckIssueReportOptions } from '../check-reporting/human';
 import { runGraphCheck, runGraphPrepare } from '../commands/graph';
 import { runPackageCheck } from '../commands/package';
 import { runProofCheck } from '../commands/proof';
 import { runReleaseCheck } from '../commands/release';
 import { runSourceCheck } from '../commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from '../commands/typecheck';
-import type {
-  BuiltinTaskName,
-  PipelineStep,
-  ResolvedCheckerConfig,
-  ResolvedLiminaConfig,
-} from '../config/runner';
-import { getActiveCheckers } from '../config/runner';
-import { createLiminaCore, type LiminaCore } from '../core';
-import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
 import type { LiminaFlowReporter } from '../flow';
 import type { SourceIssueReportOptions } from '../source-check/report';
+import {
+  appendCheckIssues,
+  completeCheckIssueSnapshot,
+  createTaskFailureIssue,
+} from '../source-check/snapshot';
 import { prepareVueTsgoCache } from '../typecheck/targets';
 
 interface RunPipelineOptions {
+  checkIssueReport?: CheckIssueReportOptions;
   core?: LiminaCore;
   cwd?: string;
   flow?: LiminaFlowReporter;
@@ -238,6 +245,7 @@ async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        report: options.checkIssueReport,
       });
     }
     case 'source:check': {
@@ -259,6 +267,7 @@ async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
         packageNames: options.packageNames,
+        report: options.checkIssueReport,
       });
     }
     case 'release:check': {
@@ -270,6 +279,7 @@ async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
         packageNames: options.packageNames,
+        report: options.checkIssueReport,
       });
     }
     case 'checker:typecheck': {
@@ -281,6 +291,7 @@ async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        report: options.checkIssueReport,
       });
 
       return result.passed;
@@ -294,6 +305,7 @@ async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        report: options.checkIssueReport,
       });
 
       return result.passed;
@@ -376,7 +388,26 @@ async function runCommandStep(
           task?.fail(`command failed: ${label} exited with code ${code ?? 1}`);
         }
 
-        resolve(passed);
+        const snapshotWrite = passed
+          ? Promise.resolve()
+          : appendCheckIssues({
+              issues: [
+                createTaskFailureIssue({
+                  code: 'LIMINA_COMMAND_FAILED',
+                  fix: 'Inspect the command output above, then rerun the pipeline.',
+                  reason: `Pipeline command "${label}" exited with code ${code ?? 1}.`,
+                  rootDir: config.rootDir,
+                  task: 'command',
+                  title: 'Pipeline command failed',
+                  tool: step.command,
+                }),
+              ],
+              rootDir: config.rootDir,
+            });
+
+        snapshotWrite.then(() => {
+          resolve(passed);
+        }, reject);
       });
     });
   }
@@ -396,6 +427,20 @@ async function runCommandStep(
   if (passed) {
     task?.pass();
   } else {
+    await appendCheckIssues({
+      issues: [
+        createTaskFailureIssue({
+          code: 'LIMINA_COMMAND_FAILED',
+          fix: 'Inspect the command output above, then rerun the pipeline.',
+          reason: `Pipeline command "${label}" exited with code ${result.status ?? 1}.`,
+          rootDir: config.rootDir,
+          task: 'command',
+          title: 'Pipeline command failed',
+          tool: step.command,
+        }),
+      ],
+      rootDir: config.rootDir,
+    });
     task?.fail(
       `command failed: ${label} exited with code ${result.status ?? 1}`,
     );
@@ -445,9 +490,12 @@ export async function runPipeline(
       pipelineTask?.fail(`pipeline blocked: ${pipelineName} at ${label}`);
 
       for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
-        options.flow?.skip(`skipped: ${getPipelineStepLabel(remainingStep)}`, {
-          depth: 1,
-        });
+        options.flow?.skip(
+          `skipped: ${getPipelineStepLabel(remainingStep)} (blocked by ${label})`,
+          {
+            depth: 1,
+          },
+        );
       }
 
       return false;
@@ -455,6 +503,9 @@ export async function runPipeline(
   }
 
   pipelineTask?.pass();
+  await completeCheckIssueSnapshot({
+    rootDir: config.rootDir,
+  });
 
   return true;
 }
@@ -492,9 +543,12 @@ export async function runDefaultCheck(
       pipelineTask?.fail(`default check blocked at ${label}`);
 
       for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
-        options.flow?.skip(`skipped: ${getPipelineStepLabel(remainingStep)}`, {
-          depth: 1,
-        });
+        options.flow?.skip(
+          `skipped: ${getPipelineStepLabel(remainingStep)} (blocked by ${label})`,
+          {
+            depth: 1,
+          },
+        );
       }
 
       return false;
@@ -512,6 +566,9 @@ export async function runDefaultCheck(
   }
 
   pipelineTask?.pass();
+  await completeCheckIssueSnapshot({
+    rootDir: config.rootDir,
+  });
 
   return true;
 }

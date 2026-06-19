@@ -1,23 +1,20 @@
-import { existsSync, statSync } from 'node:fs';
-import path from 'pathe';
-import ts from 'typescript';
 import {
   type CheckerProjectParseContext,
   getCheckerAdapter,
   normalizeExtensions,
   resolveCheckerProjectExtensions,
-} from '../../checkers';
-import type { CheckerPreset } from '../../config/runner';
-import {
-  getActiveCheckers,
-  type ResolvedLiminaConfig,
-} from '../../config/runner';
+} from '#checkers';
+import type { CheckerPreset } from '#config/runner';
+import { getActiveCheckers, type ResolvedLiminaConfig } from '#config/runner';
+import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import {
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
-} from '../../utils/path';
-import type { GeneratedTsconfigGraphResult } from '../build-graph/generated/runner';
+} from '#utils/path';
+import { existsSync, statSync } from 'node:fs';
+import path from 'pathe';
+import ts from 'typescript';
 
 export type JsonObject = Record<string, unknown>;
 

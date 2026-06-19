@@ -1,4 +1,4 @@
-import { isLocalPackageDependencySpecifier } from '../core/workspace/actions';
+import { isLocalPackageDependencySpecifier } from '#core/workspace/actions';
 
 export interface DistPackageJson {
   dependencies?: Record<string, string>;

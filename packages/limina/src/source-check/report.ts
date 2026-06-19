@@ -1,11 +1,13 @@
-import path from 'pathe';
-import rawPicomatch from 'picomatch';
-import type { ResolvedLiminaConfig } from '../config/runner';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import {
   normalizeAbsolutePath,
   normalizeSlashes,
   toRelativePath,
-} from '../utils/path';
+} from '#utils/path';
+import boxen from 'boxen';
+import path from 'pathe';
+import rawPicomatch from 'picomatch';
+import { formatCheckSummaryBlock } from '../reporting';
 
 export const SOURCE_ISSUE_CODES = {
   unusedModule: 'LIMINA_SOURCE_UNUSED_MODULE',
@@ -47,6 +49,9 @@ export type SourceCheckIssue =
 
 const DEFAULT_DETAIL_LIMIT = 5;
 const DEFAULT_COMMAND = 'limina check';
+const ISSUE_BLOCK_MIN_WIDTH = 88;
+const ISSUE_BLOCK_HORIZONTAL_PADDING = 2;
+const ISSUE_BLOCK_BORDER_WIDTH = 2;
 
 const picomatch = rawPicomatch as unknown as (
   pattern: string,
@@ -586,6 +591,196 @@ function formatLegacyProblems(
   ];
 }
 
+function getLineWrapPrefix(line: string): {
+  content: string;
+  firstPrefix: string;
+  nextPrefix: string;
+} {
+  const firstPrefix = /^\s*(?:-\s+|\d+\.\s+)?/u.exec(line)?.[0] ?? '';
+
+  return {
+    content: line.slice(firstPrefix.length),
+    firstPrefix,
+    nextPrefix: ' '.repeat(firstPrefix.length),
+  };
+}
+
+function getIssueBlockContentWidth(blockWidth: number): number {
+  return Math.max(
+    1,
+    blockWidth - ISSUE_BLOCK_BORDER_WIDTH - ISSUE_BLOCK_HORIZONTAL_PADDING,
+  );
+}
+
+function isFilesHeading(line: string): boolean {
+  return line === 'files:' || line === 'files by scope:';
+}
+
+function getRequiredFilesLineWidth(lines: readonly string[]): number {
+  let inFilesSection = false;
+  let requiredWidth = 0;
+
+  for (const line of lines) {
+    if (isFilesHeading(line)) {
+      inFilesSection = true;
+      continue;
+    }
+
+    if (!inFilesSection) {
+      continue;
+    }
+
+    if (/^\s+-\s+\S/u.test(line)) {
+      requiredWidth = Math.max(requiredWidth, line.length);
+    }
+  }
+
+  return requiredWidth;
+}
+
+function getIssueBlockWidth(lines: readonly string[]): number {
+  const requiredFilesWidth =
+    getRequiredFilesLineWidth(lines) +
+    ISSUE_BLOCK_BORDER_WIDTH +
+    ISSUE_BLOCK_HORIZONTAL_PADDING;
+
+  return Math.max(ISSUE_BLOCK_MIN_WIDTH, requiredFilesWidth);
+}
+
+function wrapIssueLine(line: string, contentWidth: number): string[] {
+  if (!line) {
+    return [line];
+  }
+
+  const { content, firstPrefix, nextPrefix } = getLineWrapPrefix(line);
+  const continuationWidth = Math.max(1, contentWidth - firstPrefix.length);
+
+  if (content.length <= continuationWidth) {
+    return [line];
+  }
+
+  const wrapped: string[] = [];
+  let current = '';
+
+  const splitLongWord = (word: string): string[] => {
+    const chunks: string[] = [];
+
+    if (word.includes('/')) {
+      let chunk = '';
+      const pathParts = word
+        .split('/')
+        .map((part, index, parts) =>
+          index === parts.length - 1 ? part : `${part}/`,
+        );
+
+      for (const part of pathParts) {
+        if (part.length > continuationWidth) {
+          if (chunk) {
+            chunks.push(chunk);
+            chunk = '';
+          }
+
+          for (let index = 0; index < part.length; index += continuationWidth) {
+            chunks.push(part.slice(index, index + continuationWidth));
+          }
+
+          continue;
+        }
+
+        if (chunk && chunk.length + part.length > continuationWidth) {
+          chunks.push(chunk);
+          chunk = '';
+        }
+
+        chunk = `${chunk}${part}`;
+      }
+
+      if (chunk) {
+        chunks.push(chunk);
+      }
+
+      return chunks;
+    }
+
+    for (let index = 0; index < word.length; index += continuationWidth) {
+      chunks.push(word.slice(index, index + continuationWidth));
+    }
+
+    return chunks;
+  };
+
+  const pushLongWord = (word: string): void => {
+    wrapped.push(...splitLongWord(word));
+  };
+
+  for (const word of content.split(/\s+/u)) {
+    if (!word) {
+      continue;
+    }
+
+    if (!current) {
+      if (word.length > continuationWidth) {
+        pushLongWord(word);
+        continue;
+      }
+
+      current = word;
+      continue;
+    }
+
+    if (current.length + 1 + word.length <= continuationWidth) {
+      current = `${current} ${word}`;
+      continue;
+    }
+
+    wrapped.push(current);
+    current = '';
+
+    if (word.length > continuationWidth) {
+      pushLongWord(word);
+      continue;
+    }
+
+    current = word;
+  }
+
+  if (current) {
+    wrapped.push(current);
+  }
+
+  return wrapped.map((part, index) =>
+    index === 0 ? `${firstPrefix}${part}` : `${nextPrefix}${part}`,
+  );
+}
+
+function formatIssueBlock(
+  lines: readonly string[],
+  options: { title?: string } = {},
+): string[] {
+  const width = getIssueBlockWidth(lines);
+  const contentWidth = getIssueBlockContentWidth(width);
+  const wrappedLines = lines.flatMap((line) =>
+    wrapIssueLine(line, contentWidth),
+  );
+
+  return boxen(wrappedLines.join('\n'), {
+    borderStyle: 'single',
+    padding: {
+      left: 1,
+      right: 1,
+    },
+    title: options.title,
+    width,
+  }).split('\n');
+}
+
+function formatSummaryBlock(summaryLines: readonly string[]): string[] {
+  return formatCheckSummaryBlock({
+    lines: summaryLines,
+    title: 'Source check summary',
+  });
+}
+
 export function formatSourceCheckHumanReport(options: {
   config: ResolvedLiminaConfig;
   issues: readonly SourceCheckIssue[];
@@ -666,7 +861,7 @@ export function formatSourceCheckHumanReport(options: {
     }
 
     if (summaryLines.length > 0) {
-      lines.push(...summaryLines, '');
+      lines.push(...formatSummaryBlock(summaryLines), '');
     }
   }
 
@@ -688,9 +883,11 @@ export function formatSourceCheckHumanReport(options: {
     }
 
     lines.push(
-      ...(report.verbose
-        ? formatVerboseUnusedModuleGroup(options.config, group)
-        : formatDefaultUnusedModuleGroup(options.config, group, report)),
+      ...formatIssueBlock(
+        report.verbose
+          ? formatVerboseUnusedModuleGroup(options.config, group)
+          : formatDefaultUnusedModuleGroup(options.config, group, report),
+      ),
     );
   }
 
@@ -699,7 +896,11 @@ export function formatSourceCheckHumanReport(options: {
       lines.push('');
     }
 
-    lines.push(...formatUnusedDependencyGroup(options.config, group, report));
+    lines.push(
+      ...formatIssueBlock(
+        formatUnusedDependencyGroup(options.config, group, report),
+      ),
+    );
   }
 
   const legacyProblems =

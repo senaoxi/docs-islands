@@ -1,12 +1,13 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
+import type { WorkspacePackage } from '#core/workspace/actions';
+import { isNamedWorkspacePackage } from '#core/workspace/actions';
+import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import type { JSONReport } from 'knip';
 import { execFile } from 'node:child_process';
 import { access, mkdir, mkdtemp, rm, rmdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'pathe';
-import type { ResolvedLiminaConfig } from '../config/runner';
-import type { WorkspacePackage } from '../core/workspace/actions';
-import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
 interface KnipUnusedWorkspaceDependencyIssue {
   dependencyName: string;
@@ -272,7 +273,9 @@ function createIgnoredDependenciesByWorkspace(options: {
 }): Record<string, KnipWorkspaceConfig> {
   const ignoredByWorkspace: Record<string, KnipWorkspaceConfig> = {};
 
-  for (const workspacePackage of options.workspacePackages) {
+  for (const workspacePackage of options.workspacePackages.filter(
+    isNamedWorkspacePackage,
+  )) {
     const dependencies = [...options.ignoredKeys]
       .flatMap((dependencyKey) => {
         const [importerName, dependencyName] = dependencyKey.split('\0');
@@ -695,7 +698,9 @@ export async function collectKnipSourceIssues(options: {
   );
 
   const workspacePackageNames = new Set(
-    options.workspacePackages.map((workspacePackage) => workspacePackage.name),
+    options.workspacePackages
+      .filter(isNamedWorkspacePackage)
+      .map((workspacePackage) => workspacePackage.name),
   );
 
   return {

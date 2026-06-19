@@ -1,15 +1,15 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import ts from 'typescript';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resolveModuleNameWithOxc } from '../core/import-analysis/runner';
+import { resolveModuleNameWithOxc } from '#core/import-analysis/runner';
 import {
   clearImportAnalysisCache,
   collectImportsFromFile,
   createImportAnalysisContext,
   resolveInternalImport,
-} from '../core/import-graph/context';
+} from '#core/import-graph/context';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import ts from 'typescript';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 async function createTempDir(): Promise<string> {
   return await mkdtemp(path.join(tmpdir(), 'limina-import-analysis-'));

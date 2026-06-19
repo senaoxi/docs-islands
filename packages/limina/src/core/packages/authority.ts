@@ -1,7 +1,12 @@
 import path from 'pathe';
 
-import { isRelativeSpecifier } from '../import-graph/context';
-import type { PackageManifest, WorkspacePackage } from '../workspace/actions';
+import { isRelativeSpecifier } from '#core/import-graph/context';
+import type {
+  NamedWorkspacePackage,
+  PackageManifest,
+  WorkspacePackage,
+} from '#core/workspace/actions';
+import { isNamedWorkspacePackage } from '#core/workspace/actions';
 
 export interface PackageImportMatch {
   key: string;
@@ -20,7 +25,7 @@ interface DependencyDeclaration {
 
 export interface WorkspaceDependencyDeclaration {
   dependencyName: string;
-  importer: WorkspacePackage;
+  importer: NamedWorkspacePackage;
   packageJsonPath: string;
   sectionName: DependencySectionName;
   specifier: string;
@@ -100,7 +105,7 @@ export function createWorkspaceDependencyKey(
 }
 
 function getWorkspacePackageJsonPath(
-  workspacePackage: WorkspacePackage,
+  workspacePackage: NamedWorkspacePackage,
 ): string {
   return path.join(workspacePackage.directory, 'package.json');
 }
@@ -125,12 +130,15 @@ function getDependencySection(
 export function collectWorkspaceDependencyDeclarations(
   workspacePackages: WorkspacePackage[],
 ): WorkspaceDependencyDeclaration[] {
+  const namedWorkspacePackages = workspacePackages.filter(
+    isNamedWorkspacePackage,
+  );
   const workspacePackageNames = new Set(
-    workspacePackages.map((workspacePackage) => workspacePackage.name),
+    namedWorkspacePackages.map((workspacePackage) => workspacePackage.name),
   );
   const declarations: WorkspaceDependencyDeclaration[] = [];
 
-  for (const importer of workspacePackages) {
+  for (const importer of namedWorkspacePackages) {
     for (const sectionName of dependencySectionNames) {
       const section = getDependencySection(importer.manifest, sectionName);
 

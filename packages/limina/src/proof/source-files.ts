@@ -3,14 +3,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'pathe';
 import { glob } from 'tinyglobby';
 
-import { getCheckerExtensions, normalizeExtensions } from '../checkers';
-import { getActiveCheckers, type ResolvedLiminaConfig } from '../config/runner';
-import { createExtensionPattern } from '../core/tsconfig/actions';
+import { getCheckerExtensions, normalizeExtensions } from '#checkers';
+import { getActiveCheckers, type ResolvedLiminaConfig } from '#config/runner';
+import { createExtensionPattern } from '#core/tsconfig/actions';
 import {
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
-} from '../utils/path';
+} from '#utils/path';
 
 const defaultSourceIncludeExtensions = [
   '.ts',

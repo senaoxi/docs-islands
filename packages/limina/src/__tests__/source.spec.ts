@@ -1,18 +1,26 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
-import { runSourceCheck } from '../commands/source';
 import type {
   GraphConfig,
   ResolvedLiminaConfig,
   SourceBoundaryConfig,
   SourceCheckConfig,
   SourceKnipWorkspaceConfig,
-} from '../config/runner';
+} from '#config/runner';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import { runSourceCheck } from '../commands/source';
 import { SourceLogger } from '../logger';
 import type { KnipCliInvocation } from '../source-check/knip';
-import { SOURCE_ISSUE_CODES } from '../source-check/report';
+import {
+  formatSourceCheckHumanReport,
+  SOURCE_ISSUE_CODES,
+  type SourceCheckIssue,
+} from '../source-check/report';
+import {
+  readCheckIssueSnapshot,
+  readSourceIssueSnapshot,
+} from '../source-check/snapshot';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -36,8 +44,16 @@ async function createFixture(
   const rootDir = await realpath(
     await mkdtemp(path.join(tmpdir(), 'limina-source-')),
   );
+  const fixtureFiles = {
+    'package.json': stringifyConfig({
+      name: 'root',
+      private: true,
+    }),
+    'pnpm-workspace.yaml': 'packages:\n  - app\n  - packages/*\n',
+    ...files,
+  };
 
-  for (const [relativePath, text] of Object.entries(files)) {
+  for (const [relativePath, text] of Object.entries(fixtureFiles)) {
     await writeText(path.join(rootDir, relativePath), text);
   }
 
@@ -438,6 +454,54 @@ describe('runSourceCheck package authority', () => {
         'export interface Peer { value: string }\n',
       ),
     });
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('allows nameless workspace package owners for path-based source checks', async () => {
+    const fixture = await createFixture(
+      {
+        ...createWorkspaceRootFiles(),
+        'packages/fixture/package.json': stringifyConfig({
+          private: true,
+          type: 'module',
+        }),
+        'packages/fixture/src/index.ts': 'export const value = 1;\n',
+        'packages/fixture/tsconfig.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
+        }),
+        'packages/fixture/tsconfig.lib.dts.json': buildConfig({
+          include: ['src/**/*.ts'],
+        }),
+        'packages/fixture/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+        'pnpm-workspace.yaml': `
+packages:
+  - packages/*
+`,
+        'tsconfig.build.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './packages/fixture/tsconfig.lib.dts.json',
+            },
+          ],
+        }),
+      },
+      {
+        source: {
+          knip: false,
+        },
+      },
+    );
 
     try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
@@ -1709,6 +1773,76 @@ packages:
     }
   });
 
+  it('does not allow source.knip workspace config to target a nameless workspace package', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture(
+      createWorkspacePackageFiles({
+        appManifest: {
+          name: undefined,
+        },
+        appSource: 'export const value = 1;\n',
+      }),
+      {
+        source: {
+          knip: {
+            workspaces: {
+              '@example/app': {
+                ignoreFiles: [],
+              },
+            },
+          },
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain(
+        'workspace config keys must name packages discovered in the pnpm workspace',
+      );
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('ignores nameless workspace package manifests as workspace dependency identities in Knip analysis', async () => {
+    const fixture = await createFixture(
+      createWorkspacePackageFiles({
+        appManifest: {
+          name: undefined,
+        },
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+    );
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          knipRunner: async () =>
+            JSON.stringify({
+              issues: [
+                {
+                  dependencies: [
+                    {
+                      name: '@example/internal',
+                    },
+                  ],
+                  file: 'packages/app/package.json',
+                },
+              ],
+            }),
+        }),
+      ).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('ignores raw source.knip fields instead of passing them through to Knip', async () => {
     const fixture = await createFixture(
       createWorkspacePackageFiles({
@@ -2155,6 +2289,137 @@ packages:
     }
   });
 
+  it('renders unused source summaries in a titled aligned box', async () => {
+    const fixture = await createFixture({});
+    const packageJsonPath = path.join(
+      fixture.rootDir,
+      'packages/app/package.json',
+    );
+    const issues = [
+      {
+        code: SOURCE_ISSUE_CODES.unusedModule,
+        filePath: path.join(fixture.rootDir, 'packages/app/src/dead.ts'),
+        ownerDirectory: path.join(fixture.rootDir, 'packages/app'),
+        ownerName: '@example/app',
+        packageJsonPath,
+      },
+      {
+        code: SOURCE_ISSUE_CODES.unusedWorkspaceDependency,
+        dependencyName: '@example/internal',
+        ownerName: '@example/app',
+        packageJsonPath,
+        sectionName: 'dependencies',
+        specifier: 'workspace:*',
+      },
+    ] satisfies SourceCheckIssue[];
+
+    try {
+      const report = formatSourceCheckHumanReport({
+        config: fixture.config,
+        issues,
+        legacyProblems: [],
+        report: {
+          command: 'limina check',
+        },
+      });
+      const summaryLines = report
+        .split('\n')
+        .filter((line) => line.includes('Found '));
+
+      expect(report).toContain('Source check summary');
+      expect(report).toMatch(
+        /│ Found 1 unused source module in 1 package\.\s+│/u,
+      );
+      expect(report).toMatch(
+        /│ Found 1 unused workspace package dependency in 1 package\.\s+│/u,
+      );
+      expect(summaryLines.map((line) => line.indexOf('Found'))).toEqual([2, 2]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('writes the last-run source issue snapshot for failed structured issues', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+      'packages/app/src/dead.ts': 'export const deadValue = 1;\n',
+    });
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          report: {
+            command: 'limina check',
+          },
+        }),
+      ).resolves.toBe(false);
+
+      const snapshot = await readSourceIssueSnapshot(fixture.rootDir);
+
+      expect(snapshot).toMatchObject({
+        command: 'limina check',
+        legacyProblemCount: 0,
+        status: 'completed',
+      });
+      expect(snapshot?.issues).toEqual([
+        {
+          code: SOURCE_ISSUE_CODES.unusedModule,
+          filePath: 'packages/app/src/dead.ts',
+          ownerName: '@example/app',
+        },
+      ]);
+
+      const checkSnapshot = await readCheckIssueSnapshot(fixture.rootDir);
+
+      expect(checkSnapshot?.issues).toContainEqual({
+        code: SOURCE_ISSUE_CODES.unusedModule,
+        filePath: 'packages/app/src/dead.ts',
+        packageName: '@example/app',
+        reason: expect.any(String),
+        scope: 'packages/app/src',
+        task: 'source:check',
+        title: 'Unused source module',
+      });
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('writes an empty last-run source issue snapshot for passing checks', async () => {
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+    });
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          report: {
+            command: 'limina source check',
+          },
+        }),
+      ).resolves.toBe(true);
+
+      const snapshot = await readSourceIssueSnapshot(fixture.rootDir);
+
+      expect(snapshot).toMatchObject({
+        command: 'limina source check',
+        issues: [],
+        legacyProblemCount: 0,
+        status: 'completed',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('groups and truncates unused source modules by default', async () => {
     const errorSpy = vi
       .spyOn(SourceLogger, 'error')
@@ -2190,6 +2455,50 @@ packages:
       expect(errors).toContain('... 1 more');
       expect(errors).toContain('Show all files:');
       expect(errors).toContain('limina check --verbose');
+      expect(errors).toMatch(/┌─+┐\n│\s*@example\/app\s+│/u);
+      expect(errors).toMatch(
+        /│ package manifest: packages\/app\/package\.json\s+│/u,
+      );
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('expands unused source module report boxes to fit the longest file path', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const longUnusedFilePath =
+      'packages/app/src/features/really/deeply/nested/module/with/an/excessively/descriptive/generated-unused-component-entry-point.ts';
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+      [longUnusedFilePath]: 'export const deadValue = 1;\n',
+    });
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          report: {
+            command: 'limina check',
+          },
+        }),
+      ).resolves.toBe(false);
+
+      const errors = errorSpy.mock.calls.join('\n');
+      const boxedLines = errors
+        .split('\n')
+        .filter((line) => /^[┌│└]/u.test(line));
+      const expectedBoxWidth = longUnusedFilePath.length + '  - '.length + 4;
+      const fileLine = boxedLines.find((line) =>
+        line.includes(longUnusedFilePath),
+      );
+
+      expect(boxedLines.length).toBeGreaterThan(0);
+      expect(fileLine).toBe(`│   - ${longUnusedFilePath} │`);
+      expect(fileLine?.length).toBe(expectedBoxWidth);
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();

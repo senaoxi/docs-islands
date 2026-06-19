@@ -1,4 +1,5 @@
-import { isPathInsideDirectory } from '../utils/path';
+import type { PackageOwner, WorkspacePackage } from '#core/workspace/actions';
+import { isPathInsideDirectory } from '#utils/path';
 import type { BuildGraphCore } from './build-graph';
 import type { WorkspaceDependencyDeclaration } from './packages/authority';
 import {
@@ -8,7 +9,6 @@ import {
 } from './packages/owners';
 import type { TsconfigCore } from './tsconfig';
 import type { WorkspaceCore } from './workspace';
-import type { PackageOwner, WorkspacePackage } from './workspace/actions';
 
 export interface PackageDomain {
   owner: PackageOwner | null;

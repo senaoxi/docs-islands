@@ -1,5 +1,12 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { createElapsedTimer } from 'logaria/helper';
-import type { ResolvedLiminaConfig } from '../config/runner';
+import { formatCheckIssueHumanReport } from '../check-reporting/human';
+import {
+  appendCheckIssues,
+  appendTaskFailureIssueIfMissing,
+  completeCheckIssueSnapshot,
+  createTaskFailureIssue,
+} from '../check-reporting/snapshot';
 import { clearCliScreen, formatErrorMessage, ProofLogger } from '../logger';
 import { runProofCheckImpl, type RunProofCheckOptions } from '../proof/runner';
 
@@ -18,7 +25,9 @@ export async function runProofCheck(
     depth: options.flowDepth ?? 0,
   });
 
-  ProofLogger.info('proof check started');
+  if (!options.flow) {
+    ProofLogger.info('proof check started');
+  }
 
   try {
     const logSuccess = !options.flow?.interactive;
@@ -26,23 +35,63 @@ export async function runProofCheck(
       core: options.core,
       generatedGraphProvider: options.generatedGraphProvider,
       logSuccess,
+      report: options.report,
     });
 
     if (passed) {
+      await completeCheckIssueSnapshot({
+        rootDir: config.rootDir,
+      });
+
       if (logSuccess) {
         ProofLogger.success('proof check finished', elapsed());
       }
 
       task?.pass();
     } else {
-      ProofLogger.error('proof check finished with failures', elapsed());
+      await appendTaskFailureIssueIfMissing({
+        issue: createTaskFailureIssue({
+          code: 'LIMINA_PROOF_CHECK_FAILED',
+          filePath: config.configPath,
+          fix: 'Inspect the proof check report above, then adjust checker coverage, config.source, or proof.allowlist.',
+          reason:
+            'Proof check found source coverage or checker graph proof violations.',
+          rootDir: config.rootDir,
+          task: 'proof:check',
+          title: 'Proof check failed',
+        }),
+        rootDir: config.rootDir,
+      });
+      if (!options.flow) {
+        ProofLogger.error('proof check finished with failures', elapsed());
+      }
       task?.fail('proof check finished with failures');
     }
 
     return passed;
   } catch (error) {
+    const issue = createTaskFailureIssue({
+      code: 'LIMINA_PROOF_CHECK_FAILED',
+      detailLines: [formatErrorMessage(error)],
+      filePath: config.configPath,
+      fix: 'Inspect the proof check error above, then rerun `limina proof check` or `limina check`.',
+      reason: `Proof check failed: ${formatErrorMessage(error)}.`,
+      rootDir: config.rootDir,
+      task: 'proof:check',
+      title: 'Proof check failed',
+    });
+
+    await appendCheckIssues({
+      issues: [issue],
+      rootDir: config.rootDir,
+    });
     ProofLogger.error(
-      `proof check failed: ${formatErrorMessage(error)}`,
+      formatCheckIssueHumanReport({
+        command: options.report?.command ?? 'limina proof check',
+        issues: [issue],
+        title: 'Proof check summary',
+        verbose: options.report?.verbose,
+      }),
       elapsed(),
     );
     task?.fail('proof check failed', { error });

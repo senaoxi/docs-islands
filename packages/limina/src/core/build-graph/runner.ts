@@ -1,8 +1,3 @@
-import { existsSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import path from 'pathe';
-import { glob } from 'tinyglobby';
-import type ts from 'typescript';
 import {
   type CheckerProjectParseContext,
   getBuildCheckerSupportedExtensions,
@@ -10,43 +5,48 @@ import {
   getCheckerExtensions,
   parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
-} from '../../../checkers';
+} from '#checkers';
 import {
   getActiveCheckers,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
-} from '../../../config/runner';
-import {
-  normalizeAbsolutePath,
-  toPosixPath,
-  toRelativePath,
-} from '../../../utils/path';
-import type { ImportAnalysisContext } from '../../import-analysis/runner';
+} from '#config/runner';
+import type { ImportAnalysisContext } from '#core/import-analysis/runner';
 import {
   collectImportsFromFile,
   createFileOwnerLookup,
   createImportAnalysisContext,
   formatImportRecordLocation,
   resolveInternalImport,
-} from '../../import-graph/context';
+} from '#core/import-graph/context';
 import {
   collectReferencePathInfosForConfig,
   createLiminaTsconfigSchemaPath,
   isOrdinarySourceTypecheckConfigPath,
   type JsonObject,
   readJsonConfig,
-} from '../../tsconfig/actions';
+} from '#core/tsconfig/actions';
 import {
   collectWorkspacePackages,
   type WorkspacePackage,
-} from '../../workspace/actions';
+} from '#core/workspace/actions';
+import {
+  normalizeAbsolutePath,
+  toPosixPath,
+  toRelativePath,
+} from '#utils/path';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'pathe';
+import { glob } from 'tinyglobby';
+import type ts from 'typescript';
 import {
   type GeneratedKnipPackageConfig,
   type GeneratedKnipPackageDiagnostic,
   prepareGeneratedKnipPackageConfigs,
   resolveGeneratedKnipPackageConfigs,
   resolveGeneratedKnipPackageDiagnostics,
-} from '../generated-knip';
+} from './generated-knip';
 import {
   addSourceReferenceConfigProblems,
   collectTypeRootCandidates,
@@ -55,11 +55,11 @@ import {
   readGraphRules,
   readImplicitRefs,
   readRelativeTypeFiles,
-} from './config-readers';
+} from './generated/config-readers';
 import {
   capabilityDiscoveryExtensions,
   getFileExtension,
-} from './file-extensions';
+} from './generated/file-extensions';
 import {
   createRelativePath,
   generatedManifestPath,
@@ -70,12 +70,12 @@ import {
   getGeneratedOutDir,
   getGeneratedSolutionBuildConfigPath,
   getGeneratedTsBuildInfoPath,
-} from './paths';
+} from './generated/paths';
 import {
   addDuplicateCheckerOwnershipProblems,
   addOverlappingCheckerEntryProblems,
   addUnsupportedSourceConfigExtensionProblems,
-} from './validation';
+} from './generated/validation';
 
 const sourceDiscoveryIgnore = [
   '**/.git/**',
@@ -86,7 +86,7 @@ const sourceDiscoveryIgnore = [
   '**/node_modules/**',
 ];
 
-export interface GeneratedCheckerManifest {
+interface GeneratedCheckerManifest {
   preset: string;
   entry: string;
   roots: string[];
@@ -95,7 +95,7 @@ export interface GeneratedCheckerManifest {
   dtsToSource: Record<string, string>;
 }
 
-export interface GeneratedProviderEdgeManifest {
+interface GeneratedProviderEdgeManifest {
   file: string;
   fromChecker: string;
   fromConfig: string;

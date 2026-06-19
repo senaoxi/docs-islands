@@ -1,26 +1,27 @@
-import path from 'pathe';
-import type { ResolvedLiminaConfig } from '../config/runner';
-import { createLiminaCore, type LiminaCore } from '../core';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import { createLiminaCore, type LiminaCore } from '#core';
 import {
   collectImportsFromFile,
   createFileOwnerLookup,
   findPackageForFile,
   type ProjectInfo,
   resolveInternalImport,
-} from '../core/import-graph/context';
+} from '#core/import-graph/context';
 import {
   findPackageForSpecifier,
+  isNamedWorkspacePackage,
   type WorkspacePackage,
-} from '../core/workspace/actions';
-import {
-  createWorkspaceExportsResolutionIndex,
-  type WorkspaceExportsResolutionProfile,
-} from '../core/workspace/exports';
+} from '#core/workspace/actions';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   toRelativePath,
-} from '../utils/path';
+} from '#utils/path';
+import path from 'pathe';
+import {
+  createWorkspaceExportsResolutionIndex,
+  type WorkspaceExportsResolutionProfile,
+} from '../core/workspace/exports';
 
 export type DependencyGraphView = 'all' | 'artifact' | 'source';
 export type DependencyGraphEdgeKind = 'artifact' | 'source';
@@ -111,6 +112,7 @@ function createNodes(
   workspacePackages: WorkspacePackage[],
 ): DependencyGraphNode[] {
   return workspacePackages
+    .filter(isNamedWorkspacePackage)
     .map((workspacePackage) => ({
       id: createPackageNodeId(workspacePackage.name),
       kind: 'package' as const,
@@ -231,6 +233,28 @@ function classifyEdge(options: {
   return null;
 }
 
+function addNamelessGraphPackageProblem(options: {
+  config: ResolvedLiminaConfig;
+  importRecord: { filePath: string; specifier: string };
+  packageRole: 'importer' | 'target';
+  problems: string[];
+  resolvedFilePath: string;
+  workspacePackage: WorkspacePackage;
+}): void {
+  options.problems.push(
+    [
+      'Dependency graph package identity requires package.json name:',
+      `  package.json: ${toRelativePath(options.config.rootDir, path.join(options.workspacePackage.directory, 'package.json'))}`,
+      `  role: ${options.packageRole}`,
+      `  file: ${toRelativePath(options.config.rootDir, options.importRecord.filePath)}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  resolved file: ${toRelativePath(options.config.rootDir, options.resolvedFilePath)}`,
+      '  reason: dependency graph nodes and edges are keyed by package name; nameless workspace packages can be source owners but cannot appear as dependency graph nodes.',
+      '  fix: add a non-empty package.json name when this workspace package should appear in the dependency graph.',
+    ].join('\n'),
+  );
+}
+
 export async function collectDependencyGraph(
   config: ResolvedLiminaConfig,
   options: CollectDependencyGraphOptions = {},
@@ -315,7 +339,10 @@ export async function collectDependencyGraph(
           resolvedFilePath,
         });
 
-        if (!targetPackage || targetPackage.name === importerPackage.name) {
+        if (
+          !targetPackage ||
+          targetPackage.directory === importerPackage.directory
+        ) {
           continue;
         }
 
@@ -327,6 +354,30 @@ export async function collectDependencyGraph(
         });
 
         if (!edgeKind || (view !== 'all' && view !== edgeKind)) {
+          continue;
+        }
+
+        if (!isNamedWorkspacePackage(importerPackage)) {
+          addNamelessGraphPackageProblem({
+            config,
+            importRecord,
+            packageRole: 'importer',
+            problems,
+            resolvedFilePath,
+            workspacePackage: importerPackage,
+          });
+          continue;
+        }
+
+        if (!isNamedWorkspacePackage(targetPackage)) {
+          addNamelessGraphPackageProblem({
+            config,
+            importRecord,
+            packageRole: 'target',
+            problems,
+            resolvedFilePath,
+            workspacePackage: targetPackage,
+          });
           continue;
         }
 
@@ -342,6 +393,10 @@ export async function collectDependencyGraph(
         });
       }
     }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(problems.join('\n\n'));
   }
 
   const nodes = createNodes(config, workspacePackages);

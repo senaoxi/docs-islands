@@ -53,7 +53,7 @@ function getNpmCommand(): string {
 }
 
 function readJsonFile<T>(filePath: string): T {
-  return JSON.parse(readFileSync(filePath, 'utf8')) as T;
+  return JSON.parse(readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '')) as T;
 }
 
 function runCommand(

@@ -1,3 +1,4 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { createHash } from 'node:crypto';
 import {
   chmod,
@@ -10,7 +11,6 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config/runner';
 import { LiminaFlowReporter } from '../flow';
 import {
   normalizePipelineStep,
@@ -226,7 +226,11 @@ describe('runPipeline', () => {
         ),
       ).toBe(true);
       expect(
-        chunks.some((chunk) => chunk.includes('[skip] skipped: checker:build')),
+        chunks.some((chunk) =>
+          chunk.includes(
+            '[skip] skipped: checker:build (blocked by proof:check)',
+          ),
+        ),
       ).toBe(true);
     } finally {
       await fixture.cleanup();

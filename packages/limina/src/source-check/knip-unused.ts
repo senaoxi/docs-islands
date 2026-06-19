@@ -1,22 +1,23 @@
 import path from 'pathe';
 
-import type { ResolvedLiminaConfig } from '../config/runner';
-import {
-  createWorkspaceDependencyKey,
-  type WorkspaceDependencyDeclaration,
-} from '../core/packages/authority';
-import { findOwnerForFile } from '../core/packages/owners';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import type {
   PackageManifest,
   PackageOwner,
   WorkspacePackage,
-} from '../core/workspace/actions';
+} from '#core/workspace/actions';
+import { isNamedWorkspacePackage } from '#core/workspace/actions';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   normalizeSlashes,
   toRelativePath,
-} from '../utils/path';
+} from '#utils/path';
+import {
+  createWorkspaceDependencyKey,
+  type WorkspaceDependencyDeclaration,
+} from '../core/packages/authority';
+import { findOwnerForFile } from '../core/packages/owners';
 import {
   formatSourceKnipWorkspaceField,
   type SourceKnipWorkspaceConfigRecord,
@@ -65,7 +66,9 @@ export function collectUnusedDependencyIgnore(options: {
 }): Set<string> {
   const ignoredKeys = new Set<string>();
   const workspacePackageNames = new Set(
-    options.workspacePackages.map((workspacePackage) => workspacePackage.name),
+    options.workspacePackages
+      .filter(isNamedWorkspacePackage)
+      .map((workspacePackage) => workspacePackage.name),
   );
   const declarationKeys = new Set(
     options.declarations.map((declaration) =>

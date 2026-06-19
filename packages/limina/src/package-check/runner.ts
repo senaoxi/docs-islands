@@ -1,4 +1,18 @@
 import type {
+  PackageAttwCheckConfig,
+  PackageAttwIgnoreRule,
+  PackageAttwProfile,
+  PackageCheckTool,
+  PackageCheckToolSelection,
+  PackageEntry,
+  PackagePublintCheckConfig,
+  ResolvedLiminaConfig,
+  RuntimeEnvironment,
+} from '#config/runner';
+import type { LiminaCore } from '#core';
+import { getPackageRootSpecifier } from '#core/workspace/actions';
+import { toRelativePath } from '#utils/path';
+import type {
   checkPackage,
   CheckPackageOptions,
   createPackageFromTarballData,
@@ -14,22 +28,13 @@ import { tmpdir } from 'node:os';
 import path from 'pathe';
 import type { publint } from 'publint';
 import type { formatMessage } from 'publint/utils';
-import type {
-  PackageAttwCheckConfig,
-  PackageAttwIgnoreRule,
-  PackageAttwProfile,
-  PackageCheckTool,
-  PackageCheckToolSelection,
-  PackageEntry,
-  PackagePublintCheckConfig,
-  ResolvedLiminaConfig,
-  RuntimeEnvironment,
-} from '../config/runner';
-import type { LiminaCore } from '../core';
-import { getPackageRootSpecifier } from '../core/workspace/actions';
+import type { CheckIssueReportOptions } from '../check-reporting/human';
+import {
+  createTaskFailureIssue,
+  type LiminaCheckIssue,
+} from '../check-reporting/snapshot';
 import type { LiminaFlowReporter } from '../flow';
 import { formatErrorMessage, PackageLogger } from '../logger';
-import { toRelativePath } from '../utils/path';
 import {
   createPackageEntrySelectionPlan,
   type PackageEntrySelectionPlan,
@@ -77,7 +82,9 @@ export interface RunPackageCheckOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  issues?: LiminaCheckIssue[];
   packageNames?: readonly string[];
+  report?: CheckIssueReportOptions;
   tool?: PackageCheckToolSelection;
 }
 const ATTW_PROFILE_IGNORED_RESOLUTIONS: Record<PackageAttwProfile, string[]> = {
@@ -122,6 +129,36 @@ function createMissingPeerDependencyError(options: {
       `  fix: install it in the workspace running Limina, for example with \`pnpm add -D ${options.packageName}\`.`,
       `  error: ${formatErrorMessage(options.error)}`,
     ].join('\n'),
+  );
+}
+
+function addPackageCheckIssue(options: {
+  code: string;
+  detailLines?: readonly string[];
+  filePath?: string;
+  fix: string;
+  issueSink?: LiminaCheckIssue[];
+  packageManifestPath?: string;
+  packageName?: string;
+  reason: string;
+  rootDir: string;
+  title: string;
+  tool: PackageCheckTool | 'manifest';
+}): void {
+  options.issueSink?.push(
+    createTaskFailureIssue({
+      code: options.code,
+      detailLines: options.detailLines,
+      filePath: options.filePath,
+      fix: options.fix,
+      packageManifestPath: options.packageManifestPath,
+      packageName: options.packageName,
+      reason: options.reason,
+      rootDir: options.rootDir,
+      task: 'package:check',
+      title: options.title,
+      tool: options.tool,
+    }),
   );
 }
 
@@ -439,7 +476,11 @@ async function runPublintCheck(options: {
   config: PackagePublintCheckConfig;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  issueSink?: LiminaCheckIssue[];
   label: string;
+  packageManifestPath: string;
+  packageName?: string;
+  rootDir: string;
   tarball: Buffer;
 }): Promise<boolean> {
   const task = options.flow?.start(`publint: ${options.label}`, {
@@ -470,6 +511,19 @@ async function runPublintCheck(options: {
   for (const message of messages) {
     const rendered = formatMessage(message, pkg) ?? message.code;
 
+    addPackageCheckIssue({
+      code: 'LIMINA_PACKAGE_PUBLINT',
+      detailLines: [`[${options.label}] [publint] ${rendered}`],
+      fix: 'Inspect the publint message and adjust package exports, types, or published files.',
+      issueSink: options.issueSink,
+      packageManifestPath: options.packageManifestPath,
+      packageName: options.packageName,
+      reason: rendered,
+      rootDir: options.rootDir,
+      title: 'Publint package issue',
+      tool: 'publint',
+    });
+
     if (message.type === 'error') {
       PackageLogger.error(`[${options.label}] [publint] ${rendered}`);
       continue;
@@ -494,8 +548,12 @@ async function runAttwCheck(options: {
   config: PackageAttwCheckConfig;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  issueSink?: LiminaCheckIssue[];
   label: string;
+  packageManifestPath: string;
+  packageName?: string;
   profile: PackageAttwProfile;
+  rootDir: string;
   tarball: Buffer;
 }): Promise<boolean> {
   const task = options.flow?.start(`attw: ${options.label}`, {
@@ -517,6 +575,18 @@ async function runAttwCheck(options: {
   const result = await checkPackage(pkg, checkOptions);
 
   if (!result.types) {
+    addPackageCheckIssue({
+      code: 'LIMINA_PACKAGE_ATTW',
+      detailLines: [`[${options.label}] [attw] package has no types`],
+      fix: 'Publish type declarations or adjust the package entry/type metadata.',
+      issueSink: options.issueSink,
+      packageManifestPath: options.packageManifestPath,
+      packageName: options.packageName,
+      reason: 'ATTW could not find package types.',
+      rootDir: options.rootDir,
+      title: 'ATTW package issue',
+      tool: 'attw',
+    });
     PackageLogger.error(`[${options.label}] [attw] package has no types`);
     PackageLogger.error(`attw failed: ${options.label}`, attwElapsed());
     task?.fail(`attw failed: ${options.label}`);
@@ -546,6 +616,21 @@ async function runAttwCheck(options: {
 
   for (const problem of problems) {
     const message = `[${options.label}] [attw] ${formatAttwProblem(problem)}`;
+
+    if (options.config.level !== 'warn') {
+      addPackageCheckIssue({
+        code: 'LIMINA_PACKAGE_ATTW',
+        detailLines: [message],
+        fix: 'Inspect the ATTW message and adjust package exports/types for consumer resolution.',
+        issueSink: options.issueSink,
+        packageManifestPath: options.packageManifestPath,
+        packageName: options.packageName,
+        reason: formatAttwProblem(problem),
+        rootDir: options.rootDir,
+        title: 'ATTW package issue',
+        tool: 'attw',
+      });
+    }
 
     if (options.config.level === 'warn') {
       PackageLogger.warn(message);
@@ -577,7 +662,11 @@ async function runBoundaryCheck(
   options: {
     flow?: LiminaFlowReporter;
     flowDepth?: number;
-  } = {},
+    issueSink?: LiminaCheckIssue[];
+    packageManifestPath: string;
+    packageName?: string;
+    rootDir: string;
+  },
 ): Promise<boolean> {
   const task = options.flow?.start(`package boundary: ${label}`, {
     depth: options.flowDepth ?? 0,
@@ -600,6 +689,21 @@ async function runBoundaryCheck(
   }
 
   for (const violation of violations) {
+    addPackageCheckIssue({
+      code: 'LIMINA_PACKAGE_BOUNDARY',
+      detailLines: [
+        `[${label}] [boundary] ${violation.filePath} (${violation.environment}) imports "${violation.specifier}": ${violation.message}`,
+      ],
+      filePath: violation.filePath,
+      fix: 'Remove the import, change the package boundary config, or move the code to an environment that allows this dependency.',
+      issueSink: options.issueSink,
+      packageManifestPath: options.packageManifestPath,
+      packageName: options.packageName,
+      reason: violation.message,
+      rootDir: options.rootDir,
+      title: 'Published package boundary issue',
+      tool: 'boundary',
+    });
     PackageLogger.error(
       `[${label}] [boundary] ${violation.filePath} (${violation.environment}) imports "${violation.specifier}": ${violation.message}`,
     );
@@ -619,6 +723,7 @@ async function runPackageCheckEntry(options: {
   config: ResolvedLiminaConfig;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  issueSink?: LiminaCheckIssue[];
   label: string;
   outDir: string;
   rawEntry: PackageEntry;
@@ -641,6 +746,7 @@ async function runPackageCheckEntry(options: {
       label,
       packageJsonPath: outputPackageJsonPath,
     });
+    const packageName = outputManifest.name;
     const manifestProblems = collectBuiltPackageManifestProblems({
       label,
       manifest: outputManifest,
@@ -682,6 +788,18 @@ async function runPackageCheckEntry(options: {
     let passed = manifestProblems.length === 0;
 
     for (const problem of manifestProblems) {
+      addPackageCheckIssue({
+        code: 'LIMINA_PACKAGE_MANIFEST_INVALID',
+        detailLines: problem.split('\n'),
+        fix: 'Fix the built package manifest before publishing or checking the package output.',
+        issueSink: options.issueSink,
+        packageManifestPath: outputPackageJsonPath,
+        packageName,
+        reason: problem.split('\n')[0] ?? 'Built package manifest is invalid.',
+        rootDir: options.config.rootDir,
+        title: 'Built package manifest issue',
+        tool: 'manifest',
+      });
       PackageLogger.error(problem);
     }
 
@@ -691,7 +809,11 @@ async function runPackageCheckEntry(options: {
           config: getPackagePublintCheckConfig(entry),
           flow: options.flow,
           flowDepth: (options.flowDepth ?? 0) + 1,
+          issueSink: options.issueSink,
           label,
+          packageManifestPath: outputPackageJsonPath,
+          packageName,
+          rootDir: options.config.rootDir,
           tarball: packedDist!.tarball,
         })) && passed;
     }
@@ -704,8 +826,12 @@ async function runPackageCheckEntry(options: {
           config: attwConfig,
           flow: options.flow,
           flowDepth: (options.flowDepth ?? 0) + 1,
+          issueSink: options.issueSink,
           label,
+          packageManifestPath: outputPackageJsonPath,
+          packageName,
           profile: options.attwProfile ?? attwConfig.profile ?? 'esm-only',
+          rootDir: options.config.rootDir,
           tarball: packedDist!.tarball,
         })) && passed;
     }
@@ -721,6 +847,10 @@ async function runPackageCheckEntry(options: {
           {
             flow: options.flow,
             flowDepth: (options.flowDepth ?? 0) + 1,
+            issueSink: options.issueSink,
+            packageManifestPath: outputPackageJsonPath,
+            packageName,
+            rootDir: options.config.rootDir,
           },
         )) && passed;
     }
@@ -854,6 +984,7 @@ export async function runPackageCheckImpl(
         config: options.config,
         flow: options.flow,
         flowDepth: (options.flowDepth ?? 0) + 1,
+        issueSink: options.issues,
         label: entry.label,
         outDir: entry.outDir,
         rawEntry: entry.rawEntry,

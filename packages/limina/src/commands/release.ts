@@ -1,8 +1,19 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
+import type { LiminaCore } from '#core';
+import { isLocalPackageDependencySpecifier } from '#core/workspace/actions';
+import { toRelativePath } from '#utils/path';
 import { createElapsedTimer } from 'logaria/helper';
 import path from 'pathe';
-import type { ResolvedLiminaConfig } from '../config/runner';
-import type { LiminaCore } from '../core';
-import { isLocalPackageDependencySpecifier } from '../core/workspace/actions';
+import {
+  type CheckIssueReportOptions,
+  formatCheckIssueHumanReport,
+} from '../check-reporting/human';
+import {
+  appendCheckIssues,
+  completeCheckIssueSnapshot,
+  createTaskFailureIssue,
+  type LiminaCheckIssue,
+} from '../check-reporting/snapshot';
 import type { LiminaFlowReporter } from '../flow';
 import { clearCliScreen, formatErrorMessage, ReleaseLogger } from '../logger';
 import {
@@ -17,7 +28,6 @@ import {
   packOutputTarball,
   readDistPackageJson,
 } from '../package-check/runner';
-import { toRelativePath } from '../utils/path';
 
 export interface RunReleaseCheckOptions {
   clearScreen?: boolean;
@@ -26,7 +36,9 @@ export interface RunReleaseCheckOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  issues?: LiminaCheckIssue[];
   packageNames?: readonly string[];
+  report?: CheckIssueReportOptions;
 }
 
 function logReleaseCheckPlan(options: {
@@ -133,16 +145,17 @@ async function runReleaseCheckEntry(options: {
   config: ResolvedLiminaConfig;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
+  issueSink?: LiminaCheckIssue[];
   label: string;
   outDir: string;
 }): Promise<boolean> {
   const task = options.flow?.start(`release entry: ${options.label}`, {
     depth: options.flowDepth ?? 0,
   });
+  const outputPackageJsonPath = path.join(options.outDir, 'package.json');
   let packedDist: PackedPackageTarball | undefined;
 
   try {
-    const outputPackageJsonPath = path.join(options.outDir, 'package.json');
     const outputManifest = await readDistPackageJson({
       config: options.config,
       label: options.label,
@@ -202,6 +215,22 @@ async function runReleaseCheckEntry(options: {
     return true;
   } catch (error) {
     if (error instanceof PackageReleaseConsistencyError) {
+      options.issueSink?.push(
+        createTaskFailureIssue({
+          code: 'LIMINA_RELEASE_CONSISTENCY',
+          detailLines: formatErrorMessage(error).split('\n'),
+          filePath: outputPackageJsonPath,
+          fix: 'Inspect the release check report, rebuild the package output, or adjust release metadata before publishing.',
+          packageManifestPath: outputPackageJsonPath,
+          packageName: options.label,
+          reason:
+            'Release check found package output or tarball consistency failures.',
+          rootDir: options.config.rootDir,
+          task: 'release:check',
+          title: 'Release consistency issue',
+          tool: 'release',
+        }),
+      );
       ReleaseLogger.error(formatErrorMessage(error));
       task?.fail(`release checks failed: ${options.label}`);
       return false;
@@ -249,6 +278,7 @@ export async function runReleaseCheck(
     });
 
     let passed = true;
+    const issues = options.issues ?? [];
 
     for (const entry of plan.entries) {
       passed =
@@ -256,26 +286,89 @@ export async function runReleaseCheck(
           config: options.config,
           flow: options.flow,
           flowDepth: (options.flowDepth ?? 0) + 1,
+          issueSink: issues,
           label: entry.label,
           outDir: entry.outDir,
         })) && passed;
     }
 
     if (passed) {
+      await completeCheckIssueSnapshot({
+        rootDir: options.config.rootDir,
+      });
+
       if (!options.flow?.interactive) {
         ReleaseLogger.success('release check finished', elapsed());
       }
 
       task?.pass();
     } else {
-      ReleaseLogger.error('release check finished with failures', elapsed());
+      const reportIssues =
+        issues.length > 0
+          ? issues
+          : [
+              createTaskFailureIssue({
+                code: 'LIMINA_RELEASE_CHECK_FAILED',
+                filePath: options.config.configPath,
+                fix: 'Inspect the release check report above, then rebuild or adjust the selected package output before publishing.',
+                packageName:
+                  options.packageNames?.length === 1
+                    ? options.packageNames[0]
+                    : undefined,
+                reason:
+                  'Release check found package output or tarball consistency failures.',
+                rootDir: options.config.rootDir,
+                task: 'release:check',
+                title: 'Release check failed',
+                tool: 'release',
+              }),
+            ];
+
+      await appendCheckIssues({
+        issues: reportIssues,
+        rootDir: options.config.rootDir,
+      });
+      ReleaseLogger.error(
+        formatCheckIssueHumanReport({
+          command: options.report?.command ?? 'limina release check',
+          issues: reportIssues,
+          title: 'Release check summary',
+          verbose: options.report?.verbose,
+        }),
+        elapsed(),
+      );
       task?.fail('release check finished with failures');
     }
 
     return passed;
   } catch (error) {
+    const issue = createTaskFailureIssue({
+      code: 'LIMINA_RELEASE_CHECK_FAILED',
+      detailLines: [formatErrorMessage(error)],
+      filePath: options.config.configPath,
+      fix: 'Inspect the release check error above, then rerun `limina release check`.',
+      packageName:
+        options.packageNames?.length === 1
+          ? options.packageNames[0]
+          : undefined,
+      reason: `Release check failed: ${formatErrorMessage(error)}.`,
+      rootDir: options.config.rootDir,
+      task: 'release:check',
+      title: 'Release check failed',
+      tool: 'release',
+    });
+
+    await appendCheckIssues({
+      issues: [issue],
+      rootDir: options.config.rootDir,
+    });
     ReleaseLogger.error(
-      `release check failed: ${formatErrorMessage(error)}`,
+      formatCheckIssueHumanReport({
+        command: options.report?.command ?? 'limina release check',
+        issues: [issue],
+        title: 'Release check summary',
+        verbose: options.report?.verbose,
+      }),
       elapsed(),
     );
     task?.fail('release check failed', { error });

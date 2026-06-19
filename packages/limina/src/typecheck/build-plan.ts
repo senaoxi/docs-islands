@@ -1,5 +1,5 @@
+import type { GeneratedProviderEdge } from '#core/build-graph/runner';
 import { availableParallelism } from 'node:os';
-import type { GeneratedProviderEdge } from '../core/build-graph/generated/runner';
 import { runWithConcurrency } from './concurrency';
 import type {
   TypecheckRunner,

@@ -1,3 +1,10 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
+import {
+  collectWorkspacePackages,
+  type PackageManifest,
+  readJsonFile,
+} from '#core/workspace/actions';
+import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import * as prompts from '@clack/prompts';
 import ignore from 'ignore';
 import { createElapsedTimer } from 'logaria/helper';
@@ -7,15 +14,8 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'pathe';
 import { parse as parseYaml } from 'yaml';
-import type { ResolvedLiminaConfig } from '../config/runner';
-import {
-  collectWorkspacePackages,
-  type PackageManifest,
-  readJsonFile,
-} from '../core/workspace/actions';
 import type { LiminaFlowReporter } from '../flow';
 import { clearCliScreen, formatErrorMessage, InitLogger } from '../logger';
-import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
 export interface RunInitOptions {
   clearScreen?: boolean;

@@ -1,17 +1,17 @@
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 
-import type { ResolvedLiminaConfig } from '../config/runner';
-import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import {
   isDtsProjectConfig,
   type ProjectInfo,
-} from '../core/import-graph/context';
+} from '#core/import-graph/context';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   toRelativePath,
-} from '../utils/path';
+} from '#utils/path';
 
 interface CustomConditionSubtreeSummary {
   consistentConditions: string[] | null;

@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 
-import type { ResolvedLiminaConfig } from '../config/runner';
-import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import { formatUnknownValue, isPlainRecord } from './config-values';
 import { addCoverage, type CoverageSource } from './coverage';
 

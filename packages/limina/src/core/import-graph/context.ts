@@ -1,29 +1,29 @@
-import path from 'pathe';
-import type ts from 'typescript';
 import {
   type CheckerProjectParseContext,
   parseCheckerProjectConfigForContext,
-} from '../../checkers';
-import type { ResolvedLiminaConfig } from '../../config/runner';
-import type { ImportRecord } from '../import-analysis/runner';
+} from '#checkers';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import type { ImportRecord } from '#core/import-analysis/runner';
+import path from 'pathe';
+import type ts from 'typescript';
 
-import {
-  isPathInsideDirectory,
-  normalizeAbsolutePath,
-  toRelativePath,
-} from '../../utils/path';
 import {
   createExtensionPattern,
   getDtsCompanionConfigPath,
   getRawReferencePaths,
   isDtsConfigPath,
   readJsonConfig,
-} from '../tsconfig/actions';
+} from '#core/tsconfig/actions';
 import {
   findPackageForSpecifier,
   type ImporterInfo,
   type WorkspacePackage,
-} from '../workspace/actions';
+} from '#core/workspace/actions';
+import {
+  isPathInsideDirectory,
+  normalizeAbsolutePath,
+  toRelativePath,
+} from '#utils/path';
 
 export interface ProjectInfo {
   checkerPresets: CheckerProjectParseContext['checkerPresets'];
@@ -260,7 +260,7 @@ export function shouldResolveThroughGraph(
   importer: ImporterInfo | null,
   targetPackage: WorkspacePackage | null,
 ): boolean {
-  if (!importer || !targetPackage) {
+  if (!importer || !targetPackage?.name) {
     return false;
   }
 
@@ -360,4 +360,4 @@ export {
   type ImportAnalysisContext,
   type ImportRecord,
   type ImportRecordKind,
-} from '../import-analysis/runner';
+} from '#core/import-analysis/runner';

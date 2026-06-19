@@ -75,16 +75,24 @@ function mockExecFileWithNpxResult(error: Error | null = null): void {
   execFileMock.mockImplementation(
     (
       command: string,
-      _args: string[],
+      args: string[],
       _options: unknown,
-      callback: (error: Error | null) => void,
+      callback: (error: Error | null, stdout: string) => void,
     ) => {
       if (command === 'npx') {
-        callback(error);
+        callback(error, '');
         return {};
       }
 
-      callback(new Error('pnpm list unavailable'));
+      const isPnpmListCommand =
+        args.slice(-5).join('\0') === 'recursive\0list\0--depth\0-1\0--json';
+
+      if (isPnpmListCommand) {
+        callback(null, '[]');
+        return {};
+      }
+
+      callback(new Error('unexpected command'), '');
       return {};
     },
   );

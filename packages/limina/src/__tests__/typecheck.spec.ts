@@ -1,3 +1,5 @@
+import type { CheckerPackageResolver } from '#checkers';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import {
@@ -12,7 +14,6 @@ import {
 import { availableParallelism, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import type { CheckerPackageResolver } from '../checkers';
 import {
   runBuild as runBuildCommand,
   type RunBuildOptions,
@@ -21,7 +22,6 @@ import {
   runCheckerTypecheck as runCheckerTypecheckCommand,
   type RunCheckerTypecheckOptions,
 } from '../commands/typecheck';
-import type { ResolvedLiminaConfig } from '../config/runner';
 import { TypecheckLogger } from '../logger';
 import type {
   TypecheckRunner,
@@ -41,8 +41,20 @@ async function createFixture(files: Record<string, string>): Promise<{
   const rootDir = await realpath(
     await mkdtemp(path.join(tmpdir(), 'limina-typecheck-')),
   );
+  const fixtureFiles = {
+    'package.json': `${JSON.stringify(
+      {
+        name: 'root',
+        private: true,
+      },
+      null,
+      2,
+    )}\n`,
+    'pnpm-workspace.yaml': 'packages:\n  - app\n  - packages/*\n',
+    ...files,
+  };
 
-  for (const [relativePath, text] of Object.entries(files)) {
+  for (const [relativePath, text] of Object.entries(fixtureFiles)) {
     await writeText(path.join(rootDir, relativePath), text);
   }
 
@@ -1407,11 +1419,15 @@ describe('runBuild', () => {
       expect(warningText).toContain('        - packages/theme/tsconfig.json');
       expect(errorText).toContain('build failed:');
       expect(errorText).toContain(
-        '.limina/tsconfig/checkers/nativeTypescript/projects/packages/shared/tsconfig.dts.json exited with code 1',
+        '.limina/tsconfig/checkers/nativeTypescript/projects/packages/shared/tsconfig.dts.json',
       );
       expect(errorText).toContain(
-        '.limina/tsconfig/checkers/vue/projects/packages/theme/tsconfig.dts.json exited with code 1',
+        '.limina/tsconfig/checkers/vue/projects/packages/theme/tsconfig.dts.json',
       );
+      expect(errorText).toContain(
+        'Checker "nativeTypescript" failed. Exit code: 1.',
+      );
+      expect(errorText).toContain('Checker "vue" failed. Exit code: 1.');
     } finally {
       errorSpy.mockRestore();
       warnSpy.mockRestore();

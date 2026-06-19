@@ -1,7 +1,8 @@
-import type { ResolvedLiminaConfig } from '../config/runner';
-import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
-import type { WorkspacePackage } from '../core/workspace/actions';
-import { toRelativePath } from '../utils/path';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
+import type { WorkspacePackage } from '#core/workspace/actions';
+import { isNamedWorkspacePackage } from '#core/workspace/actions';
+import { toRelativePath } from '#utils/path';
 import type { KnipSourceAnalysisGroup } from './knip';
 
 export type SourceKnipWorkspaceConfigRecord = Record<string, unknown>;
@@ -53,7 +54,9 @@ export function collectSourceKnipWorkspaceConfigs(options: {
   }
 
   const workspacePackageNames = new Set(
-    options.workspacePackages.map((workspacePackage) => workspacePackage.name),
+    options.workspacePackages
+      .filter(isNamedWorkspacePackage)
+      .map((workspacePackage) => workspacePackage.name),
   );
 
   for (const [rawPackageName, rawWorkspaceConfig] of Object.entries(
@@ -132,7 +135,9 @@ export function createKnipSourceAnalysisGroups(options: {
   const defaultWorkspaceNames: string[] = [];
   const groups: KnipSourceAnalysisGroup[] = [];
 
-  for (const workspacePackage of options.workspacePackages) {
+  for (const workspacePackage of options.workspacePackages.filter(
+    isNamedWorkspacePackage,
+  )) {
     if (!options.requiredWorkspaceNames.has(workspacePackage.name)) {
       continue;
     }

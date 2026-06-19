@@ -1,3 +1,5 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
+import { prepareGeneratedTsconfigGraph } from '#core/build-graph/runner';
 import { existsSync } from 'node:fs';
 import {
   mkdir,
@@ -10,8 +12,6 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config/runner';
-import { prepareGeneratedTsconfigGraph } from '../core/build-graph/generated/runner';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -26,8 +26,20 @@ async function createFixture(files: Record<string, string>): Promise<{
   const rootDir = await realpath(
     await mkdtemp(path.join(tmpdir(), 'limina-generated-graph-')),
   );
+  const fixtureFiles = {
+    'package.json': `${JSON.stringify(
+      {
+        name: 'root',
+        private: true,
+      },
+      null,
+      2,
+    )}\n`,
+    'pnpm-workspace.yaml': 'packages:\n  - app\n  - packages/*\n',
+    ...files,
+  };
 
-  for (const [relativePath, text] of Object.entries(files)) {
+  for (const [relativePath, text] of Object.entries(fixtureFiles)) {
     await writeText(path.join(rootDir, relativePath), text);
   }
 

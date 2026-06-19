@@ -1,10 +1,11 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { runProofCheck } from '../commands/proof';
-import type { ResolvedLiminaConfig } from '../config/runner';
 import { ProofLogger } from '../logger';
+import { readCheckIssueSnapshot } from '../source-check/snapshot';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -19,8 +20,12 @@ async function createFixture(files: Record<string, string>): Promise<{
   const rootDir = await realpath(
     await mkdtemp(path.join(tmpdir(), 'limina-proof-')),
   );
+  const fixtureFiles = {
+    'pnpm-workspace.yaml': 'packages:\n  - app\n  - packages/*\n',
+    ...files,
+  };
 
-  for (const [relativePath, text] of Object.entries(files)) {
+  for (const [relativePath, text] of Object.entries(fixtureFiles)) {
     await writeText(path.join(rootDir, relativePath), text);
   }
 
@@ -384,7 +389,7 @@ describe('runProofCheck dts config semantics', () => {
 
       expect(aggregatorReports).toHaveLength(1);
       expect(errors).toContain('  - field: files');
-      expect(errors).toContain('  - fields: compilerOptions, extends, include');
+      expect(errors).toContain('  ... 3 more');
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -737,6 +742,18 @@ describe('runProofCheck dts config semantics', () => {
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+
+      const snapshot = await readCheckIssueSnapshot(fixture.rootDir);
+
+      expect(snapshot?.issues).toContainEqual({
+        code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
+        filePath: 'packages/pkg/fixtures/uncovered.ts',
+        fix: expect.any(String),
+        reason: expect.any(String),
+        scope: 'packages/pkg/fixtures',
+        task: 'proof:check',
+        title: 'Source file is not covered by typecheck proof',
+      });
     } finally {
       await fixture.cleanup();
     }
@@ -771,7 +788,7 @@ describe('runProofCheck dts config semantics', () => {
       expect(output).toContain('packages/pkg/fixtures/uncovered.cts');
       expect(output).toContain('packages/pkg/fixtures/uncovered.d.cts');
       expect(output).toContain('packages/pkg/fixtures/uncovered.d.mts');
-      expect(output).toContain('packages/pkg/fixtures/uncovered.mts');
+      expect(output).toContain('  ... 1 more');
       expect(output).not.toContain('packages/pkg/fixtures/ignored.cjs');
       expect(output).not.toContain('packages/pkg/fixtures/ignored.js');
       expect(output).not.toContain('packages/pkg/fixtures/ignored.jsx');
@@ -987,7 +1004,7 @@ describe('runProofCheck dts config semantics', () => {
         }),
       ).resolves.toBe(false);
       expect(errorSpy.mock.calls.join('\n')).toContain(
-        'Source files are not covered by typecheck proof',
+        'Source file is not covered by typecheck proof',
       );
       expect(errorSpy.mock.calls.join('\n')).toContain('eslint.config.mjs');
     } finally {

@@ -1,4 +1,4 @@
-export { defineConfig } from './config/runner';
+export { defineConfig } from '#config/runner';
 
 export type {
   BuildCheckerPreset,
@@ -51,4 +51,4 @@ export type {
   SourceKnipWorkspaceConfig,
   SourceTsconfigOwnershipConfig,
   SourceTsconfigOwnershipIgnoreEntry,
-} from './config/runner';
+} from '#config/runner';

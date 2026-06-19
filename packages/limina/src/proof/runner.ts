@@ -1,20 +1,17 @@
-import { existsSync } from 'node:fs';
-import path from 'pathe';
-import type ts from 'typescript';
 import {
   type CheckerProjectParseContext,
   normalizeExtensions,
   parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
-} from '../checkers';
+} from '#checkers';
 import {
   getActiveCheckers,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
-} from '../config/runner';
-import { createLiminaCore, type LiminaCore } from '../core';
-import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
-import { collectGeneratedSourceConfigPaths } from '../core/build-graph/generated/runner';
+} from '#config/runner';
+import { createLiminaCore, type LiminaCore } from '#core';
+import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
+import { collectGeneratedSourceConfigPaths } from '#core/build-graph/runner';
 import {
   type CheckerGraphProjectRoute,
   collectCheckerEntryProjectRoutes,
@@ -28,14 +25,26 @@ import {
   type JsonObject,
   readJsonConfig,
   resolveReferencePath,
-} from '../core/tsconfig/actions';
-import type { LiminaFlowReporter } from '../flow';
-import { ProofLogger } from '../logger';
+} from '#core/tsconfig/actions';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   toRelativePath,
-} from '../utils/path';
+} from '#utils/path';
+import { existsSync } from 'node:fs';
+import path from 'pathe';
+import type ts from 'typescript';
+import {
+  type CheckIssueReportOptions,
+  formatCheckIssueHumanReport,
+} from '../check-reporting/human';
+import {
+  appendCheckIssues,
+  createTaskFailureIssue,
+  type LiminaCheckIssue,
+} from '../check-reporting/snapshot';
+import type { LiminaFlowReporter } from '../flow';
+import { ProofLogger } from '../logger';
 import {
   addAllowlistCoverage,
   addAllowlistProblems,
@@ -61,12 +70,154 @@ interface CheckerCoverageTargetCollection {
   targets: CheckerCoverageTarget[];
 }
 
+function getProofProblemTitle(problem: string): string {
+  const firstLine = problem.split('\n')[0]?.trim() || 'Proof check issue';
+
+  return firstLine.replace(/:+$/u, '');
+}
+
+function getProofProblemCode(title: string): string {
+  if (title.startsWith('Source files are not covered')) {
+    return 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE';
+  }
+
+  if (title.startsWith('Typecheck proof source boundary')) {
+    return 'LIMINA_PROOF_SOURCE_BOUNDARY_MISMATCH';
+  }
+
+  if (title.includes('duplicate') || title.includes('Duplicate')) {
+    return 'LIMINA_PROOF_DUPLICATE_SOURCE_OWNER';
+  }
+
+  if (
+    title.includes('allowlist') ||
+    title.includes('Allowlist') ||
+    title.includes('proof.allowlist')
+  ) {
+    return 'LIMINA_PROOF_ALLOWLIST_INVALID';
+  }
+
+  if (
+    title.includes('default tsconfig') ||
+    title.includes('Default tsconfig')
+  ) {
+    return 'LIMINA_PROOF_DEFAULT_TSCONFIG_INVALID';
+  }
+
+  if (title.includes('checker') || title.includes('Checker')) {
+    return 'LIMINA_PROOF_CHECKER_COVERAGE_INVALID';
+  }
+
+  return 'LIMINA_PROOF_CHECK_FAILED';
+}
+
+function getProblemLineValue(
+  problem: string,
+  label: string,
+): string | undefined {
+  const escapedLabel = label.replaceAll(
+    /[.*+?^${}()|[\]\\]/gu,
+    String.raw`\$&`,
+  );
+  const match = new RegExp(String.raw`^\s*${escapedLabel}:\s*(.+)$`, 'mu').exec(
+    problem,
+  );
+
+  return match?.[1]?.trim();
+}
+
+function createProofCheckIssue(options: {
+  config: ResolvedLiminaConfig;
+  problem: string;
+}): LiminaCheckIssue {
+  const title = getProofProblemTitle(options.problem);
+  const filePath =
+    getProblemLineValue(options.problem, 'file') ??
+    getProblemLineValue(options.problem, 'project') ??
+    getProblemLineValue(options.problem, 'config');
+
+  return createTaskFailureIssue({
+    code: getProofProblemCode(title),
+    detailLines: options.problem.split('\n'),
+    filePath,
+    fix: getProblemLineValue(options.problem, 'fix'),
+    reason:
+      getProblemLineValue(options.problem, 'reason') ??
+      'Proof check found source coverage or checker graph proof violations.',
+    rootDir: options.config.rootDir,
+    task: 'proof:check',
+    title,
+  });
+}
+
+function createProofCheckIssues(options: {
+  config: ResolvedLiminaConfig;
+  existingIssues: readonly LiminaCheckIssue[];
+  problems: readonly string[];
+}): LiminaCheckIssue[] {
+  const existingCodes = new Set(
+    options.existingIssues.map((issue) => issue.code),
+  );
+
+  return options.problems
+    .map((problem) =>
+      createProofCheckIssue({
+        config: options.config,
+        problem,
+      }),
+    )
+    .filter(
+      (issue) =>
+        issue.code !== 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE' ||
+        !existingCodes.has(issue.code),
+    );
+}
+
+function collectProofReportIssues(options: {
+  config: ResolvedLiminaConfig;
+  existingIssues?: readonly LiminaCheckIssue[];
+  problems: readonly string[];
+}): LiminaCheckIssue[] {
+  const existingIssues = options.existingIssues ?? [];
+
+  return [
+    ...existingIssues,
+    ...createProofCheckIssues({
+      config: options.config,
+      existingIssues,
+      problems: options.problems,
+    }),
+  ];
+}
+
+function formatProofProblemReport(options: {
+  config: ResolvedLiminaConfig;
+  issues?: readonly LiminaCheckIssue[];
+  problems: readonly string[];
+  report?: CheckIssueReportOptions;
+}): string {
+  const issues =
+    options.issues ??
+    collectProofReportIssues({
+      config: options.config,
+      problems: options.problems,
+    });
+
+  return formatCheckIssueHumanReport({
+    command: options.report?.command ?? 'limina proof check',
+    issues,
+    title: 'Proof check summary',
+    verbose: options.report?.verbose,
+  });
+}
+
 export interface RunProofCheckOptions {
   clearScreen?: boolean;
   core?: LiminaCore;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  report?: CheckIssueReportOptions;
 }
 
 interface ConfigFileOwner {
@@ -1215,6 +1366,7 @@ function addDuplicateTypecheckOwnershipProblems(options: {
 function addUncoveredSourceProblems(options: {
   config: ResolvedLiminaConfig;
   coverageByFile: Map<string, CoverageSource[]>;
+  issues: LiminaCheckIssue[];
   problems: string[];
   sourceFiles: Set<string>;
 }): void {
@@ -1243,6 +1395,21 @@ function addUncoveredSourceProblems(options: {
       .filter(Boolean)
       .join('\n'),
   );
+
+  for (const filePath of uncoveredFiles) {
+    options.issues.push(
+      createTaskFailureIssue({
+        code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
+        filePath,
+        fix: 'Add the file to a checker entry, exclude it from config.source, or add an explicit proof.allowlist entry with a reason.',
+        reason:
+          'Every file in config.source must be covered by a checker entry or an explicit allowlist entry.',
+        rootDir: options.config.rootDir,
+        task: 'proof:check',
+        title: 'Source file is not covered by typecheck proof',
+      }),
+    );
+  }
 }
 
 function addSourceBoundaryMismatchProblems(options: {
@@ -1287,9 +1454,11 @@ export async function runProofCheckImpl(
     core?: LiminaCore;
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
     logSuccess?: boolean;
+    report?: CheckIssueReportOptions;
   } = {},
 ): Promise<boolean> {
   const problems: string[] = [];
+  const issues: LiminaCheckIssue[] = [];
   const generatedGraph = options.generatedGraphProvider
     ? await options.generatedGraphProvider()
     : await (options.core ?? createLiminaCore(config)).buildGraph.getGraph();
@@ -1362,7 +1531,23 @@ export async function runProofCheckImpl(
   });
 
   if (problems.length > 0) {
-    ProofLogger.error(problems.join('\n\n'));
+    const reportIssues = collectProofReportIssues({
+      config,
+      problems,
+    });
+
+    await appendCheckIssues({
+      issues: reportIssues,
+      rootDir: config.rootDir,
+    });
+    ProofLogger.error(
+      formatProofProblemReport({
+        config,
+        issues: reportIssues,
+        problems,
+        report: options.report,
+      }),
+    );
     return false;
   }
 
@@ -1375,7 +1560,23 @@ export async function runProofCheckImpl(
   problems.push(...checkerTargetCollection.problems);
 
   if (problems.length > 0) {
-    ProofLogger.error(problems.join('\n\n'));
+    const reportIssues = collectProofReportIssues({
+      config,
+      problems,
+    });
+
+    await appendCheckIssues({
+      issues: reportIssues,
+      rootDir: config.rootDir,
+    });
+    ProofLogger.error(
+      formatProofProblemReport({
+        config,
+        issues: reportIssues,
+        problems,
+        report: options.report,
+      }),
+    );
     return false;
   }
 
@@ -1421,6 +1622,7 @@ export async function runProofCheckImpl(
   addUncoveredSourceProblems({
     config,
     coverageByFile,
+    issues,
     problems,
     sourceFiles,
   });
@@ -1431,7 +1633,24 @@ export async function runProofCheckImpl(
   });
 
   if (problems.length > 0) {
-    ProofLogger.error(problems.join('\n\n'));
+    const reportIssues = collectProofReportIssues({
+      config,
+      existingIssues: issues,
+      problems,
+    });
+
+    await appendCheckIssues({
+      issues: reportIssues,
+      rootDir: config.rootDir,
+    });
+    ProofLogger.error(
+      formatProofProblemReport({
+        config,
+        issues: reportIssues,
+        problems,
+        report: options.report,
+      }),
+    );
     return false;
   }
 

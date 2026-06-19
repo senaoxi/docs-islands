@@ -1,19 +1,20 @@
-import { existsSync, statSync } from 'node:fs';
-import path from 'pathe';
-import type { ResolvedLiminaConfig } from '../../config/runner';
+import type { ResolvedLiminaConfig } from '#config/runner';
+import type { GeneratedBuildModule } from '#core/build-graph/runner';
+import type { WorkspacePackage } from '#core/workspace/actions';
+import { isNamedWorkspacePackage } from '#core/workspace/actions';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
-} from '../../utils/path';
+} from '#utils/path';
+import { existsSync, statSync } from 'node:fs';
+import path from 'pathe';
 import {
   collectPackageBuildScripts,
   type PackageBuildScript,
   type PackageBuildScriptDiagnostic,
 } from '../packages/build-scripts';
-import type { WorkspacePackage } from '../workspace/actions';
-import type { GeneratedBuildModule } from './generated/runner';
 
 export type GeneratedKnipPackageBuildMode = 'managed' | 'raw';
 
@@ -282,7 +283,9 @@ export function prepareGeneratedKnipPackageConfigs(options: {
 
   const configs: PreparedGeneratedKnipPackageConfig[] = [];
 
-  for (const workspacePackage of options.workspacePackages) {
+  for (const workspacePackage of options.workspacePackages.filter(
+    isNamedWorkspacePackage,
+  )) {
     const packageScripts =
       scriptsByPackageName.get(workspacePackage.name) ?? [];
     const references = new Set<string>();

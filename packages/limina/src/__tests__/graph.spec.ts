@@ -1,3 +1,4 @@
+import type { GraphConfig, ResolvedLiminaConfig } from '#config/runner';
 import {
   mkdir,
   mkdtemp,
@@ -10,8 +11,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { runGraphCheck } from '../commands/graph';
-import type { GraphConfig, ResolvedLiminaConfig } from '../config/runner';
+import { readCheckIssueSnapshot } from '../check-reporting/snapshot';
+import { runGraphCheck, type RunGraphCheckOptions } from '../commands/graph';
 import { GraphLogger } from '../logger';
 
 const requireFromTest = createRequire(import.meta.url);
@@ -92,7 +93,14 @@ async function createFixture(
   const rootDir = await realpath(
     await mkdtemp(path.join(tmpdir(), 'limina-graph-')),
   );
-  const fixtureFiles = addFixtureEntryConfigs(files);
+  const fixtureFiles = addFixtureEntryConfigs({
+    'package.json': stringifyConfig({
+      name: 'root',
+      private: true,
+    }),
+    'pnpm-workspace.yaml': 'packages:\n  - app\n  - packages/*\n',
+    ...files,
+  });
 
   for (const [relativePath, text] of Object.entries(fixtureFiles)) {
     await writeText(path.join(rootDir, relativePath), text);
@@ -1106,12 +1114,33 @@ packages:
   });
 
   it('reports workspace package exports that TypeScript resolves to runtime JavaScript', async () => {
+    const errorSpy = vi
+      .spyOn(GraphLogger, 'error')
+      .mockImplementation(() => {});
+    const runtimeExportNames = [
+      'file-00',
+      'file-01',
+      'file-02',
+      'file-03',
+      'file-04',
+      'file-05',
+    ];
+    const runtimeExportFiles = Object.fromEntries(
+      runtimeExportNames.map((exportName) => [
+        `packages/internal/dist/${exportName}.js`,
+        'export const value = 1;\n',
+      ]),
+    );
+    const runtimeExports = Object.fromEntries(
+      runtimeExportNames.map((exportName, index) => [
+        index === 0 ? '.' : `./${exportName}`,
+        `./dist/${exportName}.js`,
+      ]),
+    );
     const fixture = await createFixture({
-      'packages/internal/dist/index.js': 'export const value = 1;\n',
+      ...runtimeExportFiles,
       'packages/internal/package.json': stringifyConfig({
-        exports: {
-          '.': './dist/index.js',
-        },
+        exports: runtimeExports,
         name: '@example/internal',
         type: 'module',
       }),
@@ -1137,7 +1166,32 @@ packages:
 
     try {
       await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain(
+        'Workspace package export resolves to runtime JavaScript in TypeScript',
+      );
+      expect(errors).toContain('│ Found 6 check issues.');
+      expect(errors).toContain('│ package: @example/internal');
+      expect(errors).toContain('│ files:');
+      expect(errors).toContain('│   - packages/internal/dist/file-00.js');
+      expect(errors).toContain('│   - packages/internal/dist/file-04.js');
+      expect(errors).not.toContain('│   - packages/internal/dist/file-05.js');
+      expect(errors).toContain('│   ... 1 more');
+
+      const snapshot = await readCheckIssueSnapshot(fixture.rootDir);
+
+      expect(snapshot?.issues).toContainEqual(
+        expect.objectContaining({
+          filePath: 'packages/internal/dist/file-00.js',
+          packageName: '@example/internal',
+          task: 'graph:check',
+          title:
+            'Workspace package export resolves to runtime JavaScript in TypeScript',
+        }),
+      );
     } finally {
+      errorSpy.mockRestore();
       await fixture.cleanup();
     }
   });
@@ -1584,6 +1638,9 @@ describe('runGraphCheck graph rules', () => {
   });
 
   it('reports invalid graph rule entries', async () => {
+    const errorSpy = vi
+      .spyOn(GraphLogger, 'error')
+      .mockImplementation(() => {});
     const fixture = await createFixture(
       createLocalBoundaryFiles({
         limina: 'runtime',
@@ -1607,7 +1664,97 @@ describe('runGraphCheck graph rules', () => {
 
     try {
       await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain('Graph check summary');
+      expect(errors).toContain('│ Found 1 check issue.');
+      expect(errors).toContain('│ Top rules: LIMINA_GRAPH_CONFIG_INVALID (1)');
+      expect(errors).toContain('│   Invalid graph rule config:');
+      expect(errors).toContain(
+        '│     field: graph.rules.runtime.deny.refs[0].reason',
+      );
+      expect(errors).toContain('│     value: ""');
+      expect(errors).toContain(
+        '│     reason: deny.refs reason is required and must be a non-empty string.',
+      );
+
+      const snapshot = await readCheckIssueSnapshot(fixture.rootDir);
+
+      expect(snapshot?.issues).toContainEqual(
+        expect.objectContaining({
+          code: 'LIMINA_GRAPH_CONFIG_INVALID',
+          detailLines: expect.arrayContaining(['Invalid graph rule config:']),
+          reason:
+            'deny.refs reason is required and must be a non-empty string.',
+          task: 'graph:check',
+          title: 'Invalid graph rule config',
+        }),
+      );
     } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('formats thrown graph check errors as summary reports in flow mode', async () => {
+    const errorSpy = vi
+      .spyOn(GraphLogger, 'error')
+      .mockImplementation(() => {});
+    const task = {
+      fail: vi.fn(),
+      info: vi.fn(),
+      pass: vi.fn(),
+      skip: vi.fn(),
+      warn: vi.fn(),
+    };
+    const flow = {
+      interactive: false,
+      start: vi.fn(() => task),
+    } as unknown as NonNullable<RunGraphCheckOptions['flow']>;
+    const fixture = await createFixture({});
+
+    try {
+      await expect(
+        runGraphCheck(fixture.config, {
+          clearScreen: false,
+          flow,
+          generatedGraphProvider: async () => {
+            throw new Error(
+              [
+                'Unsupported auto checker source file extension:',
+                '  scope: packages/create-vite/template-svelte-ts/tsconfig.json',
+                '  extension: .svelte',
+                '  example: packages/create-vite/template-svelte-ts/src/App.svelte',
+                '  reason: auto checker mode can only route TypeScript, JavaScript, JSON, and Vue source scopes.',
+                '  fix: move this file to an explicit checker scope or configure config.checkers manually.',
+              ].join('\n'),
+            );
+          },
+        }),
+      ).resolves.toBe(false);
+
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain('Graph check summary');
+      expect(errors).toContain('│ Found 1 check issue.');
+      expect(errors).toContain('│ Top rules: LIMINA_GRAPH_CHECK_FAILED (1)');
+      expect(errors).toContain(
+        '│   Unsupported auto checker source file extension:',
+      );
+      expect(errors).toContain(
+        '│     scope: packages/create-vite/template-svelte-ts/tsconfig.json',
+      );
+      expect(errors).toContain('│     extension: .svelte');
+      expect(errors).toContain(
+        '│     example: packages/create-vite/template-svelte-ts/src/App.svelte',
+      );
+      expect(errors).toContain(
+        '│     reason: auto checker mode can only route',
+      );
+      expect(errors).not.toContain('graph check failed: Unsupported');
+      expect(task.fail).toHaveBeenCalledWith('graph check failed');
+    } finally {
+      errorSpy.mockRestore();
       await fixture.cleanup();
     }
   });

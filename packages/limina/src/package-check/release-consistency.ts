@@ -1,23 +1,24 @@
+import type {
+  ReleaseContentHashConfigArgs,
+  ResolvedLiminaConfig,
+} from '#config/runner';
+import {
+  collectWorkspacePackages,
+  getPublishDependencySections,
+  isLocalPackageDependencySpecifier,
+  isNamedWorkspacePackage,
+  isWorkspaceDependencySpecifier,
+  type NamedWorkspacePackage,
+  type PackageManifest,
+  type PublishDependencySectionName,
+} from '#core/workspace/actions';
+import { toRelativePath } from '#utils/path';
 import { unpack } from '@publint/pack';
 import { NpmPackageJsonLint } from 'npm-package-json-lint';
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
 import semver from 'semver';
-import type {
-  ReleaseContentHashConfigArgs,
-  ResolvedLiminaConfig,
-} from '../config/runner';
-import {
-  collectWorkspacePackages,
-  getPublishDependencySections,
-  isLocalPackageDependencySpecifier,
-  isWorkspaceDependencySpecifier,
-  type PackageManifest,
-  type PublishDependencySectionName,
-  type WorkspacePackage,
-} from '../core/workspace/actions';
 import { formatErrorMessage, ReleaseLogger } from '../logger';
-import { toRelativePath } from '../utils/path';
 import { type PackedPackageTarball, packOutputTarball } from './runner';
 
 interface NpmPackageJsonLintIssue {
@@ -111,7 +112,7 @@ interface RegistryPackageMetadata {
 interface DirectWorkspaceDependency {
   dependencyName: string;
   sectionName: PublishDependencySectionName;
-  targetPackage: WorkspacePackage;
+  targetPackage: NamedWorkspacePackage;
 }
 
 interface ReleaseConsistencyProblem {
@@ -451,7 +452,7 @@ async function fetchRegistryTarball(tarballUrl: string): Promise<Buffer> {
 
 function resolveWorkspacePackageOutputDir(
   config: ResolvedLiminaConfig,
-  workspacePackage: WorkspacePackage,
+  workspacePackage: NamedWorkspacePackage,
 ): string {
   const configuredEntry = config.package?.entries?.find(
     (entry) => entry.name === workspacePackage.name,
@@ -807,7 +808,7 @@ async function compareLocalWorkspacePackageOutputToBaseline(options: {
   config: ResolvedLiminaConfig;
   ignoreRules: readonly ContentHashIgnoreRule[];
   tarballUrl: string;
-  workspacePackage: WorkspacePackage;
+  workspacePackage: NamedWorkspacePackage;
 }): Promise<WorkspacePackageOutputComparison> {
   let localPackedTarball: PackedPackageTarball | undefined;
 
@@ -849,7 +850,7 @@ async function verifyWorkspacePackagePublished(options: {
   config: ResolvedLiminaConfig;
   importerName: string;
   state: ReleaseConsistencyState;
-  workspacePackage: WorkspacePackage;
+  workspacePackage: NamedWorkspacePackage;
 }): Promise<void> {
   const { importerName, state, workspacePackage } = options;
   const dependencyName = workspacePackage.name;
@@ -996,7 +997,7 @@ async function visitWorkspacePackageDependencies(options: {
   isRoot: boolean;
   manifest: PackageManifest;
   state: ReleaseConsistencyState;
-  workspacePackagesByName: Map<string, WorkspacePackage>;
+  workspacePackagesByName: Map<string, NamedWorkspacePackage>;
 }): Promise<void> {
   const {
     config,
@@ -1410,7 +1411,9 @@ function createReleaseConsistencyError(options: {
 export async function assertPackageReleaseConsistency(
   options: AssertPackageReleaseConsistencyOptions,
 ): Promise<void> {
-  const workspacePackages = await collectWorkspacePackages(options.config);
+  const workspacePackages = (
+    await collectWorkspacePackages(options.config)
+  ).filter(isNamedWorkspacePackage);
   const sourcePackage = workspacePackages.find(
     (workspacePackage) => workspacePackage.name === options.outputManifest.name,
   );

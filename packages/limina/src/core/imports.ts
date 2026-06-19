@@ -1,13 +1,13 @@
-import type ts from 'typescript';
-import type { CheckerProjectParseContext } from '../checkers';
-import type { ResolvedLiminaConfig } from '../config/runner';
-import { normalizeAbsolutePath } from '../utils/path';
+import type { CheckerProjectParseContext } from '#checkers';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import {
   createImportAnalysisContext,
   type ImportAnalysisContext,
   type ImportRecord,
-} from './import-analysis/runner';
-import type { ProjectInfo } from './import-graph/context';
+} from '#core/import-analysis/runner';
+import type { ProjectInfo } from '#core/import-graph/context';
+import { normalizeAbsolutePath } from '#utils/path';
+import type ts from 'typescript';
 
 export interface ResolveImportOptions {
   containingFile: string;
