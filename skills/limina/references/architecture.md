@@ -68,7 +68,7 @@ Pure aggregators may only declare `$schema`, `files`, `references`, and allowed 
 
 ## Generated Checker Graph
 
-`limina graph prepare` and graph-consuming commands call `prepareGeneratedTsconfigGraph()` to:
+`limina graph prepare` and graph-consuming commands prepare the generated checker graph to:
 
 - Resolve checkers from manual `config.checkers` or auto mode.
 - Expand each selected `tsconfig.json` entry through ordinary source references.

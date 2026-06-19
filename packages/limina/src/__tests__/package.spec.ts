@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import { LiminaFlowReporter } from '../flow';
 
 const packageCheckMocks = vi.hoisted(() => ({
@@ -157,9 +157,10 @@ vi.mock('@arethetypeswrong/core', () => ({
   })),
 }));
 
-const { auditPublishedPackageBoundaries, runPackageCheck } = await import(
-  '../commands/package'
+const { auditPublishedPackageBoundaries } = await import(
+  '../package-check/runner'
 );
+const { runPackageCheck } = await import('../commands/package');
 const { runReleaseCheck } = await import('../commands/release');
 
 async function writeText(filePath: string, text: string): Promise<void> {

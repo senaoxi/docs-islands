@@ -1,22 +1,12 @@
-import { createElapsedTimer } from 'logaria/helper';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'pathe';
-import type { ResolvedLiminaConfig } from '../config';
-import {
-  collectDependencyGraph,
-  type DependencyGraphDocument,
-  type DependencyGraphView,
-  stringifyDependencyGraph,
-} from '../dependency-graph';
-import type { LiminaFlowReporter } from '../flow';
-import {
-  type GeneratedTsconfigGraphResult,
-  prepareGeneratedTsconfigGraph,
-} from '../generated-graph';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import { createLiminaCore, type LiminaCore } from '../core';
+import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
+import type { ImportAnalysisContext } from '../core/import-analysis/runner';
 import {
   collectImportsFromFile,
   createFileOwnerLookup,
-  createImportAnalysisContext,
   findImporterForFile,
   findPackageForFile,
   findTargetProject,
@@ -26,40 +16,34 @@ import {
   type ImportRecord,
   inferPackageProject,
   isDtsProjectConfig,
-  parseProject,
   type ProjectInfo,
   resolveInternalImport,
   shouldResolveThroughGraph,
-} from '../graph-context';
-import {
-  getAllowedRefRule,
-  getDeniedDepRuleForPackage,
-  getDeniedDepRuleForSpecifier,
-  getDeniedRefRule,
-  type GraphRuleDepDeny,
-  type GraphRuleRefDeny,
-  type NormalizedGraphRules,
-  normalizeGraphRules,
-} from '../graph-rules';
-import { clearCliScreen, formatErrorMessage, GraphLogger } from '../logger';
+} from '../core/import-graph/context';
 import {
   collectSourceGraphProjectExtensions,
   formatReferences,
-} from '../tsconfig';
-import { toRelativePath } from '../utils/path';
+} from '../core/tsconfig/actions';
 import {
-  collectImporters,
-  collectWorkspacePackages,
   findPackageForSpecifier,
   type ImporterInfo,
   type WorkspacePackage,
-} from '../workspace';
+} from '../core/workspace/actions';
 import {
   createWorkspaceExportsResolutionIndex,
   type WorkspaceExportsResolutionIndex,
   type WorkspaceExportsResolutionProfile,
   type WorkspacePackageExportResolution,
-} from '../workspace-exports';
+} from '../core/workspace/exports';
+import {
+  collectDependencyGraph,
+  type DependencyGraphDocument,
+  type DependencyGraphView,
+  stringifyDependencyGraph,
+} from '../dependency-graph/runner';
+import type { LiminaFlowReporter } from '../flow';
+import { GraphLogger } from '../logger';
+import { toRelativePath } from '../utils/path';
 import {
   addConditionDomainProblems,
   addDefaultCustomConditionProblems,
@@ -69,9 +53,20 @@ import {
   addDtsOptionProblems,
   addTypecheckParityProblems,
 } from './dts-options';
+import {
+  getAllowedRefRule,
+  getDeniedDepRuleForPackage,
+  getDeniedDepRuleForSpecifier,
+  getDeniedRefRule,
+  type GraphRuleDepDeny,
+  type GraphRuleRefDeny,
+  type NormalizedGraphRules,
+  normalizeGraphRules,
+} from './rules';
 
 export interface RunGraphCheckOptions {
   clearScreen?: boolean;
+  core?: LiminaCore;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
@@ -79,12 +74,14 @@ export interface RunGraphCheckOptions {
 
 export interface RunGraphPrepareOptions {
   clearScreen?: boolean;
+  core?: LiminaCore;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
 }
 
 export interface RunGraphExportOptions {
+  core?: LiminaCore;
   outputPath?: string;
   view?: DependencyGraphView;
 }
@@ -128,6 +125,7 @@ interface ExpectedReferenceCollectionOptions {
   fileOwnerLookup: Map<string, string[]>;
   generatedGraph: GeneratedTsconfigGraphResult;
   graphRules: NormalizedGraphRules;
+  importAnalysis: ImportAnalysisContext;
   importers: ImporterInfo[];
   packages: WorkspacePackage[];
   problems: string[];
@@ -141,7 +139,6 @@ interface ExpectedReferenceCollectionOptions {
 interface ExpectedReferenceCollectionContext
   extends ExpectedReferenceCollectionOptions {
   expectedReferencesByProjectPath: ExpectedReferencesByProjectPath;
-  importAnalysis: ReturnType<typeof createImportAnalysisContext>;
 }
 
 interface GraphImportResolution {
@@ -559,7 +556,6 @@ function createExpectedReferenceCollectionContext(
   return {
     ...options,
     expectedReferencesByProjectPath: new Map(),
-    importAnalysis: createImportAnalysisContext(),
   };
 }
 
@@ -1121,34 +1117,37 @@ function createGeneratedGraphPathAliases(
   );
 }
 
-async function runGraphCheckInternal(
+export async function runGraphCheckImpl(
   config: ResolvedLiminaConfig,
   options: {
+    core?: LiminaCore;
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
     logSuccess?: boolean;
   } = {},
 ): Promise<boolean> {
+  const core = options.core ?? createLiminaCore(config);
   const generatedGraph = options.generatedGraphProvider
     ? await options.generatedGraphProvider()
-    : await prepareGeneratedTsconfigGraph(config);
+    : await core.buildGraph.getGraph();
   const graphRoute = collectSourceGraphProjectExtensions(
     config,
     generatedGraph,
   );
   const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
-  const projects = projectPaths.map((projectPath) =>
-    parseProject(
-      config,
-      projectPath,
-      graphRoute.projectContextsByPath.get(projectPath),
+  const projects = await Promise.all(
+    projectPaths.map((projectPath) =>
+      core.tsconfig.getProject(
+        projectPath,
+        graphRoute.projectContextsByPath.get(projectPath),
+      ),
     ),
   );
   const projectsByPath = new Map(
     projects.map((project) => [project.configPath, project]),
   );
   const fileOwnerLookup = createFileOwnerLookup(projects);
-  const packages = await collectWorkspacePackages(config);
-  const importers = collectImporters(config, packages);
+  const packages = await core.workspace.getPackages();
+  const importers = await core.workspace.getImporters();
   const problems: string[] = [...graphRoute.problems];
   const customConditionConsistencyContext =
     createCustomConditionConsistencyContext(projectsByPath);
@@ -1215,6 +1214,7 @@ async function runGraphCheckInternal(
     fileOwnerLookup,
     generatedGraph,
     graphRules,
+    importAnalysis: core.imports.context,
     importers,
     packages,
     problems,
@@ -1248,96 +1248,23 @@ async function runGraphCheckInternal(
   return true;
 }
 
-export async function runGraphPrepare(
+export async function runGraphPrepareImpl(
   config: ResolvedLiminaConfig,
   options: RunGraphPrepareOptions = {},
-): Promise<boolean> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
+): Promise<GeneratedTsconfigGraphResult> {
+  const core = options.core ?? createLiminaCore(config);
 
-  const elapsed = createElapsedTimer();
-  const task = options.flow?.start('graph prepare', {
-    depth: options.flowDepth ?? 0,
-  });
-
-  GraphLogger.info('graph prepare started');
-
-  try {
-    const result = options.generatedGraphProvider
-      ? await options.generatedGraphProvider()
-      : await prepareGeneratedTsconfigGraph(config);
-
-    if (!options.flow?.interactive) {
-      GraphLogger.success(
-        result.changed
-          ? 'graph prepare generated files'
-          : 'graph prepare found generated files up to date',
-        elapsed(),
-      );
-    }
-
-    task?.pass();
-    return true;
-  } catch (error) {
-    GraphLogger.error(
-      `graph prepare failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('graph prepare failed', { error });
-    throw error;
-  }
+  return options.generatedGraphProvider
+    ? await options.generatedGraphProvider()
+    : await core.buildGraph.prepareGraph({ write: true });
 }
 
-export async function runGraphCheck(
-  config: ResolvedLiminaConfig,
-  options: RunGraphCheckOptions = {},
-): Promise<boolean> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
-  const task = options.flow?.start('graph check', {
-    depth: options.flowDepth ?? 0,
-  });
-
-  GraphLogger.info('graph check started');
-
-  try {
-    const logSuccess = !options.flow?.interactive;
-    const passed = await runGraphCheckInternal(config, {
-      generatedGraphProvider: options.generatedGraphProvider,
-      logSuccess,
-    });
-
-    if (passed) {
-      if (logSuccess) {
-        GraphLogger.success('graph check finished', elapsed());
-      }
-
-      task?.pass();
-    } else {
-      GraphLogger.error('graph check finished with failures', elapsed());
-      task?.fail('graph check finished with failures');
-    }
-
-    return passed;
-  } catch (error) {
-    GraphLogger.error(
-      `graph check failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('graph check failed', { error });
-    throw error;
-  }
-}
-
-export async function runGraphExport(
+export async function runGraphExportImpl(
   config: ResolvedLiminaConfig,
   options: RunGraphExportOptions = {},
 ): Promise<DependencyGraphDocument> {
   const graph = await collectDependencyGraph(config, {
+    core: options.core,
     view: options.view,
   });
 

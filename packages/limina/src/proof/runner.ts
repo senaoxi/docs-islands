@@ -1,4 +1,3 @@
-import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 import type ts from 'typescript';
@@ -12,14 +11,10 @@ import {
   getActiveCheckers,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
-} from '../config';
-import type { LiminaFlowReporter } from '../flow';
-import type { GeneratedTsconfigGraphResult } from '../generated-graph';
-import {
-  collectGeneratedSourceConfigPaths,
-  prepareGeneratedTsconfigGraph,
-} from '../generated-graph';
-import { clearCliScreen, formatErrorMessage, ProofLogger } from '../logger';
+} from '../config/runner';
+import { createLiminaCore, type LiminaCore } from '../core';
+import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
+import { collectGeneratedSourceConfigPaths } from '../core/build-graph/generated/runner';
 import {
   type CheckerGraphProjectRoute,
   collectCheckerEntryProjectRoutes,
@@ -33,7 +28,9 @@ import {
   type JsonObject,
   readJsonConfig,
   resolveReferencePath,
-} from '../tsconfig';
+} from '../core/tsconfig/actions';
+import type { LiminaFlowReporter } from '../flow';
+import { ProofLogger } from '../logger';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
@@ -66,6 +63,7 @@ interface CheckerCoverageTargetCollection {
 
 export interface RunProofCheckOptions {
   clearScreen?: boolean;
+  core?: LiminaCore;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
@@ -1283,9 +1281,10 @@ function addSourceBoundaryMismatchProblems(options: {
   );
 }
 
-async function runProofCheckInternal(
+export async function runProofCheckImpl(
   config: ResolvedLiminaConfig,
   options: {
+    core?: LiminaCore;
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
     logSuccess?: boolean;
   } = {},
@@ -1293,7 +1292,7 @@ async function runProofCheckInternal(
   const problems: string[] = [];
   const generatedGraph = options.generatedGraphProvider
     ? await options.generatedGraphProvider()
-    : await prepareGeneratedTsconfigGraph(config);
+    : await (options.core ?? createLiminaCore(config)).buildGraph.getGraph();
   const graphRouteCollection = collectGraphProjectRoutes(
     config,
     generatedGraph,
@@ -1465,48 +1464,4 @@ async function runProofCheckInternal(
   }
 
   return true;
-}
-
-export async function runProofCheck(
-  config: ResolvedLiminaConfig,
-  options: RunProofCheckOptions = {},
-): Promise<boolean> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
-  const task = options.flow?.start('proof check', {
-    depth: options.flowDepth ?? 0,
-  });
-
-  ProofLogger.info('proof check started');
-
-  try {
-    const logSuccess = !options.flow?.interactive;
-    const passed = await runProofCheckInternal(config, {
-      generatedGraphProvider: options.generatedGraphProvider,
-      logSuccess,
-    });
-
-    if (passed) {
-      if (logSuccess) {
-        ProofLogger.success('proof check finished', elapsed());
-      }
-
-      task?.pass();
-    } else {
-      ProofLogger.error('proof check finished with failures', elapsed());
-      task?.fail('proof check finished with failures');
-    }
-
-    return passed;
-  } catch (error) {
-    ProofLogger.error(
-      `proof check failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('proof check failed', { error });
-    throw error;
-  }
 }

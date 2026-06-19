@@ -1,19 +1,19 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'pathe';
-import type { ResolvedLiminaConfig } from './config';
-import type { GeneratedBuildModule } from './generated-graph';
-import {
-  collectPackageBuildScripts,
-  type PackageBuildScript,
-  type PackageBuildScriptDiagnostic,
-} from './package-build-scripts';
+import type { ResolvedLiminaConfig } from '../../config/runner';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
-} from './utils/path';
-import type { WorkspacePackage } from './workspace';
+} from '../../utils/path';
+import {
+  collectPackageBuildScripts,
+  type PackageBuildScript,
+  type PackageBuildScriptDiagnostic,
+} from '../packages/build-scripts';
+import type { WorkspacePackage } from '../workspace/actions';
+import type { GeneratedBuildModule } from './generated/runner';
 
 export type GeneratedKnipPackageBuildMode = 'managed' | 'raw';
 

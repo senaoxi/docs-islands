@@ -1,9 +1,12 @@
 import { builtinModules } from 'node:module';
 import path from 'pathe';
-import type { ResolvedLiminaConfig } from './config';
-import { isDtsProjectConfig } from './graph-context';
-import { normalizeAbsolutePath } from './utils/path';
-import { getPackageRootSpecifier, type WorkspacePackage } from './workspace';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import { isDtsProjectConfig } from '../core/import-graph/context';
+import {
+  getPackageRootSpecifier,
+  type WorkspacePackage,
+} from '../core/workspace/actions';
+import { normalizeAbsolutePath } from '../utils/path';
 
 export interface GraphRuleRef {
   path: string;

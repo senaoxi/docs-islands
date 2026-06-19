@@ -5,7 +5,7 @@ import type {
   PackageCheckToolSelection,
   PackageEntry,
   ResolvedLiminaConfig,
-} from '../config';
+} from '../config/runner';
 import { formatErrorMessage } from '../logger';
 
 interface PlannedPackageEntry {

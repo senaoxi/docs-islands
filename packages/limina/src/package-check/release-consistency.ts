@@ -3,16 +3,10 @@ import { NpmPackageJsonLint } from 'npm-package-json-lint';
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
 import semver from 'semver';
-import {
-  type PackedPackageTarball,
-  packOutputTarball,
-} from './commands/package';
 import type {
   ReleaseContentHashConfigArgs,
   ResolvedLiminaConfig,
-} from './config';
-import { formatErrorMessage, ReleaseLogger } from './logger';
-import { toRelativePath } from './utils/path';
+} from '../config/runner';
 import {
   collectWorkspacePackages,
   getPublishDependencySections,
@@ -21,7 +15,10 @@ import {
   type PackageManifest,
   type PublishDependencySectionName,
   type WorkspacePackage,
-} from './workspace';
+} from '../core/workspace/actions';
+import { formatErrorMessage, ReleaseLogger } from '../logger';
+import { toRelativePath } from '../utils/path';
+import { type PackedPackageTarball, packOutputTarball } from './runner';
 
 interface NpmPackageJsonLintIssue {
   lintId: string;

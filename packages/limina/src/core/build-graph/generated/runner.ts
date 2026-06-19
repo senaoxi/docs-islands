@@ -10,12 +10,36 @@ import {
   getCheckerExtensions,
   parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
-} from '../checkers';
+} from '../../../checkers';
 import {
   getActiveCheckers,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
-} from '../config';
+} from '../../../config/runner';
+import {
+  normalizeAbsolutePath,
+  toPosixPath,
+  toRelativePath,
+} from '../../../utils/path';
+import type { ImportAnalysisContext } from '../../import-analysis/runner';
+import {
+  collectImportsFromFile,
+  createFileOwnerLookup,
+  createImportAnalysisContext,
+  formatImportRecordLocation,
+  resolveInternalImport,
+} from '../../import-graph/context';
+import {
+  collectReferencePathInfosForConfig,
+  createLiminaTsconfigSchemaPath,
+  isOrdinarySourceTypecheckConfigPath,
+  type JsonObject,
+  readJsonConfig,
+} from '../../tsconfig/actions';
+import {
+  collectWorkspacePackages,
+  type WorkspacePackage,
+} from '../../workspace/actions';
 import {
   type GeneratedKnipPackageConfig,
   type GeneratedKnipPackageDiagnostic,
@@ -23,26 +47,6 @@ import {
   resolveGeneratedKnipPackageConfigs,
   resolveGeneratedKnipPackageDiagnostics,
 } from '../generated-knip';
-import {
-  collectImportsFromFile,
-  createFileOwnerLookup,
-  createImportAnalysisContext,
-  formatImportRecordLocation,
-  resolveInternalImport,
-} from '../graph-context';
-import {
-  collectReferencePathInfosForConfig,
-  createLiminaTsconfigSchemaPath,
-  isOrdinarySourceTypecheckConfigPath,
-  type JsonObject,
-  readJsonConfig,
-} from '../tsconfig';
-import {
-  normalizeAbsolutePath,
-  toPosixPath,
-  toRelativePath,
-} from '../utils/path';
-import { collectWorkspacePackages } from '../workspace';
 import {
   addSourceReferenceConfigProblems,
   collectTypeRootCandidates,
@@ -146,6 +150,11 @@ export interface GeneratedTsconfigGraphResult {
   generatedKnipDiagnostics: GeneratedKnipPackageDiagnostic[];
   providerEdges: GeneratedProviderEdge[];
   manifest: GeneratedTsconfigGraphManifest;
+}
+
+export interface PrepareGeneratedTsconfigGraphOptions {
+  importAnalysisContext?: ImportAnalysisContext;
+  workspacePackagesProvider?: () => Promise<WorkspacePackage[]>;
 }
 
 interface SourceProject {
@@ -704,13 +713,19 @@ function collectAutoImportCandidatePaths(options: {
 function collectAutoScopeDependencies(
   config: ResolvedLiminaConfig,
   scopes: AutoScope[],
+  options: Pick<
+    PrepareGeneratedTsconfigGraphOptions,
+    'importAnalysisContext'
+  > = {},
 ): Map<string, Set<string>> {
   const dependenciesByEntry = new Map(
     scopes.map((scope) => [scope.entryConfigPath, new Set<string>()]),
   );
   const scopeEntries = new Set(scopes.map((scope) => scope.entryConfigPath));
   const entryPathsByFileName = new Map<string, Set<string>>();
-  const importAnalysis = createImportAnalysisContext();
+  const importAnalysis =
+    options.importAnalysisContext ??
+    createImportAnalysisContext({ isolated: true });
 
   for (const scope of scopes) {
     for (const project of scope.projects) {
@@ -807,6 +822,10 @@ function promoteAutoScopes(
 
 async function resolveAutoCheckers(
   config: ResolvedLiminaConfig,
+  options: Pick<
+    PrepareGeneratedTsconfigGraphOptions,
+    'importAnalysisContext'
+  > = {},
 ): Promise<ResolvedCheckerConfig[]> {
   const entryConfigPaths = await collectAutoEntryConfigPaths(config);
   const scopes = entryConfigPaths
@@ -819,7 +838,10 @@ async function resolveAutoCheckers(
     ]),
   );
 
-  promoteAutoScopes(kindsByEntry, collectAutoScopeDependencies(config, scopes));
+  promoteAutoScopes(
+    kindsByEntry,
+    collectAutoScopeDependencies(config, scopes, options),
+  );
 
   const entriesByPreset = new Map<AutoCheckerPreset, string[]>();
 
@@ -861,9 +883,13 @@ async function resolveAutoCheckers(
 
 async function resolveGeneratedGraphCheckers(
   config: ResolvedLiminaConfig,
+  options: Pick<
+    PrepareGeneratedTsconfigGraphOptions,
+    'importAnalysisContext'
+  > = {},
 ): Promise<ResolvedCheckerConfig[]> {
   return isAutoCheckerMode(config)
-    ? resolveAutoCheckers(config)
+    ? resolveAutoCheckers(config, options)
     : getActiveCheckers(config);
 }
 
@@ -1204,10 +1230,16 @@ function inferProjectReferences(
   config: ResolvedLiminaConfig,
   projects: SourceProject[],
   ownerProjects: SourceProject[] = projects,
+  options: Pick<
+    PrepareGeneratedTsconfigGraphOptions,
+    'importAnalysisContext'
+  > = {},
 ): InferredProjectReferenceCollection {
   const problems: string[] = [];
   const providerEdgesByKey = new Map<string, GeneratedProviderEdge>();
-  const importAnalysis = createImportAnalysisContext();
+  const importAnalysis =
+    options.importAnalysisContext ??
+    createImportAnalysisContext({ isolated: true });
   const ownerLookup = createFileOwnerLookup(
     ownerProjects.map((project) => ({
       checkerPresets: project.context.checkerPresets,
@@ -1845,8 +1877,9 @@ export function collectGeneratedSourceConfigPaths(
 
 export async function prepareGeneratedTsconfigGraph(
   config: ResolvedLiminaConfig,
+  options: PrepareGeneratedTsconfigGraphOptions = {},
 ): Promise<GeneratedTsconfigGraphResult> {
-  const checkers = await resolveGeneratedGraphCheckers(config);
+  const checkers = await resolveGeneratedGraphCheckers(config, options);
   const checkerCollectionsByName = new Map<
     string,
     CheckerSourceConfigCollection
@@ -1968,6 +2001,7 @@ export async function prepareGeneratedTsconfigGraph(
         config,
         projectsByChecker.get(checker.name) ?? [],
         allProjects,
+        options,
       ),
     ),
   );
@@ -2003,7 +2037,9 @@ export async function prepareGeneratedTsconfigGraph(
     );
   }
 
-  const workspacePackages = await collectWorkspacePackages(config);
+  const workspacePackages = options.workspacePackagesProvider
+    ? await options.workspacePackagesProvider()
+    : await collectWorkspacePackages(config);
   const generatedKnip = prepareGeneratedKnipPackageConfigs({
     config,
     sourceToBuildByChecker,

@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import {
   collectDependencyGraph,
   type DependencyGraphDocument,
   type DependencyGraphEdgeKind,
-} from '../dependency-graph';
+} from '../dependency-graph/runner';
 
 const defaultCheckers: NonNullable<ResolvedLiminaConfig['config']>['checkers'] =
   {

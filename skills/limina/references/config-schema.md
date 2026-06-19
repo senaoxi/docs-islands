@@ -343,24 +343,14 @@ Command step details:
 
 `limina check <name>` only runs `pipelines[name]`; missing names are errors and do not fall back to the default.
 
-## Programmatic Helpers
+## Root Entry Helpers
 
 ```ts
-import {
-  defineConfig,
-  getActiveCheckerExtensions,
-  getActiveCheckers,
-  loadConfig,
-  validateLiminaConfig,
-  type LiminaConfig,
-  type ResolvedLiminaConfig,
-} from 'limina';
+import { defineConfig, type LiminaConfig } from 'limina';
 ```
 
 - `defineConfig(value)` is an identity helper with typed overloads.
-- `loadConfig({ command?, configPath?, cwd?, mode? })` resolves and validates the nearest config inside the pnpm workspace root.
-- `validateLiminaConfig(config)` validates top-level shape, checker shape, removed fields, and release content hash shape.
-- `getActiveCheckers(config)` returns manually configured `ResolvedCheckerConfig[]` with `{ name, preset, include, exclude, extensions }`; auto mode resolves during generated graph preparation.
-- `getActiveCheckerExtensions(config)` returns normalized checker extensions across active manual checkers.
+- The package root is config-only: `defineConfig` plus config authoring types are public.
+- Runtime helpers such as `loadConfig`, checker resolution helpers, command runners, generated graph helpers, and resolved runtime types are internal.
 
 Deeper runtime validation for graph rules, package entries, proof allowlist, Knip workspace config, tsconfig ownership ignores, and `implicitRefs` happens inside the relevant commands.

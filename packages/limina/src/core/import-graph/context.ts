@@ -3,27 +3,27 @@ import type ts from 'typescript';
 import {
   type CheckerProjectParseContext,
   parseCheckerProjectConfigForContext,
-} from './checkers';
-import type { ResolvedLiminaConfig } from './config';
-import type { ImportRecord } from './import-analysis';
+} from '../../checkers';
+import type { ResolvedLiminaConfig } from '../../config/runner';
+import type { ImportRecord } from '../import-analysis/runner';
 
+import {
+  isPathInsideDirectory,
+  normalizeAbsolutePath,
+  toRelativePath,
+} from '../../utils/path';
 import {
   createExtensionPattern,
   getDtsCompanionConfigPath,
   getRawReferencePaths,
   isDtsConfigPath,
   readJsonConfig,
-} from './tsconfig';
-import {
-  isPathInsideDirectory,
-  normalizeAbsolutePath,
-  toRelativePath,
-} from './utils/path';
+} from '../tsconfig/actions';
 import {
   findPackageForSpecifier,
   type ImporterInfo,
   type WorkspacePackage,
-} from './workspace';
+} from '../workspace/actions';
 
 export interface ProjectInfo {
   checkerPresets: CheckerProjectParseContext['checkerPresets'];
@@ -360,4 +360,4 @@ export {
   type ImportAnalysisContext,
   type ImportRecord,
   type ImportRecordKind,
-} from './import-analysis';
+} from '../import-analysis/runner';

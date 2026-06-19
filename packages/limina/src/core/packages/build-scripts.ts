@@ -1,7 +1,10 @@
 import path from 'pathe';
-import type { BuildCheckerPreset, ResolvedLiminaConfig } from './config';
-import { normalizeAbsolutePath, toRelativePath } from './utils/path';
-import type { WorkspacePackage } from './workspace';
+import type {
+  BuildCheckerPreset,
+  ResolvedLiminaConfig,
+} from '../../config/runner';
+import { normalizeAbsolutePath, toRelativePath } from '../../utils/path';
+import type { WorkspacePackage } from '../workspace/actions';
 
 export interface PackageBuildScript {
   checker?: BuildCheckerPreset;

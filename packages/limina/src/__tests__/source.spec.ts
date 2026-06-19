@@ -9,9 +9,9 @@ import type {
   SourceBoundaryConfig,
   SourceCheckConfig,
   SourceKnipWorkspaceConfig,
-} from '../config';
-import type { KnipCliInvocation } from '../knip';
+} from '../config/runner';
 import { SourceLogger } from '../logger';
+import type { KnipCliInvocation } from '../source-check/knip';
 import { SOURCE_ISSUE_CODES } from '../source-check/report';
 
 async function writeText(filePath: string, text: string): Promise<void> {

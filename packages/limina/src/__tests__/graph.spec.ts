@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { runGraphCheck } from '../commands/graph';
-import type { GraphConfig, ResolvedLiminaConfig } from '../config';
+import type { GraphConfig, ResolvedLiminaConfig } from '../config/runner';
 import { GraphLogger } from '../logger';
 
 const requireFromTest = createRequire(import.meta.url);

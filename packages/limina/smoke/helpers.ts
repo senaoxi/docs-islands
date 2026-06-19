@@ -355,6 +355,18 @@ const manifest = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 if (typeof publicApi.defineConfig !== 'function') {
   throw new Error('limina root export did not expose defineConfig.');
 }
+for (const removedExport of [
+  'loadConfig',
+  'runGraphCheck',
+  'runSourceCheck',
+  'prepareGeneratedTsconfigGraph',
+  'collectDependencyGraph',
+  'createLiminaFlowReporter',
+]) {
+  if (removedExport in publicApi) {
+    throw new Error(\`limina root export should not expose \${removedExport}.\`);
+  }
+}
 let configExportRejected = false;
 try {
   await import('limina/config');

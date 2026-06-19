@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { runProofCheck } from '../commands/proof';
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import { ProofLogger } from '../logger';
 
 async function writeText(filePath: string, text: string): Promise<void> {

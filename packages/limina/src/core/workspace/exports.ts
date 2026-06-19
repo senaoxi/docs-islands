@@ -6,15 +6,15 @@ import {
   type CheckerProjectParseContext,
   normalizeExtensions,
   resolveModuleNameWithCheckers,
-} from './checkers';
-import type { ResolvedLiminaConfig } from './config';
-import { resolveModuleNameWithOxc } from './import-analysis';
+} from '../../checkers';
+import type { ResolvedLiminaConfig } from '../../config/runner';
 import {
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
-} from './utils/path';
-import type { WorkspacePackage } from './workspace';
+} from '../../utils/path';
+import { resolveModuleNameWithOxc } from '../import-analysis/runner';
+import type { WorkspacePackage } from './actions';
 
 export interface WorkspaceExportsResolutionProfile {
   checkerPresets: CheckerProjectParseContext['checkerPresets'];

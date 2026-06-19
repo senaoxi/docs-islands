@@ -1,4 +1,3 @@
-import { createElapsedTimer } from 'logaria/helper';
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
@@ -6,16 +5,14 @@ import {
   type CheckerProjectParseContext,
   normalizeExtensions,
 } from '../checkers';
-import { getActiveCheckers, type ResolvedLiminaConfig } from '../config';
-import type { LiminaFlowReporter } from '../flow';
+import { getActiveCheckers, type ResolvedLiminaConfig } from '../config/runner';
+import { createLiminaCore, type LiminaCore } from '../core';
 import {
   collectGeneratedSourceConfigPaths,
   type GeneratedTsconfigGraphResult,
-  prepareGeneratedTsconfigGraph,
-} from '../generated-graph';
+} from '../core/build-graph/generated/runner';
 import {
   collectImportsFromFile,
-  createImportAnalysisContext,
   formatImportRecordLocation,
   getTypecheckConfigPath,
   type ImportRecord,
@@ -24,21 +21,37 @@ import {
   parseProject,
   type ProjectInfo,
   resolveInternalImport,
-} from '../graph-context';
-import { isNodeBuiltinSpecifier } from '../graph-rules';
+} from '../core/import-graph/context';
 import {
-  collectKnipSourceIssues,
-  type KnipCliRunner,
-  type KnipOwnerProject,
-  type KnipSourceIssues,
-} from '../knip';
-import { clearCliScreen, formatErrorMessage, SourceLogger } from '../logger';
+  collectWorkspaceDependencyDeclarations,
+  createWorkspaceDependencyKey,
+  findPackageImportMatch,
+  isBarePackageSpecifier,
+  isDependencyAuthorized,
+  isPackageImportSpecifier,
+  isUrlOrDataOrFileSpecifier,
+  isVirtualModuleSpecifier,
+  type WorkspaceDependencyDeclaration,
+} from '../core/packages/authority';
+import {
+  classifyResolvedPackageTarget,
+  findOwnerForFile,
+  type NearestPackageInfo,
+} from '../core/packages/owners';
 import {
   collectSourceGraphProjectExtensions,
   getRawReferencePaths,
   isOrdinaryTypecheckConfigPath,
   readJsonConfig,
-} from '../tsconfig';
+} from '../core/tsconfig/actions';
+import {
+  getPackageRootSpecifier,
+  type PackageOwner,
+  type WorkspacePackage,
+} from '../core/workspace/actions';
+import type { LiminaFlowReporter } from '../flow';
+import { isNodeBuiltinSpecifier } from '../graph-check/rules';
+import { SourceLogger } from '../logger';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
@@ -46,12 +59,11 @@ import {
   toRelativePath,
 } from '../utils/path';
 import {
-  collectPackageOwners,
-  collectWorkspacePackages,
-  getPackageRootSpecifier,
-  type PackageOwner,
-  type WorkspacePackage,
-} from '../workspace';
+  collectKnipSourceIssues,
+  type KnipCliRunner,
+  type KnipOwnerProject,
+  type KnipSourceIssues,
+} from './knip';
 import {
   collectSourceKnipWorkspaceConfigs,
   createKnipSourceAnalysisGroups,
@@ -66,22 +78,6 @@ import {
   type OwnerSourceModuleSet,
 } from './knip-unused';
 import {
-  classifyResolvedPackageTarget,
-  findOwnerForFile,
-  type NearestPackageInfo,
-} from './owners';
-import {
-  collectWorkspaceDependencyDeclarations,
-  createWorkspaceDependencyKey,
-  findPackageImportMatch,
-  isBarePackageSpecifier,
-  isDependencyAuthorized,
-  isPackageImportSpecifier,
-  isUrlOrDataOrFileSpecifier,
-  isVirtualModuleSpecifier,
-  type WorkspaceDependencyDeclaration,
-} from './package-authority';
-import {
   formatSourceCheckHumanReport,
   SOURCE_ISSUE_CODES,
   type SourceCheckIssue,
@@ -95,6 +91,7 @@ import {
 
 export interface RunSourceCheckOptions {
   clearScreen?: boolean;
+  core?: LiminaCore;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
@@ -1256,65 +1253,68 @@ async function addKnipBackedSourceProblems(options: {
   }
 }
 
-function createSourceProjectEntries(
-  config: ResolvedLiminaConfig,
+async function createSourceProjectEntries(
+  core: LiminaCore,
   projects: ProjectInfo[],
-): SourceProjectEntry[] {
-  return projects
-    .filter((project) => isDtsProjectConfig(project.configPath))
-    .map((project) => {
-      const typecheckConfigPath = getTypecheckConfigPath(project.configPath);
-      const fileNames = new Set(project.fileNames);
+): Promise<SourceProjectEntry[]> {
+  return Promise.all(
+    projects
+      .filter((project) => isDtsProjectConfig(project.configPath))
+      .map(async (project) => {
+        const typecheckConfigPath = getTypecheckConfigPath(project.configPath);
+        const fileNames = new Set(project.fileNames);
 
-      if (existsSync(typecheckConfigPath)) {
-        for (const fileName of parseProject(
-          config,
-          typecheckConfigPath,
-          project,
-        ).fileNames) {
-          fileNames.add(fileName);
+        if (existsSync(typecheckConfigPath)) {
+          for (const fileName of (
+            await core.tsconfig.getProject(typecheckConfigPath, project)
+          ).fileNames) {
+            fileNames.add(fileName);
+          }
         }
-      }
 
-      return {
-        fileNames: [...fileNames].sort(),
-        project,
-      };
-    });
+        return {
+          fileNames: [...fileNames].sort(),
+          project,
+        };
+      }),
+  );
 }
 
-async function runSourceCheckInternal(
+export async function runSourceCheckImpl(
   config: ResolvedLiminaConfig,
   options: {
+    core?: LiminaCore;
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
     knipRunner?: KnipCliRunner;
     logSuccess?: boolean;
     report?: SourceIssueReportOptions;
   } = {},
 ): Promise<boolean> {
+  const core = options.core ?? createLiminaCore(config);
   const generatedGraph = options.generatedGraphProvider
     ? await options.generatedGraphProvider()
-    : await prepareGeneratedTsconfigGraph(config);
+    : await core.buildGraph.getGraph();
   const graphRoute = collectSourceGraphProjectExtensions(
     config,
     generatedGraph,
   );
   const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
-  const projects = projectPaths.map((projectPath) =>
-    parseProject(
-      config,
-      projectPath,
-      graphRoute.projectContextsByPath.get(projectPath),
+  const projects = await Promise.all(
+    projectPaths.map((projectPath) =>
+      core.tsconfig.getProject(
+        projectPath,
+        graphRoute.projectContextsByPath.get(projectPath),
+      ),
     ),
   );
-  const sourceProjectEntries = createSourceProjectEntries(config, projects);
-  const packages = await collectWorkspacePackages(config);
-  const packageOwners = await collectPackageOwners(config);
+  const sourceProjectEntries = await createSourceProjectEntries(core, projects);
+  const packages = await core.workspace.getPackages();
+  const packageOwners = await core.workspace.getPackageOwners();
   const ownerModuleSets = collectOwnerSourceModuleSets({
     owners: packageOwners,
     sourceProjectEntries,
   });
-  const importAnalysis = createImportAnalysisContext();
+  const importAnalysis = core.imports.context;
   const problems: string[] = [...graphRoute.problems];
   const sourceIssues: SourceCheckIssue[] = [];
 
@@ -1359,7 +1359,9 @@ async function runSourceCheckInternal(
       addProjectOwnerProblems({
         config,
         configPath: typecheckConfigPath,
-        fileNames: parseProject(config, typecheckConfigPath, project).fileNames,
+        fileNames: (
+          await core.tsconfig.getProject(typecheckConfigPath, project)
+        ).fileNames,
         owners: packageOwners,
         problems,
         role: 'typecheck companion',
@@ -1557,55 +1559,4 @@ async function runSourceCheckInternal(
   }
 
   return true;
-}
-
-export async function runSourceCheck(
-  config: ResolvedLiminaConfig,
-  options: RunSourceCheckOptions = {},
-): Promise<boolean> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
-  const task = options.flow?.start('source check', {
-    depth: options.flowDepth ?? 0,
-  });
-
-  if (!options.flow) {
-    SourceLogger.info('source check started');
-  }
-
-  try {
-    const logSuccess = !options.flow?.interactive;
-    const passed = await runSourceCheckInternal(config, {
-      generatedGraphProvider: options.generatedGraphProvider,
-      knipRunner: options.knipRunner,
-      logSuccess,
-      report: options.report,
-    });
-
-    if (passed) {
-      if (logSuccess) {
-        SourceLogger.success('source check finished', elapsed());
-      }
-
-      task?.pass();
-    } else {
-      if (!options.flow) {
-        SourceLogger.error('source check failed', elapsed());
-      }
-
-      task?.fail('source check failed');
-    }
-
-    return passed;
-  } catch (error) {
-    SourceLogger.error(
-      `source check failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('source check failed', { error });
-    throw error;
-  }
 }

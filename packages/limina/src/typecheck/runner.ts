@@ -1,4 +1,3 @@
-import { createElapsedTimer } from 'logaria/helper';
 import { existsSync, statSync } from 'node:fs';
 import path from 'pathe';
 import {
@@ -11,21 +10,21 @@ import {
   getActiveCheckers,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
-} from '../config';
-import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
-import {
-  type GeneratedBuildModule,
-  type GeneratedTsconfigGraphResult,
-  prepareGeneratedTsconfigGraph,
-} from '../generated-graph';
-import { clearCliScreen, formatErrorMessage, TypecheckLogger } from '../logger';
+} from '../config/runner';
+import { createLiminaCore, type LiminaCore } from '../core';
+import type {
+  GeneratedBuildModule,
+  GeneratedTsconfigGraphResult,
+} from '../core/build-graph/generated/runner';
 import {
   collectGraphProjectRouteFromRoot,
   getRawReferencePathsForConfig,
   isDtsConfigPath,
   isOrdinarySourceTypecheckConfigPath,
   resolveProjectConfigPath,
-} from '../tsconfig';
+} from '../core/tsconfig/actions';
+import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
+import { formatErrorMessage, TypecheckLogger } from '../logger';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
@@ -44,6 +43,7 @@ import {
 export interface RunCheckerBuildOptions {
   clearScreen?: boolean;
   config: ResolvedLiminaConfig;
+  core?: LiminaCore;
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
@@ -64,6 +64,7 @@ export interface RunBuildOptions {
   checker?: BuildCheckerPreset;
   configPath?: string;
   config: ResolvedLiminaConfig;
+  core?: LiminaCore;
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
@@ -84,6 +85,7 @@ export interface RunBuildResult {
 export interface RunCheckerTypecheckOptions {
   clearScreen?: boolean;
   config: ResolvedLiminaConfig;
+  core?: LiminaCore;
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
@@ -99,14 +101,16 @@ export interface RunCheckerTypecheckResult {
   rootConfigPaths: string[];
 }
 
-async function runCheckerBuildInternal(
+export async function runCheckerBuildImpl(
   options: RunCheckerBuildOptions,
 ): Promise<RunCheckerBuildResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const projectRootDir = normalizeAbsolutePath(options.config.rootDir);
   const generatedGraph = options.generatedGraphProvider
     ? await options.generatedGraphProvider()
-    : await prepareGeneratedTsconfigGraph(options.config);
+    : await (
+        options.core ?? createLiminaCore(options.config)
+      ).buildGraph.getGraph();
   const allCheckers = generatedGraph.checkers;
   const checkers = getExecutionCheckers({
     checkers: allCheckers,
@@ -251,44 +255,6 @@ async function runCheckerBuildInternal(
     projectRootDir,
     rootConfigPaths,
   };
-}
-
-export async function runCheckerBuild(
-  options: RunCheckerBuildOptions,
-): Promise<RunCheckerBuildResult> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
-  const task = options.flow?.start('checker build', {
-    depth: options.flowDepth ?? 0,
-  });
-
-  TypecheckLogger.info('checker build started');
-
-  try {
-    const result = await runCheckerBuildInternal(options);
-
-    if (result.passed) {
-      if (!options.flow?.interactive) {
-        TypecheckLogger.success('checker build finished', elapsed());
-      }
-
-      task?.pass();
-    } else {
-      TypecheckLogger.error('checker build finished with failures', elapsed());
-      task?.fail('checker build finished with failures');
-    }
-    return result;
-  } catch (error) {
-    TypecheckLogger.error(
-      `checker build failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('checker build failed', { error });
-    throw error;
-  }
 }
 
 function findNearestDefaultTsconfig(options: {
@@ -468,6 +434,7 @@ interface ResolveBuildTargetOptions {
   checker?: BuildCheckerPreset;
   config: ResolvedLiminaConfig;
   configPath?: string;
+  core?: LiminaCore;
   cwd: string;
   project?: string;
 }
@@ -557,7 +524,9 @@ async function resolveBuildTarget(
     project: options.project,
     rootDir: projectRootDir,
   });
-  const generatedGraph = await prepareGeneratedTsconfigGraph(options.config);
+  const generatedGraph = await (
+    options.core ?? createLiminaCore(options.config)
+  ).buildGraph.getGraph();
   const allCheckers = generatedGraph.checkers;
   const managedTargets = isOrdinarySourceTypecheckConfigPath(targetConfigPath)
     ? collectManagedBuildTargets({
@@ -924,7 +893,7 @@ function collectBuildTargetProviderClosure(options: {
   );
 }
 
-async function runBuildInternal(
+export async function runBuildImpl(
   options: RunBuildOptions,
 ): Promise<RunBuildResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
@@ -933,6 +902,7 @@ async function runBuildInternal(
     checker: options.checker,
     config: options.config,
     configPath: options.configPath,
+    core: options.core,
     cwd,
     project: options.project,
   });
@@ -1229,46 +1199,7 @@ async function runBuildInternal(
   };
 }
 
-export async function runBuild(
-  options: RunBuildOptions,
-): Promise<RunBuildResult> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
-  const task = options.flow?.start('build', {
-    depth: options.flowDepth ?? 0,
-  });
-
-  TypecheckLogger.info('build started');
-
-  try {
-    const result = await runBuildInternal(options);
-
-    if (result.passed) {
-      if (!options.flow?.interactive) {
-        TypecheckLogger.success('build finished', elapsed());
-      }
-
-      task?.pass();
-    } else {
-      TypecheckLogger.error('build finished with failures', elapsed());
-      task?.fail('build finished with failures');
-    }
-
-    return result;
-  } catch (error) {
-    TypecheckLogger.error(
-      `build failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('build failed', { error });
-    throw error;
-  }
-}
-
-async function runCheckerTypecheckInternal(
+export async function runCheckerTypecheckImpl(
   options: RunCheckerTypecheckOptions,
 ): Promise<RunCheckerTypecheckResult> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
@@ -1318,7 +1249,9 @@ async function runCheckerTypecheckInternal(
 
   const generatedGraph = options.generatedGraphProvider
     ? await options.generatedGraphProvider()
-    : await prepareGeneratedTsconfigGraph(options.config);
+    : await (
+        options.core ?? createLiminaCore(options.config)
+      ).buildGraph.getGraph();
   const targets = checkers.map((checker) => {
     const configPath = generatedGraph.checkerEntries.get(checker.name);
 
@@ -1422,44 +1355,4 @@ async function runCheckerTypecheckInternal(
   };
 }
 
-export async function runCheckerTypecheck(
-  options: RunCheckerTypecheckOptions,
-): Promise<RunCheckerTypecheckResult> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
-  const task = options.flow?.start('checker typecheck', {
-    depth: options.flowDepth ?? 0,
-  });
-
-  TypecheckLogger.info('checker typecheck started');
-
-  try {
-    const result = await runCheckerTypecheckInternal(options);
-
-    if (result.passed) {
-      if (!options.flow?.interactive) {
-        TypecheckLogger.success('checker typecheck finished', elapsed());
-      }
-
-      task?.pass();
-    } else {
-      TypecheckLogger.error(
-        'checker typecheck finished with failures',
-        elapsed(),
-      );
-      task?.fail('checker typecheck finished with failures');
-    }
-
-    return result;
-  } catch (error) {
-    TypecheckLogger.error(
-      `checker typecheck failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('checker typecheck failed', { error });
-    throw error;
-  }
-}
+export default runCheckerBuildImpl;

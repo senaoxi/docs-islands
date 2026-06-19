@@ -1,26 +1,26 @@
 import path from 'pathe';
 
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import {
+  createWorkspaceDependencyKey,
+  type WorkspaceDependencyDeclaration,
+} from '../core/packages/authority';
+import { findOwnerForFile } from '../core/packages/owners';
+import type {
+  PackageManifest,
+  PackageOwner,
+  WorkspacePackage,
+} from '../core/workspace/actions';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   normalizeSlashes,
   toRelativePath,
 } from '../utils/path';
-import type {
-  PackageManifest,
-  PackageOwner,
-  WorkspacePackage,
-} from '../workspace';
 import {
   formatSourceKnipWorkspaceField,
   type SourceKnipWorkspaceConfigRecord,
 } from './knip-routing';
-import { findOwnerForFile } from './owners';
-import {
-  createWorkspaceDependencyKey,
-  type WorkspaceDependencyDeclaration,
-} from './package-authority';
 import {
   isInvalidWorkspacePattern,
   normalizeWorkspacePattern,

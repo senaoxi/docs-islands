@@ -1,7 +1,7 @@
 import path from 'pathe';
 
-import { isRelativeSpecifier } from '../graph-context';
-import type { PackageManifest, WorkspacePackage } from '../workspace';
+import { isRelativeSpecifier } from '../import-graph/context';
+import type { PackageManifest, WorkspacePackage } from '../workspace/actions';
 
 export interface PackageImportMatch {
   key: string;

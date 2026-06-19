@@ -1,4 +1,5 @@
 import * as prompts from '@clack/prompts';
+import ignore from 'ignore';
 import { createElapsedTimer } from 'logaria/helper';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -6,15 +7,15 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'pathe';
 import { parse as parseYaml } from 'yaml';
-import type { ResolvedLiminaConfig } from '../config';
-import type { LiminaFlowReporter } from '../flow';
-import { clearCliScreen, formatErrorMessage, InitLogger } from '../logger';
-import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import {
   collectWorkspacePackages,
   type PackageManifest,
   readJsonFile,
-} from '../workspace';
+} from '../core/workspace/actions';
+import type { LiminaFlowReporter } from '../flow';
+import { clearCliScreen, formatErrorMessage, InitLogger } from '../logger';
+import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
 export interface RunInitOptions {
   clearScreen?: boolean;
@@ -451,8 +452,9 @@ async function ensureGeneratedGraphGitignore(options: {
   }
 
   const content = readFileSync(gitignorePath, 'utf8');
+  const ig = ignore().add(content);
 
-  if (content.split(/\r?\n/u).includes(entry)) {
+  if (ig.ignores(entry)) {
     options.skippedFiles.push(gitignorePath);
     return {
       message: '.gitignore (skipped: .limina/ already ignored)',
@@ -467,6 +469,7 @@ async function ensureGeneratedGraphGitignore(options: {
     `${content}${separator}${entry}\n`,
     options.writtenFiles,
   );
+
   return {
     message: '.gitignore updated',
     status: 'pass',
@@ -595,9 +598,7 @@ async function installLiminaSkill(options: {
   }
 }
 
-async function runInitInternal(
-  options: RunInitOptions,
-): Promise<RunInitResult> {
+async function runInitImpl(options: RunInitOptions): Promise<RunInitResult> {
   const cwd = normalizeAbsolutePath(options.cwd ?? process.cwd());
   const stepDepth = (options.flowDepth ?? 0) + 1;
   const { rootDir } = await runInitFlowStep({
@@ -764,7 +765,7 @@ export async function runInit(
   InitLogger.info('init started');
 
   try {
-    const result = await runInitInternal(options);
+    const result = await runInitImpl(options);
 
     InitLogger.success(
       `init generated ${result.writtenFiles.length} files for ${result.workspacePackageCount} workspace packages.`,

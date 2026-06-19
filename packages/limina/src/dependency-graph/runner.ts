@@ -1,30 +1,26 @@
 import path from 'pathe';
-import type { ResolvedLiminaConfig } from './config';
-import { prepareGeneratedTsconfigGraph } from './generated-graph';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import { createLiminaCore, type LiminaCore } from '../core';
 import {
   collectImportsFromFile,
   createFileOwnerLookup,
-  createImportAnalysisContext,
   findPackageForFile,
-  parseProject,
   type ProjectInfo,
   resolveInternalImport,
-} from './graph-context';
-import { collectSourceGraphProjectExtensions } from './tsconfig';
+} from '../core/import-graph/context';
+import {
+  findPackageForSpecifier,
+  type WorkspacePackage,
+} from '../core/workspace/actions';
+import {
+  createWorkspaceExportsResolutionIndex,
+  type WorkspaceExportsResolutionProfile,
+} from '../core/workspace/exports';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   toRelativePath,
-} from './utils/path';
-import {
-  collectWorkspacePackages,
-  findPackageForSpecifier,
-  type WorkspacePackage,
-} from './workspace';
-import {
-  createWorkspaceExportsResolutionIndex,
-  type WorkspaceExportsResolutionProfile,
-} from './workspace-exports';
+} from '../utils/path';
 
 export type DependencyGraphView = 'all' | 'artifact' | 'source';
 export type DependencyGraphEdgeKind = 'artifact' | 'source';
@@ -58,6 +54,7 @@ export interface DependencyGraphDocument {
 }
 
 export interface CollectDependencyGraphOptions {
+  core?: LiminaCore;
   view?: DependencyGraphView;
 }
 
@@ -96,29 +93,11 @@ function createWorkspaceExportsResolutionProfiles(
   }));
 }
 
-async function collectDependencyGraphProjects(
-  config: ResolvedLiminaConfig,
-): Promise<{
+async function collectDependencyGraphProjects(core: LiminaCore): Promise<{
   problems: string[];
   projects: ProjectInfo[];
 }> {
-  const generatedGraph = await prepareGeneratedTsconfigGraph(config);
-  const graphRoute = collectSourceGraphProjectExtensions(
-    config,
-    generatedGraph,
-  );
-  const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
-
-  return {
-    problems: graphRoute.problems,
-    projects: projectPaths.map((projectPath) =>
-      parseProject(
-        config,
-        projectPath,
-        graphRoute.projectContextsByPath.get(projectPath),
-      ),
-    ),
-  };
+  return core.tsconfig.getSourceGraphProjects();
 }
 
 function normalizeDependencyGraphView(
@@ -256,10 +235,11 @@ export async function collectDependencyGraph(
   config: ResolvedLiminaConfig,
   options: CollectDependencyGraphOptions = {},
 ): Promise<DependencyGraphDocument> {
+  const core = options.core ?? createLiminaCore(config);
   const view = normalizeDependencyGraphView(options.view);
-  const checkerProjects = await collectDependencyGraphProjects(config);
+  const checkerProjects = await collectDependencyGraphProjects(core);
   const problems = [...checkerProjects.problems];
-  const workspacePackages = await collectWorkspacePackages(config);
+  const workspacePackages = await core.workspace.getPackages();
   const workspaceExports = await createWorkspaceExportsResolutionIndex({
     config,
     packages: workspacePackages,
@@ -275,7 +255,7 @@ export async function collectDependencyGraph(
   }
 
   const fileOwnerLookup = createFileOwnerLookup(checkerProjects.projects);
-  const importAnalysis = createImportAnalysisContext();
+  const importAnalysis = core.imports.context;
   const edgesByKey = new Map<string, DependencyGraphEdge>();
 
   for (const project of checkerProjects.projects) {

@@ -24,11 +24,12 @@ import type {
   PackagePublintCheckConfig,
   ResolvedLiminaConfig,
   RuntimeEnvironment,
-} from '../config';
+} from '../config/runner';
+import type { LiminaCore } from '../core';
+import { getPackageRootSpecifier } from '../core/workspace/actions';
 import type { LiminaFlowReporter } from '../flow';
-import { clearCliScreen, formatErrorMessage, PackageLogger } from '../logger';
+import { formatErrorMessage, PackageLogger } from '../logger';
 import { toRelativePath } from '../utils/path';
-import { getPackageRootSpecifier } from '../workspace';
 import {
   createPackageEntrySelectionPlan,
   type PackageEntrySelectionPlan,
@@ -72,6 +73,7 @@ export interface RunPackageCheckOptions {
   attwProfile?: PackageAttwProfile;
   clearScreen?: boolean;
   config: ResolvedLiminaConfig;
+  core?: LiminaCore;
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
@@ -811,82 +813,52 @@ export async function auditPublishedPackageBoundaries(
   });
 }
 
-export async function runPackageCheck(
+export async function runPackageCheckImpl(
   options: RunPackageCheckOptions,
 ): Promise<boolean> {
-  if (options.clearScreen ?? true) {
-    clearCliScreen();
-  }
-
-  const elapsed = createElapsedTimer();
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  const task = options.flow?.start('package check', {
-    depth: options.flowDepth ?? 0,
+
+  const plan = createPackageEntrySelectionPlan({
+    config: options.config,
+    cwd,
+    packageNames: options.packageNames,
+    requireCwdPackageMatch: false,
+    tool: options.tool,
   });
 
-  try {
-    PackageLogger.info('package check started');
+  logPackageCheckPlan({
+    config: options.config,
+    cwd,
+    plan,
+  });
 
-    const plan = createPackageEntrySelectionPlan({
-      config: options.config,
-      cwd,
-      packageNames: options.packageNames,
-      requireCwdPackageMatch: false,
-      tool: options.tool,
-    });
+  const runnableEntries = plan.entries.filter(
+    (entry) => entry.checks.length > 0,
+  );
 
-    logPackageCheckPlan({
-      config: options.config,
-      cwd,
-      plan,
-    });
-
-    const runnableEntries = plan.entries.filter(
-      (entry) => entry.checks.length > 0,
+  if (runnableEntries.length === 0) {
+    throw new Error(
+      options.tool && options.tool !== 'all'
+        ? `No package entries have "${options.tool}" enabled.`
+        : 'No package checks are enabled.',
     );
-
-    if (runnableEntries.length === 0) {
-      throw new Error(
-        options.tool && options.tool !== 'all'
-          ? `No package entries have "${options.tool}" enabled.`
-          : 'No package checks are enabled.',
-      );
-    }
-
-    let passed = true;
-
-    for (const entry of runnableEntries) {
-      passed =
-        (await runPackageCheckEntry({
-          attwProfile: options.attwProfile,
-          checks: entry.checks,
-          config: options.config,
-          flow: options.flow,
-          flowDepth: (options.flowDepth ?? 0) + 1,
-          label: entry.label,
-          outDir: entry.outDir,
-          rawEntry: entry.rawEntry,
-        })) && passed;
-    }
-
-    if (passed) {
-      if (!options.flow?.interactive) {
-        PackageLogger.success('package check finished', elapsed());
-      }
-
-      task?.pass();
-    } else {
-      PackageLogger.error('package check finished with failures', elapsed());
-      task?.fail('package check finished with failures');
-    }
-
-    return passed;
-  } catch (error) {
-    PackageLogger.error(
-      `package check failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
-    task?.fail('package check failed', { error });
-    throw error;
   }
+
+  let passed = true;
+
+  for (const entry of runnableEntries) {
+    passed =
+      (await runPackageCheckEntry({
+        attwProfile: options.attwProfile,
+        checks: entry.checks,
+        config: options.config,
+        flow: options.flow,
+        flowDepth: (options.flowDepth ?? 0) + 1,
+        label: entry.label,
+        outDir: entry.outDir,
+        rawEntry: entry.rawEntry,
+      })) && passed;
+  }
+
+  return passed;
 }

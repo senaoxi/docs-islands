@@ -2,8 +2,8 @@ import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'pathe';
 import { glob } from 'tinyglobby';
-import type { ResolvedLiminaConfig } from './config';
-import { normalizeAbsolutePath, toRelativePath } from './utils/path';
+import type { ResolvedLiminaConfig } from '../../config/runner';
+import { normalizeAbsolutePath, toRelativePath } from '../../utils/path';
 
 const pnpmWorkspaceFileName = 'pnpm-workspace.yaml';
 const pnpmWorkspaceListTimeoutMs = 3000;

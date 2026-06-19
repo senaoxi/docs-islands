@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import {
   collectPnpmWorkspacePatterns,
   collectWorkspacePackages,
   parsePnpmWorkspaceListJson,
-} from '../workspace';
+} from '../core/workspace/actions';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });

@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { defineConfig, getActiveCheckers, loadConfig } from '../config';
-import { prepareGeneratedTsconfigGraph } from '../generated-graph';
-import { collectGraphProjectRoutes } from '../tsconfig';
+import { defineConfig, getActiveCheckers, loadConfig } from '../config/runner';
+import { prepareGeneratedTsconfigGraph } from '../core/build-graph/generated/runner';
+import { collectGraphProjectRoutes } from '../core/tsconfig/actions';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -531,7 +531,7 @@ export default Promise.resolve({});
       await writeText(
         path.join(rootDir, 'limina.config.mjs'),
         `
-import { defineConfig } from '${new URL('../config.ts', import.meta.url).href}';
+import { defineConfig } from '${new URL('../config/runner.ts', import.meta.url).href}';
 
 export default defineConfig(async ({ mode }) => ({
   config: {

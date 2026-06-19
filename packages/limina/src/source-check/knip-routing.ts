@@ -1,8 +1,8 @@
-import type { ResolvedLiminaConfig } from '../config';
-import type { GeneratedTsconfigGraphResult } from '../generated-graph';
-import type { KnipSourceAnalysisGroup } from '../knip';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
+import type { WorkspacePackage } from '../core/workspace/actions';
 import { toRelativePath } from '../utils/path';
-import type { WorkspacePackage } from '../workspace';
+import type { KnipSourceAnalysisGroup } from './knip';
 
 export type SourceKnipWorkspaceConfigRecord = Record<string, unknown>;
 

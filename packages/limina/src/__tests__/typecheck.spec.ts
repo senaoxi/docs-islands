@@ -20,12 +20,14 @@ import {
   type RunCheckerBuildOptions,
   runCheckerTypecheck as runCheckerTypecheckCommand,
   type RunCheckerTypecheckOptions,
-  type TypecheckRunner,
-  type TypecheckTarget,
-  type TypecheckTargetResult,
 } from '../commands/typecheck';
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import { TypecheckLogger } from '../logger';
+import type {
+  TypecheckRunner,
+  TypecheckTarget,
+  TypecheckTargetResult,
+} from '../typecheck/targets';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });

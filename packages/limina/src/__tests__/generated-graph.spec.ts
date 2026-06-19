@@ -10,8 +10,8 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config';
-import { prepareGeneratedTsconfigGraph } from '../generated-graph';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import { prepareGeneratedTsconfigGraph } from '../core/build-graph/generated/runner';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });

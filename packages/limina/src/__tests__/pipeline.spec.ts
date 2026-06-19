@@ -10,13 +10,13 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import { LiminaFlowReporter } from '../flow';
 import {
   normalizePipelineStep,
   runDefaultCheck,
   runPipeline,
-} from '../pipeline';
+} from '../pipeline/runner';
 
 const green = (message: string): string => `\u001B[32m${message}\u001B[0m`;
 

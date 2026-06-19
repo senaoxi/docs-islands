@@ -4,9 +4,9 @@ import { access, mkdir, mkdtemp, rm, rmdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'pathe';
-import type { ResolvedLiminaConfig } from './config';
-import { normalizeAbsolutePath, toRelativePath } from './utils/path';
-import type { WorkspacePackage } from './workspace';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import type { WorkspacePackage } from '../core/workspace/actions';
+import { normalizeAbsolutePath, toRelativePath } from '../utils/path';
 
 interface KnipUnusedWorkspaceDependencyIssue {
   dependencyName: string;

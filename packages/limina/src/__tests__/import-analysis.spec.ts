@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { resolveModuleNameWithOxc } from '../core/import-analysis/runner';
 import {
   clearImportAnalysisCache,
   collectImportsFromFile,
   createImportAnalysisContext,
   resolveInternalImport,
-} from '../graph-context';
-import { resolveModuleNameWithOxc } from '../import-analysis';
+} from '../core/import-graph/context';
 
 async function createTempDir(): Promise<string> {
   return await mkdtemp(path.join(tmpdir(), 'limina-import-analysis-'));

@@ -23,14 +23,14 @@ import {
   type PackageAttwProfile,
   type PackageCheckToolSelection,
   type ResolvedLiminaConfig,
-} from './config';
+} from './config/runner';
 import {
   type DependencyGraphView,
   stringifyDependencyGraph,
-} from './dependency-graph';
+} from './dependency-graph/runner';
 import { createLiminaFlowReporter } from './flow';
 import { clearCliScreen, CliLogger, formatErrorMessage } from './logger';
-import { runDefaultCheck, runPipeline } from './pipeline';
+import { runDefaultCheck, runPipeline } from './pipeline/runner';
 import type { SourceIssueReportOptions } from './source-check/report';
 
 interface GlobalFlags {

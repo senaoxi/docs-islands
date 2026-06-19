@@ -1,6 +1,6 @@
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import {
   normalizeAbsolutePath,
   normalizeSlashes,

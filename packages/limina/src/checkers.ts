@@ -8,7 +8,7 @@ import type {
   CheckerExecutionKind,
   CheckerPreset,
   ResolvedCheckerConfig,
-} from './config';
+} from './config/runner';
 import { normalizeAbsolutePath, toRelativePath } from './utils/path';
 
 type TypeScriptExtensionGroups = readonly (readonly string[])[];

@@ -1,13 +1,13 @@
 import { existsSync } from 'node:fs';
 import type ts from 'typescript';
 
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
 import {
   getTypecheckConfigPath,
   isDtsProjectConfig,
   parseProject,
   type ProjectInfo,
-} from '../graph-context';
+} from '../core/import-graph/context';
 import { toRelativePath } from '../utils/path';
 
 const requiredDtsCompilerOptions: [keyof ts.CompilerOptions, unknown][] = [

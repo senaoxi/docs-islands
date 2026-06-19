@@ -4,7 +4,7 @@ import {
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
-} from '../utils/path';
+} from '../../../utils/path';
 
 export const generatedRootDirName: string = '.limina';
 export const generatedTsconfigDir: string = path.join(

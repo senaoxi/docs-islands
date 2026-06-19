@@ -6,15 +6,18 @@ import {
   getCheckerAdapter,
   normalizeExtensions,
   resolveCheckerProjectExtensions,
-} from './checkers';
-import type { CheckerPreset } from './config';
-import { getActiveCheckers, type ResolvedLiminaConfig } from './config';
-import type { GeneratedTsconfigGraphResult } from './generated-graph';
+} from '../../checkers';
+import type { CheckerPreset } from '../../config/runner';
+import {
+  getActiveCheckers,
+  type ResolvedLiminaConfig,
+} from '../../config/runner';
 import {
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
-} from './utils/path';
+} from '../../utils/path';
+import type { GeneratedTsconfigGraphResult } from '../build-graph/generated/runner';
 
 export type JsonObject = Record<string, unknown>;
 

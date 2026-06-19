@@ -1,14 +1,14 @@
 import { createElapsedTimer } from 'logaria/helper';
 import path from 'pathe';
-import type { ResolvedLiminaConfig } from '../config';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import type { LiminaCore } from '../core';
+import { isLocalPackageDependencySpecifier } from '../core/workspace/actions';
 import type { LiminaFlowReporter } from '../flow';
 import { clearCliScreen, formatErrorMessage, ReleaseLogger } from '../logger';
 import {
   assertPackageReleaseConsistency,
   PackageReleaseConsistencyError,
-} from '../package-release-consistency';
-import { toRelativePath } from '../utils/path';
-import { isLocalPackageDependencySpecifier } from '../workspace';
+} from '../package-check/release-consistency';
 import {
   createPackageEntrySelectionPlan,
   type DistPackageJson,
@@ -16,11 +16,13 @@ import {
   type PackedPackageTarball,
   packOutputTarball,
   readDistPackageJson,
-} from './package';
+} from '../package-check/runner';
+import { toRelativePath } from '../utils/path';
 
 export interface RunReleaseCheckOptions {
   clearScreen?: boolean;
   config: ResolvedLiminaConfig;
+  core?: LiminaCore;
   cwd?: string;
   flow?: LiminaFlowReporter;
   flowDepth?: number;

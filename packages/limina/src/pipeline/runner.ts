@@ -1,31 +1,27 @@
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'pathe';
-import { getCheckerAdapter } from './checkers';
-import { runGraphCheck, runGraphPrepare } from './commands/graph';
-import { runPackageCheck } from './commands/package';
-import { runProofCheck } from './commands/proof';
-import { runReleaseCheck } from './commands/release';
-import { runSourceCheck } from './commands/source';
-import {
-  prepareVueTsgoCache,
-  runCheckerBuild,
-  runCheckerTypecheck,
-} from './commands/typecheck';
+import { getCheckerAdapter } from '../checkers';
+import { runGraphCheck, runGraphPrepare } from '../commands/graph';
+import { runPackageCheck } from '../commands/package';
+import { runProofCheck } from '../commands/proof';
+import { runReleaseCheck } from '../commands/release';
+import { runSourceCheck } from '../commands/source';
+import { runCheckerBuild, runCheckerTypecheck } from '../commands/typecheck';
 import type {
   BuiltinTaskName,
   PipelineStep,
   ResolvedCheckerConfig,
   ResolvedLiminaConfig,
-} from './config';
-import { getActiveCheckers } from './config';
-import type { LiminaFlowReporter } from './flow';
-import {
-  type GeneratedTsconfigGraphResult,
-  prepareGeneratedTsconfigGraph,
-} from './generated-graph';
-import type { SourceIssueReportOptions } from './source-check/report';
+} from '../config/runner';
+import { getActiveCheckers } from '../config/runner';
+import { createLiminaCore, type LiminaCore } from '../core';
+import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
+import type { LiminaFlowReporter } from '../flow';
+import type { SourceIssueReportOptions } from '../source-check/report';
+import { prepareVueTsgoCache } from '../typecheck/targets';
 
 interface RunPipelineOptions {
+  core?: LiminaCore;
   cwd?: string;
   flow?: LiminaFlowReporter;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
@@ -34,11 +30,6 @@ interface RunPipelineOptions {
 }
 
 type NormalizedPipelineStep = Exclude<PipelineStep, string>;
-
-interface PipelineGeneratedGraphContext {
-  get: () => Promise<GeneratedTsconfigGraphResult>;
-  reset: () => void;
-}
 
 const builtInTaskNames = new Set<string>([
   'checker:build',
@@ -58,26 +49,6 @@ const defaultCheckPipeline: PipelineStep[] = [
   'checker:build',
   'checker:typecheck',
 ];
-
-function createPipelineGeneratedGraphContext(
-  config: ResolvedLiminaConfig,
-  options: RunPipelineOptions,
-): PipelineGeneratedGraphContext {
-  let promise: Promise<GeneratedTsconfigGraphResult> | undefined;
-
-  return {
-    get: () => {
-      promise ??= options.generatedGraphProvider
-        ? options.generatedGraphProvider()
-        : prepareGeneratedTsconfigGraph(config);
-
-      return promise;
-    },
-    reset: () => {
-      promise = undefined;
-    },
-  };
-}
 
 function reportCheckerCapabilities(
   config: ResolvedLiminaConfig,
@@ -245,6 +216,7 @@ async function runBuiltinTask(
     case 'graph:check': {
       return runGraphCheck(config, {
         clearScreen: false,
+        core: options.core,
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
@@ -253,6 +225,7 @@ async function runBuiltinTask(
     case 'graph:prepare': {
       return runGraphPrepare(config, {
         clearScreen: false,
+        core: options.core,
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
@@ -261,6 +234,7 @@ async function runBuiltinTask(
     case 'proof:check': {
       return runProofCheck(config, {
         clearScreen: false,
+        core: options.core,
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
@@ -269,6 +243,7 @@ async function runBuiltinTask(
     case 'source:check': {
       return runSourceCheck(config, {
         clearScreen: false,
+        core: options.core,
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
@@ -279,6 +254,7 @@ async function runBuiltinTask(
       return runPackageCheck({
         clearScreen: false,
         config,
+        core: options.core,
         cwd: options.cwd,
         flow: options.flow,
         flowDepth: 1,
@@ -289,6 +265,7 @@ async function runBuiltinTask(
       return runReleaseCheck({
         clearScreen: false,
         config,
+        core: options.core,
         cwd: options.cwd,
         flow: options.flow,
         flowDepth: 1,
@@ -299,6 +276,7 @@ async function runBuiltinTask(
       const result = await runCheckerTypecheck({
         clearScreen: false,
         config,
+        core: options.core,
         cwd: config.rootDir,
         flow: options.flow,
         flowDepth: 1,
@@ -311,6 +289,7 @@ async function runBuiltinTask(
       const result = await runCheckerBuild({
         clearScreen: false,
         config,
+        core: options.core,
         cwd: config.rootDir,
         flow: options.flow,
         flowDepth: 1,
@@ -445,13 +424,10 @@ export async function runPipeline(
   const pipelineTask = options.flow?.start(`pipeline: ${pipelineName}`, {
     collapseOnSuccess: false,
   });
-  const generatedGraphContext = createPipelineGeneratedGraphContext(
-    config,
-    options,
-  );
+  const core = options.core ?? createLiminaCore(config);
   const taskOptions = {
     ...options,
-    generatedGraphProvider: generatedGraphContext.get,
+    core,
   };
 
   for (const [stepIndex, step] of normalizedSteps.entries()) {
@@ -460,7 +436,7 @@ export async function runPipeline(
       : runCommandStep(config, step, options));
 
     if (step.type === 'command') {
-      generatedGraphContext.reset();
+      core.invalidateAll();
     }
 
     if (!passed) {
@@ -491,13 +467,10 @@ export async function runDefaultCheck(
   const pipelineTask = options.flow?.start('default check', {
     collapseOnSuccess: false,
   });
-  const generatedGraphContext = createPipelineGeneratedGraphContext(
-    config,
-    options,
-  );
+  const core = options.core ?? createLiminaCore(config);
   const taskOptions = {
     ...options,
-    generatedGraphProvider: generatedGraphContext.get,
+    core,
   };
 
   if (!usesAutoCheckers(config)) {
@@ -510,7 +483,7 @@ export async function runDefaultCheck(
       : runCommandStep(config, step, options));
 
     if (step.type === 'command') {
-      generatedGraphContext.reset();
+      core.invalidateAll();
     }
 
     if (!passed) {
@@ -532,7 +505,7 @@ export async function runDefaultCheck(
         reportCheckerCapabilities(
           config,
           options.flow,
-          (await generatedGraphContext.get()).checkers,
+          (await core.buildGraph.getGraph()).checkers,
         );
       }
     }

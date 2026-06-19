@@ -7,8 +7,8 @@ import {
   type CheckerProjectParseContext,
   normalizeExtensions,
   resolveModuleNameWithCheckers,
-} from '../checkers';
-import { normalizeAbsolutePath } from '../utils/path';
+} from '../../checkers';
+import { normalizeAbsolutePath } from '../../utils/path';
 import {
   buildLineStarts,
   type CollectedImportRecord,

@@ -1,9 +1,12 @@
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 
-import type { ResolvedLiminaConfig } from '../config';
-import type { GeneratedTsconfigGraphResult } from '../generated-graph';
-import { isDtsProjectConfig, type ProjectInfo } from '../graph-context';
+import type { ResolvedLiminaConfig } from '../config/runner';
+import type { GeneratedTsconfigGraphResult } from '../core/build-graph/generated/runner';
+import {
+  isDtsProjectConfig,
+  type ProjectInfo,
+} from '../core/import-graph/context';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
