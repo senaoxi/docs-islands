@@ -93,4 +93,4 @@ Limina tries to keep the rules visible. Instead of hiding policy in a preset, it
 
 That makes architecture changes something reviewers can read, not something CI discovers only after the merge.
 
-For example, if browser runtime code must never reach Node-only packages, put `"graphRules": ["runtime-client"]` under `liminaOptions` in the declaration leaf and define the deny rule under `graph.rules.runtime-client`. Future boundary changes then appear in config or tsconfig diffs, where reviewers can discuss them directly.
+For example, if browser runtime code must never reach Node-only packages, put `"graphRules": ["runtime-client"]` under `liminaOptions` in the source tsconfig and define the deny rule under `graph.rules.runtime-client`. Limina copies the label to the generated declaration leaf, so future boundary changes appear in config or tsconfig diffs where reviewers can discuss them directly.

@@ -98,7 +98,7 @@ pnpm exec limina graph export --view all
 
 ## 标签与规则
 
-声明叶子可以通过 `liminaOptions.graphRules` 启用一条或多条[图规则](./config/graph-rules.md)：
+源码 tsconfig 可以通过 `liminaOptions.graphRules` 启用一条或多条[图规则](./config/graph-rules.md)。Limina 会把这些标签复制到生成的声明叶子上：
 
 ```jsonc
 {

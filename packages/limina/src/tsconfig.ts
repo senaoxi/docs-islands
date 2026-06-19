@@ -1,12 +1,10 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'pathe';
-import { glob } from 'tinyglobby';
 import ts from 'typescript';
 import {
   type CheckerProjectParseContext,
   getCheckerAdapter,
   normalizeExtensions,
-  parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
 } from './checkers';
 import type { CheckerPreset } from './config';
@@ -25,7 +23,6 @@ const buildGraphConfigFilePattern = /^tsconfig(?:\..+)?\.build\.json$/u;
 const baseConfigFilePattern = /^tsconfig(?:\..+)?\.base\.json$/u;
 const checkConfigFilePattern = /^tsconfig(?:\..+)?\.check\.json$/u;
 const tsconfigFilePattern = /^tsconfig(?:\..+)?\.json$/u;
-const tsconfigGlobPattern = '**/tsconfig*.json';
 // eslint-disable-next-line regexp/no-useless-assertions -- Empty extension sets must match no paths.
 const neverMatchingPattern = new RegExp(String.fromCodePoint(97, 94), 'u');
 const liminaTsconfigSchemaPath = [
@@ -69,7 +66,7 @@ export interface CollectSourceGraphProjectExtensionsResult {
   projectExtensionsByPath: Map<string, string[]>;
 }
 
-export function createFormatHost(rootDir: string): ts.FormatDiagnosticsHost {
+function createFormatHost(rootDir: string): ts.FormatDiagnosticsHost {
   return {
     getCanonicalFileName: (fileName) => fileName,
     getCurrentDirectory: () => rootDir,
@@ -317,7 +314,7 @@ export function isBuildGraphConfigPath(configPath: string): boolean {
   return buildGraphConfigFilePattern.test(path.basename(configPath));
 }
 
-export function isReservedTypeScriptConfigFile(fileName: string): boolean {
+function isReservedTypeScriptConfigFile(fileName: string): boolean {
   return (
     dtsConfigFilePattern.test(fileName) ||
     buildGraphConfigFilePattern.test(fileName) ||
@@ -342,27 +339,6 @@ export function isOrdinarySourceTypecheckConfigPath(
     isOrdinaryTypecheckConfigPath(configPath) &&
     !configPath.split(path.sep).includes('.limina')
   );
-}
-
-export async function collectOrdinaryTypecheckConfigPaths(
-  config: ResolvedLiminaConfig,
-): Promise<string[]> {
-  const paths = await glob(tsconfigGlobPattern, {
-    cwd: config.rootDir,
-    absolute: true,
-    ignore: [
-      '**/.git/**',
-      '**/.tsbuild/**',
-      '**/coverage/**',
-      '**/dist/**',
-      '**/node_modules/**',
-    ],
-  });
-
-  return paths
-    .map(normalizeAbsolutePath)
-    .filter(isOrdinaryTypecheckConfigPath)
-    .sort();
 }
 
 export function collectGraphProjectRouteFromRoot(options: {
@@ -583,20 +559,6 @@ export function collectCheckerEntryProjectRoutes(
   };
 }
 
-export function collectGraphProjectRoute(
-  config: ResolvedLiminaConfig,
-  generatedGraph?: GeneratedTsconfigGraphResult,
-): CollectGraphProjectPathsResult {
-  const routeCollection = collectGraphProjectRoutes(config, generatedGraph);
-
-  return {
-    problems: routeCollection.problems,
-    projectPaths: [
-      ...new Set(routeCollection.routes.flatMap((route) => route.projectPaths)),
-    ].sort(),
-  };
-}
-
 export function collectSourceGraphProjectExtensions(
   config: ResolvedLiminaConfig,
   generatedGraph?: GeneratedTsconfigGraphResult,
@@ -645,42 +607,6 @@ export function collectSourceGraphProjectExtensions(
     projectContextsByPath,
     projectExtensionsByPath,
   };
-}
-
-export function collectGraphProjectPaths(
-  config: ResolvedLiminaConfig,
-): string[] {
-  return collectGraphProjectRoute(config).projectPaths;
-}
-
-export function parseProjectFileNames(
-  config: ResolvedLiminaConfig,
-  configPath: string,
-  pattern: RegExp = /\.(?:[cm]?tsx?|d\.[cm]?ts|json)$/u,
-): string[] {
-  return parseProjectFileNamesForExtensions(config, configPath, [], pattern);
-}
-
-export function parseProjectFileNamesForExtensions(
-  config: ResolvedLiminaConfig,
-  configPath: string,
-  contextOrExtensions: CheckerProjectParseContext | string[],
-  pattern?: RegExp,
-): string[] {
-  const context = Array.isArray(contextOrExtensions)
-    ? {
-        checkerPresets: [] satisfies CheckerPreset[],
-        extensions: contextOrExtensions,
-      }
-    : contextOrExtensions;
-  const parsed = parseCheckerProjectConfigForContext({
-    configPath,
-    context,
-    projectRootDir: config.rootDir,
-  });
-  const filePattern = pattern ?? createExtensionPattern(parsed.extensions);
-
-  return parsed.fileNames.filter((fileName) => filePattern.test(fileName));
 }
 
 export function formatReferences(

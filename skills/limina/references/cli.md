@@ -1,6 +1,6 @@
 # Limina CLI Reference
 
-Every command, action, flag, and exit-code rule emitted by `limina`.
+Every public command, action, flag, and exit-code rule currently emitted by `limina`.
 
 Invocation form:
 
@@ -8,7 +8,7 @@ Invocation form:
 limina [--config <path>] [--mode <mode>] <command> [...]
 ```
 
-## Global flags (every command)
+## Global Flags
 
 | Flag              | Effect                                                                                                                 |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -20,11 +20,11 @@ When `--config` is omitted, Limina walks upward from cwd looking for `limina.con
 
 ## `limina init [--yes]`
 
-Bootstrap root config, ignored generated directory, dependencies, and the `limina:check` script for a workspace that has not yet adopted Limina conventions.
+Bootstrap root config, ignored generated directory, dependencies, and the `limina:build` script for a pnpm workspace.
 
-| Flag    | Effect                                                                                                                                                                                                                |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--yes` | Accept core confirmations (root selection, missing root `package.json`, overwriting an existing `limina.config.mjs` or `limina:check` script) and skip optional skill installation. Required in non-TTY environments. |
+| Flag    | Effect                                                                                            |
+| ------- | ------------------------------------------------------------------------------------------------- |
+| `--yes` | Accept core confirmations and skip optional skill installation. Required in non-TTY environments. |
 
 What it does:
 
@@ -32,9 +32,10 @@ What it does:
 2. Confirms the workspace root.
 3. Writes an auto-first `limina.config.mjs` with `config.checkers: 'auto'`.
 4. Ensures `.limina/` is ignored in the root `.gitignore`.
-5. Creates or updates the root `package.json` with `"limina:check": "limina check"` and missing `limina` / `typescript` devDependencies.
-6. Deletes an existing root `.limina` file or directory, but does not create `.limina` graph files.
-7. In interactive mode, asks whether to install the Limina skill for the current project. `--yes` skips skill installation and prints the manual command.
+5. Creates or updates the root `package.json` with `"limina:build": "limina checker build"` and missing `limina` / `typescript` devDependencies.
+6. Removes a legacy root `"limina:check": "limina check"` script when it still has that exact value.
+7. Deletes an existing root `.limina` file or directory, but does not create `.limina` graph files.
+8. In interactive mode, asks whether to install the Limina skill for the current project. `--yes` skips skill installation and prints the manual command.
 
 Refusal conditions:
 
@@ -43,116 +44,127 @@ Refusal conditions:
 
 Exit code: non-zero on any refusal or write error.
 
-## `limina check`
+## `limina check [-p name]`
 
-Run the BUILT-IN default pipeline.
-
-```sh
-limina check
-```
+Run the built-in default pipeline.
 
 Order: `graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck`. Stops on the first failure; remaining steps are reported as skipped.
 
+`-p, --package <name>` passes one or more package entry names to package-aware tasks when they appear in a pipeline. The built-in default pipeline does not include `package:check` or `release:check`.
+
 Exit code: 1 if any step fails, 0 otherwise.
 
-## `limina check <pipeline>`
+## `limina check <pipeline> [-p name]`
 
-Run the user-defined pipeline at `pipelines[<name>]`. ONLY runs pipelines from `limina.config.mjs#pipelines` — there is no fallback to the default.
+Run the user-defined pipeline at `pipelines[<name>]`. This only runs configured pipelines; there is no fallback to the default.
 
-Exit code: 1 if the name is missing OR any step fails.
+Exit code: 1 if the name is missing or any step fails.
 
-## `limina graph <check|sync> [path]`
+## `limina graph <prepare|check|export>`
 
-Action must be `check` or `sync`.
+Action must be `prepare`, `check`, or `export`.
 
-Validates:
+### `limina graph prepare`
 
-- Every `tsconfig*.dts.json` reachable from a checker entry has correct build options (`composite`, `incremental`, `noEmit: false`, `declaration`, `emitDeclarationOnly`, plus `rootDir`/`outDir`/`tsBuildInfoFile`).
-- Every dts leaf has a matching local companion with parity on type-affecting compilerOptions.
-- Project references match real source imports.
-- A cross-package dts reference implies a `workspace:*` dep in the importing package manifest.
-- Labels declared on dts leaves match `graph.rules.<label>`; denied refs and denied deps are flagged.
-- `workspace:*` source dependencies resolve to files owned by the source graph, not to artifacts under `dist`.
+Generates or refreshes `.limina/tsconfig/checkers/<checker>/**` from selected ordinary source `tsconfig.json` entries. It uses the same generated graph preparation used by graph-consuming commands and pipelines.
+
+Exit code: 1 when graph generation fails.
+
+### `limina graph check`
+
+Validates the generated checker graph and source-derived architecture:
+
+- Generated declaration configs have build-safe compiler options.
+- Generated declaration configs and source configs keep type-affecting compiler option parity.
+- Project references match real source imports and `liminaOptions.implicitRefs`.
+- Cross-package generated references imply declared workspace dependencies.
+- `workspace:*` source dependencies resolve to files owned by the source graph, not artifacts under `dist`.
+- Labels declared through source `liminaOptions.graphRules` match configured `graph.rules`; denied refs and denied deps are flagged.
+- Configured condition domains keep expected `customConditions` through their reference trees.
 
 Exit code: 1 on any violation.
 
-`limina graph sync [path]` rewrites declaration-leaf `references` from TypeScript-resolved source imports. With no path, it uses all configured checker entries. A `tsconfig*.build.json` path syncs all reachable declaration leaves, and a `tsconfig*.dts.json` path syncs only that leaf. Relative paths resolve from cwd.
+### `limina graph export [--view V] [--output P]`
 
-## `limina source <check>`
+Exports Limina's package dependency graph JSON.
+
+| Flag              | Values                      | Effect                                                       |
+| ----------------- | --------------------------- | ------------------------------------------------------------ |
+| `--view <view>`   | `all`, `source`, `artifact` | Select dependency edge kinds. Invalid values are rejected.   |
+| `--output <path>` | file path                   | Write JSON to a file. Without it, JSON is printed to stdout. |
+
+There is no `limina graph sync` command in the current CLI.
+
+## `limina source check`
 
 Action must be `check`.
 
-Validates package-owner boundary rules:
+Validates package-owner and source usage rules:
 
-- A non-aggregator `tsconfig*.dts.json` (or its companion) must stay within ONE nearest-`package.json` owner. Mixing owners is an error.
-- Every source file must have a package owner.
-- A relative source import must not cross the nearest package.json owner boundary.
-- A bare package import is checked from TypeScript's resolved entry first. Current-owner targets are allowed, other workspace owners require a manifest dependency, artifact-package targets require a manifest dependency, and unresolved imports fall back to the raw package root.
+- Every governed source file has a nearest package owner.
+- Non-aggregator generated/source config coverage stays within one nearest `package.json` owner.
+- Relative source imports do not cross package owner boundaries.
+- Bare package imports are checked from TypeScript's resolved entry first. Current-owner targets are allowed; other workspace or artifact-package targets require manifest authorization.
 - Dependency authorization accepts `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`.
-- `#xxx` package imports must match the nearest package.json `imports` field, may resolve within the current owner, must not resolve to another workspace owner, and may resolve to a named artifact package only when the owner declares that dependency.
+- `#imports` specifiers must match the current package's `imports` field, must stay within the owner unless resolving to a declared artifact package, and must not resolve to another workspace owner.
+- Knip-backed unused workspace dependency and unused module checks run unless `source.knip` is `false`.
+- Package-owned source modules must resolve to a unique ordinary `tsconfig.json` owner unless ignored through `source.tsconfigOwnership.ignore`.
 
 Exit code: 1 on any violation.
 
-## `limina proof <check>`
+## `limina proof check`
 
 Action must be `check`.
 
 Validates source coverage proof:
 
-- Every dts leaf reachable from a graph-capable checker has exactly one owning entry. Duplicate ownership is an error.
-- Each dts leaf has a paired local companion that exists.
-- Pure aggregators (`tsconfig*.build.json` and `tsconfig.json` with `references`) contain only `$schema`, `files: []`, `references` — extra keys or non-empty `files` are errors.
-- A `tsconfig.json` that has `references` must NOT reference dts/build configs — it is the IDE/typecheck entry.
-- A directory with multiple ordinary `tsconfig*.json` environments must have an aggregator `tsconfig.json`. With one environment, the leaf should be `tsconfig.json`.
-- The declaration leaf and its companion have identical file sets and identical type-affecting compilerOptions (a curated allowlist of options that affect typecheck semantics is compared, ignoring emit/path options).
-- Every file in the configured source boundary is covered by either a graph project, a checker entry, or an explicit `proof.allowlist` entry.
-- Allowlist files are inside the source boundary AND not already covered.
+- Source-level hand-maintained `tsconfig*.dts.json` configs are rejected; Limina generates declaration configs under `.limina`.
+- Source typecheck leaf configs must not hand-maintain `references`; use a solution-style `tsconfig.json` or `liminaOptions.implicitRefs`.
+- Pure aggregators contain only `$schema`, `files: []`, `references`, and allowed Limina metadata.
+- A default `tsconfig.json` aggregator references only ordinary typecheck configs, not build or declaration configs.
+- The generated declaration config and its source config have matching files and type-affecting compiler options.
+- Every file in `config.source` is covered by generated graph coverage, checker entry coverage, or `proof.allowlist`.
+- Allowlist files are inside the source boundary and not already covered.
 
 Exit code: 1 on any violation.
 
-## `limina nx <action> [target...]`
+## `limina checker build [config] [--preset P] [-w|--watch]`
 
-Action must be `sync` or `check`. When no targets are passed, Limina uses `build`. Repeated target names are ignored in first-seen order.
+Build-capable checker execution.
 
-- `sync` — sync each selected `targets.<target>.dependsOn` from link-based artifact dependencies. Existing `project.json` files are updated only when the target already exists; missing targets are skipped. Missing `project.json` files are created from the Limina template and include every selected target.
-- `check` — compare each existing selected target's `dependsOn` project-name set with Limina's expected set, ignoring order and duplicates. Existing files that lack the target are skipped. Missing `project.json` files are stale and fail the check.
+Without `config`, Limina prepares the generated graph and runs every build-capable checker entry (`tsc`, `tsgo`, `vue-tsc`) through the generated root configs.
 
-Synced `dependsOn` values always use upstream project names with `target: "build"`:
+With `config`, Limina resolves the argument from cwd:
 
-```json
-{
-  "dependsOn": [
-    {
-      "projects": ["@scope/dependency"],
-      "target": "build"
-    }
-  ]
-}
-```
+- If it is an ordinary source tsconfig governed by Limina, it builds the generated module for that source config and recursively includes build-capable provider edges.
+- If it is not governed by Limina, it falls back to raw checker build mode and runs the selected build checker against that config.
 
-Use multiple targets when separate Nx targets share the same artifact prerequisite graph:
+| Flag            | Values                   | Effect                                                               |
+| --------------- | ------------------------ | -------------------------------------------------------------------- |
+| `--preset <p>`  | `tsc`, `tsgo`, `vue-tsc` | Select a build-capable checker preset. Requires a `config` argument. |
+| `-w`, `--watch` | boolean                  | Watch and preserve rebuild output. Requires a `config` argument.     |
 
-```sh
-limina nx sync build docs:build test:build
-limina nx check build docs:build test:build
-```
+Removed or rejected options:
 
-Exit code: 1 only for `nx check` when synced target state is stale, or for invalid link artifact dependencies.
+- `--checker` is rejected; use `--preset`.
+- `--project` is rejected; pass the config as the positional argument.
+- `--preset` without a config is rejected.
+- `--watch` without a config is rejected.
 
-## `limina checker <action> [--concurrency N]`
+Exit code: 1 if dependency preflight fails, the selected managed target has no build-capable checker, the selected preset is not available for the source config, or any checker exits non-zero.
 
-Action must be `typecheck` or `build`.
+## `limina checker typecheck`
 
-- `typecheck` — runs source-only checker entries directly, currently `vue-tsgo --project <entry>` and `svelte-check --tsconfig <entry>`. Run in parallel up to `--concurrency` (default = `availableParallelism()` reported by Node).
-- `build` — runs the checker's build execution for every entry whose preset supports build (currently `tsc -b`, `tsgo -b`, and `vue-tsc -b`). `vue-tsgo` and `svelte-check` do NOT support first-class build execution and are filtered out.
+Runs direct typecheck execution for typecheck-only checkers:
 
-Both actions fail fast on missing peer dependencies (`typescript`, `@typescript/native-preview`, `vue-tsc`, `vue-tsgo`, `svelte-check`, and related framework peers) and print a one-line `pnpm add -D <packages>` fix.
+- `vue-tsgo --project <generated checker entry>`
+- `svelte-check --tsconfig <generated checker entry>`
 
-`--concurrency` accepts a positive integer; anything else is rejected.
+It does not accept a config argument, `--preset`, or `--watch`.
 
-Exit code: 1 if any target exits non-zero.
+Exit code: 1 if dependency preflight fails or any target exits non-zero. If no typecheck-only entries are configured, the command succeeds after reporting no targets.
 
-## `limina package <check> [--package N] [--tool T] [--attw-profile P]`
+## `limina package check [--package N] [--tool T] [--attw-profile P]`
 
 Action must be `check`.
 
@@ -165,14 +177,13 @@ Action must be `check`.
 For every selected entry:
 
 1. Read `<outDir>/package.json`.
-2. If `publint` or `attw` is enabled, pack the directory with `@publint/pack` (ignoring scripts) into a temporary directory and feed the tarball to both tools.
-3. Run boundary check if enabled: parse every `.js`/`.mjs`/`.cjs` in the output, extract bare-package imports, validate them against the output manifest's dependencies, self-export specifiers, and runtime environment classification.
+2. Reject publish-ready output manifests that still expose `workspace:`, `link:`, `file:`, or `catalog:` specifiers.
+3. If `publint` or `attw` is enabled, pack `outDir` with `@publint/pack` and feed the tarball to the selected tools.
+4. Run boundary check if enabled: parse emitted `.js`/`.mjs`/`.cjs`, extract bare-package imports, and validate them against the output manifest and runtime environment.
 
-`publint` runs with its strict option enabled by default (overridable per entry with `publint.strict`).
+Exit code: 1 if any selected check fails, or if no runnable entry exists for the selected tool.
 
-Exit code: 1 if any check on any entry fails, or if no runnable entry exists for the selected tool.
-
-## `limina release <check> [--package N]`
+## `limina release check [--package N]`
 
 Action must be `check`.
 
@@ -182,19 +193,21 @@ Action must be `check`.
 
 Without `--package`, Limina walks from cwd to the workspace root, reads the nearest `package.json#name`, and requires it to match exactly one configured `package.entries[].name`.
 
-For every selected entry, Limina rejects `private: true`, packs `<outDir>`, checks tarball publish hygiene (`README.md`, `LICENSE.md`, no `*.map`, no JS `sourceMappingURL` directive), and verifies source/packed manifest consistency plus workspace publish dependency consistency against npm registry metadata.
+For every selected entry, Limina reads `<outDir>/package.json`, rejects `private: true`, rejects local dependency specifiers in output manifests, packs the npm tarball, checks tarball publish hygiene, and verifies source/packed manifest consistency plus workspace publish dependency consistency.
 
 Exit code: 1 if cwd matching fails, a requested entry is missing, or any release consistency check fails.
 
-## Help and errors
+## Help And Errors
 
 `limina --help` and any unknown command or action prints CAC help and exits non-zero.
 
+Known command families: `init`, `check`, `graph`, `proof`, `source`, `checker`, `package`, `release`.
+
 All command failures print the structured field/value/reason error format. Boundary, graph, proof, and source failures group multiple issues into one error block separated by `\n\n`.
 
-## Exit-code summary
+## Exit-Code Summary
 
 - `0` — every step succeeded.
 - `1` — any check failed, an unsupported action was passed, a config validation issue surfaced, or a missing pipeline name was used.
 
-`limina` never throws unhandled exceptions — caught errors are formatted and the process sets `process.exitCode = 1`.
+CLI `main()` catches command errors, formats them, and sets `process.exitCode = 1`.

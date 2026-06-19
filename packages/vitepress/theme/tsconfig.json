@@ -6,7 +6,7 @@
     "isolatedDeclarations": false,
     "types": ["vite/client"],
   },
-  "include": ["./", "../src/__tests__/theme/**/*.ts"],
+  "include": ["./"],
   "exclude": [
     "../../../**/.tsbuild/**",
     "../../../**/*cache",

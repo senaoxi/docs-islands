@@ -139,7 +139,7 @@ function assertNeverTaskName(taskName: never): never {
   throw new Error(`Unsupported built-in task: ${taskName}`);
 }
 
-export function getPipelineStepLabel(step: NormalizedPipelineStep): string {
+function getPipelineStepLabel(step: NormalizedPipelineStep): string {
   if (step.type === 'task') {
     return step.name;
   }
@@ -220,7 +220,7 @@ async function prepareCommandStepCache(
   );
 }
 
-export async function runBuiltinTask(
+async function runBuiltinTask(
   config: ResolvedLiminaConfig,
   taskName: BuiltinTaskName,
   options: RunPipelineOptions = {},
@@ -335,7 +335,7 @@ export function normalizePipelineStep(
   };
 }
 
-export async function runCommandStep(
+async function runCommandStep(
   config: ResolvedLiminaConfig,
   step: Extract<PipelineStep, { type: 'command' }>,
   options: RunPipelineOptions = {},

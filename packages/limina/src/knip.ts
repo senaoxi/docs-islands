@@ -8,7 +8,7 @@ import type { ResolvedLiminaConfig } from './config';
 import { normalizeAbsolutePath, toRelativePath } from './utils/path';
 import type { WorkspacePackage } from './workspace';
 
-export interface KnipUnusedWorkspaceDependencyIssue {
+interface KnipUnusedWorkspaceDependencyIssue {
   dependencyName: string;
   packageJsonPath: string;
 }
@@ -499,7 +499,7 @@ async function withTemporaryRootPackageJson<T>(
   }
 }
 
-export function collectUnusedWorkspaceDependencyIssues(options: {
+function collectUnusedWorkspaceDependencyIssues(options: {
   report: JSONReport;
   rootDir: string;
   workspacePackageNames: Set<string>;
@@ -711,20 +711,4 @@ export async function collectKnipSourceIssues(options: {
       workspacePackageNames,
     }),
   };
-}
-
-export async function collectKnipUnusedWorkspaceDependencyIssues(options: {
-  config: ResolvedLiminaConfig;
-  ignoredKeys: Set<string>;
-  workspacePackages: WorkspacePackage[];
-}): Promise<KnipUnusedWorkspaceDependencyIssue[]> {
-  return (
-    await collectKnipSourceIssues({
-      config: options.config,
-      ignoredKeys: options.ignoredKeys,
-      includeFiles: false,
-      ownerProjects: [],
-      workspacePackages: options.workspacePackages,
-    })
-  ).unusedWorkspaceDependencies;
 }

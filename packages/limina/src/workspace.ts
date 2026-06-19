@@ -62,7 +62,7 @@ export function readJsonFile<T>(filePath: string): T {
   return JSON.parse(readFileSync(filePath, 'utf8')) as T;
 }
 
-export function stripYamlQuotes(value: string): string {
+function stripYamlQuotes(value: string): string {
   const trimmed = value.trim();
 
   if (
@@ -170,9 +170,7 @@ function readWorkspacePackage(options: {
   };
 }
 
-export function collectWorkspacePatterns(
-  config: ResolvedLiminaConfig,
-): string[] {
+function collectWorkspacePatterns(config: ResolvedLiminaConfig): string[] {
   const rootPackageJsonPath = path.join(config.rootDir, 'package.json');
   const patterns = new Set<string>();
 
@@ -409,7 +407,7 @@ export async function collectPackageOwners(
     .sort((left, right) => right.directory.length - left.directory.length);
 }
 
-export function getDependencySections(
+function getDependencySections(
   importer: PackageManifest,
 ): Record<string, string>[] {
   return [
@@ -475,16 +473,6 @@ export function findPackageForSpecifier(
       (workspacePackage) => workspacePackage.name === packageName,
     ) ?? null
   );
-}
-
-export function readPackageName(directoryPath: string): string | undefined {
-  const packageJsonPath = path.join(directoryPath, 'package.json');
-
-  if (!existsSync(packageJsonPath)) {
-    return undefined;
-  }
-
-  return readJsonFile<{ name?: string }>(packageJsonPath).name;
 }
 
 export function collectImporters(

@@ -10,6 +10,5 @@
     "scripts/**/__tests__/**/*.ts",
     "tests/**/*.ts",
     "vitest.config.ts"
-  ],
-  "exclude": ["src/__tests__/theme/**/*.ts"]
+  ]
 }

@@ -118,16 +118,6 @@ export default defineConfig({
         },
       },
     },
-    tsconfigOwnership: {
-      ignore: [
-        {
-          owner: '@docs-islands/vitepress',
-          files: ['packages/vitepress/src/**/__tests__/**'],
-          reason:
-            'Vitest loads package test modules through the package-level test tsconfig; nearby runtime tsconfig.json files intentionally do not reference tests.',
-        },
-      ],
-    },
   },
 
   // TypeScript project graph policy. This checks project references,

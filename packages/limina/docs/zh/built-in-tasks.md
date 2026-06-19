@@ -319,9 +319,9 @@ Potentially incompatible build checker combination:
 
 对应 `limina checker typecheck`，跑「二等公民」只检查不产出的检查器。
 
-### 同样先做 peer 依赖预检
+### 只预检类型检查类 checker 的 peer 依赖
 
-和 `checker:build` 一样，先预检全部检查器的 peer 依赖。
+这一步只预检即将运行的二等公民 checker entry，例如 `vue-tsgo` 和 `svelte-check`。执行构建的一等公民预设由 `checker:build` 处理。
 
 报 `Missing checker peer dependencies:`，并附 `Fix: pnpm add -D <包名>`。
 
@@ -336,9 +336,9 @@ checkers: { vue: { preset: 'vue-tsgo', include: ['apps/app/tsconfig.json'] } }
 
 有 `.vue` 类型错误时非零退出，报 `typecheck checks failed:`。修复：解决报出来的 `.vue` 类型错误。
 
-### 纯 `tsc` 仓库是空操作
+### 没有二等公民检查器时是空操作
 
-如果没有配置二等公民检查器（纯 `tsc` / `tsgo` / `vue-tsc`），这一步直接通过，并打印 `No second-class checker entries configured.`；真正的类型检查在 `checker:build` 完成。
+如果没有显式配置二等公民检查器，例如 auto 模式，或只有 `tsc` / `tsgo` / `vue-tsc`，这一步直接通过，并打印 `No second-class checker entries configured.`；真正的类型检查在 `checker:build` 完成。
 
 ## `package:check`
 

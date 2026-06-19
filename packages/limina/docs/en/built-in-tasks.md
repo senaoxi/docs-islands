@@ -324,9 +324,9 @@ Reports `build checks failed:` followed by the failing entries. Fix: resolve the
 
 Maps to `limina checker typecheck`. Runs the second-class checkers that type-check without emitting.
 
-### It runs the same peer-dependency preflight
+### It preflights typecheck checker peer dependencies
 
-Just like `checker:build`, it preflights every checker's peer dependencies first.
+This step only preflights the configured second-class checker entries it is about to run, such as `vue-tsgo` and `svelte-check`. Build-execution presets are handled by `checker:build`.
 
 Reports `Missing checker peer dependencies:` with `Fix: pnpm add -D <packages>`.
 
@@ -341,9 +341,9 @@ checkers: { vue: { preset: 'vue-tsgo', include: ['apps/app/tsconfig.json'] } }
 
 A `.vue` type error makes it exit non-zero and report `typecheck checks failed:`. Fix: resolve the reported `.vue` type error.
 
-### A `tsc`-only repo is a no-op
+### Repositories without second-class checkers are a no-op
 
-If no second-class checker is configured (only `tsc` / `tsgo` / `vue-tsc`), this step passes and prints `No second-class checker entries configured.`; the actual type-check happens in `checker:build`.
+If no explicit second-class checker is configured, for example auto mode or only `tsc` / `tsgo` / `vue-tsc`, this step passes and prints `No second-class checker entries configured.`; the actual type-check happens in `checker:build`.
 
 ## `package:check`
 

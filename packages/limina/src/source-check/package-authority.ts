@@ -7,13 +7,13 @@ export interface PackageImportMatch {
   key: string;
 }
 
-export type DependencySectionName =
+type DependencySectionName =
   | 'dependencies'
   | 'devDependencies'
   | 'peerDependencies'
   | 'optionalDependencies';
 
-export interface DependencyDeclaration {
+interface DependencyDeclaration {
   sectionName: DependencySectionName;
   specifier: string;
 }
@@ -26,7 +26,7 @@ export interface WorkspaceDependencyDeclaration {
   specifier: string;
 }
 
-export const dependencySectionNames: DependencySectionName[] = [
+const dependencySectionNames: DependencySectionName[] = [
   'dependencies',
   'devDependencies',
   'peerDependencies',
@@ -64,7 +64,7 @@ export function isBarePackageSpecifier(specifier: string): boolean {
   );
 }
 
-export function collectDependencyDeclarations(
+function collectDependencyDeclarations(
   manifest: PackageManifest,
   packageName: string,
 ): DependencyDeclaration[] {

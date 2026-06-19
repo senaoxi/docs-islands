@@ -98,7 +98,7 @@ Artifact outputs are still checked at the package-output layer by `limina packag
 
 ## Labels and Rules
 
-A declaration leaf can opt into one or more [graph rules](./config/graph-rules.md) with `liminaOptions.graphRules`:
+A source tsconfig can opt into one or more [graph rules](./config/graph-rules.md) with `liminaOptions.graphRules`. Limina copies those labels onto the generated declaration leaf:
 
 ```jsonc
 {

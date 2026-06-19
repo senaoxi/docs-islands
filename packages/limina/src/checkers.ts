@@ -1018,9 +1018,7 @@ const builtinCheckerAdapters = {
   },
 } satisfies Record<BuiltinCheckerPreset, CheckerAdapter>;
 
-export function isBuiltinCheckerPreset(
-  value: string,
-): value is BuiltinCheckerPreset {
+function isBuiltinCheckerPreset(value: string): value is BuiltinCheckerPreset {
   return Object.hasOwn(builtinCheckerAdapters, value);
 }
 
@@ -1032,7 +1030,7 @@ function isVueCheckerPreset(preset: CheckerPreset): boolean {
   return preset === 'vue-tsc' || preset === 'vue-tsgo';
 }
 
-export function resolveCheckerPackageFromRoot(options: {
+function resolveCheckerPackageFromRoot(options: {
   packageName: string;
   projectRootDir: string;
 }): string | undefined {

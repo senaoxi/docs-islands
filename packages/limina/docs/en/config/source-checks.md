@@ -64,12 +64,12 @@ A static package script can override that default and give Limina a package-spec
 ```json
 {
   "scripts": {
-    "build:types": "limina checker build tsconfig.json"
+    "build:types": "limina checker build tsconfig.dts.json --preset tsgo"
   }
 }
 ```
 
-The `<config>` path is resolved from the package directory. Limina supports static forms such as `limina checker build tsconfig.json`, `limina checker build tsconfig.json --preset vue-tsc`, `pnpm limina checker build tsconfig.json`, and `pnpm exec limina checker build tsconfig.json`. Dynamic shell scripts such as `limina checker build $CONFIG` are reported as unsupported instead of silently falling back to Knip defaults.
+The `<config>` path is resolved from the package directory. It must be a JSON file inside the workspace. Raw package-script configs must stay inside the owning package directory, and generated `.limina` configs are not valid script inputs. Limina supports static forms such as `limina checker build tsconfig.dts.json --preset tsgo`, `limina checker build tsconfig.json --preset vue-tsc`, `pnpm limina checker build tsconfig.dts.json`, and `pnpm exec limina checker build tsconfig.dts.json`. Dynamic shell scripts such as `limina checker build $CONFIG` are reported as unsupported instead of silently falling back to Knip defaults.
 
 ::: warning
 `knip` is an optional peer dependency of Limina. If `source.knip` is enabled but `knip` is not installed in the workspace running Limina, `source check` fails with a missing peer dependency error.
@@ -89,7 +89,7 @@ This is a general package design pattern: `package.json` describes the built fil
 }
 ```
 
-Then `utils/tsconfig.dts.json` can describe the source side:
+Then a package-local JSON build config such as `utils/tsconfig.dts.json` can describe the source-to-output layout:
 
 ```json
 {
@@ -101,19 +101,19 @@ Then `utils/tsconfig.dts.json` can describe the source side:
 }
 ```
 
-As long as the Knip tsconfig, whether Knip's default or Limina's derived one, explains the source and output directories, such as `rootDir: "."` and `outDir: "./dist"`, Knip can map `utils/dist/src/env.js` back to `utils/src/env.ts`. The source module is then considered reachable from the package entry even without an `exports.source` condition.
+As long as the Knip tsconfig, whether Knip's default or Limina's derived one, explains the source and output directories, such as `rootDir: "."` and `outDir: "./dist"`, Knip can map `utils/dist/src/env.js` back to `utils/src/env.ts`. The source module is then considered reachable from the package entry.
 
 Expose that intent through a static package script:
 
 ```json
 {
   "scripts": {
-    "build:types": "limina checker build tsconfig.dts.json"
+    "build:types": "limina checker build tsconfig.dts.json --preset tsgo"
   }
 }
 ```
 
-If the derived Knip tsconfig does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but may not find the source module behind it. That source file may be reported as unused. Prefer pointing `limina checker build <config>` at the right package-local config over adding a tool-only `source` condition to `package.json` just to satisfy Knip.
+If the derived Knip tsconfig does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but may not find the source module behind it. That source file may be reported as unused. Prefer pointing `limina checker build <config>` at the right package-local JSON config over adding tool-only package export conditions just to satisfy Knip.
 
 Limina also determines Knip's `project` file set automatically from governed source modules. Users do not configure `project`.
 

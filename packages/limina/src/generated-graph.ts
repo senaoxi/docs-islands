@@ -1,5 +1,4 @@
 export {
-  collectGeneratedProjectSourceConfigPaths,
   collectGeneratedSourceConfigPaths,
   prepareGeneratedTsconfigGraph,
   type GeneratedBuildModule,
@@ -11,5 +10,3 @@ export {
   type GeneratedTsconfigGraphManifest,
   type GeneratedTsconfigGraphResult,
 } from './generated-graph/runner';
-
-export { getGeneratedDtsConfigPath } from './generated-graph/paths';

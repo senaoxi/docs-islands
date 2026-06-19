@@ -245,15 +245,6 @@ export function findPackageForFile(
   );
 }
 
-export function isWorkspacePackageFile(
-  filePath: string,
-  packages: WorkspacePackage[],
-): boolean {
-  return packages.some((workspacePackage) =>
-    isPathInsideDirectory(filePath, workspacePackage.directory),
-  );
-}
-
 export function findImporterForFile(
   filePath: string,
   importers: ImporterInfo[],

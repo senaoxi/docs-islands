@@ -64,12 +64,12 @@ interface SourceKnipCheckConfig {
 ```json
 {
   "scripts": {
-    "build:types": "limina checker build tsconfig.json"
+    "build:types": "limina checker build tsconfig.dts.json --preset tsgo"
   }
 }
 ```
 
-`<config>` 会从这个包目录解析。Limina 支持 `limina checker build tsconfig.json`、`limina checker build tsconfig.json --preset vue-tsc`、`pnpm limina checker build tsconfig.json`、`pnpm exec limina checker build tsconfig.json` 这类静态写法。像 `limina checker build $CONFIG` 这样的动态 shell 脚本会被报告为不支持，而不是静默退回 Knip 默认行为。
+`<config>` 会从这个包目录解析。它必须是工作区内的 JSON 文件；raw package script 配置还必须留在所属包目录里，并且不能指向生成的 `.limina` 配置。Limina 支持 `limina checker build tsconfig.dts.json --preset tsgo`、`limina checker build tsconfig.json --preset vue-tsc`、`pnpm limina checker build tsconfig.dts.json`、`pnpm exec limina checker build tsconfig.dts.json` 这类静态写法。像 `limina checker build $CONFIG` 这样的动态 shell 脚本会被报告为不支持，而不是静默退回 Knip 默认行为。
 
 ::: warning
 `knip` 是 Limina 的 optional peer dependency。如果启用了 `source.knip`，但运行 Limina 的工作区没有安装 `knip`，`source check` 会直接报缺失 peer dependency。
@@ -89,7 +89,7 @@ Limina 会为受治理的 owner workspace 写入 `entry: []`，从而关闭 Knip
 }
 ```
 
-同时让 `utils/tsconfig.dts.json` 描述源码侧：
+同时让 `utils/tsconfig.dts.json` 这样的包内 JSON 构建配置描述源码到产物的布局：
 
 ```json
 {
@@ -101,19 +101,19 @@ Limina 会为受治理的 owner workspace 写入 `entry: []`，从而关闭 Knip
 }
 ```
 
-只要给 Knip 使用的 tsconfig（无论是 Knip 默认选择的，还是 Limina 推导出来的）能说明源码目录和输出目录（例如 `rootDir: "."`、`outDir: "./dist"`），Knip 就能把 `utils/dist/src/env.js` 反推成 `utils/src/env.ts`。这样源码模块虽然没有出现在 `exports.source` 里，也仍然会被视为从包入口可达。
+只要给 Knip 使用的 tsconfig（无论是 Knip 默认选择的，还是 Limina 推导出来的）能说明源码目录和输出目录（例如 `rootDir: "."`、`outDir: "./dist"`），Knip 就能把 `utils/dist/src/env.js` 反推成 `utils/src/env.ts`。这样源码模块就会被视为从包入口可达。
 
 然后用静态 package script 暴露这个意图：
 
 ```json
 {
   "scripts": {
-    "build:types": "limina checker build tsconfig.dts.json"
+    "build:types": "limina checker build tsconfig.dts.json --preset tsgo"
   }
 }
 ```
 
-反过来，如果推导出的 Knip tsconfig 没有清楚说明 `outDir` / `rootDir`，Knip 只能看到 `dist` 入口，却找不到对应的源码模块。这类源码文件可能会被报告为未使用模块。遇到这种情况，优先让 `limina checker build <config>` 指向正确的包内配置，而不是为了让 Knip 通过而给 `package.json` 补一份只给工具看的 `source` 条件。
+反过来，如果推导出的 Knip tsconfig 没有清楚说明 `outDir` / `rootDir`，Knip 只能看到 `dist` 入口，却找不到对应的源码模块。这类源码文件可能会被报告为未使用模块。遇到这种情况，优先让 `limina checker build <config>` 指向正确的包内 JSON 配置，而不是为了让 Knip 通过而给 `package.json` 补只给工具看的导出条件。
 
 Knip 的 `project` 文件集合也由 Limina 根据受治理源码模块自动确定；用户不配置 `project`。
 
