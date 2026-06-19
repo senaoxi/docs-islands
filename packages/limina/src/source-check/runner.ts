@@ -82,6 +82,12 @@ import {
   type WorkspaceDependencyDeclaration,
 } from './package-authority';
 import {
+  formatSourceCheckHumanReport,
+  SOURCE_ISSUE_CODES,
+  type SourceCheckIssue,
+  type SourceIssueReportOptions,
+} from './report';
+import {
   isInvalidWorkspacePattern,
   normalizeWorkspacePattern,
   toOwnerRelativeEntryPattern,
@@ -93,6 +99,7 @@ export interface RunSourceCheckOptions {
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   knipRunner?: KnipCliRunner;
+  report?: SourceIssueReportOptions;
 }
 
 interface SourceProjectEntry {
@@ -1048,11 +1055,10 @@ function createKnipOwnerProjects(options: {
 }
 
 function addUnusedDependencyProblems(options: {
-  config: ResolvedLiminaConfig;
   declarations: WorkspaceDependencyDeclaration[];
   ignoredDependencies: Set<string>;
+  issues: SourceCheckIssue[];
   knipIssues: KnipSourceIssues;
-  problems: string[];
 }): void {
   const unusedDependencyIssueKeys = new Set(
     options.knipIssues.unusedWorkspaceDependencies.map((issue) =>
@@ -1084,27 +1090,23 @@ function addUnusedDependencyProblems(options: {
       continue;
     }
 
-    options.problems.push(
-      [
-        'Unused workspace package dependency:',
-        `  importer: ${declaration.importer.name}`,
-        `  package manifest: ${toRelativePath(options.config.rootDir, declaration.packageJsonPath)}`,
-        `  dependency: ${declaration.dependencyName}`,
-        `  section: ${declaration.sectionName}`,
-        `  specifier: ${declaration.specifier}`,
-        '  reason: workspace package dependencies should be reachable from package entries, binaries, scripts, or explicitly ignored when usage is not visible to Knip analysis.',
-        `  fix: remove ${declaration.dependencyName} from ${declaration.sectionName}, make it reachable from a package manifest entry, source.knip.workspaces["${declaration.importer.name}"].entry, a package binary invoked from scripts owned by ${declaration.importer.name}, or add source.knip.workspaces["${declaration.importer.name}"].ignoreDependencies with dep "${declaration.dependencyName}" and a reason.`,
-      ].join('\n'),
-    );
+    options.issues.push({
+      code: SOURCE_ISSUE_CODES.unusedWorkspaceDependency,
+      dependencyName: declaration.dependencyName,
+      ownerName: declaration.importer.name,
+      packageJsonPath: declaration.packageJsonPath,
+      sectionName: declaration.sectionName,
+      specifier: declaration.specifier,
+    });
   }
 }
 
 function addUnusedModuleProblems(options: {
   config: ResolvedLiminaConfig;
   ignoredModuleKeys: Set<string>;
+  issues: SourceCheckIssue[];
   knipIssues: KnipSourceIssues;
   ownerModuleSets: OwnerSourceModuleSet[];
-  problems: string[];
 }): void {
   const moduleSetByFilePath = new Map<string, OwnerSourceModuleSet>();
   const reportedKeys = new Set<string>();
@@ -1135,16 +1137,13 @@ function addUnusedModuleProblems(options: {
 
     reportedKeys.add(issueKey);
 
-    options.problems.push(
-      [
-        'Unused source module:',
-        `  owner: ${moduleSet.owner.name}`,
-        `  package manifest: ${toRelativePath(options.config.rootDir, moduleSet.owner.packageJsonPath)}`,
-        `  file: ${toRelativePath(options.config.rootDir, filePath)}`,
-        '  reason: owner-governed source modules must be reachable from package entries, binaries, scripts, or Knip plugin entries.',
-        `  fix: delete ${toRelativePath(options.config.rootDir, filePath)}, make it reachable from a package manifest entry or source.knip.workspaces["${moduleSet.owner.name}"].entry, or add source.knip.workspaces["${moduleSet.owner.name}"].ignoreFiles with file "${toRelativePath(options.config.rootDir, filePath)}" and a reason.`,
-      ].join('\n'),
-    );
+    options.issues.push({
+      code: SOURCE_ISSUE_CODES.unusedModule,
+      filePath,
+      ownerDirectory: moduleSet.owner.directory,
+      ownerName: moduleSet.owner.name,
+      packageJsonPath: moduleSet.owner.packageJsonPath,
+    });
   }
 }
 
@@ -1154,6 +1153,7 @@ async function addKnipBackedSourceProblems(options: {
   knipRunner?: KnipCliRunner;
   ownerModuleSets: OwnerSourceModuleSet[];
   problems: string[];
+  sourceIssues: SourceCheckIssue[];
   workspacePackages: WorkspacePackage[];
 }): Promise<void> {
   if (options.config.source?.knip === false) {
@@ -1239,20 +1239,19 @@ async function addKnipBackedSourceProblems(options: {
   });
 
   addUnusedDependencyProblems({
-    config: options.config,
     declarations,
     ignoredDependencies,
+    issues: options.sourceIssues,
     knipIssues,
-    problems: options.problems,
   });
 
   if (includeFiles) {
     addUnusedModuleProblems({
       config: options.config,
       ignoredModuleKeys: unusedModuleConfig.ignoredKeys,
+      issues: options.sourceIssues,
       knipIssues,
       ownerModuleSets: options.ownerModuleSets,
-      problems: options.problems,
     });
   }
 }
@@ -1290,6 +1289,7 @@ async function runSourceCheckInternal(
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
     knipRunner?: KnipCliRunner;
     logSuccess?: boolean;
+    report?: SourceIssueReportOptions;
   } = {},
 ): Promise<boolean> {
   const generatedGraph = options.generatedGraphProvider
@@ -1316,6 +1316,7 @@ async function runSourceCheckInternal(
   });
   const importAnalysis = createImportAnalysisContext();
   const problems: string[] = [...graphRoute.problems];
+  const sourceIssues: SourceCheckIssue[] = [];
 
   await addTsconfigGovernanceProblems({
     config,
@@ -1330,6 +1331,7 @@ async function runSourceCheckInternal(
     knipRunner: options.knipRunner,
     ownerModuleSets,
     problems,
+    sourceIssues,
     workspacePackages: packages,
   });
 
@@ -1536,8 +1538,15 @@ async function runSourceCheckInternal(
     }
   }
 
-  if (problems.length > 0) {
-    SourceLogger.error(problems.join('\n\n'));
+  if (problems.length > 0 || sourceIssues.length > 0) {
+    SourceLogger.error(
+      formatSourceCheckHumanReport({
+        config,
+        issues: sourceIssues,
+        legacyProblems: problems,
+        report: options.report,
+      }),
+    );
     return false;
   }
 
@@ -1563,7 +1572,9 @@ export async function runSourceCheck(
     depth: options.flowDepth ?? 0,
   });
 
-  SourceLogger.info('source check started');
+  if (!options.flow) {
+    SourceLogger.info('source check started');
+  }
 
   try {
     const logSuccess = !options.flow?.interactive;
@@ -1571,6 +1582,7 @@ export async function runSourceCheck(
       generatedGraphProvider: options.generatedGraphProvider,
       knipRunner: options.knipRunner,
       logSuccess,
+      report: options.report,
     });
 
     if (passed) {
@@ -1580,8 +1592,11 @@ export async function runSourceCheck(
 
       task?.pass();
     } else {
-      SourceLogger.error('source check finished with failures', elapsed());
-      task?.fail('source check finished with failures');
+      if (!options.flow) {
+        SourceLogger.error('source check failed', elapsed());
+      }
+
+      task?.fail('source check failed');
     }
 
     return passed;

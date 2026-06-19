@@ -31,6 +31,7 @@ import {
 import { createLiminaFlowReporter } from './flow';
 import { clearCliScreen, CliLogger, formatErrorMessage } from './logger';
 import { runDefaultCheck, runPipeline } from './pipeline';
+import type { SourceIssueReportOptions } from './source-check/report';
 
 interface GlobalFlags {
   config?: string;
@@ -41,7 +42,16 @@ interface PackageSelectionFlags {
   package?: string | string[];
 }
 
-interface CheckFlags extends GlobalFlags, PackageSelectionFlags {}
+interface SourceIssueSelectionFlags extends PackageSelectionFlags {
+  file?: string | string[];
+  rule?: string | string[];
+  scope?: string | string[];
+  verbose?: boolean;
+}
+
+interface CheckFlags extends GlobalFlags, SourceIssueSelectionFlags {}
+
+interface SourceFlags extends GlobalFlags, SourceIssueSelectionFlags {}
 
 interface PackageFlags extends GlobalFlags, PackageSelectionFlags {
   attwProfile?: string;
@@ -180,6 +190,34 @@ function parsePackageNames(
   return packageNames.length > 0 ? packageNames : undefined;
 }
 
+function parseRepeatedStrings(
+  value: string | string[] | undefined,
+): string[] | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const values = (Array.isArray(value) ? value : [value])
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return values.length > 0 ? values : undefined;
+}
+
+function createSourceIssueReportOptions(
+  flags: SourceIssueSelectionFlags,
+  command: string,
+): SourceIssueReportOptions {
+  return {
+    command,
+    files: parseRepeatedStrings(flags.file),
+    packageNames: parsePackageNames(flags.package),
+    rules: parseRepeatedStrings(flags.rule),
+    scopes: parseRepeatedStrings(flags.scope),
+    verbose: flags.verbose,
+  };
+}
+
 function parseDependencyGraphView(
   view: string | undefined,
 ): DependencyGraphView | undefined {
@@ -233,19 +271,31 @@ async function main(): Promise<void> {
       '-p, --package <name>',
       'Run package-aware pipeline tasks for one package entry',
     )
+    .option('--verbose', 'Show full source issue details')
+    .option('--rule <code>', 'Filter source issue details by stable rule code')
+    .option('--file <path>', 'Filter source issue details by exact file path')
+    .option('--scope <glob>', 'Filter source issue details by path scope')
     .action(async (pipeline: string | undefined, flags: CheckFlags) => {
       const flow = createCliFlow();
       flow.intro('limina check');
       const config = await load(flags, 'check');
+      const packageNames = parsePackageNames(flags.package);
+      const sourceIssueReport = createSourceIssueReportOptions(
+        flags,
+        pipeline ? `limina check ${pipeline}` : 'limina check',
+      );
       const passed = pipeline
         ? await runPipeline(config, pipeline, {
             cwd: process.cwd(),
             flow,
-            packageNames: parsePackageNames(flags.package),
+            packageNames,
+            sourceIssueReport,
           })
         : await runDefaultCheck(config, {
             cwd: process.cwd(),
             flow,
+            packageNames,
+            sourceIssueReport,
           });
 
       if (!passed) {
@@ -338,7 +388,12 @@ async function main(): Promise<void> {
 
   cli
     .command('source <action>', 'Check source package boundaries')
-    .action(async (action: string, flags: GlobalFlags) => {
+    .option('-p, --package <name>', 'Filter source issue details by package')
+    .option('--verbose', 'Show full source issue details')
+    .option('--rule <code>', 'Filter source issue details by stable rule code')
+    .option('--file <path>', 'Filter source issue details by exact file path')
+    .option('--scope <glob>', 'Filter source issue details by path scope')
+    .action(async (action: string, flags: SourceFlags) => {
       if (action !== 'check') {
         throw new Error(`Unknown source action "${action}". Expected check.`);
       }
@@ -348,6 +403,7 @@ async function main(): Promise<void> {
       const passed = await runSourceCheck(config, {
         clearScreen: false,
         flow,
+        report: createSourceIssueReportOptions(flags, 'limina source check'),
       });
 
       if (!passed) {

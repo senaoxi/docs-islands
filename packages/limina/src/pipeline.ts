@@ -23,12 +23,14 @@ import {
   type GeneratedTsconfigGraphResult,
   prepareGeneratedTsconfigGraph,
 } from './generated-graph';
+import type { SourceIssueReportOptions } from './source-check/report';
 
 interface RunPipelineOptions {
   cwd?: string;
   flow?: LiminaFlowReporter;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   packageNames?: readonly string[];
+  sourceIssueReport?: SourceIssueReportOptions;
 }
 
 type NormalizedPipelineStep = Exclude<PipelineStep, string>;
@@ -129,6 +131,20 @@ function usesAutoCheckers(config: ResolvedLiminaConfig): boolean {
   return (
     config.config?.checkers === undefined || config.config.checkers === 'auto'
   );
+}
+
+function createSourceIssueReportOptions(
+  options: RunPipelineOptions,
+): SourceIssueReportOptions | undefined {
+  if (!options.sourceIssueReport && !options.packageNames?.length) {
+    return undefined;
+  }
+
+  return {
+    ...options.sourceIssueReport,
+    packageNames:
+      options.sourceIssueReport?.packageNames ?? options.packageNames,
+  };
 }
 
 function isBuiltinTaskName(value: string): value is BuiltinTaskName {
@@ -256,6 +272,7 @@ async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        report: createSourceIssueReportOptions(options),
       });
     }
     case 'package:check': {

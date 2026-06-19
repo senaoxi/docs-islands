@@ -12,6 +12,7 @@ import type {
 } from '../config';
 import type { KnipCliInvocation } from '../knip';
 import { SourceLogger } from '../logger';
+import { SOURCE_ISSUE_CODES } from '../source-check/report';
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -2144,9 +2145,134 @@ packages:
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
-      expect(errors).toContain('Unused source module:');
-      expect(errors).toContain('owner: @example/app');
-      expect(errors).toContain('file: packages/app/src/dead.ts');
+      expect(errors).toContain('Found 1 unused source module in 1 package.');
+      expect(errors).toContain(`rule: ${SOURCE_ISSUE_CODES.unusedModule}`);
+      expect(errors).toContain('@example/app');
+      expect(errors).toContain('packages/app/src/dead.ts');
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('groups and truncates unused source modules by default', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+      'packages/app/src/dead-a.ts': 'export const deadA = 1;\n',
+      'packages/app/src/dead-b.ts': 'export const deadB = 1;\n',
+      'packages/app/src/dead-c.ts': 'export const deadC = 1;\n',
+      'packages/app/src/dead-d.ts': 'export const deadD = 1;\n',
+      'packages/app/src/dead-e.ts': 'export const deadE = 1;\n',
+      'packages/app/src/dead-f.ts': 'export const deadF = 1;\n',
+    });
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          report: {
+            command: 'limina check',
+          },
+        }),
+      ).resolves.toBe(false);
+
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain('Found 6 unused source modules in 1 package.');
+      expect(errors).toContain(`rule: ${SOURCE_ISSUE_CODES.unusedModule}`);
+      expect(errors).toContain(
+        'source.knip.workspaces["@example/app"].ignoreFiles',
+      );
+      expect(errors).toContain('... 1 more');
+      expect(errors).toContain('Show all files:');
+      expect(errors).toContain('limina check --verbose');
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('renders filtered verbose unused source module details', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+      'packages/app/src/theme/button.ts': 'export const button = 1;\n',
+      'packages/app/src/theme/card.ts': 'export const card = 1;\n',
+      'packages/app/src/other.ts': 'export const other = 1;\n',
+    });
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          report: {
+            command: 'limina check',
+            packageNames: ['@example/app'],
+            rules: [SOURCE_ISSUE_CODES.unusedModule],
+            scopes: ['packages/app/src/theme'],
+            verbose: true,
+          },
+        }),
+      ).resolves.toBe(false);
+
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain('Filters:');
+      expect(errors).toContain('package: @example/app');
+      expect(errors).toContain(`rule: ${SOURCE_ISSUE_CODES.unusedModule}`);
+      expect(errors).toContain('scope: packages/app/src/theme');
+      expect(errors).toContain('Matched 2 issues.');
+      expect(errors).toContain('files by scope:');
+      expect(errors).toContain('src/theme  2 files');
+      expect(errors).toContain('packages/app/src/theme/button.ts');
+      expect(errors).toContain('packages/app/src/theme/card.ts');
+      expect(errors).not.toContain('packages/app/src/other.ts');
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('explains unmatched source issue filters', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appSource: "export { internalValue } from '@example/internal';\n",
+      }),
+      'packages/app/src/dead.ts': 'export const deadValue = 1;\n',
+    });
+
+    try {
+      await expect(
+        runSourceCheck(fixture.config, {
+          report: {
+            command: 'limina check',
+            files: ['packages/app/src/missing.ts'],
+            rules: ['LIMINA_SOURCE_UNUSED_MODUL'],
+            verbose: true,
+          },
+        }),
+      ).resolves.toBe(false);
+
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain(
+        'Unknown issue rule: LIMINA_SOURCE_UNUSED_MODUL',
+      );
+      expect(errors).toContain(`  - ${SOURCE_ISSUE_CODES.unusedModule}`);
+      expect(errors).toContain('No issues matched the selected filters.');
+      expect(errors).toContain('Available packages with issues:');
+      expect(errors).toContain('  - @example/app');
+      expect(errors).toContain('Available rules with issues:');
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
