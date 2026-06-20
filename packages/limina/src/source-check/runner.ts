@@ -39,6 +39,7 @@ import {
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import {
   collectWorkspaceDependencyDeclarations,
   createWorkspaceDependencyKey,
@@ -52,8 +53,10 @@ import {
 } from '../core/packages/authority';
 import {
   classifyResolvedPackageTarget,
+  findNearestPackageScopeInfo,
   findOwnerForFile,
   type NearestPackageInfo,
+  type ResolvedPackageTarget,
 } from '../core/packages/owners';
 import type { LiminaFlowReporter } from '../flow';
 import { isNodeBuiltinSpecifier } from '../graph-check/rules';
@@ -82,12 +85,12 @@ import {
   SOURCE_ISSUE_CODES,
   type SourceCheckIssue,
   type SourceIssueReportOptions,
+  type SourceStructuredIssue,
 } from './report';
 import { writeCompletedSourceIssueSnapshot } from './snapshot';
 import {
   isInvalidWorkspacePattern,
   normalizeWorkspacePattern,
-  toOwnerRelativeEntryPattern,
 } from './workspace-patterns';
 
 export interface RunSourceCheckOptions {
@@ -105,11 +108,6 @@ interface SourceProjectEntry {
   project: ProjectInfo;
 }
 
-interface TsconfigOwnershipIgnoreRule {
-  matcher: (filePath: string) => boolean;
-  owner: PackageOwner;
-}
-
 interface TsconfigOwnershipResolution {
   matchedOwnerConfigPaths: string[];
   searchedTsconfigPaths: string[];
@@ -122,16 +120,12 @@ const picomatch = rawPicomatch as unknown as (
   options?: { dot?: boolean; posixSlashes?: boolean },
 ) => (value: string) => boolean;
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
+interface CompiledImportAuthorityAllowRule {
+  fileMatchers: ((value: string) => boolean)[];
+  ownerIdentity?: string;
+  packageMatchers: ((value: string) => boolean)[];
+  reason: string;
+  specifierMatchers: ((value: string) => boolean)[];
 }
 
 function addProjectOwnerProblems(options: {
@@ -159,7 +153,7 @@ function addProjectOwnerProblems(options: {
   if (missingOwnerFiles.length > 0) {
     options.problems.push(
       [
-        'Source file has no package owner:',
+        'Source file has no source owner:',
         `  ${options.role}: ${toRelativePath(options.config.rootDir, options.configPath)}`,
         '  files:',
         ...missingOwnerFiles
@@ -171,7 +165,7 @@ function addProjectOwnerProblems(options: {
         ...(missingOwnerFiles.length > 10
           ? [`    ...and ${missingOwnerFiles.length - 10} more`]
           : []),
-        '  reason: every source file checked by Limina must be governed by the nearest package.json owner.',
+        '  reason: every source file checked by Limina must be governed by a pnpm workspace source owner.',
       ].join('\n'),
     );
   }
@@ -182,14 +176,14 @@ function addProjectOwnerProblems(options: {
 
   options.problems.push(
     [
-      'Tsconfig source file set mixes package owners:',
+      'Tsconfig source file set mixes source owners:',
       `  ${options.role}: ${toRelativePath(options.config.rootDir, options.configPath)}`,
-      '  owners:',
+      '  source owners:',
       ...[...ownerPaths.values()].map(
         (owner) =>
           `    - ${toRelativePath(options.config.rootDir, owner.packageJsonPath)}`,
       ),
-      '  reason: non-aggregator tsconfig leaves and their companion typecheck configs must stay within one nearest package.json owner scope.',
+      '  reason: non-aggregator tsconfig leaves and their companion typecheck configs must stay within one pnpm workspace source owner scope.',
     ].join('\n'),
   );
 }
@@ -200,26 +194,33 @@ function addRelativeImportOwnerProblem(options: {
   owner: PackageOwner;
   problems: string[];
   resolvedFilePath: string;
-  targetOwner: PackageOwner | null;
+  sourcePackageScope: NearestPackageInfo | null;
+  targetPackageScope: NearestPackageInfo | null;
 }): void {
   options.problems.push(
     [
-      'Relative import escapes package owner scope:',
-      `  package owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
+      'Relative import escapes package scope:',
+      `  source owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
+      ...(options.sourcePackageScope
+        ? [
+            `  package scope: ${toRelativePath(options.config.rootDir, options.sourcePackageScope.packageJsonPath)}`,
+          ]
+        : []),
       `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
       `  imported specifier: ${options.importRecord.specifier}`,
       `  resolved file: ${toRelativePath(options.config.rootDir, options.resolvedFilePath)}`,
-      ...(options.targetOwner
+      ...(options.targetPackageScope
         ? [
-            `  target owner: ${toRelativePath(options.config.rootDir, options.targetOwner.packageJsonPath)}`,
+            `  target package scope: ${toRelativePath(options.config.rootDir, options.targetPackageScope.packageJsonPath)}`,
           ]
         : []),
-      '  reason: relative source imports must not cross the nearest package.json owner boundary.',
+      '  reason: relative source imports must not cross the nearest package.json package boundary.',
     ].join('\n'),
   );
 }
 
 function addPackageImportAuthorizationProblem(options: {
+  authorityManifestPaths: string[];
   config: ResolvedLiminaConfig;
   dependencySpecifier?: string;
   importRecord: ImportRecord;
@@ -228,22 +229,316 @@ function addPackageImportAuthorizationProblem(options: {
   problems: string[];
   workspacePackage: WorkspacePackage | null;
 }): void {
+  const fix = formatPackageImportAuthorizationFix(options);
+
   options.problems.push(
     [
       'Unauthorized bare package import:',
-      `  package owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
+      `  source owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
       `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
       `  imported specifier: ${options.importRecord.specifier}`,
       `  package: ${options.packageName}`,
       ...(options.dependencySpecifier
         ? [`  resolved dependency specifier: ${options.dependencySpecifier}`]
         : []),
-      ...(options.workspacePackage
+      ...(options.workspacePackage?.name
         ? [`  workspace package: ${options.workspacePackage.name}`]
         : []),
-      '  reason: source imports must be authorized by the nearest package.json dependencies, devDependencies, peerDependencies, or optionalDependencies.',
+      '  dependency authority manifests:',
+      ...options.authorityManifestPaths.map(
+        (manifestPath) =>
+          `    - ${toRelativePath(options.config.rootDir, manifestPath)}`,
+      ),
+      '  reason: source imports must be authorized by the source owner dependencies, devDependencies, peerDependencies, optionalDependencies, by the workspace root devDependencies when the importing context is relaxed, or by an explicit source.importAuthority.allow rule.',
+      `  fix: ${fix}`,
     ].join('\n'),
   );
+}
+
+function formatPackageImportAuthorizationFix(options: {
+  authorityManifestPaths: string[];
+  config: ResolvedLiminaConfig;
+  dependencySpecifier?: string;
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  packageName: string;
+  workspacePackage: WorkspacePackage | null;
+}): string {
+  const ownerManifestPath = toRelativePath(
+    options.config.rootDir,
+    options.owner.packageJsonPath,
+  );
+  const rootManifestPath = options.authorityManifestPaths.find(
+    (manifestPath) => manifestPath !== options.owner.packageJsonPath,
+  );
+  const rootManifestFix = rootManifestPath
+    ? ` Because this file is in a relaxed source context, declaring "${options.packageName}" in ${toRelativePath(options.config.rootDir, rootManifestPath)} devDependencies is also accepted.`
+    : '';
+  const typeDeclarationFix =
+    options.dependencySpecifier?.startsWith('@types/') &&
+    options.dependencySpecifier !== options.packageName
+      ? ` "${options.dependencySpecifier}" only supplies declarations and does not authorize "${options.packageName}".`
+      : '';
+  const explicitAuthorityFix = ` If "${options.packageName}" is supplied by a runtime, template, or alias instead of the owner manifest, add a source.importAuthority.allow rule for this file/package with a reason.`;
+  return [
+    `Declare "${options.packageName}" in ${ownerManifestPath} dependencies, devDependencies, peerDependencies, or optionalDependencies.`,
+    rootManifestFix,
+    explicitAuthorityFix,
+    typeDeclarationFix,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function getWorkspacePackageJsonPath(
+  workspacePackage: WorkspacePackage,
+): string {
+  return normalizeAbsolutePath(
+    path.join(workspacePackage.directory, 'package.json'),
+  );
+}
+
+function findWorkspaceRootPackage(options: {
+  config: ResolvedLiminaConfig;
+  packages: WorkspacePackage[];
+}): WorkspacePackage | null {
+  return (
+    options.packages.find(
+      (workspacePackage) =>
+        normalizeAbsolutePath(workspacePackage.directory) ===
+        normalizeAbsolutePath(options.config.rootDir),
+    ) ?? null
+  );
+}
+
+function isRootDevDependencyAuthorized(
+  manifest: WorkspacePackage['manifest'],
+  packageName: string,
+): boolean {
+  return typeof manifest.devDependencies?.[packageName] === 'string';
+}
+
+function isRelaxedDependencyAuthorityContext(options: {
+  config: ResolvedLiminaConfig;
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+}): boolean {
+  if (!options.owner.name || options.owner.manifest.private === true) {
+    return true;
+  }
+
+  if (options.importRecord.kind === 'import-type') {
+    return true;
+  }
+
+  const relativePath = normalizeSlashes(
+    toRelativePath(options.config.rootDir, options.importRecord.filePath),
+  );
+  const basename = path.basename(relativePath);
+
+  return (
+    relativePath.startsWith('docs/') ||
+    relativePath.includes('/docs/') ||
+    relativePath.includes('/__tests__/') ||
+    relativePath.includes('/__tests_dts__/') ||
+    relativePath.startsWith('scripts/') ||
+    relativePath.startsWith('tools/') ||
+    relativePath.includes('/scripts/') ||
+    relativePath.includes('/tools/') ||
+    /\.(?:spec|test)\.[cm]?[jt]sx?$/u.test(basename) ||
+    /(?:^|\.)(?:config|configs)\.[cm]?[jt]sx?$/u.test(basename)
+  );
+}
+
+function getDependencyAuthorityManifestPaths(options: {
+  config: ResolvedLiminaConfig;
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  rootPackage: WorkspacePackage | null;
+}): string[] {
+  const manifestPaths = [options.owner.packageJsonPath];
+
+  if (
+    options.rootPackage &&
+    options.rootPackage.directory !== options.owner.directory &&
+    isRelaxedDependencyAuthorityContext({
+      config: options.config,
+      importRecord: options.importRecord,
+      owner: options.owner,
+    })
+  ) {
+    manifestPaths.push(getWorkspacePackageJsonPath(options.rootPackage));
+  }
+
+  return manifestPaths;
+}
+
+function isDependencyAuthorizedBySourceAuthority(options: {
+  config: ResolvedLiminaConfig;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  packageName: string;
+  rootPackage: WorkspacePackage | null;
+}): boolean {
+  if (isDependencyAuthorized(options.owner.manifest, options.packageName)) {
+    return true;
+  }
+
+  if (
+    isImportAuthorizedByExplicitAuthority({
+      config: options.config,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      packageName: options.packageName,
+      rules: options.importAuthorityAllowRules,
+    })
+  ) {
+    return true;
+  }
+
+  return Boolean(
+    options.rootPackage &&
+      options.rootPackage.directory !== options.owner.directory &&
+      isRelaxedDependencyAuthorityContext({
+        config: options.config,
+        importRecord: options.importRecord,
+        owner: options.owner,
+      }) &&
+      isRootDevDependencyAuthorized(
+        options.rootPackage.manifest,
+        options.packageName,
+      ),
+  );
+}
+
+function getPackageNameForAuthorization(options: {
+  importRecord: ImportRecord;
+  resolvedPackageName?: string;
+}): string {
+  const fallbackPackageName = getPackageRootSpecifier(
+    options.importRecord.specifier,
+  );
+
+  if (
+    options.resolvedPackageName?.startsWith('@types/') &&
+    fallbackPackageName !== options.resolvedPackageName
+  ) {
+    return fallbackPackageName;
+  }
+
+  return options.resolvedPackageName ?? fallbackPackageName;
+}
+
+function createValueMatcher(pattern: string): (value: string) => boolean {
+  if (/[*?[\]{}()!+]/u.test(pattern)) {
+    return picomatch(pattern, {
+      dot: true,
+      posixSlashes: true,
+    });
+  }
+
+  return (value) => value === pattern;
+}
+
+function getSourceOwnerIdentity(options: {
+  config: ResolvedLiminaConfig;
+  owner: PackageOwner;
+}): string {
+  return (
+    options.owner.name ??
+    normalizeSlashes(
+      toRelativePath(options.config.rootDir, options.owner.directory),
+    )
+  );
+}
+
+function collectImportAuthorityAllowRules(options: {
+  config: ResolvedLiminaConfig;
+  problems: string[];
+}): CompiledImportAuthorityAllowRule[] {
+  const rawRules = options.config.source?.importAuthority?.allow;
+
+  if (rawRules === undefined) {
+    return [];
+  }
+
+  const rules: CompiledImportAuthorityAllowRule[] = [];
+
+  for (const [index, rule] of rawRules.entries()) {
+    const field = `source.importAuthority.allow[${index}]`;
+    const files = rule.files
+      .map((file) => normalizeWorkspacePattern(file))
+      .filter((file) => file.length > 0);
+    const invalidFile = files.find(isInvalidWorkspacePattern);
+
+    if (files.length === 0 || invalidFile) {
+      options.problems.push(
+        [
+          'Invalid source import authority config:',
+          `  field: ${field}.files`,
+          ...(invalidFile ? [`  file: ${invalidFile}`] : []),
+          '  reason: files must be positive workspace-root-relative globs inside the workspace root.',
+        ].join('\n'),
+      );
+      continue;
+    }
+
+    const packages = rule.packages?.map((value) => value.trim()) ?? [];
+    const specifiers = rule.specifiers?.map((value) => value.trim()) ?? [];
+
+    rules.push({
+      fileMatchers: files.map((file) =>
+        picomatch(file, {
+          dot: true,
+          posixSlashes: true,
+        }),
+      ),
+      ...(rule.owner ? { ownerIdentity: rule.owner.trim() } : {}),
+      packageMatchers: packages.map(createValueMatcher),
+      reason: rule.reason.trim(),
+      specifierMatchers: specifiers.map(createValueMatcher),
+    });
+  }
+
+  return rules;
+}
+
+function isImportAuthorizedByExplicitAuthority(options: {
+  config: ResolvedLiminaConfig;
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  packageName: string;
+  rules: CompiledImportAuthorityAllowRule[];
+}): boolean {
+  if (options.rules.length === 0) {
+    return false;
+  }
+
+  const filePath = normalizeSlashes(
+    toRelativePath(options.config.rootDir, options.importRecord.filePath),
+  );
+  const ownerIdentity = getSourceOwnerIdentity({
+    config: options.config,
+    owner: options.owner,
+  });
+
+  return options.rules.some((rule) => {
+    if (rule.ownerIdentity && rule.ownerIdentity !== ownerIdentity) {
+      return false;
+    }
+
+    if (!rule.fileMatchers.some((matches) => matches(filePath))) {
+      return false;
+    }
+
+    return (
+      rule.packageMatchers.some((matches) => matches(options.packageName)) ||
+      rule.specifierMatchers.some((matches) =>
+        matches(options.importRecord.specifier),
+      )
+    );
+  });
 }
 
 function addResolvedPackageWithoutNameProblem(options: {
@@ -256,7 +551,7 @@ function addResolvedPackageWithoutNameProblem(options: {
   options.problems.push(
     [
       'Resolved package import has no package name:',
-      `  package owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
+      `  source owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
       `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
       `  imported specifier: ${options.importRecord.specifier}`,
       `  resolved package.json: ${toRelativePath(options.config.rootDir, options.packageInfo.packageJsonPath)}`,
@@ -275,15 +570,15 @@ function addPackageImportOtherOwnerProblem(options: {
 }): void {
   options.problems.push(
     [
-      'Package import resolves to another package owner:',
-      `  package owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
+      'Package import resolves to another source owner:',
+      `  source owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
       `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
       `  imported specifier: ${options.importRecord.specifier}`,
-      `  target owner: ${toRelativePath(options.config.rootDir, options.targetOwner.packageJsonPath)}`,
-      ...(options.workspacePackage
+      `  target source owner: ${toRelativePath(options.config.rootDir, options.targetOwner.packageJsonPath)}`,
+      ...(options.workspacePackage?.name
         ? [`  workspace package: ${options.workspacePackage.name}`]
         : []),
-      '  reason: #... package imports must not resolve to modules governed by another package.json owner.',
+      '  reason: #... package imports must not resolve to modules governed by another source owner.',
     ].join('\n'),
   );
 }
@@ -296,6 +591,8 @@ function addPackageImportProblem(options: {
   packages: WorkspacePackage[];
   problems: string[];
   resolvedFilePath: string | null;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  rootPackage: WorkspacePackage | null;
 }): void {
   const match = findPackageImportMatch(
     options.owner.manifest.imports,
@@ -306,10 +603,10 @@ function addPackageImportProblem(options: {
     options.problems.push(
       [
         'Unauthorized package import specifier:',
-        `  package owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
+        `  source owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
         `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
         `  imported specifier: ${options.importRecord.specifier}`,
-        '  reason: #... package imports must match the nearest package.json imports field.',
+        '  reason: #... package imports must match the source owner package.json imports field.',
       ].join('\n'),
     );
     return;
@@ -319,10 +616,10 @@ function addPackageImportProblem(options: {
     options.problems.push(
       [
         'Unresolved package import specifier:',
-        `  package owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
+        `  source owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
         `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
         `  imported specifier: ${options.importRecord.specifier}`,
-        '  reason: matched #... package imports must resolve to a file within the same package owner scope.',
+        '  reason: matched #... package imports must resolve to a file within the same source owner scope.',
       ].join('\n'),
     );
     return;
@@ -363,18 +660,36 @@ function addPackageImportProblem(options: {
       return;
     }
 
+    const packageName = getPackageNameForAuthorization({
+      importRecord: options.importRecord,
+      resolvedPackageName: target.packageInfo.name,
+    });
+
     if (
-      isDependencyAuthorized(options.owner.manifest, target.packageInfo.name)
+      isDependencyAuthorizedBySourceAuthority({
+        config: options.config,
+        importAuthorityAllowRules: options.importAuthorityAllowRules,
+        importRecord: options.importRecord,
+        owner: options.owner,
+        packageName,
+        rootPackage: options.rootPackage,
+      })
     ) {
       return;
     }
 
     addPackageImportAuthorizationProblem({
+      authorityManifestPaths: getDependencyAuthorityManifestPaths({
+        config: options.config,
+        importRecord: options.importRecord,
+        owner: options.owner,
+        rootPackage: options.rootPackage,
+      }),
       config: options.config,
       dependencySpecifier: target.packageInfo.name,
       importRecord: options.importRecord,
       owner: options.owner,
-      packageName: target.packageInfo.name,
+      packageName,
       problems: options.problems,
       workspacePackage: null,
     });
@@ -383,12 +698,12 @@ function addPackageImportProblem(options: {
 
   options.problems.push(
     [
-      'Package import resolves outside package ownership:',
-      `  package owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
+      'Package import resolves outside source ownership:',
+      `  source owner: ${toRelativePath(options.config.rootDir, options.owner.packageJsonPath)}`,
       `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
       `  imported specifier: ${options.importRecord.specifier}`,
       `  resolved file: ${toRelativePath(options.config.rootDir, options.resolvedFilePath)}`,
-      '  reason: #... package imports must resolve to the current package owner or to a named artifact package dependency.',
+      '  reason: #... package imports must resolve to the current source owner or to a named artifact package dependency.',
     ].join('\n'),
   );
 }
@@ -607,212 +922,8 @@ function addNearestTsconfigOwnershipProblem(options: {
       '  matched owner tsconfigs:',
       ...formatConfigPathList(options.config, options.matchedOwnerConfigPaths),
       `  reason: ${options.reason}`,
-      '  fix: make one tsconfig.json between the module directory and workspace root include the module, or make its ordinary typecheck references reach exactly one owner tsconfig. If this module is intentionally loaded outside that shape, add a scoped source.tsconfigOwnership.ignore entry with a reason.',
+      '  fix: make one tsconfig.json between the module directory and workspace root include the module, or make its ordinary typecheck references reach exactly one owner tsconfig.',
     ].join('\n'),
-  );
-}
-
-function collectTsconfigOwnershipIgnoreRules(options: {
-  config: ResolvedLiminaConfig;
-  owners: PackageOwner[];
-  problems: string[];
-}): TsconfigOwnershipIgnoreRule[] {
-  const rawConfig = options.config.source?.tsconfigOwnership;
-  const rules: TsconfigOwnershipIgnoreRule[] = [];
-
-  if (rawConfig === undefined) {
-    return rules;
-  }
-
-  if (!isPlainRecord(rawConfig)) {
-    options.problems.push(
-      [
-        'Invalid tsconfig ownership config:',
-        '  field: source.tsconfigOwnership',
-        `  value: ${formatUnknownValue(rawConfig)}`,
-        '  reason: tsconfigOwnership must be an object.',
-      ].join('\n'),
-    );
-    return rules;
-  }
-
-  const rawIgnore = rawConfig.ignore;
-
-  if (rawIgnore === undefined) {
-    return rules;
-  }
-
-  if (!Array.isArray(rawIgnore)) {
-    options.problems.push(
-      [
-        'Invalid tsconfig ownership ignore config:',
-        '  field: source.tsconfigOwnership.ignore',
-        `  value: ${formatUnknownValue(rawIgnore)}`,
-        '  reason: ignore must be an array.',
-      ].join('\n'),
-    );
-    return rules;
-  }
-
-  const ownerByName = new Map(
-    options.owners
-      .filter((owner): owner is PackageOwner & { name: string } =>
-        Boolean(owner.name),
-      )
-      .map((owner) => [owner.name, owner]),
-  );
-
-  for (const [index, entry] of rawIgnore.entries()) {
-    const field = `source.tsconfigOwnership.ignore[${index}]`;
-
-    if (!isPlainRecord(entry)) {
-      options.problems.push(
-        [
-          'Invalid tsconfig ownership ignore config:',
-          `  field: ${field}`,
-          `  value: ${formatUnknownValue(entry)}`,
-          '  reason: ignore entries must be objects with non-empty owner, files, and reason fields.',
-        ].join('\n'),
-      );
-      continue;
-    }
-
-    const ownerValue = entry.owner;
-    const filesValue = entry.files;
-    const reasonValue = entry.reason;
-
-    if (typeof ownerValue !== 'string' || ownerValue.trim().length === 0) {
-      options.problems.push(
-        [
-          'Invalid tsconfig ownership ignore config:',
-          `  field: ${field}.owner`,
-          `  value: ${formatUnknownValue(ownerValue)}`,
-          '  reason: owner must be a non-empty package owner name.',
-        ].join('\n'),
-      );
-      continue;
-    }
-
-    if (!Array.isArray(filesValue) || filesValue.length === 0) {
-      options.problems.push(
-        [
-          'Invalid tsconfig ownership ignore config:',
-          `  field: ${field}.files`,
-          `  value: ${formatUnknownValue(filesValue)}`,
-          '  reason: files must be a non-empty array of workspace-root-relative glob patterns.',
-        ].join('\n'),
-      );
-      continue;
-    }
-
-    if (typeof reasonValue !== 'string' || reasonValue.trim().length === 0) {
-      options.problems.push(
-        [
-          'Invalid tsconfig ownership ignore config:',
-          `  field: ${field}.reason`,
-          `  value: ${formatUnknownValue(reasonValue)}`,
-          '  reason: reason must be a non-empty string.',
-        ].join('\n'),
-      );
-      continue;
-    }
-
-    const ownerName = ownerValue.trim();
-    const owner = ownerByName.get(ownerName);
-
-    if (!owner) {
-      options.problems.push(
-        [
-          'Invalid tsconfig ownership ignore config:',
-          `  field: ${field}.owner`,
-          `  owner: ${ownerName}`,
-          '  reason: owner must name an existing package owner with a package.json name.',
-        ].join('\n'),
-      );
-      continue;
-    }
-
-    for (const [fileIndex, fileValue] of filesValue.entries()) {
-      const fileField = `${field}.files[${fileIndex}]`;
-
-      if (typeof fileValue !== 'string' || fileValue.trim().length === 0) {
-        options.problems.push(
-          [
-            'Invalid tsconfig ownership ignore config:',
-            `  field: ${fileField}`,
-            `  value: ${formatUnknownValue(fileValue)}`,
-            '  reason: file patterns must be non-empty strings.',
-          ].join('\n'),
-        );
-        continue;
-      }
-
-      const pattern = normalizeWorkspacePattern(fileValue);
-
-      if (isInvalidWorkspacePattern(pattern)) {
-        options.problems.push(
-          [
-            'Invalid tsconfig ownership ignore config:',
-            `  field: ${fileField}`,
-            `  file: ${pattern}`,
-            '  reason: file patterns must be positive workspace-root-relative globs inside the workspace root.',
-          ].join('\n'),
-        );
-        continue;
-      }
-
-      if (
-        !toOwnerRelativeEntryPattern({
-          config: options.config,
-          owner,
-          pattern,
-        })
-      ) {
-        options.problems.push(
-          [
-            'Invalid tsconfig ownership ignore config:',
-            `  field: ${fileField}`,
-            `  owner: ${ownerName}`,
-            `  file: ${pattern}`,
-            '  reason: file patterns must stay inside the owner package directory.',
-          ].join('\n'),
-        );
-        continue;
-      }
-
-      rules.push({
-        matcher: picomatch(pattern, {
-          dot: true,
-          posixSlashes: true,
-        }),
-        owner,
-      });
-    }
-  }
-
-  return rules;
-}
-
-function isIgnoredTsconfigOwnershipModule(options: {
-  config: ResolvedLiminaConfig;
-  fileName: string;
-  fileOwner: PackageOwner | null;
-  ignoreRules: TsconfigOwnershipIgnoreRule[];
-}): boolean {
-  if (!options.fileOwner) {
-    return false;
-  }
-
-  const fileOwner = options.fileOwner;
-  const relativeFilePath = normalizeSlashes(
-    toRelativePath(options.config.rootDir, options.fileName),
-  );
-
-  return options.ignoreRules.some(
-    (rule) =>
-      rule.owner.packageJsonPath === fileOwner.packageJsonPath &&
-      isPathInsideDirectory(options.fileName, rule.owner.directory) &&
-      rule.matcher(relativeFilePath),
   );
 }
 
@@ -832,11 +943,6 @@ async function addTsconfigGovernanceProblems(options: {
     string,
     Map<string, { configPaths: string[]; owner: PackageOwner }>
   >();
-  const tsconfigOwnershipIgnoreRules = collectTsconfigOwnershipIgnoreRules({
-    config: options.config,
-    owners: options.owners,
-    problems: options.problems,
-  });
   const projectFileSetsByConfigPath = new Map<string, Set<string>>();
   const getProjectFileSet = (configPath: string): Set<string> => {
     const normalizedConfigPath = normalizeAbsolutePath(configPath);
@@ -866,9 +972,9 @@ async function addTsconfigGovernanceProblems(options: {
     if (!owner) {
       options.problems.push(
         [
-          'Tsconfig has no package owner:',
+          'Tsconfig has no source owner:',
           `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
-          '  reason: every tsconfig*.json that governs modules must be assigned to its nearest package.json.',
+          '  reason: every tsconfig*.json that governs modules must be assigned to its pnpm workspace source owner.',
         ].join('\n'),
       );
       continue;
@@ -884,16 +990,16 @@ async function addTsconfigGovernanceProblems(options: {
       if (fileOwner?.packageJsonPath !== owner.packageJsonPath) {
         options.problems.push(
           [
-            'Tsconfig source file set crosses package owner scope:',
+            'Tsconfig source file set crosses source owner scope:',
             `  config: ${toRelativePath(options.config.rootDir, configPath)}`,
-            `  package owner: ${toRelativePath(options.config.rootDir, owner.packageJsonPath)}`,
+            `  source owner: ${toRelativePath(options.config.rootDir, owner.packageJsonPath)}`,
             `  file: ${toRelativePath(options.config.rootDir, fileName)}`,
             ...(fileOwner
               ? [
-                  `  file owner: ${toRelativePath(options.config.rootDir, fileOwner.packageJsonPath)}`,
+                  `  file source owner: ${toRelativePath(options.config.rootDir, fileOwner.packageJsonPath)}`,
                 ]
               : []),
-            '  reason: every package-owned tsconfig*.json must govern only modules owned by the same nearest package.json.',
+            '  reason: every source-owner tsconfig*.json must govern only modules owned by the same pnpm workspace source owner.',
           ].join('\n'),
         );
       }
@@ -919,47 +1025,36 @@ async function addTsconfigGovernanceProblems(options: {
       toRelativePath(options.config.rootDir, right),
     ),
   )) {
-    const fileOwner = findOwnerForFile(fileName, options.owners);
+    const ownershipResolution = resolveTsconfigOwnership({
+      config: options.config,
+      fileName,
+      getProjectFileSet,
+    });
 
-    if (
-      !isIgnoredTsconfigOwnershipModule({
+    if (ownershipResolution.status === 'missing') {
+      addNearestTsconfigOwnershipProblem({
         config: options.config,
         fileName,
-        fileOwner,
-        ignoreRules: tsconfigOwnershipIgnoreRules,
-      })
-    ) {
-      const ownershipResolution = resolveTsconfigOwnership({
-        config: options.config,
-        fileName,
-        getProjectFileSet,
+        matchedOwnerConfigPaths: ownershipResolution.matchedOwnerConfigPaths,
+        problems: options.problems,
+        reason:
+          'no tsconfig.json was found between the module directory and the workspace root.',
+        searchedTsconfigPaths: ownershipResolution.searchedTsconfigPaths,
+        tsconfigPath: ownershipResolution.tsconfigPath,
       });
-
-      if (ownershipResolution.status === 'missing') {
-        addNearestTsconfigOwnershipProblem({
-          config: options.config,
-          fileName,
-          matchedOwnerConfigPaths: ownershipResolution.matchedOwnerConfigPaths,
-          problems: options.problems,
-          reason:
-            'no tsconfig.json was found between the module directory and the workspace root.',
-          searchedTsconfigPaths: ownershipResolution.searchedTsconfigPaths,
-          tsconfigPath: ownershipResolution.tsconfigPath,
-        });
-      } else if (ownershipResolution.status !== 'matched') {
-        addNearestTsconfigOwnershipProblem({
-          config: options.config,
-          fileName,
-          matchedOwnerConfigPaths: ownershipResolution.matchedOwnerConfigPaths,
-          problems: options.problems,
-          reason:
-            ownershipResolution.status === 'unmatched'
-              ? 'no tsconfig.json between the module directory and workspace root includes the module or reaches one ordinary typecheck config that includes it.'
-              : 'the first matching tsconfig.json reaches multiple ordinary typecheck configs that include the module.',
-          searchedTsconfigPaths: ownershipResolution.searchedTsconfigPaths,
-          tsconfigPath: ownershipResolution.tsconfigPath,
-        });
-      }
+    } else if (ownershipResolution.status !== 'matched') {
+      addNearestTsconfigOwnershipProblem({
+        config: options.config,
+        fileName,
+        matchedOwnerConfigPaths: ownershipResolution.matchedOwnerConfigPaths,
+        problems: options.problems,
+        reason:
+          ownershipResolution.status === 'unmatched'
+            ? 'no tsconfig.json between the module directory and workspace root includes the module or reaches one ordinary typecheck config that includes it.'
+            : 'the first matching tsconfig.json reaches multiple ordinary typecheck configs that include the module.',
+        searchedTsconfigPaths: ownershipResolution.searchedTsconfigPaths,
+        tsconfigPath: ownershipResolution.tsconfigPath,
+      });
     }
 
     if (governanceUnits.size <= 1) {
@@ -998,9 +1093,9 @@ async function addTsconfigGovernanceProblems(options: {
 
     options.problems.push(
       [
-        'Source module belongs to multiple package owners:',
+        'Source module belongs to multiple source owners:',
         `  file: ${toRelativePath(options.config.rootDir, fileName)}`,
-        '  package owners:',
+        '  source owners:',
         ...uniqueOwners
           .sort((left, right) =>
             toRelativePath(options.config.rootDir, left).localeCompare(
@@ -1011,7 +1106,7 @@ async function addTsconfigGovernanceProblems(options: {
             (packageJsonPath) =>
               `    - ${toRelativePath(options.config.rootDir, packageJsonPath)}`,
           ),
-        '  reason: source ownership prohibits overlap between module sets governed by different package.json files.',
+        '  reason: source ownership prohibits overlap between module sets governed by different pnpm workspace source owners.',
       ].join('\n'),
     );
   }
@@ -1281,6 +1376,608 @@ async function createSourceProjectEntries(
   );
 }
 
+async function addSourceProjectOwnerProblems(options: {
+  config: ResolvedLiminaConfig;
+  core: LiminaCore;
+  owners: PackageOwner[];
+  problems: string[];
+  projects: ProjectInfo[];
+}): Promise<void> {
+  for (const project of options.projects) {
+    if (project.labelProblem) {
+      options.problems.push(project.labelProblem);
+    }
+
+    if (!isDtsProjectConfig(project.configPath)) {
+      continue;
+    }
+
+    addProjectOwnerProblems({
+      config: options.config,
+      configPath: project.configPath,
+      fileNames: project.fileNames,
+      owners: options.owners,
+      problems: options.problems,
+      role: 'declaration leaf',
+    });
+
+    const typecheckConfigPath = getTypecheckConfigPath(project.configPath);
+
+    if (!existsSync(typecheckConfigPath)) {
+      continue;
+    }
+
+    addProjectOwnerProblems({
+      config: options.config,
+      configPath: typecheckConfigPath,
+      fileNames: (
+        await options.core.tsconfig.getProject(typecheckConfigPath, project)
+      ).fileNames,
+      owners: options.owners,
+      problems: options.problems,
+      role: 'typecheck companion',
+    });
+  }
+}
+
+function addRelativeImportProblems(options: {
+  config: ResolvedLiminaConfig;
+  filePath: string;
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  problems: string[];
+  resolvedFilePath: string | null;
+}): void {
+  if (!options.resolvedFilePath) {
+    return;
+  }
+
+  const sourcePackageScope = findNearestPackageScopeInfo(options.filePath);
+  const targetPackageScope = findNearestPackageScopeInfo(
+    options.resolvedFilePath,
+  );
+
+  if (
+    sourcePackageScope?.packageJsonPath === targetPackageScope?.packageJsonPath
+  ) {
+    return;
+  }
+
+  addRelativeImportOwnerProblem({
+    config: options.config,
+    importRecord: options.importRecord,
+    owner: options.owner,
+    problems: options.problems,
+    resolvedFilePath: options.resolvedFilePath,
+    sourcePackageScope,
+    targetPackageScope,
+  });
+}
+
+function shouldSkipBarePackageAuthorization(
+  importRecord: ImportRecord,
+): boolean {
+  return (
+    isUrlOrDataOrFileSpecifier(importRecord.specifier) ||
+    isVirtualModuleSpecifier(importRecord.specifier) ||
+    !isBarePackageSpecifier(importRecord.specifier) ||
+    importRecord.kind === 'comment' ||
+    isNodeBuiltinSpecifier(importRecord.specifier)
+  );
+}
+
+function addResolvedOtherOwnerBarePackageProblems(options: {
+  config: ResolvedLiminaConfig;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  problems: string[];
+  rootPackage: WorkspacePackage | null;
+  target: Extract<ResolvedPackageTarget, { kind: 'other-owner' }>;
+}): void {
+  const packageName =
+    options.target.packageInfo.name ?? options.target.targetOwner.name;
+
+  if (!packageName) {
+    addResolvedPackageWithoutNameProblem({
+      config: options.config,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      packageInfo: options.target.packageInfo,
+      problems: options.problems,
+    });
+    return;
+  }
+
+  const authorizedPackageName = getPackageNameForAuthorization({
+    importRecord: options.importRecord,
+    resolvedPackageName: packageName,
+  });
+
+  if (
+    isDependencyAuthorizedBySourceAuthority({
+      config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      packageName: authorizedPackageName,
+      rootPackage: options.rootPackage,
+    })
+  ) {
+    return;
+  }
+
+  addPackageImportAuthorizationProblem({
+    authorityManifestPaths: getDependencyAuthorityManifestPaths({
+      config: options.config,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      rootPackage: options.rootPackage,
+    }),
+    config: options.config,
+    ...(authorizedPackageName === packageName
+      ? {}
+      : { dependencySpecifier: packageName }),
+    importRecord: options.importRecord,
+    owner: options.owner,
+    packageName: authorizedPackageName,
+    problems: options.problems,
+    workspacePackage: options.target.workspacePackage,
+  });
+}
+
+function addResolvedArtifactBarePackageProblems(options: {
+  config: ResolvedLiminaConfig;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  problems: string[];
+  rootPackage: WorkspacePackage | null;
+  target: Extract<ResolvedPackageTarget, { kind: 'artifact-package' }>;
+}): void {
+  if (!options.target.packageInfo.name) {
+    addResolvedPackageWithoutNameProblem({
+      config: options.config,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      packageInfo: options.target.packageInfo,
+      problems: options.problems,
+    });
+    return;
+  }
+
+  const packageName = getPackageNameForAuthorization({
+    importRecord: options.importRecord,
+    resolvedPackageName: options.target.packageInfo.name,
+  });
+
+  if (
+    isDependencyAuthorizedBySourceAuthority({
+      config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      packageName,
+      rootPackage: options.rootPackage,
+    })
+  ) {
+    return;
+  }
+
+  addPackageImportAuthorizationProblem({
+    authorityManifestPaths: getDependencyAuthorityManifestPaths({
+      config: options.config,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      rootPackage: options.rootPackage,
+    }),
+    config: options.config,
+    ...(packageName === options.target.packageInfo.name
+      ? {}
+      : { dependencySpecifier: options.target.packageInfo.name }),
+    importRecord: options.importRecord,
+    owner: options.owner,
+    packageName,
+    problems: options.problems,
+    workspacePackage: null,
+  });
+}
+
+function addResolvedBarePackageImportProblems(options: {
+  config: ResolvedLiminaConfig;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  owners: PackageOwner[];
+  packages: WorkspacePackage[];
+  problems: string[];
+  resolvedFilePath: string;
+  rootPackage: WorkspacePackage | null;
+}): boolean {
+  const target = classifyResolvedPackageTarget({
+    owner: options.owner,
+    owners: options.owners,
+    packages: options.packages,
+    resolvedFilePath: options.resolvedFilePath,
+  });
+
+  if (target.kind === 'current-owner') {
+    return true;
+  }
+
+  if (target.kind === 'other-owner') {
+    addResolvedOtherOwnerBarePackageProblems({
+      config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      problems: options.problems,
+      rootPackage: options.rootPackage,
+      target,
+    });
+    return true;
+  }
+
+  if (target.kind === 'artifact-package') {
+    addResolvedArtifactBarePackageProblems({
+      config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      problems: options.problems,
+      rootPackage: options.rootPackage,
+      target,
+    });
+    return true;
+  }
+
+  return false;
+}
+
+function addBarePackageImportProblems(options: {
+  config: ResolvedLiminaConfig;
+  fallbackPackageName: string;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  owners: PackageOwner[];
+  packages: WorkspacePackage[];
+  problems: string[];
+  resolvedFilePath: string | null;
+  rootPackage: WorkspacePackage | null;
+}): void {
+  if (options.owner.name === options.fallbackPackageName) {
+    return;
+  }
+
+  if (
+    options.resolvedFilePath &&
+    addResolvedBarePackageImportProblems({
+      config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      owners: options.owners,
+      packages: options.packages,
+      problems: options.problems,
+      resolvedFilePath: options.resolvedFilePath,
+      rootPackage: options.rootPackage,
+    })
+  ) {
+    return;
+  }
+
+  const workspacePackage =
+    options.packages.find(
+      (candidate) => candidate.name === options.fallbackPackageName,
+    ) ?? null;
+
+  if (
+    isDependencyAuthorizedBySourceAuthority({
+      config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      packageName: options.fallbackPackageName,
+      rootPackage: options.rootPackage,
+    })
+  ) {
+    return;
+  }
+
+  addPackageImportAuthorizationProblem({
+    authorityManifestPaths: getDependencyAuthorityManifestPaths({
+      config: options.config,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      rootPackage: options.rootPackage,
+    }),
+    config: options.config,
+    importRecord: options.importRecord,
+    owner: options.owner,
+    packageName: options.fallbackPackageName,
+    problems: options.problems,
+    workspacePackage,
+  });
+}
+
+function addImportRecordProblems(options: {
+  config: ResolvedLiminaConfig;
+  filePath: string;
+  importAnalysis: LiminaCore['imports']['context'];
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  owners: PackageOwner[];
+  packages: WorkspacePackage[];
+  problems: string[];
+  project: ProjectInfo;
+  rootPackage: WorkspacePackage | null;
+}): void {
+  const resolvedFilePath = resolveInternalImport(
+    options.importRecord.specifier,
+    options.filePath,
+    options.project.options,
+    options.project,
+    options.importAnalysis,
+  );
+
+  if (isRelativeSpecifier(options.importRecord.specifier)) {
+    addRelativeImportProblems({
+      config: options.config,
+      filePath: options.filePath,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      problems: options.problems,
+      resolvedFilePath,
+    });
+    return;
+  }
+
+  if (isPackageImportSpecifier(options.importRecord.specifier)) {
+    addPackageImportProblem({
+      config: options.config,
+      importRecord: options.importRecord,
+      owner: options.owner,
+      owners: options.owners,
+      packages: options.packages,
+      problems: options.problems,
+      resolvedFilePath,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
+      rootPackage: options.rootPackage,
+    });
+    return;
+  }
+
+  if (shouldSkipBarePackageAuthorization(options.importRecord)) {
+    return;
+  }
+
+  addBarePackageImportProblems({
+    config: options.config,
+    fallbackPackageName: getPackageRootSpecifier(
+      options.importRecord.specifier,
+    ),
+    importAuthorityAllowRules: options.importAuthorityAllowRules,
+    importRecord: options.importRecord,
+    owner: options.owner,
+    owners: options.owners,
+    packages: options.packages,
+    problems: options.problems,
+    resolvedFilePath,
+    rootPackage: options.rootPackage,
+  });
+}
+
+function addSourceImportProblems(options: {
+  config: ResolvedLiminaConfig;
+  importAnalysis: LiminaCore['imports']['context'];
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  owners: PackageOwner[];
+  packages: WorkspacePackage[];
+  problems: string[];
+  rootPackage: WorkspacePackage | null;
+  sourceProjectEntries: SourceProjectEntry[];
+}): void {
+  for (const { fileNames, project } of options.sourceProjectEntries) {
+    for (const filePath of fileNames) {
+      const owner = findOwnerForFile(filePath, options.owners);
+
+      if (!owner) {
+        continue;
+      }
+
+      for (const importRecord of collectImportsFromFile(
+        filePath,
+        options.config.rootDir,
+        options.importAnalysis,
+      )) {
+        addImportRecordProblems({
+          config: options.config,
+          filePath,
+          importAnalysis: options.importAnalysis,
+          importAuthorityAllowRules: options.importAuthorityAllowRules,
+          importRecord,
+          owner,
+          owners: options.owners,
+          packages: options.packages,
+          problems: options.problems,
+          project,
+          rootPackage: options.rootPackage,
+        });
+      }
+    }
+  }
+}
+
+function getProblemTitle(problem: string): string {
+  return (problem.split('\n')[0]?.trim() || 'Source check issue').replace(
+    /:+$/u,
+    '',
+  );
+}
+
+function getProblemLineValue(
+  problem: string,
+  label: string,
+): string | undefined {
+  const escapedLabel = label.replaceAll(
+    /[.*+?^${}()|[\]\\]/gu,
+    String.raw`\$&`,
+  );
+  const match = new RegExp(String.raw`^\s*${escapedLabel}:\s*(.+)$`, 'mu').exec(
+    problem,
+  );
+
+  return match?.[1]?.trim();
+}
+
+function stripProblemLocationSuffix(filePath: string): string {
+  return filePath.replace(/:\d+(?::\d+)?(?:\s+\(.+\))?$/u, '');
+}
+
+function getSourceProblemCode(title: string): string {
+  if (title.includes('Knip') || title.includes('knip')) {
+    if (title.includes('build script')) {
+      return LIMINA_CHECK_ISSUE_CODES.sourceKnipBuildScriptUnsupported;
+    }
+
+    return LIMINA_CHECK_ISSUE_CODES.sourceKnipConfigInvalid;
+  }
+
+  if (title.includes('import authority')) {
+    return LIMINA_CHECK_ISSUE_CODES.sourceImportAuthorityInvalid;
+  }
+
+  if (title.startsWith('Unauthorized bare package import')) {
+    return LIMINA_CHECK_ISSUE_CODES.sourcePackageImportUnauthorized;
+  }
+
+  if (title.startsWith('Relative import escapes package scope')) {
+    return LIMINA_CHECK_ISSUE_CODES.sourceRelativeImportEscapesScope;
+  }
+
+  if (title.includes('package import') || title.includes('Package import')) {
+    return LIMINA_CHECK_ISSUE_CODES.sourcePackageImportInvalid;
+  }
+
+  if (title.includes('Tsconfig') || title.includes('tsconfig')) {
+    return LIMINA_CHECK_ISSUE_CODES.sourceTsconfigGovernance;
+  }
+
+  if (title.includes('source owner') || title.includes('source owners')) {
+    return LIMINA_CHECK_ISSUE_CODES.sourceOwnerInvalid;
+  }
+
+  return LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed;
+}
+
+function getSourceProblemFilePath(problem: string): string | undefined {
+  const rawFile =
+    getProblemLineValue(problem, 'file') ??
+    getProblemLineValue(problem, 'config') ??
+    getProblemLineValue(problem, 'project') ??
+    getProblemLineValue(problem, 'declaration leaf') ??
+    getProblemLineValue(problem, 'typecheck companion') ??
+    getProblemLineValue(problem, 'resolver tsconfig');
+
+  return rawFile ? stripProblemLocationSuffix(rawFile) : undefined;
+}
+
+function getSourceProblemManifestPath(problem: string): string | undefined {
+  return (
+    getProblemLineValue(problem, 'source owner') ??
+    getProblemLineValue(problem, 'package owner') ??
+    getProblemLineValue(problem, 'package manifest') ??
+    getProblemLineValue(problem, 'package scope')
+  );
+}
+
+function createSourceProblemOwnerLookup(
+  owners: readonly PackageOwner[],
+): Map<string, string> {
+  return new Map(
+    owners.flatMap((owner) =>
+      owner.name
+        ? [[normalizeSlashes(owner.packageJsonPath), owner.name] as const]
+        : [],
+    ),
+  );
+}
+
+function getStructuredSourceIssueOwnerName(options: {
+  ownerNamesByManifestPath: Map<string, string>;
+  problem: string;
+}): string {
+  const fieldPackageName = /source\.knip\.workspaces\["([^"]+)"\]/u.exec(
+    getProblemLineValue(options.problem, 'field') ?? '',
+  )?.[1];
+
+  if (fieldPackageName) {
+    return fieldPackageName;
+  }
+
+  const manifestPath = getSourceProblemManifestPath(options.problem);
+
+  if (manifestPath) {
+    const normalizedManifestPath = normalizeSlashes(manifestPath);
+    const ownerName =
+      options.ownerNamesByManifestPath.get(normalizedManifestPath) ??
+      [...options.ownerNamesByManifestPath.entries()].find(([key]) =>
+        key.endsWith(normalizedManifestPath),
+      )?.[1];
+
+    if (ownerName) {
+      return ownerName;
+    }
+  }
+
+  return (
+    getProblemLineValue(options.problem, 'package') ??
+    getProblemLineValue(options.problem, 'workspace package') ??
+    '<workspace>'
+  );
+}
+
+function createStructuredSourceIssueFromProblem(options: {
+  ownerNamesByManifestPath: Map<string, string>;
+  problem: string;
+}): SourceStructuredIssue {
+  const title = getProblemTitle(options.problem);
+  const filePath = getSourceProblemFilePath(options.problem);
+  const packageJsonPath = getSourceProblemManifestPath(options.problem);
+  const field = getProblemLineValue(options.problem, 'field');
+  const fix = getProblemLineValue(options.problem, 'fix');
+
+  return {
+    code: getSourceProblemCode(title),
+    detailLines: options.problem.split('\n'),
+    detector: 'source',
+    evidence: [
+      {
+        label: 'diagnostic',
+        lines: options.problem.split('\n'),
+      },
+    ],
+    filePath,
+    fix,
+    fixSteps: fix ? [fix] : undefined,
+    locations: field ? [{ label: 'field', scope: field }] : undefined,
+    ownerName: getStructuredSourceIssueOwnerName({
+      ownerNamesByManifestPath: options.ownerNamesByManifestPath,
+      problem: options.problem,
+    }),
+    packageJsonPath,
+    reason:
+      getProblemLineValue(options.problem, 'reason') ??
+      'Source check found package ownership, import authority, tsconfig governance, or Knip configuration violations.',
+    summary: title,
+    title,
+    tool: title.includes('Knip') || title.includes('knip') ? 'knip' : 'limina',
+    verifyCommands: ['limina source check'],
+  };
+}
+
 export async function runSourceCheckImpl(
   config: ResolvedLiminaConfig,
   options: {
@@ -1311,12 +2008,20 @@ export async function runSourceCheckImpl(
   const sourceProjectEntries = await createSourceProjectEntries(core, projects);
   const packages = await core.workspace.getPackages();
   const packageOwners = await core.workspace.getPackageOwners();
+  const rootPackage = findWorkspaceRootPackage({
+    config,
+    packages,
+  });
   const ownerModuleSets = collectOwnerSourceModuleSets({
     owners: packageOwners,
     sourceProjectEntries,
   });
   const importAnalysis = core.imports.context;
   const problems: string[] = [...graphRoute.problems];
+  const importAuthorityAllowRules = collectImportAuthorityAllowRules({
+    config,
+    problems,
+  });
   const sourceIssues: SourceCheckIssue[] = [];
 
   await addTsconfigGovernanceProblems({
@@ -1336,224 +2041,49 @@ export async function runSourceCheckImpl(
     workspacePackages: packages,
   });
 
-  for (const project of projects) {
-    if (project.labelProblem) {
-      problems.push(project.labelProblem);
-    }
+  await addSourceProjectOwnerProblems({
+    config,
+    core,
+    owners: packageOwners,
+    problems,
+    projects,
+  });
+  addSourceImportProblems({
+    config,
+    importAnalysis,
+    importAuthorityAllowRules,
+    owners: packageOwners,
+    packages,
+    problems,
+    rootPackage,
+    sourceProjectEntries,
+  });
 
-    if (!isDtsProjectConfig(project.configPath)) {
-      continue;
-    }
-
-    addProjectOwnerProblems({
-      config,
-      configPath: project.configPath,
-      fileNames: project.fileNames,
-      owners: packageOwners,
-      problems,
-      role: 'declaration leaf',
-    });
-
-    const typecheckConfigPath = getTypecheckConfigPath(project.configPath);
-
-    if (existsSync(typecheckConfigPath)) {
-      addProjectOwnerProblems({
-        config,
-        configPath: typecheckConfigPath,
-        fileNames: (
-          await core.tsconfig.getProject(typecheckConfigPath, project)
-        ).fileNames,
-        owners: packageOwners,
-        problems,
-        role: 'typecheck companion',
-      });
-    }
-  }
-
-  for (const { fileNames, project } of sourceProjectEntries) {
-    for (const filePath of fileNames) {
-      const owner = findOwnerForFile(filePath, packageOwners);
-
-      if (!owner) {
-        continue;
-      }
-
-      for (const importRecord of collectImportsFromFile(
-        filePath,
-        config.rootDir,
-        importAnalysis,
-      )) {
-        const resolvedFilePath = resolveInternalImport(
-          importRecord.specifier,
-          filePath,
-          project.options,
-          project,
-          importAnalysis,
-        );
-
-        if (isRelativeSpecifier(importRecord.specifier)) {
-          if (!resolvedFilePath) {
-            continue;
-          }
-
-          const targetOwner = findOwnerForFile(resolvedFilePath, packageOwners);
-
-          if (targetOwner?.packageJsonPath !== owner.packageJsonPath) {
-            addRelativeImportOwnerProblem({
-              config,
-              importRecord,
-              owner,
-              problems,
-              resolvedFilePath,
-              targetOwner,
-            });
-          }
-
-          continue;
-        }
-
-        if (isPackageImportSpecifier(importRecord.specifier)) {
-          addPackageImportProblem({
-            config,
-            importRecord,
-            owner,
-            owners: packageOwners,
-            packages,
-            problems,
-            resolvedFilePath,
-          });
-          continue;
-        }
-
-        if (
-          isUrlOrDataOrFileSpecifier(importRecord.specifier) ||
-          isVirtualModuleSpecifier(importRecord.specifier)
-        ) {
-          continue;
-        }
-
-        if (!isBarePackageSpecifier(importRecord.specifier)) {
-          continue;
-        }
-
-        if (isNodeBuiltinSpecifier(importRecord.specifier)) {
-          continue;
-        }
-
-        const fallbackPackageName = getPackageRootSpecifier(
-          importRecord.specifier,
-        );
-
-        if (owner.name === fallbackPackageName) {
-          continue;
-        }
-
-        if (resolvedFilePath) {
-          const target = classifyResolvedPackageTarget({
-            owner,
-            owners: packageOwners,
-            packages,
-            resolvedFilePath,
-          });
-
-          if (target.kind === 'current-owner') {
-            continue;
-          }
-
-          if (target.kind === 'other-owner') {
-            const packageName =
-              target.packageInfo.name ?? target.targetOwner.name;
-
-            if (!packageName) {
-              addResolvedPackageWithoutNameProblem({
-                config,
-                importRecord,
-                owner,
-                packageInfo: target.packageInfo,
-                problems,
-              });
-              continue;
-            }
-
-            if (!isDependencyAuthorized(owner.manifest, packageName)) {
-              addPackageImportAuthorizationProblem({
-                config,
-                importRecord,
-                owner,
-                packageName,
-                problems,
-                workspacePackage: target.workspacePackage,
-              });
-              continue;
-            }
-
-            continue;
-          }
-
-          if (target.kind === 'artifact-package') {
-            if (!target.packageInfo.name) {
-              addResolvedPackageWithoutNameProblem({
-                config,
-                importRecord,
-                owner,
-                packageInfo: target.packageInfo,
-                problems,
-              });
-              continue;
-            }
-
-            if (
-              isDependencyAuthorized(owner.manifest, target.packageInfo.name)
-            ) {
-              continue;
-            }
-
-            addPackageImportAuthorizationProblem({
-              config,
-              importRecord,
-              owner,
-              packageName: target.packageInfo.name,
-              problems,
-              workspacePackage: null,
-            });
-            continue;
-          }
-        }
-
-        const workspacePackage =
-          packages.find(
-            (candidate) => candidate.name === fallbackPackageName,
-          ) ?? null;
-
-        if (isDependencyAuthorized(owner.manifest, fallbackPackageName)) {
-          continue;
-        }
-
-        addPackageImportAuthorizationProblem({
-          config,
-          importRecord,
-          owner,
-          packageName: fallbackPackageName,
-          problems,
-          workspacePackage,
-        });
-      }
-    }
-  }
+  const ownerNamesByManifestPath =
+    createSourceProblemOwnerLookup(packageOwners);
+  const structuredSourceIssues = [
+    ...sourceIssues,
+    ...problems.map((problem) =>
+      createStructuredSourceIssueFromProblem({
+        ownerNamesByManifestPath,
+        problem,
+      }),
+    ),
+  ];
 
   await writeCompletedSourceIssueSnapshot({
     command: options.report?.command ?? 'limina source check',
-    issues: sourceIssues,
-    legacyProblems: problems,
+    issues: structuredSourceIssues,
+    legacyProblems: [],
     rootDir: config.rootDir,
   });
 
-  if (problems.length > 0 || sourceIssues.length > 0) {
+  if (structuredSourceIssues.length > 0) {
     SourceLogger.error(
       formatSourceCheckHumanReport({
         config,
-        issues: sourceIssues,
-        legacyProblems: problems,
+        issues: structuredSourceIssues,
+        legacyProblems: [],
         report: options.report,
       }),
     );

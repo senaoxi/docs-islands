@@ -4,20 +4,68 @@
 This page documents the top-level `source` option — the **Knip-driven dependency and module reachability checks** run by `source:check`. It is different from `config.source`, which defines the governed-file boundary used by proof coverage. For that option, see [Source Boundary](./source-boundary.md).
 :::
 
-`source check` owns package authority and ordinary typecheck ownership checks. Its Knip-backed branch uses package entries instead of `include` / `exclude` to report unused workspace dependencies and unused source modules from Limina's package owner module sets.
+`source check` owns package authority and ordinary typecheck ownership checks. Limina treats pnpm workspace packages as source owners, including nameless workspace packages identified by path. Nested `package.json` files still affect package resolution and form package scopes for relative-import boundaries, but they do not split a source owner unless pnpm reports them as workspace packages.
+
+Its Knip-backed branch uses package entries instead of `include` / `exclude` to report unused workspace dependencies and unused source modules from Limina's source owner module sets.
 
 ```js
 import { defineConfig } from 'limina';
 
 export default defineConfig({
   source: {
+    importAuthority: {
+      allow: [],
+    },
     knip: {
       workspaces: {},
     },
-    tsconfigOwnership: { ignore: [] },
   },
 });
 ```
+
+## importAuthority
+
+`source.importAuthority` controls bare package imports that are not declared by the source owner manifest.
+
+Runtime imports in public packages are strict by default: the source owner `package.json` must declare the package in `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies`. Docs, tests, config/tooling files, type-only imports, private owners, and nameless owners may also use the workspace root `devDependencies`.
+
+For files whose dependencies are intentionally supplied somewhere else, add an explicit allow rule:
+
+```js
+import { defineConfig } from 'limina';
+
+export default defineConfig({
+  source: {
+    importAuthority: {
+      allow: [
+        {
+          files: ['packages/create-app/templates/react/**'],
+          packages: ['react', 'react-dom'],
+          reason: 'Template files declare these dependencies in generated apps.',
+        },
+      ],
+    },
+  },
+});
+```
+
+```ts
+interface SourceImportAuthorityAllowRule {
+  files: string[];
+  packages?: string[];
+  specifiers?: string[];
+  owner?: string;
+  reason: string;
+}
+
+interface SourceImportAuthorityConfig {
+  allow?: SourceImportAuthorityAllowRule[];
+}
+```
+
+`files` are workspace-root-relative globs. `packages` match package names such as `react` or `@components/shared`; `specifiers` match full import specifiers such as `react/jsx-runtime`. Glob syntax is supported for all three. `owner` is optional; when present it matches a named source owner by package name, or a nameless source owner by workspace-root-relative package directory.
+
+Use this for source that is intentionally not governed by the importing owner manifest, such as project templates or documentation aliases. Prefer a manifest dependency whenever the import is part of the owner's real runtime.
 
 ## knip
 
@@ -55,7 +103,7 @@ interface SourceKnipCheckConfig {
 }
 ```
 
-`source.knip.workspaces` keys are package names discovered from the pnpm workspace, such as `@acme/app`. Unknown package names fail `source check`.
+`source.knip.workspaces` keys are package names discovered from the pnpm workspace, such as `@acme/app`. Unknown package names fail `source check`. Nameless workspace packages can still be source owners, but they cannot be configured under `source.knip.workspaces` because there is no stable package name key.
 
 `source.knip.workspaces[pkg]` only configures extra reachability and ignore rules. It does not accept `tsConfig`. If a package does not declare a static `limina checker build <config>` script, Limina runs Knip for that package without `--tsConfig`, so Knip uses its own default tsconfig behavior.
 
@@ -115,7 +163,7 @@ Expose that intent through a static package script:
 
 If the derived Knip tsconfig does not clearly describe `outDir` / `rootDir`, Knip can see the `dist` entry but may not find the source module behind it. That source file may be reported as unused. Prefer pointing `limina checker build <config>` at the right package-local JSON config over adding tool-only package export conditions just to satisfy Knip.
 
-Limina also determines Knip's `project` file set automatically from governed source modules. Users do not configure `project`.
+Limina also determines Knip's `project` file set automatically from checked source modules. Users do not configure `project`.
 
 ```js
 import { defineConfig } from 'limina';
@@ -175,33 +223,3 @@ Ignore entries must name an existing workspace package in `dep` and a dependency
 Use `ignoreFiles` only when a source module is intentionally retained but not visible to Knip.
 
 Ignore entries must use a workspace-root-relative file path that stays inside the repository and a non-empty reason. The file must belong to the keyed package's source module set known to Limina.
-
-## tsconfigOwnership.ignore
-
-- **Type:** `Array<{ owner: string; files: string[]; reason: string }>`
-
-`source check` searches upward from each governed module's directory for bare `tsconfig.json` files, matching the project-config lookup used by Rolldown and TypeScript's Go to Project Configuration action. A candidate may include the module directly, or it may reach exactly one ordinary typecheck config through transitive `references`. If the nearest candidate does not match the module, Limina keeps searching parent directories until the workspace root.
-
-Limina only follows ordinary typecheck configs in this search. It does not treat `tsconfig*.dts.json`, `tsconfig*.build.json`, `tsconfig*.base.json`, or `tsconfig*.check.json` as ownership configs.
-
-Tests and fixtures may be loaded by tools in ways that do not fit this local tsconfig shape. Keep those modules governed, but skip only this ownership rule with a scoped ignore:
-
-```js
-import { defineConfig } from 'limina';
-
-export default defineConfig({
-  source: {
-    tsconfigOwnership: {
-      ignore: [
-        {
-          owner: '@acme/app',
-          files: ['packages/app/src/**/*.spec.ts'],
-          reason: 'Vitest loads test modules directly.',
-        },
-      ],
-    },
-  },
-});
-```
-
-Ignore entries must use a named package owner, positive workspace-root-relative glob patterns inside that owner directory, and a non-empty reason. They only skip upward `tsconfig.json` owner resolution; package ownership, import authority, proof coverage, and unused-module checks still run.

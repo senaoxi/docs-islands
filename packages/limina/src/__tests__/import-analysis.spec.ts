@@ -5,11 +5,14 @@ import {
   createImportAnalysisContext,
   resolveInternalImport,
 } from '#core/import-graph/context';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+const requireFromTest = createRequire(import.meta.url);
 
 async function createTempDir(): Promise<string> {
   return await mkdtemp(path.join(tmpdir(), 'limina-import-analysis-'));
@@ -22,6 +25,22 @@ async function writeText(rootDir: string, filePath: string, text: string) {
   await writeFile(absolutePath, text);
 
   return absolutePath;
+}
+
+async function linkCompilerSfc(rootDir: string): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    '@vue/compiler-sfc/package.json',
+  );
+  const nodeModulesDir = path.join(rootDir, 'node_modules', '@vue');
+
+  await mkdir(nodeModulesDir, {
+    recursive: true,
+  });
+  await symlink(
+    path.dirname(compilerPackagePath),
+    path.join(nodeModulesDir, 'compiler-sfc'),
+    'dir',
+  );
 }
 
 beforeEach(() => {
@@ -199,6 +218,101 @@ describe('import analysis', () => {
         { kind: 'export', line: 12, specifier: './Widget' },
         { kind: 'dynamic', line: 13, specifier: './lazy' },
       ]);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('collects Vue imports with the compiler-sfc parser when configured', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await linkCompilerSfc(rootDir);
+      const filePath = await writeText(
+        rootDir,
+        'src/App.vue',
+        [
+          '<template><div /></template>',
+          '<script setup lang="ts" generic="T extends Record<string, value>">',
+          "import value from './value';",
+          "import Equal = require('./equal');",
+          "type Imported = import('./types').Imported;",
+          '</script>',
+          '<script lang="tsx">',
+          "export { Widget } from './Widget';",
+          "void import('./lazy');",
+          '</script>',
+        ].join('\n'),
+      );
+      const context = createImportAnalysisContext({
+        isolated: true,
+        projectRootDir: rootDir,
+        vueParser: 'compiler-sfc',
+      });
+
+      expect(
+        collectImportsFromFile(filePath, rootDir, context).map((item) => ({
+          kind: item.kind,
+          line: item.line,
+          specifier: item.specifier,
+        })),
+      ).toEqual([
+        { kind: 'static', line: 3, specifier: './value' },
+        { kind: 'import-equals', line: 4, specifier: './equal' },
+        { kind: 'import-type', line: 5, specifier: './types' },
+        { kind: 'export', line: 8, specifier: './Widget' },
+        { kind: 'dynamic', line: 9, specifier: './lazy' },
+      ]);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('fails compiler-sfc Vue import analysis when the peer is missing', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      const filePath = await writeText(
+        rootDir,
+        'src/App.vue',
+        '<script setup lang="ts">import value from "./value";</script>\n',
+      );
+      const context = createImportAnalysisContext({
+        isolated: true,
+        projectRootDir: rootDir,
+        vueParser: 'compiler-sfc',
+      });
+
+      expect(() => collectImportsFromFile(filePath, rootDir, context)).toThrow(
+        /Unable to load Vue SFC compiler for import analysis/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('fails compiler-sfc Vue import analysis on SFC parse errors', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await linkCompilerSfc(rootDir);
+      const filePath = await writeText(
+        rootDir,
+        'src/App.vue',
+        [
+          '<script setup lang="ts">import one from "./one";</script>',
+          '<script setup lang="ts">import two from "./two";</script>',
+        ].join('\n'),
+      );
+      const context = createImportAnalysisContext({
+        isolated: true,
+        projectRootDir: rootDir,
+        vueParser: 'compiler-sfc',
+      });
+
+      expect(() => collectImportsFromFile(filePath, rootDir, context)).toThrow(
+        /Unable to parse Vue SFC for import analysis/u,
+      );
     } finally {
       await rm(rootDir, { force: true, recursive: true });
     }

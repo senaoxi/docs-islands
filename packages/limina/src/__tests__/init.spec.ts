@@ -302,7 +302,10 @@ describe('runInit', () => {
       ).toBe(true);
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
-      ).toContain("checkers: 'auto'");
+      ).toContain("mode: 'auto'");
+      expect(
+        await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
+      ).toContain('exclude: []');
     } finally {
       await fixture.cleanup();
     }
@@ -605,7 +608,10 @@ describe('runInit', () => {
       ).toBe(false);
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
-      ).toContain("checkers: 'auto'");
+      ).toContain("mode: 'auto'");
+      expect(
+        await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
+      ).toContain('exclude: []');
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
       ).not.toContain('include:');
@@ -650,7 +656,10 @@ describe('runInit', () => {
       ).resolves.toBe(false);
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
-      ).toContain("checkers: 'auto'");
+      ).toContain("mode: 'auto'");
+      expect(
+        await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
+      ).toContain('exclude: []');
       expect(
         await readFile(path.join(fixture.rootDir, 'limina.config.mjs'), 'utf8'),
       ).not.toContain('include:');
@@ -681,7 +690,10 @@ describe('runInit', () => {
 
 export default defineConfig({
   config: {
-    checkers: 'auto',
+    checkers: {
+      mode: 'auto',
+      exclude: [],
+    },
   },
 });
 `;
@@ -724,7 +736,10 @@ export default defineConfig({
 
 export default defineConfig({
   config: {
-    checkers: 'auto',
+    checkers: {
+      mode: 'auto',
+      exclude: [],
+    },
   },
 });
 `;

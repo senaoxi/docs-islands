@@ -7,15 +7,23 @@ import {
 import boxen from 'boxen';
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
+import type {
+  LiminaCheckIssueEvidence,
+  LiminaCheckIssueLocation,
+} from '../check-reporting/snapshot';
 import { formatCheckSummaryBlock } from '../reporting';
 
-export const SOURCE_ISSUE_CODES = {
-  unusedModule: 'LIMINA_SOURCE_UNUSED_MODULE',
-  unusedWorkspaceDependency: 'LIMINA_SOURCE_UNUSED_WORKSPACE_DEPENDENCY',
-} as const;
+export const SOURCE_ISSUE_CODES: {
+  readonly unusedModule: typeof LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule;
+  readonly unusedWorkspaceDependency: typeof LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency;
+} = {
+  unusedModule: LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule,
+  unusedWorkspaceDependency:
+    LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency,
+};
 
-export type SourceIssueCode =
-  (typeof SOURCE_ISSUE_CODES)[keyof typeof SOURCE_ISSUE_CODES];
+export type SourceIssueCode = string;
 
 export interface SourceIssueReportOptions {
   command?: string;
@@ -43,9 +51,29 @@ export interface SourceUnusedWorkspaceDependencyIssue {
   specifier: string;
 }
 
+export interface SourceStructuredIssue {
+  code: SourceIssueCode;
+  detailLines?: string[];
+  detector?: string;
+  evidence?: LiminaCheckIssueEvidence[];
+  filePath?: string;
+  fix?: string;
+  fixSteps?: string[];
+  locations?: LiminaCheckIssueLocation[];
+  ownerName: string;
+  packageJsonPath?: string;
+  reason: string;
+  scope?: string;
+  summary?: string;
+  title: string;
+  tool?: string;
+  verifyCommands?: string[];
+}
+
 export type SourceCheckIssue =
   | SourceUnusedModuleIssue
-  | SourceUnusedWorkspaceDependencyIssue;
+  | SourceUnusedWorkspaceDependencyIssue
+  | SourceStructuredIssue;
 
 const DEFAULT_DETAIL_LIMIT = 5;
 const DEFAULT_COMMAND = 'limina check';
@@ -127,16 +155,22 @@ function pathMatchesPlainScope(filePath: string, scope: string): boolean {
 
 function pathMatchesScope(
   rootDir: string,
-  issue: SourceUnusedModuleIssue,
+  issue: SourceUnusedModuleIssue | SourceStructuredIssue,
   scope: string,
 ): boolean {
   const normalizedScope = normalizeScope(rootDir, scope);
-  const rootRelativePath = normalizeSlashes(
-    toRelativePath(rootDir, issue.filePath),
-  );
-  const ownerRelativePath = normalizeSlashes(
-    toRelativePath(issue.ownerDirectory, issue.filePath),
-  );
+  const filePath = issue.filePath;
+
+  if (!filePath) {
+    return false;
+  }
+
+  const rootRelativePath = normalizeSlashes(toRelativePath(rootDir, filePath));
+  const ownerDirectory =
+    'ownerDirectory' in issue ? issue.ownerDirectory : undefined;
+  const ownerRelativePath = ownerDirectory
+    ? normalizeSlashes(toRelativePath(ownerDirectory, filePath))
+    : rootRelativePath;
 
   if (!hasGlobSyntax(normalizedScope)) {
     return (
@@ -159,10 +193,22 @@ function isSourceUnusedModuleIssue(
   return issue.code === SOURCE_ISSUE_CODES.unusedModule;
 }
 
+function isSourceStructuredIssue(
+  issue: SourceCheckIssue,
+): issue is SourceStructuredIssue {
+  return (
+    issue.code !== SOURCE_ISSUE_CODES.unusedModule &&
+    issue.code !== SOURCE_ISSUE_CODES.unusedWorkspaceDependency
+  );
+}
+
 function isFileBackedIssue(
   issue: SourceCheckIssue,
-): issue is SourceUnusedModuleIssue {
-  return isSourceUnusedModuleIssue(issue);
+): issue is SourceUnusedModuleIssue | SourceStructuredIssue {
+  return (
+    isSourceUnusedModuleIssue(issue) ||
+    (isSourceStructuredIssue(issue) && Boolean(issue.filePath))
+  );
 }
 
 function issueMatchesFilters(
@@ -186,6 +232,10 @@ function issueMatchesFilters(
       return false;
     }
 
+    if (!issue.filePath) {
+      return false;
+    }
+
     const issueFilePath = normalizeAbsolutePath(issue.filePath);
     const selectedFiles = options.files.map((filePath) =>
       normalizeIssueFilePath(config.rootDir, filePath),
@@ -199,6 +249,7 @@ function issueMatchesFilters(
   if (
     options.scopes?.length &&
     (!isFileBackedIssue(issue) ||
+      !issue.filePath ||
       !options.scopes.some((scope) =>
         pathMatchesScope(config.rootDir, issue, scope),
       ))
@@ -371,6 +422,175 @@ function groupUnusedWorkspaceDependencyIssues(
           right[0]?.packageJsonPath ?? '',
         ),
     );
+}
+
+interface GenericSourceIssueGroup {
+  issues: SourceStructuredIssue[];
+  key: string;
+}
+
+function groupGenericSourceIssues(
+  issues: readonly SourceCheckIssue[],
+): GenericSourceIssueGroup[] {
+  const groups = new Map<string, SourceStructuredIssue[]>();
+
+  for (const issue of issues) {
+    if (!isSourceStructuredIssue(issue)) {
+      continue;
+    }
+
+    const key = [
+      issue.code,
+      issue.title,
+      issue.ownerName,
+      issue.packageJsonPath ?? '',
+      issue.reason,
+      issue.fix ?? '',
+      JSON.stringify(issue.fixSteps ?? null),
+    ].join('\0');
+    const group = groups.get(key) ?? [];
+
+    group.push(issue);
+    groups.set(key, group);
+  }
+
+  return [...groups.entries()]
+    .map(([key, groupedIssues]) => ({
+      issues: groupedIssues.sort((left, right) =>
+        getGenericSourceIssueLocation(left).localeCompare(
+          getGenericSourceIssueLocation(right),
+        ),
+      ),
+      key,
+    }))
+    .sort(
+      (left, right) =>
+        (left.issues[0]?.code ?? '').localeCompare(
+          right.issues[0]?.code ?? '',
+        ) ||
+        (left.issues[0]?.ownerName ?? '').localeCompare(
+          right.issues[0]?.ownerName ?? '',
+        ) ||
+        left.key.localeCompare(right.key),
+    );
+}
+
+function getGenericSourceIssueLocation(issue: SourceStructuredIssue): string {
+  const structuredLocation = issue.locations?.find(
+    (location) =>
+      location.filePath || location.packageManifestPath || location.scope,
+  );
+
+  if (structuredLocation) {
+    const value =
+      structuredLocation.filePath ??
+      structuredLocation.packageManifestPath ??
+      structuredLocation.scope;
+
+    return [structuredLocation.label, value].filter(Boolean).join(': ');
+  }
+
+  return (
+    issue.filePath ??
+    issue.packageJsonPath ??
+    issue.locations?.find((location) => location.filePath)?.filePath ??
+    issue.locations?.find((location) => location.packageManifestPath)
+      ?.packageManifestPath ??
+    issue.scope ??
+    issue.title
+  );
+}
+
+function formatSourceEvidence(
+  evidence: readonly LiminaCheckIssueEvidence[] | undefined,
+): string[] {
+  if (!evidence?.length) {
+    return [];
+  }
+
+  return [
+    'evidence:',
+    ...evidence.flatMap((item) => [
+      ...(item.label || item.value
+        ? [`  - ${[item.label, item.value].filter(Boolean).join(': ')}`]
+        : []),
+      ...(item.lines ?? []).map((line) => `    ${line}`),
+    ]),
+  ];
+}
+
+function formatGenericSourceIssueGroup(
+  group: GenericSourceIssueGroup,
+  options: SourceIssueReportOptions,
+): string[] {
+  const firstIssue = group.issues[0];
+
+  if (!firstIssue) {
+    return [];
+  }
+
+  const locations = uniqueSorted(
+    group.issues.map(getGenericSourceIssueLocation),
+  );
+  const visibleLocations = options.verbose
+    ? locations
+    : locations.slice(0, DEFAULT_DETAIL_LIMIT);
+  const remainingCount = locations.length - visibleLocations.length;
+  const fixSteps = firstIssue.fixSteps?.length
+    ? firstIssue.fixSteps
+    : firstIssue.fix
+      ? [firstIssue.fix]
+      : [];
+
+  return [
+    `${firstIssue.title}  ${group.issues.length} ${plural(
+      group.issues.length,
+      'issue',
+      'issues',
+    )}`,
+    `package: ${firstIssue.ownerName}`,
+    `rule: ${firstIssue.code}`,
+    ...(firstIssue.packageJsonPath
+      ? [`package manifest: ${firstIssue.packageJsonPath}`]
+      : []),
+    ...(firstIssue.detector ? [`detector: ${firstIssue.detector}`] : []),
+    ...(firstIssue.tool ? [`tool: ${firstIssue.tool}`] : []),
+    '',
+    ...(firstIssue.summary ? ['summary:', `  ${firstIssue.summary}`, ''] : []),
+    'reason:',
+    `  ${firstIssue.reason}`,
+    ...(fixSteps.length > 0
+      ? [
+          '',
+          'fix steps:',
+          ...fixSteps.map((step, index) => `  ${index + 1}. ${step}`),
+        ]
+      : []),
+    ...(firstIssue.verifyCommands?.length
+      ? [
+          '',
+          'verify:',
+          ...firstIssue.verifyCommands.map((command) => `  - ${command}`),
+        ]
+      : []),
+    ...(formatSourceEvidence(firstIssue.evidence).length > 0
+      ? ['', ...formatSourceEvidence(firstIssue.evidence)]
+      : []),
+    '',
+    options.verbose ? 'details:' : 'files:',
+    ...visibleLocations.map((location) => `  - ${location}`),
+    ...(options.verbose
+      ? group.issues.flatMap((issue) =>
+          issue.detailLines?.length
+            ? ['', ...issue.detailLines.map((line) => `    ${line}`)]
+            : [],
+        )
+      : []),
+    ...(remainingCount > 0 ? [`  ... ${remainingCount} more`] : []),
+    ...(remainingCount > 0
+      ? ['', 'Show all files:', `  ${createVerboseCommand(options)}`]
+      : []),
+  ];
 }
 
 function formatUnusedModuleFixes(ownerName: string): string[] {
@@ -573,20 +793,299 @@ function formatNoMatchedIssues(
   ];
 }
 
-function formatLegacyProblems(
+interface LegacyProblem {
+  fields: Map<string, string[]>;
+  raw: string;
+  title: string;
+}
+
+interface LegacyProblemGroup {
+  fields: Map<string, string[]>;
+  items: LegacyProblem[];
+  title: string;
+}
+
+const LEGACY_GROUP_FIELD_LABELS = [
+  'source owner',
+  'package owner',
+  'package',
+  'package manifest',
+  'script',
+  'command',
+  'target source owner',
+  'target owner',
+  'workspace package',
+  'imported specifier',
+  'resolved package.json',
+  'resolved dependency specifier',
+  'resolver tsconfig',
+  'field',
+  'dep',
+  'importer',
+] as const;
+
+function normalizeLegacyFieldLabel(label: string): string {
+  return label.trim().toLowerCase().replaceAll(/\s+/gu, ' ');
+}
+
+function isLegacyFieldLabel(label: string): boolean {
+  if (label.length === 0) {
+    return false;
+  }
+
+  for (const [index, character] of [...label].entries()) {
+    const codePoint = character.codePointAt(0);
+    const isAsciiLetter =
+      codePoint !== undefined &&
+      ((codePoint >= 65 && codePoint <= 90) ||
+        (codePoint >= 97 && codePoint <= 122));
+
+    if (!isAsciiLetter && (index === 0 || ![' ', '.'].includes(character))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getLegacyFieldValues(problem: LegacyProblem, label: string): string[] {
+  return problem.fields.get(label) ?? [];
+}
+
+function getLegacyFieldValue(problem: LegacyProblem, label: string): string {
+  return getLegacyFieldValues(problem, label)[0] ?? '';
+}
+
+function getCommonLegacyFieldValue(
+  group: LegacyProblemGroup,
+  label: string,
+): string | undefined {
+  const values = group.fields.get(label) ?? [];
+
+  return values.length === 1 ? values[0] : undefined;
+}
+
+function parseLegacyProblem(rawProblem: string): LegacyProblem {
+  const lines = rawProblem.split('\n');
+  const title = (lines[0]?.trim() || 'Source check issue').replace(/:+$/u, '');
+  const fields = new Map<string, string[]>();
+
+  for (const line of lines.slice(1)) {
+    const trimmedLine = line.trimStart();
+
+    if (trimmedLine === line) {
+      continue;
+    }
+
+    const separatorIndex = trimmedLine.indexOf(':');
+
+    if (separatorIndex === -1) {
+      continue;
+    }
+
+    const rawLabel = trimmedLine.slice(0, separatorIndex);
+
+    if (!isLegacyFieldLabel(rawLabel)) {
+      continue;
+    }
+
+    const rawValue = trimmedLine.slice(separatorIndex + 1);
+    const label = normalizeLegacyFieldLabel(rawLabel);
+    const values = fields.get(label) ?? [];
+
+    values.push(rawValue.trim());
+    fields.set(label, values);
+  }
+
+  return {
+    fields,
+    raw: rawProblem,
+    title,
+  };
+}
+
+function getLegacyGroupKey(problem: LegacyProblem): string {
+  const sourceOwner =
+    getLegacyFieldValue(problem, 'source owner') ||
+    getLegacyFieldValue(problem, 'package owner');
+  const targetSourceOwner =
+    getLegacyFieldValue(problem, 'target source owner') ||
+    getLegacyFieldValue(problem, 'target owner');
+
+  return [
+    problem.title,
+    sourceOwner,
+    getLegacyFieldValue(problem, 'package'),
+    targetSourceOwner,
+    getLegacyFieldValue(problem, 'workspace package'),
+    getLegacyFieldValue(problem, 'resolved package.json'),
+    getLegacyFieldValue(problem, 'reason'),
+    getLegacyFieldValue(problem, 'fix'),
+  ].join('\0');
+}
+
+function groupLegacyProblems(
   legacyProblems: readonly string[],
-  options: { heading?: string } = {},
+): LegacyProblemGroup[] {
+  const uniqueProblems = [...new Set(legacyProblems)];
+  const groups = new Map<string, LegacyProblemGroup>();
+
+  for (const rawProblem of uniqueProblems) {
+    const problem = parseLegacyProblem(rawProblem);
+    const key = getLegacyGroupKey(problem);
+    const group = groups.get(key) ?? {
+      fields: new Map<string, string[]>(),
+      items: [],
+      title: problem.title,
+    };
+
+    group.items.push(problem);
+    groups.set(key, group);
+  }
+
+  for (const group of groups.values()) {
+    const fieldValues = new Map<string, Set<string>>();
+
+    for (const problem of group.items) {
+      for (const [label, values] of problem.fields.entries()) {
+        const collectedValues = fieldValues.get(label) ?? new Set<string>();
+
+        for (const value of values) {
+          if (value) {
+            collectedValues.add(value);
+          }
+        }
+
+        fieldValues.set(label, collectedValues);
+      }
+    }
+
+    group.fields = new Map(
+      [...fieldValues.entries()].map(([label, values]) => [
+        label,
+        [...values].sort((left, right) => left.localeCompare(right)),
+      ]),
+    );
+    group.items.sort((left, right) =>
+      getLegacyProblemPrimaryLocation(left).localeCompare(
+        getLegacyProblemPrimaryLocation(right),
+      ),
+    );
+  }
+
+  return [...groups.values()].sort(
+    (left, right) =>
+      left.title.localeCompare(right.title) ||
+      (
+        getCommonLegacyFieldValue(left, 'source owner') ??
+        getCommonLegacyFieldValue(left, 'package owner') ??
+        ''
+      ).localeCompare(
+        getCommonLegacyFieldValue(right, 'source owner') ??
+          getCommonLegacyFieldValue(right, 'package owner') ??
+          '',
+      ) ||
+      (getCommonLegacyFieldValue(left, 'package') ?? '').localeCompare(
+        getCommonLegacyFieldValue(right, 'package') ?? '',
+      ),
+  );
+}
+
+function countLegacyProblemGroups(
+  groups: readonly LegacyProblemGroup[],
+): number {
+  return groups.reduce((count, group) => count + group.items.length, 0);
+}
+
+function getLegacyProblemPrimaryLocation(problem: LegacyProblem): string {
+  return (
+    getLegacyFieldValue(problem, 'file') ||
+    getLegacyFieldValue(problem, 'project') ||
+    getLegacyFieldValue(problem, 'config') ||
+    getLegacyFieldValue(problem, 'field') ||
+    getLegacyFieldValue(problem, 'package manifest') ||
+    getLegacyFieldValue(problem, 'resolver tsconfig') ||
+    getLegacyFieldValue(problem, 'command') ||
+    problem.title
+  );
+}
+
+function getLegacyProblemLocations(group: LegacyProblemGroup): string[] {
+  return uniqueSorted(group.items.map(getLegacyProblemPrimaryLocation));
+}
+
+function formatLegacyGroupHeader(group: LegacyProblemGroup): string[] {
+  return [
+    `${group.title}  ${group.items.length} ${plural(
+      group.items.length,
+      'issue',
+      'issues',
+    )}`,
+    ...LEGACY_GROUP_FIELD_LABELS.flatMap((label) => {
+      const value = getCommonLegacyFieldValue(group, label);
+
+      return value ? [`${label}: ${value}`] : [];
+    }),
+    ...(getCommonLegacyFieldValue(group, 'reason')
+      ? ['', 'reason:', `  ${getCommonLegacyFieldValue(group, 'reason')}`]
+      : []),
+    ...(getCommonLegacyFieldValue(group, 'fix')
+      ? ['', 'suggested fix:', `  ${getCommonLegacyFieldValue(group, 'fix')}`]
+      : []),
+  ];
+}
+
+function indentLegacyProblem(rawProblem: string): string[] {
+  return rawProblem.split('\n').map((line) => (line ? `    ${line}` : ''));
+}
+
+function formatLegacyProblemGroup(
+  group: LegacyProblemGroup,
+  options: SourceIssueReportOptions,
 ): string[] {
-  if (legacyProblems.length === 0) {
+  if (options.verbose) {
+    return [
+      ...formatLegacyGroupHeader(group),
+      '',
+      'details:',
+      ...group.items.flatMap((problem, index) => [
+        ...(index === 0 ? [] : ['']),
+        `  - ${getLegacyProblemPrimaryLocation(problem)}`,
+        ...indentLegacyProblem(problem.raw),
+      ]),
+    ];
+  }
+
+  const locations = getLegacyProblemLocations(group);
+  const visibleLocations = locations.slice(0, DEFAULT_DETAIL_LIMIT);
+  const remainingCount = locations.length - visibleLocations.length;
+
+  return [
+    ...formatLegacyGroupHeader(group),
+    '',
+    'files:',
+    ...visibleLocations.map((location) => `  - ${location}`),
+    ...(remainingCount > 0 ? [`  ... ${remainingCount} more`] : []),
+    ...(remainingCount > 0
+      ? ['', 'Show all files:', `  ${createVerboseCommand(options)}`]
+      : []),
+  ];
+}
+
+function formatLegacyProblemGroups(
+  groups: readonly LegacyProblemGroup[],
+  options: SourceIssueReportOptions & { heading?: string },
+): string[] {
+  if (groups.length === 0) {
     return [];
   }
 
   return [
     options.heading ?? 'Other source check issues:',
     '',
-    ...legacyProblems.flatMap((problem, index) => [
+    ...groups.flatMap((group, index) => [
       ...(index === 0 ? [] : ['']),
-      problem,
+      ...formatIssueBlock(formatLegacyProblemGroup(group, options)),
     ]),
   ];
 }
@@ -796,6 +1295,8 @@ export function formatSourceCheckHumanReport(options: {
     issueMatchesFilters(options.config, issue, report),
   );
   const activeFilters = hasFilters(report);
+  const legacyProblemGroups = groupLegacyProblems(options.legacyProblems);
+  const legacyProblemCount = countLegacyProblemGroups(legacyProblemGroups);
   const lines = [...unknownRuleLines];
 
   if (unknownRuleLines.length > 0) {
@@ -805,8 +1306,8 @@ export function formatSourceCheckHumanReport(options: {
   if (activeFilters && filteredIssues.length === 0) {
     lines.push(...formatNoMatchedIssues(options.issues, report));
 
-    if (options.legacyProblems.length > 0) {
-      lines.push('', ...formatLegacyProblems(options.legacyProblems));
+    if (legacyProblemGroups.length > 0) {
+      lines.push('', ...formatLegacyProblemGroups(legacyProblemGroups, report));
     }
 
     return lines.join('\n');
@@ -815,12 +1316,17 @@ export function formatSourceCheckHumanReport(options: {
   const unusedModuleGroups = groupUnusedModuleIssues(filteredIssues);
   const unusedDependencyGroups =
     groupUnusedWorkspaceDependencyIssues(filteredIssues);
+  const genericIssueGroups = groupGenericSourceIssues(filteredIssues);
   const unusedModuleIssueCount = unusedModuleGroups.reduce(
     (count, group) => count + group.length,
     0,
   );
   const unusedDependencyIssueCount = unusedDependencyGroups.reduce(
     (count, group) => count + group.length,
+    0,
+  );
+  const genericIssueCount = genericIssueGroups.reduce(
+    (count, group) => count + group.issues.length,
     0,
   );
 
@@ -860,6 +1366,18 @@ export function formatSourceCheckHumanReport(options: {
       );
     }
 
+    if (genericIssueCount > 0) {
+      const packageCount = uniqueSorted(
+        genericIssueGroups.flatMap((group) =>
+          group.issues[0] ? [group.issues[0].ownerName] : [],
+        ),
+      ).length;
+
+      summaryLines.push(
+        `Found ${genericIssueCount} source check ${plural(genericIssueCount, 'issue', 'issues')} in ${packageCount} ${plural(packageCount, 'package', 'packages')}.`,
+      );
+    }
+
     if (summaryLines.length > 0) {
       lines.push(...formatSummaryBlock(summaryLines), '');
     }
@@ -869,10 +1387,11 @@ export function formatSourceCheckHumanReport(options: {
     !report.verbose &&
     unusedModuleIssueCount === 0 &&
     unusedDependencyIssueCount === 0 &&
-    options.legacyProblems.length > 0
+    genericIssueCount === 0 &&
+    legacyProblemCount > 0
   ) {
     lines.push(
-      `Found ${options.legacyProblems.length} source check ${plural(options.legacyProblems.length, 'issue', 'issues')}.`,
+      `Found ${legacyProblemCount} source check ${plural(legacyProblemCount, 'issue', 'issues')}.`,
       '',
     );
   }
@@ -903,13 +1422,23 @@ export function formatSourceCheckHumanReport(options: {
     );
   }
 
-  const legacyProblems =
-    activeFilters && !report.verbose ? [] : options.legacyProblems;
+  for (const group of genericIssueGroups) {
+    if (lines.length > 0) {
+      lines.push('');
+    }
 
-  if (legacyProblems.length > 0) {
+    lines.push(
+      ...formatIssueBlock(formatGenericSourceIssueGroup(group, report)),
+    );
+  }
+
+  const displayedLegacyProblemGroups =
+    activeFilters && !report.verbose ? [] : legacyProblemGroups;
+
+  if (displayedLegacyProblemGroups.length > 0) {
     lines.push(
       ...(lines.length > 0 ? ['', ''] : []),
-      ...formatLegacyProblems(legacyProblems),
+      ...formatLegacyProblemGroups(displayedLegacyProblemGroups, report),
     );
   }
 

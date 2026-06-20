@@ -155,6 +155,7 @@ export interface CheckerAdapter {
 export interface MissingCheckerPeerDependency {
   checkerNames: string[];
   packageName: string;
+  reason?: string;
 }
 
 export type CheckerPackageResolver = (options: {
@@ -999,7 +1000,7 @@ const builtinCheckerAdapters = {
     extensions: (options) =>
       resolveVueProjectExtensionsForChecker(options, 'vue-tsc'),
     execution: 'build',
-    packageNames: ['vue-tsc', '@vue/compiler-sfc'],
+    packageNames: ['vue-tsc'],
     parseProjectConfig: (options) => parseVueProjectConfig(options, 'vue-tsc'),
     preset: 'vue-tsc',
     resolveModuleName: resolveTypeScriptModuleName,
@@ -1116,8 +1117,9 @@ export function formatMissingCheckerPeerDependencies(
       const checkerList = dependency.checkerNames
         .map((checkerName) => `"${checkerName}"`)
         .join(', ');
+      const reason = dependency.reason ? `; ${dependency.reason}` : '';
 
-      return `  - ${dependency.packageName} (used by checker ${checkerList})`;
+      return `  - ${dependency.packageName} (used by checker ${checkerList}${reason})`;
     }),
     `Fix: pnpm add -D ${packageNames.join(' ')}`,
   ].join('\n');
@@ -1146,16 +1148,22 @@ export function getCheckerExtensions(
 }
 
 export function getResolvedCheckers(config: {
-  config?: { checkers?: 'auto' | Record<string, CheckerConfig> };
+  config?: {
+    checkers?:
+      | { exclude?: string[]; mode: 'auto' }
+      | Record<string, CheckerConfig>;
+  };
   rootDir?: string;
 }): ResolvedCheckerConfig[] {
   const checkers = config.config?.checkers;
 
-  if (!checkers || checkers === 'auto') {
+  if (!checkers || checkers.mode === 'auto') {
     return [];
   }
 
-  return Object.entries(checkers)
+  const checkerMap = checkers as Record<string, CheckerConfig>;
+
+  return Object.entries(checkerMap)
     .map(([name, checker]) => ({
       exclude: (checker.exclude ?? []).map((value) => value.trim()),
       extensions: getCheckerExtensions(checker, {

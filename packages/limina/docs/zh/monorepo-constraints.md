@@ -25,7 +25,7 @@ Limina 不要求每个 monorepo 都长成同一种目录结构。它真正约束
 
 ## 文件必须有清楚的包归属
 
-Limina 用最近的 `package.json` 判断一个文件属于哪个包。被检查的源码文件不能没有包归属，一个普通源码 `tsconfig*.json` 也不能同时覆盖多个包的文件。
+Limina 用 pnpm workspace package 判断一个文件属于哪个 source owner。没有 `name` 的 workspace package 也可以用路径成为 source owner；普通嵌套 `package.json` 只影响 package resolution，不会自动切分 source owner。被检查的源码文件不能没有 source owner，一个普通源码 `tsconfig*.json` 也不能同时覆盖多个 source owner 的文件。
 
 ```text
 packages/
@@ -40,7 +40,7 @@ packages/
 
 如果 `packages/app/tsconfig.lib.json` 把 `packages/ui/src/Button.ts` 也 include 进来，Limina 会认为这个类型检查单元跨过了包边界。修复方式通常不是给诊断“消音”，而是让 `app` 通过包名依赖 `ui`，让 `ui` 自己的配置负责自己的源码。
 
-默认的 `tsconfig.json` 也有形状约束：如果它带 `references`，它应该只做聚合入口，保留 `files: []` 和 `references`，把源码输入和编译选项放到具体的叶子配置里。普通源码叶子配置不应该手写 `references`；静态边由 Limina 从真实 import 推导，静态分析看不到的动态或虚拟边写在 `liminaOptions.implicitRefs`。一个目录里有多套类型环境时，默认 `tsconfig.json` 应该能把它们聚合起来；只有一套环境时，默认 `tsconfig.json` 就应该直接代表这套环境。
+默认的 `tsconfig.json` 也有形状约束：如果它带 `references`，它应该只做聚合入口，保留 `files: []` 和 `references`，把源码输入和编译选项放到具体的叶子配置里。普通源码配置不应该手写 `references`；静态边由 Limina 从真实 import 推导，静态分析看不到的动态或虚拟边写在 `liminaOptions.implicitRefs`。一个目录里有多套类型环境时，默认 `tsconfig.json` 应该能把它们聚合起来；只有一套环境时，默认 `tsconfig.json` 就应该直接代表这套环境。
 
 ## 跨包访问必须走公开入口
 
@@ -64,9 +64,9 @@ import { Button } from '../../ui/src/Button';
 import { Button } from '@acme/ui';
 ```
 
-裸包导入也必须被最近的 `package.json` 承认。也就是说，源码里 import 了 `p-map`，当前包的 `dependencies`、`devDependencies`、`peerDependencies` 或 `optionalDependencies` 至少要有一处声明它。包自身导入和 Node 内置模块不按普通外部依赖处理。
+相对导入必须留在最近 `package.json` 形成的 package scope 内。裸包导入也必须被 source owner 承认。也就是说，源码里 import 了 `p-map`，当前 source owner 的 `dependencies`、`devDependencies`、`peerDependencies` 或 `optionalDependencies` 至少要有一处声明它。docs、tests、config/tooling 文件、type-only import、private owner 和无名 owner 也可以由 workspace root 的 `devDependencies` 授权；项目模板、文档别名等由别处提供依赖的场景，可以用显式 `source.importAuthority.allow` 规则说明。包自身导入和 Node 内置模块不按普通外部依赖处理。
 
-`#imports` 也遵守同样的边界：`#utils/foo` 必须匹配当前包自己的 `package.json#imports`，解析结果也必须留在当前包内，或者落到一个已经声明的外部产物包里。
+`#imports` 也遵守同样的边界：`#utils/foo` 必须匹配当前 source owner 自己的 `package.json#imports`，解析结果也必须留在当前 source owner 内，或者落到一个已经声明的外部产物包里。
 
 ## 公开导出必须真的可解析
 

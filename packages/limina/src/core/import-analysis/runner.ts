@@ -3,8 +3,10 @@ import {
   normalizeExtensions,
   resolveModuleNameWithCheckers,
 } from '#checkers';
+import type { VueImportParser } from '#config/runner';
 import { normalizeAbsolutePath } from '#utils/path';
 import { existsSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { type ParseResult, parseSync, rawTransferSupported } from 'oxc-parser';
 import { type NapiResolveOptions, ResolverFactory } from 'oxc-resolver';
@@ -33,6 +35,8 @@ export interface ImportAnalysisContext {
 
 export interface CreateImportAnalysisContextOptions {
   isolated?: boolean;
+  projectRootDir?: string;
+  vueParser?: VueImportParser;
 }
 
 export interface ImportResolveContextFields
@@ -53,6 +57,32 @@ interface ImportAnalysisCaches {
   resolutionCache: Map<string, string | null>;
   resolverCache: Map<string, ResolverFactory>;
   sourceTextCache: Map<string, string>;
+}
+
+interface VueCompilerSfcBlock {
+  attrs?: Record<string, string | true>;
+  content: string;
+  lang?: string;
+  loc?: {
+    start?: {
+      line?: number;
+      offset?: number;
+    };
+  };
+  src?: string;
+}
+
+interface VueCompilerSfc {
+  parse: (
+    source: string,
+    options?: { filename?: string },
+  ) => {
+    descriptor: {
+      script: VueCompilerSfcBlock | null;
+      scriptSetup: VueCompilerSfcBlock | null;
+    };
+    errors: unknown[];
+  };
 }
 
 const jsDocImportRE = /import\(\s*['"]([^'"]+)['"]\s*\)(?:\.\w+)?/gu;
@@ -798,8 +828,12 @@ function getHtmlAttributeValue(attrs: string, name: string): string | null {
 }
 
 function getVueScriptKind(attrs: string): ts.ScriptKind {
-  const lang = getHtmlAttributeValue(attrs, 'lang');
+  return getVueScriptKindFromLang(getHtmlAttributeValue(attrs, 'lang'));
+}
 
+function getVueScriptKindFromLang(
+  lang: string | null | undefined,
+): ts.ScriptKind {
   return lang === 'tsx' || lang === 'jsx'
     ? ts.ScriptKind.TSX
     : ts.ScriptKind.TS;
@@ -829,6 +863,140 @@ function collectVueImportsFromSourceText(options: {
         scriptKind: getVueScriptKind(attrs),
         sourceOffset: contentStart,
         sourceText: content,
+      }),
+    );
+  }
+
+  return imports;
+}
+
+function resolveVueCompilerSfc(projectRootDir: string): VueCompilerSfc {
+  const requireFromRoot = createRequire(
+    path.join(projectRootDir, 'package.json'),
+  );
+
+  try {
+    return requireFromRoot('@vue/compiler-sfc') as VueCompilerSfc;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'MODULE_NOT_FOUND'
+    ) {
+      throw new Error(
+        [
+          'Unable to load Vue SFC compiler for import analysis:',
+          '  package: @vue/compiler-sfc',
+          `  root: ${projectRootDir}`,
+          '  reason: config.imports.vue is "compiler-sfc", but the package is not installed.',
+          '  fix: pnpm add -D @vue/compiler-sfc',
+        ].join('\n'),
+      );
+    }
+
+    throw error;
+  }
+}
+
+function formatVueCompilerSfcErrors(errors: unknown[]): string {
+  return errors
+    .map((error) => {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'message' in error &&
+        typeof error.message === 'string'
+      ) {
+        return error.message;
+      }
+
+      return String(error);
+    })
+    .join('; ');
+}
+
+function getVueCompilerSfcBlockContentStart(
+  block: VueCompilerSfcBlock,
+  sourceText: string,
+): number {
+  if (typeof block.loc?.start?.offset === 'number') {
+    return block.loc.start.offset;
+  }
+
+  const index = sourceText.indexOf(block.content);
+
+  return Math.max(index, 0);
+}
+
+function getVueCompilerSfcBlockLineOffset(
+  block: VueCompilerSfcBlock,
+  lineStarts: number[],
+  contentStart: number,
+): number {
+  return typeof block.loc?.start?.line === 'number'
+    ? block.loc.start.line - 1
+    : getLine(lineStarts, contentStart) - 1;
+}
+
+function getVueCompilerSfcBlockLang(block: VueCompilerSfcBlock): string | null {
+  if (block.lang) {
+    return block.lang;
+  }
+
+  const attrLang = block.attrs?.lang;
+
+  return typeof attrLang === 'string' ? attrLang : null;
+}
+
+function collectVueImportsFromSourceTextWithCompilerSfc(options: {
+  filePath: string;
+  projectRootDir: string;
+  sourceText: string;
+}): ImportRecord[] {
+  const compiler = resolveVueCompilerSfc(options.projectRootDir);
+  const result = compiler.parse(options.sourceText, {
+    filename: options.filePath,
+  });
+
+  if (result.errors.length > 0) {
+    throw new Error(
+      [
+        'Unable to parse Vue SFC for import analysis:',
+        `  file: ${path.relative(options.projectRootDir, options.filePath)}`,
+        `  reason: ${formatVueCompilerSfcErrors(result.errors)}`,
+      ].join('\n'),
+    );
+  }
+
+  const imports: ImportRecord[] = [];
+  const lineStarts = buildLineStarts(options.sourceText);
+  const blocks = [
+    result.descriptor.scriptSetup,
+    result.descriptor.script,
+  ].filter((block): block is VueCompilerSfcBlock => Boolean(block));
+
+  for (const block of blocks) {
+    if (block.src) {
+      continue;
+    }
+
+    const contentStart = getVueCompilerSfcBlockContentStart(
+      block,
+      options.sourceText,
+    );
+
+    imports.push(
+      ...collectImportsFromSourceText({
+        filePath: options.filePath,
+        lineOffset: getVueCompilerSfcBlockLineOffset(
+          block,
+          lineStarts,
+          contentStart,
+        ),
+        scriptKind: getVueScriptKindFromLang(getVueCompilerSfcBlockLang(block)),
+        sourceOffset: contentStart,
+        sourceText: block.content,
       }),
     );
   }
@@ -1287,6 +1455,7 @@ export function createImportAnalysisContext(
   const caches = options.isolated
     ? createImportAnalysisCaches()
     : sharedImportAnalysisCaches;
+  const vueParser = options.vueParser ?? 'heuristic';
 
   const readSourceText = (filePath: string): string => {
     if (!caches.sourceTextCache.has(filePath)) {
@@ -1296,9 +1465,20 @@ export function createImportAnalysisContext(
     return caches.sourceTextCache.get(filePath)!;
   };
 
-  const collectImportsFromFile = (filePath: string): ImportRecord[] => {
+  const collectImportsFromFile = (
+    filePath: string,
+    rootDir: string,
+  ): ImportRecord[] => {
     const normalizedFilePath = normalizeAbsolutePath(filePath);
-    const cached = caches.importsCache.get(normalizedFilePath);
+    const projectRootDir = normalizeAbsolutePath(
+      options.projectRootDir ?? rootDir,
+    );
+    const cacheKey = JSON.stringify({
+      filePath: normalizedFilePath,
+      projectRootDir,
+      vueParser,
+    });
+    const cached = caches.importsCache.get(cacheKey);
 
     if (cached) {
       return cached;
@@ -1306,17 +1486,23 @@ export function createImportAnalysisContext(
 
     const sourceText = readSourceText(normalizedFilePath);
     const imports = normalizedFilePath.endsWith('.vue')
-      ? collectVueImportsFromSourceText({
-          filePath: normalizedFilePath,
-          sourceText,
-        })
+      ? vueParser === 'compiler-sfc'
+        ? collectVueImportsFromSourceTextWithCompilerSfc({
+            filePath: normalizedFilePath,
+            projectRootDir,
+            sourceText,
+          })
+        : collectVueImportsFromSourceText({
+            filePath: normalizedFilePath,
+            sourceText,
+          })
       : collectImportsFromSourceText({
           filePath: normalizedFilePath,
           scriptKind: getSourceFileKind(normalizedFilePath),
           sourceText,
         });
 
-    caches.importsCache.set(normalizedFilePath, imports);
+    caches.importsCache.set(cacheKey, imports);
     return imports;
   };
 

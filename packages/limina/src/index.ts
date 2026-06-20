@@ -1,6 +1,7 @@
 export { defineConfig } from '#config/runner';
 
 export type {
+  AutoCheckerConfig,
   BuildCheckerPreset,
   BuiltinCheckerPreset,
   BuiltinTaskName,
@@ -16,6 +17,7 @@ export type {
   GraphRuleDepDenyEntry,
   GraphRuleRefAllowEntry,
   GraphRuleRefDenyEntry,
+  ImportAnalysisConfig,
   LiminaCommand,
   LiminaConfig,
   LiminaConfigEnv,
@@ -44,11 +46,12 @@ export type {
   SharedLiminaConfig,
   SourceBoundaryConfig,
   SourceCheckConfig,
+  SourceImportAuthorityAllowRule,
+  SourceImportAuthorityConfig,
   SourceKnipCheckConfig,
   SourceKnipEntryConfig,
   SourceKnipIgnoredDependencyConfig,
   SourceKnipIgnoredFileConfig,
   SourceKnipWorkspaceConfig,
-  SourceTsconfigOwnershipConfig,
-  SourceTsconfigOwnershipIgnoreEntry,
+  VueImportParser,
 } from '#config/runner';

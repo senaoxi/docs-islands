@@ -745,15 +745,17 @@ describe('runProofCheck dts config semantics', () => {
 
       const snapshot = await readCheckIssueSnapshot(fixture.rootDir);
 
-      expect(snapshot?.issues).toContainEqual({
-        code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
-        filePath: 'packages/pkg/fixtures/uncovered.ts',
-        fix: expect.any(String),
-        reason: expect.any(String),
-        scope: 'packages/pkg/fixtures',
-        task: 'proof:check',
-        title: 'Source file is not covered by typecheck proof',
-      });
+      expect(snapshot?.issues).toContainEqual(
+        expect.objectContaining({
+          code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
+          filePath: 'packages/pkg/fixtures/uncovered.ts',
+          fix: expect.any(String),
+          reason: expect.any(String),
+          scope: 'packages/pkg/fixtures',
+          task: 'proof:check',
+          title: 'Source file is not covered by typecheck proof',
+        }),
+      );
     } finally {
       await fixture.cleanup();
     }

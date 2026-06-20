@@ -39,7 +39,7 @@ check command to show the full list.
 | `limina graph prepare` | Generate `.limina/manifest.json` and checker-scoped declaration/build tsconfig graphs.                                       |
 | `limina graph check`   | Prepare and validate generated project references, workspace imports, graph rules, and source/artifact dependency semantics. |
 | `limina graph export`  | Export the neutral package dependency graph as JSON. Use `--view source\|artifact\|all` and optional `--output <file>`.      |
-| `limina source check`  | Validate package ownership, relative import boundaries, bare dependency declarations, and `#imports`.                        |
+| `limina source check`  | Validate source ownership, relative import boundaries, bare dependency declarations, and `#imports`.                         |
 | `limina proof check`   | Validate declaration leaves, local companions, checker coverage, pure aggregators, and source coverage.                      |
 
 `limina graph check`, `limina source check`, and `limina proof check` accept
@@ -47,13 +47,13 @@ check command to show the full list.
 
 ## Checkers
 
-| Command                                      | Description                                                             |
-| -------------------------------------------- | ----------------------------------------------------------------------- |
-| `limina checker build`                       | Run build execution for checker entries that support it.                |
-| `limina checker build <config>`              | Run checker build for one source or raw tsconfig.                       |
-| `limina checker build <config> --preset <p>` | Select the build preset: `tsc`, `vue-tsc`, or `tsgo`.                   |
-| `limina checker build <config> --watch`      | Watch input files and rebuild one selected config.                      |
-| `limina checker typecheck`                   | Run second-class checker entries such as `vue-tsgo` and `svelte-check`. |
+| Command                                      | Description                                                       |
+| -------------------------------------------- | ----------------------------------------------------------------- |
+| `limina checker build`                       | Run build execution for checker entries that support it.          |
+| `limina checker build <config>`              | Run checker build for one source or raw tsconfig.                 |
+| `limina checker build <config> --preset <p>` | Select the build preset: `tsc`, `vue-tsc`, or `tsgo`.             |
+| `limina checker build <config> --watch`      | Watch input files and rebuild one selected config.                |
+| `limina checker typecheck`                   | Run typecheck-only entries such as `vue-tsgo` and `svelte-check`. |
 
 `limina checker build` and `limina checker typecheck` accept `--verbose` when
 they report checker failures.

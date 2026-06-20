@@ -22,17 +22,17 @@ hero:
 features:
   - icon: 🧭
     title: Low-friction incremental build
-    details: limina init adds limina:build, then Limina generates a TypeScript project-reference build graph from existing tsconfig files and source imports so users can first get tsc -b, tsgo, or vue-tsc incremental builds.
+    details: limina init adds limina:build and prepares a TypeScript build graph from existing tsconfig files and real imports, so the workspace gets tsc -b, tsgo, or vue-tsc incremental build value first.
     link: /getting-started
     linkText: Start build-first
   - icon: 🕸️
     title: Generate type graphs automatically
-    details: Generate type graphs for TypeScript, Vue, Svelte, and other checkers, allowing different stacks to build, check, and diagnose under one unified model.
+    details: Bring TypeScript, Vue, Svelte, and other checkers into one type relationship graph, so builds, checks, and diagnostics work from the same facts.
     link: /config/checkers
     linkText: Configure checkers
   - icon: 🧱
     title: Govern project references
-    details: Detect missing references, illegal dependencies, cross-runtime calls, and architecture rule violations to ensure project relationships match declared boundaries.
+    details: Use real imports to catch missing references, illegal dependencies, cross-runtime calls, and architecture rule violations before project relationships drift past declared boundaries.
     link: /built-in-tasks
     linkText: View graph checks
   - icon: 🛡️
@@ -42,7 +42,7 @@ features:
     linkText: View source checks
   - icon: 🎯
     title: Verify check coverage
-    details: Align source files with TypeScript, Vue, Svelte, test, tools, docs, and other check scopes to find uncovered files, duplicate coverage, or files assigned to the wrong project graph.
+    details: Align source files with TypeScript, Vue, Svelte, test, tools, docs, and other check scopes to find files that are uncovered, checked twice, or assigned to the wrong owner.
     link: /config/checkers
     linkText: Configure coverage
   - icon: 📦

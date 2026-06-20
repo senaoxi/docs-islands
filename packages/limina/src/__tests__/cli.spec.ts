@@ -639,7 +639,105 @@ describe('limina CLI', () => {
       );
       expect(result.stdout).toContain('scopes:\n  - app/src/theme  1 issue');
       expect(result.stdout).toContain('checkers:\n  (none)');
-      expect(result.stdout).toContain('tools:\n  (none)');
+      expect(result.stdout).toContain('tools:\n  - knip  1 issue');
+
+      const detailsResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--details',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      expect(detailsResult.stdout).toContain('Check issue details');
+      expect(detailsResult.stdout).toContain('Unused source module');
+      expect(detailsResult.stdout).toContain('fix steps:');
+
+      const fixesResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--fixes',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      expect(fixesResult.stdout).toContain('Check issue fixes');
+      expect(fixesResult.stdout).toContain(
+        'Delete files that are truly unused.',
+      );
+
+      const jsonResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--format',
+          'json',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      expect(JSON.parse(jsonResult.stdout)).toMatchObject({
+        issueCount: 1,
+        issues: [
+          {
+            code: 'LIMINA_SOURCE_UNUSED_MODULE',
+            tool: 'knip',
+          },
+        ],
+      });
+
+      const ndjsonResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--format',
+          'ndjson',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      expect(JSON.parse(ndjsonResult.stdout)).toMatchObject({
+        code: 'LIMINA_SOURCE_UNUSED_MODULE',
+        tool: 'knip',
+      });
 
       const ruleFilteredResult = await execFileAsync(
         process.execPath,
@@ -773,7 +871,7 @@ describe('limina CLI', () => {
         ]),
       ).rejects.toMatchObject({
         stderr: expect.stringContaining(
-          '`limina check --task`, `--checker`, and `--tool` require --issues.',
+          '`limina check --task`, `--checker`, `--tool`, `--details`, `--fixes`, and `--format` require --issues.',
         ),
       });
     } finally {
@@ -1556,7 +1654,10 @@ describe('limina CLI', () => {
       expect(result.stdout).toContain('limina init finished');
       expect(
         await readFile(path.join(rootDir, 'limina.config.mjs'), 'utf8'),
-      ).toContain("checkers: 'auto'");
+      ).toContain("mode: 'auto'");
+      expect(
+        await readFile(path.join(rootDir, 'limina.config.mjs'), 'utf8'),
+      ).toContain('exclude: []');
       expect(
         await readFile(path.join(rootDir, 'limina.config.mjs'), 'utf8'),
       ).not.toContain('include:');

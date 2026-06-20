@@ -1741,13 +1741,13 @@ describe('runGraphCheck graph rules', () => {
       expect(errors).toContain('Graph check summary');
       expect(errors).toContain('│ Found 1 check issue.');
       expect(errors).toContain('│ Top rules: LIMINA_GRAPH_CONFIG_INVALID (1)');
-      expect(errors).toContain('│   Invalid graph rule config:');
+      expect(errors).toContain('Invalid graph rule config:');
       expect(errors).toContain(
-        '│     field: graph.rules.runtime.deny.refs[0].reason',
+        'field: graph.rules.runtime.deny.refs[0].reason',
       );
-      expect(errors).toContain('│     value: ""');
+      expect(errors).toContain('value: ""');
       expect(errors).toContain(
-        '│     reason: deny.refs reason is required and must be a non-empty string.',
+        'reason: deny.refs reason is required and must be a non-empty string.',
       );
 
       const snapshot = await readCheckIssueSnapshot(fixture.rootDir);
@@ -1811,18 +1811,16 @@ describe('runGraphCheck graph rules', () => {
       expect(errors).toContain('│ Found 1 check issue.');
       expect(errors).toContain('│ Top rules: LIMINA_GRAPH_CHECK_FAILED (1)');
       expect(errors).toContain(
-        '│   Unsupported auto checker source file extension:',
+        'Unsupported auto checker source file extension:',
       );
       expect(errors).toContain(
-        '│     scope: packages/create-vite/template-svelte-ts/tsconfig.json',
+        'scope: packages/create-vite/template-svelte-ts/tsconfig.json',
       );
-      expect(errors).toContain('│     extension: .svelte');
+      expect(errors).toContain('extension: .svelte');
       expect(errors).toContain(
-        '│     example: packages/create-vite/template-svelte-ts/src/App.svelte',
+        'example: packages/create-vite/template-svelte-ts/src/App.svelte',
       );
-      expect(errors).toContain(
-        '│     reason: auto checker mode can only route',
-      );
+      expect(errors).toContain('reason: auto checker mode can only route');
       expect(errors).not.toContain('graph check failed: Unsupported');
       expect(task.fail).toHaveBeenCalledWith('graph check failed');
     } finally {

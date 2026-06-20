@@ -26,7 +26,7 @@ pnpm exec limina check
 pnpm exec limina graph export --view artifact --output .limina/dependency-graph.json
 ```
 
-For a first trial, start with `limina checker build` to get a Limina-managed incremental type build entry. Once that build path is stable, put `limina check` into pull requests or CI. The surrounding workflow still owns ordinary execution concerns. Limina owns whether workspace package exports resolve correctly, whether imports are authorized by the nearest `package.json`, whether project references match source-owned imports, whether artifact imports are visible in the scoped dependency graph, whether source configs have valid graph companions, whether source files are covered by checkers, whether client / shared / node runtime boundaries hold, and whether published `dist` artifacts are usable by consumers.
+For a first trial, start with `limina checker build` to get a Limina-managed incremental type build entry. Once that build path is stable, put `limina check` into pull requests or CI. The surrounding workflow still owns ordinary execution concerns. Limina owns whether workspace package exports resolve correctly, whether imports are authorized by the source owner or an allowed root dev dependency, whether project references match source-owned imports, whether artifact imports are visible in the scoped dependency graph, whether source configs have valid graph companions, whether source files are covered by checkers, whether client / shared / node runtime boundaries hold, and whether published `dist` artifacts are usable by consumers.
 
 Some tools also offer module-boundary and conformance capabilities, for example declaring dependency constraints through project metadata. The difference is that limina's rules are not generic project-dependency policies:
 
@@ -53,7 +53,7 @@ Project references are supposed to describe which project depends on which other
 
 Limina reads the projects reachable from your checker entries, resolves real imports with TypeScript, and reports missing or forbidden references. It also checks label-based rules, so a browser runtime project can be denied access to Node-only projects or dependencies.
 
-For example, `@acme/app` imports `@acme/core`, but the generated app declaration leaf under `.limina/` does not reference the generated core declaration leaf. Limina points at the importing file, maps the generated project back to the source tsconfig, and reports the missing edge. After `limina graph prepare`, `tsc -b`, the editor, and CI are looking at the same dependency graph.
+For example, `@acme/app` imports `@acme/core`, but the generated app declaration build config under `.limina/` does not reference the generated core config. Limina points at the importing file, maps the generated project back to the source tsconfig, and reports the missing edge. After `limina graph prepare`, `tsc -b`, the editor, and CI are looking at the same dependency graph.
 
 ## Workspace Dependencies Need Clear Meaning
 
@@ -61,21 +61,21 @@ A package dependency declaration authorizes access to another package, but it do
 
 That distinction matters because TypeScript project references do not rewrite package exports. If package A references package B but imports `@scope/b`, TypeScript still follows B's package exports. Limina therefore resolves the public exports first and treats the resolved entry as the fact source for later checks.
 
-If the import resolves to a checker-owned source file, the consuming declaration leaf must reference the owner leaf. If the import resolves to a built declaration artifact such as `dist/*.d.ts`, graph references are not required. Instead, `limina graph export --view artifact` reports that artifact edge inside the importing tsconfig's condition domain. That export is useful for review and diagnostics, not as a task-ordering guarantee.
+If the import resolves to source covered by Limina, the consuming declaration build config must reference the config for that source. If the import resolves to a built declaration artifact such as `dist/*.d.ts`, graph references are not required. Instead, `limina graph export --view artifact` reports that artifact edge inside the importing tsconfig's condition domain. That export is useful for review and diagnostics, not as a task-ordering guarantee.
 
 For example, `@acme/app` depends on `@acme/core`. If it imports `@acme/core` and that export resolves to `./src/index.ts`, graph check requires the matching project reference. If it imports `@acme/core/runtime` and that export resolves to `./dist/runtime.d.ts` or `./dist/runtime.js`, graph export reports an artifact edge from app to core.
 
 ## Source Ownership Should Be Boring
 
-In a monorepo, relative imports that jump across package folders make ownership unclear. A package can also import a bare dependency that is not declared in its nearest `package.json`.
+In a monorepo, relative imports that jump across the nearest `package.json` package scope make ownership unclear. A package can also import a bare dependency without an authority manifest that explains why the dependency is available.
 
 Limina's source check keeps these rules plain:
 
-- source files must belong to a nearest package owner;
-- a non-aggregator tsconfig should not mix several package owners;
-- relative imports must stay inside the same package owner;
-- bare imports must be declared in the nearest `package.json`, in `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies`;
-- `#imports` must match the nearest package's `imports` field, must not target another workspace package, and must resolve inside that package.
+- source files must belong to one pnpm workspace source owner;
+- a non-aggregator tsconfig should not mix several source owners;
+- relative imports must stay inside the same nearest `package.json` package scope;
+- bare imports must be declared by the source owner, with workspace root `devDependencies` allowed for docs, tests, tooling, type-only imports, private owners, and nameless owners, and explicit `source.importAuthority.allow` rules available for intentional exceptions;
+- `#imports` must match the source owner's `imports` field, must not target another workspace package, and must resolve inside that owner.
 
 For example, `packages/app/src/main.ts` reaches into another package with `../core/src/index`. Limina reports the cross-package relative import and nudges the dependency back through `@acme/core` package exports. After that, reviewers can understand the dependency from manifests and exports instead of chasing relative paths.
 
@@ -93,4 +93,4 @@ Limina tries to keep the rules visible. Instead of hiding policy in a preset, it
 
 That makes architecture changes something reviewers can read, not something CI discovers only after the merge.
 
-For example, if browser runtime code must never reach Node-only packages, put `"graphRules": ["runtime-client"]` under `liminaOptions` in the source tsconfig and define the deny rule under `graph.rules.runtime-client`. Limina copies the label to the generated declaration leaf, so future boundary changes appear in config or tsconfig diffs where reviewers can discuss them directly.
+For example, if browser runtime code must never reach Node-only packages, put `"graphRules": ["runtime-client"]` under `liminaOptions` in the source tsconfig and define the deny rule under `graph.rules.runtime-client`. Limina carries that label into the generated build config, so future boundary changes appear in config or tsconfig diffs where reviewers can discuss them directly.

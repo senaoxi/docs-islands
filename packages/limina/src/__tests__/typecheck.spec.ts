@@ -544,7 +544,7 @@ describe('runCheckerBuild', () => {
     }
   });
 
-  it('fails before running checker entries when a configured peer is missing', async () => {
+  it('does not require the Vue SFC compiler for vue-tsc by default', async () => {
     const calls: TypecheckTarget[] = [];
     const errorSpy = vi
       .spyOn(TypecheckLogger, 'error')
@@ -580,9 +580,59 @@ describe('runCheckerBuild', () => {
         runner: passingRunner(calls),
       });
 
+      expect(result.passed).toBe(true);
+      expect(calls.map((target) => target.command)).toEqual(['tsc', 'vue-tsc']);
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('requires the Vue SFC compiler when compiler-sfc import analysis is enabled', async () => {
+    const calls: TypecheckTarget[] = [];
+    const errorSpy = vi
+      .spyOn(TypecheckLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      'tsconfig.build.json': tsconfig({ files: [] }),
+      'tsconfig.vue.build.json': tsconfig({ files: [] }),
+    });
+
+    try {
+      const result = await runCheckerBuild({
+        checkerPackageResolver: ({ packageName }) =>
+          packageName === 'typescript' || packageName === 'vue-tsc'
+            ? packageName
+            : undefined,
+        config: {
+          config: {
+            checkers: {
+              typescript: {
+                include: ['tsconfig.json'],
+                preset: 'tsc',
+              },
+              vue: {
+                include: ['vue/tsconfig.json'],
+                preset: 'vue-tsc',
+              },
+            },
+            imports: {
+              vue: 'compiler-sfc',
+            },
+          },
+          configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+          rootDir: fixture.rootDir,
+        },
+        cwd: fixture.rootDir,
+        runner: passingRunner(calls),
+      });
+
       expect(result.passed).toBe(false);
       expect(calls).toHaveLength(0);
       expect(errorSpy.mock.calls.join('\n')).toContain('@vue/compiler-sfc');
+      expect(errorSpy.mock.calls.join('\n')).toContain('config.imports.vue');
+      expect(errorSpy.mock.calls.join('\n')).toContain('"compiler-sfc"');
       expect(errorSpy.mock.calls.join('\n')).toContain(
         'Fix: pnpm add -D @vue/compiler-sfc',
       );
@@ -1419,8 +1469,9 @@ describe('runBuild', () => {
       expect(warningText).toContain('        - packages/theme/tsconfig.json');
       expect(errorText).toContain('build failed:');
       expect(errorText).toContain(
-        '.limina/tsconfig/checkers/nativeTypescript/projects/packages/shared/tsconfig.dts.json',
+        '.limina/tsconfig/checkers/nativeTypescript/projects/packages/shared/',
       );
+      expect(errorText).toContain('tsconfig.dts.json');
       expect(errorText).toContain(
         '.limina/tsconfig/checkers/vue/projects/packages/theme/tsconfig.dts.json',
       );

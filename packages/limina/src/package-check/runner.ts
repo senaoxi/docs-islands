@@ -29,6 +29,10 @@ import path from 'pathe';
 import type { publint } from 'publint';
 import type { formatMessage } from 'publint/utils';
 import type { CheckIssueReportOptions } from '../check-reporting/human';
+import type {
+  LiminaCheckIssueEvidence,
+  LiminaCheckIssueExternal,
+} from '../check-reporting/snapshot';
 import {
   createTaskFailureIssue,
   type LiminaCheckIssue,
@@ -135,29 +139,42 @@ function createMissingPeerDependencyError(options: {
 function addPackageCheckIssue(options: {
   code: string;
   detailLines?: readonly string[];
+  evidence?: readonly LiminaCheckIssueEvidence[];
+  external?: LiminaCheckIssueExternal;
   filePath?: string;
   fix: string;
+  fixSteps?: readonly string[];
   issueSink?: LiminaCheckIssue[];
   packageManifestPath?: string;
   packageName?: string;
   reason: string;
   rootDir: string;
+  summary?: string;
   title: string;
   tool: PackageCheckTool | 'manifest';
+  verifyCommands?: readonly string[];
 }): void {
   options.issueSink?.push(
     createTaskFailureIssue({
       code: options.code,
       detailLines: options.detailLines,
+      domain: 'package',
+      evidence: options.evidence,
+      external: options.external ?? {
+        tool: options.tool,
+      },
       filePath: options.filePath,
       fix: options.fix,
+      fixSteps: options.fixSteps ?? [options.fix],
       packageManifestPath: options.packageManifestPath,
       packageName: options.packageName,
       reason: options.reason,
       rootDir: options.rootDir,
+      summary: options.summary,
       task: 'package:check',
       title: options.title,
       tool: options.tool,
+      verifyCommands: options.verifyCommands ?? ['limina package check'],
     }),
   );
 }
@@ -514,12 +531,24 @@ async function runPublintCheck(options: {
     addPackageCheckIssue({
       code: 'LIMINA_PACKAGE_PUBLINT',
       detailLines: [`[${options.label}] [publint] ${rendered}`],
+      evidence: [{ label: 'publint', value: rendered }],
+      external: {
+        code: message.code,
+        message: rendered,
+        tool: 'publint',
+      },
       fix: 'Inspect the publint message and adjust package exports, types, or published files.',
+      fixSteps: [
+        'Inspect the publint message for the affected export, type, or published file.',
+        'Update the built package manifest or package output so publint resolves the package correctly.',
+        'Rebuild the package output and rerun the package check.',
+      ],
       issueSink: options.issueSink,
       packageManifestPath: options.packageManifestPath,
       packageName: options.packageName,
       reason: rendered,
       rootDir: options.rootDir,
+      summary: rendered,
       title: 'Publint package issue',
       tool: 'publint',
     });
@@ -578,12 +607,18 @@ async function runAttwCheck(options: {
     addPackageCheckIssue({
       code: 'LIMINA_PACKAGE_ATTW',
       detailLines: [`[${options.label}] [attw] package has no types`],
+      evidence: [{ label: 'attw', value: 'package has no types' }],
+      external: {
+        message: 'package has no types',
+        tool: 'attw',
+      },
       fix: 'Publish type declarations or adjust the package entry/type metadata.',
       issueSink: options.issueSink,
       packageManifestPath: options.packageManifestPath,
       packageName: options.packageName,
       reason: 'ATTW could not find package types.',
       rootDir: options.rootDir,
+      summary: 'ATTW could not find package types.',
       title: 'ATTW package issue',
       tool: 'attw',
     });
@@ -621,12 +656,24 @@ async function runAttwCheck(options: {
       addPackageCheckIssue({
         code: 'LIMINA_PACKAGE_ATTW',
         detailLines: [message],
+        evidence: [{ label: 'attw', value: formatAttwProblem(problem) }],
+        external: {
+          code: getAttwProblemRuleName(problem),
+          message: formatAttwProblem(problem),
+          tool: 'attw',
+        },
         fix: 'Inspect the ATTW message and adjust package exports/types for consumer resolution.',
+        fixSteps: [
+          'Inspect the ATTW message for the failing entrypoint and resolution mode.',
+          'Update package exports, types, or emitted declaration files for that consumer resolution.',
+          'Rebuild the package output and rerun the package check.',
+        ],
         issueSink: options.issueSink,
         packageManifestPath: options.packageManifestPath,
         packageName: options.packageName,
         reason: formatAttwProblem(problem),
         rootDir: options.rootDir,
+        summary: formatAttwProblem(problem),
         title: 'ATTW package issue',
         tool: 'attw',
       });
@@ -694,13 +741,26 @@ async function runBoundaryCheck(
       detailLines: [
         `[${label}] [boundary] ${violation.filePath} (${violation.environment}) imports "${violation.specifier}": ${violation.message}`,
       ],
+      evidence: [
+        {
+          label: 'import',
+          value: `${violation.filePath} imports "${violation.specifier}"`,
+        },
+        { label: 'environment', value: violation.environment },
+      ],
       filePath: violation.filePath,
       fix: 'Remove the import, change the package boundary config, or move the code to an environment that allows this dependency.',
+      fixSteps: [
+        'Remove the disallowed import from the published output.',
+        'Move the code to an environment where the dependency is allowed, or adjust the package boundary config.',
+        'Rebuild the package output and rerun the package check.',
+      ],
       issueSink: options.issueSink,
       packageManifestPath: options.packageManifestPath,
       packageName: options.packageName,
       reason: violation.message,
       rootDir: options.rootDir,
+      summary: `${violation.filePath} imports "${violation.specifier}" in ${violation.environment}.`,
       title: 'Published package boundary issue',
       tool: 'boundary',
     });
@@ -791,12 +851,21 @@ async function runPackageCheckEntry(options: {
       addPackageCheckIssue({
         code: 'LIMINA_PACKAGE_MANIFEST_INVALID',
         detailLines: problem.split('\n'),
+        evidence: [
+          { label: 'manifest diagnostic', lines: problem.split('\n') },
+        ],
         fix: 'Fix the built package manifest before publishing or checking the package output.',
+        fixSteps: [
+          'Fix the built package manifest field reported in the diagnostic.',
+          'Rebuild the package output.',
+          'Rerun the package check.',
+        ],
         issueSink: options.issueSink,
         packageManifestPath: outputPackageJsonPath,
         packageName,
         reason: problem.split('\n')[0] ?? 'Built package manifest is invalid.',
         rootDir: options.config.rootDir,
+        summary: problem.split('\n')[0] ?? 'Built package manifest is invalid.',
         title: 'Built package manifest issue',
         tool: 'manifest',
       });

@@ -379,7 +379,10 @@ packages:
 }
 
 describe('runSourceCheck package authority', () => {
-  it('rejects external bare imports that are not declared by the nearest owner', async () => {
+  it('rejects external bare imports that are not declared by the source owner', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
     const fixture = await createFixture(
       createPackageFixture({
         source: "import { z } from 'zod';\nexport const schema = z.string();\n",
@@ -388,15 +391,19 @@ describe('runSourceCheck package authority', () => {
 
     try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+      const errors = errorSpy.mock.calls.join('\n');
+
+      expect(errors).toContain('fix steps:');
+      expect(errors).toContain('Declare "zod" in app/package.json');
+      expect(errors).toContain('or optionalDependencies.');
+      expect(errors).toContain('source.importAuthority.allow');
     } finally {
+      errorSpy.mockRestore();
       await fixture.cleanup();
     }
   });
 
-  it('reports comment imports with kind in package authority diagnostics', async () => {
-    const errorSpy = vi
-      .spyOn(SourceLogger, 'error')
-      .mockImplementation(() => {});
+  it('ignores comment imports for package authority diagnostics', async () => {
     const fixture = await createFixture(
       createPackageFixture({
         source:
@@ -405,14 +412,140 @@ describe('runSourceCheck package authority', () => {
     );
 
     try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
-      const errors = errorSpy.mock.calls.join('\n');
-
-      expect(errors).toContain('Unauthorized bare package import:');
-      expect(errors).toContain('file: app/src/index.ts:1 (kind: comment)');
-      expect(errors).toContain('imported specifier: zod');
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
-      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('allows test file bare imports declared only by root devDependencies', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          source: "export const value = 'checked';\n",
+        }),
+        'app/src/index.spec.ts':
+          "import { z } from 'zod';\nexport const schema = z.string();\n",
+        'package.json': stringifyConfig({
+          devDependencies: {
+            zod: '^1.0.0',
+          },
+          name: 'root',
+          private: true,
+        }),
+      },
+      {
+        source: {
+          knip: false,
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not allow runtime bare imports from public packages through root devDependencies', async () => {
+    const fixture = await createFixture({
+      ...createPackageFixture({
+        source: "import { z } from 'zod';\nexport const schema = z.string();\n",
+      }),
+      'package.json': stringifyConfig({
+        devDependencies: {
+          zod: '^1.0.0',
+        },
+        name: 'root',
+        private: true,
+      }),
+    });
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('allows explicit source import authority rules', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          source: "export const value = 'checked';\n",
+        }),
+        'app/src/template/main.ts':
+          "import React from 'react';\nexport const value = React.createElement('div');\n",
+      },
+      {
+        source: {
+          importAuthority: {
+            allow: [
+              {
+                files: ['app/src/template/**'],
+                packages: ['react'],
+                reason:
+                  'Template files declare dependencies in generated apps.',
+              },
+            ],
+          },
+          knip: false,
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('allows type-only bare imports declared only by root devDependencies', async () => {
+    const fixture = await createFixture({
+      ...createPackageFixture({
+        source:
+          "import type { ZodType } from 'zod';\nexport type Schema = ZodType;\n",
+      }),
+      'package.json': stringifyConfig({
+        devDependencies: {
+          zod: '^1.0.0',
+        },
+        name: 'root',
+        private: true,
+      }),
+    });
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('authorizes resolved @types packages by the imported package name', async () => {
+    const fixture = await createFixture({
+      ...createPackageFixture({
+        manifest: {
+          dependencies: {
+            etag: '^1.0.0',
+          },
+        },
+        source:
+          "import etag from 'etag';\nexport const value = etag('body');\n",
+      }),
+      'app/node_modules/@types/etag/index.d.ts':
+        'declare function etag(value: string): string;\nexport default etag;\n',
+      'app/node_modules/@types/etag/package.json': stringifyConfig({
+        name: '@types/etag',
+        types: './index.d.ts',
+      }),
+    });
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
       await fixture.cleanup();
     }
   });
@@ -462,7 +595,7 @@ describe('runSourceCheck package authority', () => {
     }
   });
 
-  it('allows nameless workspace package owners for path-based source checks', async () => {
+  it('allows nameless workspace package source owners for path-based source checks', async () => {
     const fixture = await createFixture(
       {
         ...createWorkspaceRootFiles(),
@@ -566,7 +699,9 @@ packages:
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
-      expect(errors).toContain('Resolved package import has no package name:');
+      expect(errors).toContain(
+        'Resolved package import has no package name  1 issue',
+      );
       expect(errors).toContain(
         'resolved package.json: app/node_modules/unnamed-pkg/package.json',
       );
@@ -595,24 +730,27 @@ packages:
     }
   });
 
-  it('rejects typecheck configs that escape nearest package owner', async () => {
-    const fixture = await createFixture({
-      ...createPackageFixture({
-        source: "export const rootValue = 'root';\n",
-      }),
-      'app/tsconfig.lib.dts.json': buildConfig({
-        include: ['src/index.ts'],
-      }),
-      'app/tsconfig.lib.json': typecheckConfig(['src/index.ts']),
-      'app/src/nested/package.json': stringifyConfig({
-        name: '@example/nested',
-        type: 'module',
-      }),
-      'app/src/nested/tsconfig.json': typecheckConfig(['../index.ts']),
-    });
+  it('allows source configs that include nested non-workspace package scopes', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          source: "export const rootValue = 'root';\n",
+        }),
+        'app/src/nested/package.json': stringifyConfig({
+          name: '@example/nested',
+          type: 'module',
+        }),
+        'app/src/nested/value.ts': "export const nestedValue = 'nested';\n",
+      },
+      {
+        source: {
+          knip: false,
+        },
+      },
+    );
 
     try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }
@@ -655,23 +793,83 @@ packages:
     }
   });
 
-  it('uses the nearest nested package owner for dependency authorization', async () => {
-    const fixture = await createFixture({
-      ...createPackageFixture({
-        manifest: {
-          dependencies: {
-            zod: '^1.0.0',
+  it('uses the pnpm workspace source owner for dependency authorization across nested package scopes', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          manifest: {
+            dependencies: {
+              zod: '^1.0.0',
+            },
           },
+          source: "export const rootValue = 'root';\n",
+        }),
+        'app/src/nested/package.json': stringifyConfig({
+          name: '@example/nested',
+          type: 'module',
+        }),
+        'app/src/nested/value.ts':
+          "import { z } from 'zod';\nexport const nestedValue = z.string();\n",
+      },
+      {
+        source: {
+          knip: false,
         },
-        source: "export const rootValue = 'root';\n",
-      }),
-      'app/src/nested/package.json': stringifyConfig({
-        name: '@example/nested',
-        type: 'module',
-      }),
-      'app/src/nested/value.ts':
-        "import { z } from 'zod';\nexport const nestedValue = z.string();\n",
-    });
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('allows declaration leaves whose file set crosses nested non-workspace package scopes', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          source: "export const rootValue = 'root';\n",
+        }),
+        'app/src/nested/package.json': stringifyConfig({
+          name: '@example/nested',
+          type: 'module',
+        }),
+        'app/src/nested/value.ts': "export const nestedValue = 'nested';\n",
+      },
+      {
+        source: {
+          knip: false,
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects relative imports that cross nested package scopes', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          source: "export const rootValue = 'root';\n",
+        }),
+        'app/src/nested/package.json': stringifyConfig({
+          name: '@example/nested',
+          type: 'module',
+        }),
+        'app/src/nested/value.ts':
+          "import { rootValue } from '../index';\nexport const nestedValue = rootValue;\n",
+      },
+      {
+        source: {
+          knip: false,
+        },
+      },
+    );
 
     try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
@@ -680,58 +878,7 @@ packages:
     }
   });
 
-  it('rejects declaration leaves whose file set mixes package owners', async () => {
-    const fixture = await createFixture({
-      ...createPackageFixture({
-        source: "export const rootValue = 'root';\n",
-      }),
-      'app/src/nested/package.json': stringifyConfig({
-        name: '@example/nested',
-        type: 'module',
-      }),
-      'app/src/nested/value.ts': "export const nestedValue = 'nested';\n",
-    });
-
-    try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('rejects relative imports that escape the nearest package owner scope', async () => {
-    const fixture = await createFixture({
-      ...createPackageFixture({
-        source: "export const rootValue = 'root';\n",
-      }),
-      'app/src/nested/package.json': stringifyConfig({
-        name: '@example/nested',
-        type: 'module',
-      }),
-      'app/src/nested/value.ts':
-        "import { rootValue } from '../index';\nexport const nestedValue = rootValue;\n",
-      'app/src/nested/tsconfig.lib.dts.json': buildConfig({
-        include: ['*.ts'],
-      }),
-      'app/src/nested/tsconfig.lib.json': typecheckConfig(['*.ts']),
-      'tsconfig.build.json': stringifyConfig({
-        files: [],
-        references: [
-          {
-            path: './app/src/nested/tsconfig.lib.dts.json',
-          },
-        ],
-      }),
-    });
-
-    try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('rejects relative imports that cross workspace package owners', async () => {
+  it('rejects relative imports that cross workspace package scopes', async () => {
     const fixture = await createFixture(
       createWorkspacePackageFiles({
         appSource:
@@ -746,7 +893,7 @@ packages:
     }
   });
 
-  it('requires workspace packages to be declared by the nearest owner', async () => {
+  it('requires workspace packages to be declared by the source owner', async () => {
     const fixture = await createFixture({
       ...createWorkspaceRootFiles(['app', 'packages/*']),
       ...createPackageFixture({
@@ -961,7 +1108,7 @@ packages:
     try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       expect(errorSpy.mock.calls.join('\n')).toContain(
-        'Package import resolves to another package owner:',
+        'Package import resolves to another source owner  1 issue',
       );
     } finally {
       errorSpy.mockRestore();
@@ -1211,13 +1358,10 @@ packages:
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain(
-        'Tsconfig search cannot determine module owner:',
+        'Tsconfig search cannot determine module owner  1 issue',
       );
       expect(errors).toContain('resolver tsconfig: app/tsconfig.json');
-      expect(errors).toContain('searched tsconfigs:');
-      expect(errors).toContain('    - app/tsconfig.json');
-      expect(errors).toContain('matched owner tsconfigs:');
-      expect(errors).toContain('    (none)');
+      expect(errors).toContain('app/tools/build.ts');
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -1251,10 +1395,12 @@ packages:
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain(
-        'the first matching tsconfig.json reaches multiple ordinary typecheck configs that include the module',
+        'Tsconfig search cannot determine module owner  1 issue',
       );
-      expect(errors).toContain('    - app/tsconfig.lib.json');
-      expect(errors).toContain('    - app/tsconfig.test.json');
+      expect(errors).toContain(
+        'Source module belongs to multiple tsconfig governance units  1 issue',
+      );
+      expect(errors).toContain('app/src/index.ts');
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -1300,117 +1446,10 @@ packages:
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain(
-        'Tsconfig search cannot determine module owner:',
+        'Tsconfig search cannot determine module owner  1 issue',
       );
-      expect(errors).toContain('    (none)');
+      expect(errors).toContain('app/src/index.ts');
       expect(errors).not.toContain('    - app/tsconfig.lib.json');
-    } finally {
-      errorSpy.mockRestore();
-      await fixture.cleanup();
-    }
-  });
-
-  it('allows scoped tsconfig ownership ignore globs', async () => {
-    const fixture = await createFixture(
-      {
-        'app/package.json': stringifyConfig({
-          name: '@example/app',
-          type: 'module',
-        }),
-        'app/src/index.spec.ts': "export const tested = 'checked';\n",
-        'app/tsconfig.json': stringifyConfig({
-          files: [],
-          references: [],
-        }),
-        'app/tsconfig.lib.dts.json': buildConfig({
-          include: ['src/**/*.spec.ts'],
-        }),
-        'app/tsconfig.lib.json': typecheckConfig(['src/**/*.spec.ts']),
-        'tsconfig.build.json': stringifyConfig({
-          files: [],
-          references: [
-            {
-              path: './app/tsconfig.lib.dts.json',
-            },
-          ],
-        }),
-      },
-      {
-        source: {
-          tsconfigOwnership: {
-            ignore: [
-              {
-                files: ['app/src/**/*.spec.ts'],
-                owner: '@example/app',
-                reason: 'Vitest loads test modules directly.',
-              },
-            ],
-          },
-        },
-      },
-    );
-
-    try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('rejects invalid tsconfig ownership ignore entries', async () => {
-    const errorSpy = vi
-      .spyOn(SourceLogger, 'error')
-      .mockImplementation(() => {});
-    const ignore = [
-      {
-        files: ['app/src/**/*.spec.ts'],
-        owner: '@example/app',
-      },
-      {
-        files: ['app/src/**/*.spec.ts'],
-        owner: '@example/missing',
-        reason: 'Missing owner.',
-      },
-      {
-        files: [],
-        owner: '@example/app',
-        reason: 'Empty files.',
-      },
-      {
-        files: ['packages/internal/src/**/*.spec.ts'],
-        owner: '@example/app',
-        reason: 'Wrong owner directory.',
-      },
-    ] as unknown as NonNullable<
-      NonNullable<SourceCheckConfig['tsconfigOwnership']>['ignore']
-    >;
-    const fixture = await createFixture(
-      createPackageFixture({
-        source: "export const value = 'checked';\n",
-      }),
-      {
-        source: {
-          tsconfigOwnership: {
-            ignore,
-          },
-        },
-      },
-    );
-
-    try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
-      const errors = errorSpy.mock.calls.join('\n');
-
-      expect(errors).toContain('reason must be a non-empty string');
-      expect(errors).toContain(
-        'owner must name an existing package owner with a package.json name',
-      );
-      expect(errors).toContain(
-        'files must be a non-empty array of workspace-root-relative glob patterns',
-      );
-      expect(errors).toContain(
-        'file patterns must stay inside the owner package directory',
-      );
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -1701,9 +1740,7 @@ packages:
       expect(errors).toContain(
         'dep must name a package from the pnpm workspace',
       );
-      expect(errors).toContain(
-        'ignoreDependencies entries must match a workspace dependency declared by the keyed importer package manifest',
-      );
+      expect(errors).toContain('importer: @example/app');
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -2078,7 +2115,7 @@ packages:
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain(
-        'Unsupported package build script for generated Knip tsconfig:',
+        'Unsupported package build script for generated Knip tsconfig  1 issue',
       );
       expect(errors).toContain('command: limina checker build $CONFIG');
       expect(errors).toContain('static limina checker build scripts');
@@ -2339,6 +2376,59 @@ packages:
     }
   });
 
+  it('groups and truncates legacy source check problems by owner and package', async () => {
+    const fixture = await createFixture({});
+    const legacyProblems = Array.from({ length: 6 }, (_, index) =>
+      [
+        'Unauthorized bare package import:',
+        '  source owner: docs/package.json',
+        `  file: docs/.vitepress/theme/landing/file-${index.toString().padStart(2, '0')}.vue:2 (kind: static)`,
+        `  imported specifier: @components/shared/File${index}.vue`,
+        '  package: @components/shared',
+        '  reason: source imports must be authorized by the source owner dependencies, devDependencies, peerDependencies, optionalDependencies, by the workspace root devDependencies when the importing context is relaxed, or by an explicit source.importAuthority.allow rule.',
+        '  fix: Declare "@components/shared" in docs/package.json dependencies, devDependencies, peerDependencies, or optionalDependencies. If "@components/shared" is supplied by a runtime, template, or alias instead of the owner manifest, add a source.importAuthority.allow rule for this file/package with a reason.',
+      ].join('\n'),
+    );
+
+    try {
+      const report = formatSourceCheckHumanReport({
+        config: fixture.config,
+        issues: [],
+        legacyProblems: [...legacyProblems, legacyProblems[0]!],
+        report: {
+          command: 'limina source check',
+        },
+      });
+
+      expect(report).toContain('Found 6 source check issues.');
+      expect(report).toContain('Unauthorized bare package import  6 issues');
+      expect(report).toContain('source owner: docs/package.json');
+      expect(report).toContain('package: @components/shared');
+      expect(report).toContain('suggested fix:');
+      expect(report).toContain(
+        'Declare "@components/shared" in docs/package.json',
+      );
+      expect(report).toContain('files:');
+      expect(report).toContain(
+        'docs/.vitepress/theme/landing/file-00.vue:2 (kind: static)',
+      );
+      expect(report).toContain(
+        'docs/.vitepress/theme/landing/file-04.vue:2 (kind: static)',
+      );
+      expect(report).not.toContain(
+        'docs/.vitepress/theme/landing/file-05.vue:2 (kind: static)',
+      );
+      expect(report).toContain('... 1 more');
+      expect(report).toContain('Show all files:');
+      expect(report).toContain('limina source check --verbose');
+      expect(
+        report.match(/Unauthorized bare package import:/gu) ?? [],
+      ).toHaveLength(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('writes the last-run source issue snapshot for failed structured issues', async () => {
     const errorSpy = vi
       .spyOn(SourceLogger, 'error')
@@ -2376,15 +2466,17 @@ packages:
 
       const checkSnapshot = await readCheckIssueSnapshot(fixture.rootDir);
 
-      expect(checkSnapshot?.issues).toContainEqual({
-        code: SOURCE_ISSUE_CODES.unusedModule,
-        filePath: 'packages/app/src/dead.ts',
-        packageName: '@example/app',
-        reason: expect.any(String),
-        scope: 'packages/app/src',
-        task: 'source:check',
-        title: 'Unused source module',
-      });
+      expect(checkSnapshot?.issues).toContainEqual(
+        expect.objectContaining({
+          code: SOURCE_ISSUE_CODES.unusedModule,
+          filePath: 'packages/app/src/dead.ts',
+          packageName: '@example/app',
+          reason: expect.any(String),
+          scope: 'packages/app/src',
+          task: 'source:check',
+          title: 'Unused source module',
+        }),
+      );
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -2759,15 +2851,13 @@ packages:
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
-      expect(errors).toContain('Invalid source Knip entry config:');
+      expect(errors).toContain('Invalid source Knip entry config  1 issue');
       expect(errors).toContain('source.knip.workspaces["@example/app"].entry');
       expect(errors).toContain('reason must be a non-empty string');
       expect(errors).toContain(
         'files must be a non-empty array of workspace-root-relative glob patterns',
       );
-      expect(errors).toContain(
-        'file patterns must be positive workspace-root-relative globs inside the workspace root',
-      );
+      expect(errors).toContain('../outside.ts');
       expect(errors).toContain(
         'file patterns must stay inside the keyed package directory',
       );
@@ -2805,16 +2895,18 @@ packages:
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
-      expect(errors).toContain('Unsupported source Knip workspace config:');
+      expect(errors).toContain(
+        'Unsupported source Knip workspace config  1 issue',
+      );
+      expect(errors).toContain('package: @example/app');
+      expect(errors).toContain('package: @example/internal');
       expect(errors).toContain(
         'source.knip.workspaces["@example/app"].tsConfig',
       );
       expect(errors).toContain(
         'source.knip.workspaces["@example/internal"].tsConfig',
       );
-      expect(errors).toContain(
-        'tsConfig is no longer supported. Limina uses Knip default tsconfig behavior unless a package has a static limina checker build script.',
-      );
+      expect(errors).toContain('tsConfig is no longer supported');
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -2835,7 +2927,7 @@ packages:
       },
       {
         file: 'packages/internal/src/index.ts',
-        reason: 'Wrong package owner.',
+        reason: 'Wrong source owner.',
       },
     ] as unknown as SourceKnipWorkspaceConfig['ignoreFiles'];
     const fixture = await createFixture(
@@ -2873,7 +2965,7 @@ packages:
     }
   });
 
-  it('rejects usage tsconfigs that include files from another package owner', async () => {
+  it('rejects usage tsconfigs that include files from another source owner', async () => {
     const fixture = await createFixture(
       createRootWorkspaceDependencyFiles({
         rootSource: 'export const value = 1;\n',

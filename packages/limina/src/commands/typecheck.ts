@@ -1,4 +1,5 @@
 import { createElapsedTimer } from 'logaria/helper';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import { formatCheckIssueHumanReport } from '../check-reporting/human';
 import {
   appendCheckIssues,
@@ -9,6 +10,7 @@ import {
 } from '../check-reporting/snapshot';
 import { clearCliScreen, formatErrorMessage, TypecheckLogger } from '../logger';
 import {
+  type CheckerFailureKind,
   type CheckerFailureTarget,
   runBuildImpl,
   type RunBuildOptions,
@@ -38,23 +40,48 @@ export type {
 function createCheckerFailureIssues(options: {
   failedTargets: readonly CheckerFailureTarget[];
   fallbackReason: string;
+  failureKind?: CheckerFailureKind;
   fix: string;
   projectRootDir: string;
+  problems?: readonly string[];
   task: Extract<LiminaCheckTaskName, 'checker:build' | 'checker:typecheck'>;
   title: string;
 }): LiminaCheckIssue[] {
+  const defaultFailureCode =
+    options.task === 'checker:build'
+      ? LIMINA_CHECK_ISSUE_CODES.checkerBuildFailed
+      : LIMINA_CHECK_ISSUE_CODES.checkerTypecheckFailed;
+  const failureCode =
+    options.failureKind === 'peer-dependency'
+      ? LIMINA_CHECK_ISSUE_CODES.checkerPeerDependencyMissing
+      : options.failureKind === 'target-selection'
+        ? LIMINA_CHECK_ISSUE_CODES.checkerTargetSelectionFailed
+        : defaultFailureCode;
+
   if (options.failedTargets.length === 0) {
     return [
       createTaskFailureIssue({
-        code:
-          options.task === 'checker:build'
-            ? 'LIMINA_CHECKER_BUILD_FAILED'
-            : 'LIMINA_CHECKER_TYPECHECK_FAILED',
+        code: failureCode,
+        detailLines: options.problems ? [...options.problems] : undefined,
+        evidence: options.problems?.length
+          ? [
+              {
+                label: 'checker diagnostic',
+                lines: [...options.problems],
+              },
+            ]
+          : undefined,
         fix: options.fix,
+        fixSteps: [options.fix],
         reason: options.fallbackReason,
         rootDir: options.projectRootDir,
         task: options.task,
         title: options.title,
+        verifyCommands: [
+          options.task === 'checker:build'
+            ? 'limina checker build'
+            : 'limina checker typecheck',
+        ],
       }),
     ];
   }
@@ -62,12 +89,17 @@ function createCheckerFailureIssues(options: {
   return options.failedTargets.map((target) =>
     createTaskFailureIssue({
       checkerName: target.checkerName,
-      code:
-        options.task === 'checker:build'
-          ? 'LIMINA_CHECKER_BUILD_FAILED'
-          : 'LIMINA_CHECKER_TYPECHECK_FAILED',
+      code: defaultFailureCode,
+      evidence: [
+        {
+          label: 'exit code',
+          value: String(target.exitCode),
+        },
+        ...(target.message ? [{ label: 'error', value: target.message }] : []),
+      ],
       filePath: target.configPath,
       fix: options.fix,
+      fixSteps: [options.fix],
       reason: [
         target.checkerName
           ? `Checker "${target.checkerName}" failed.`
@@ -78,6 +110,11 @@ function createCheckerFailureIssues(options: {
       rootDir: options.projectRootDir,
       task: options.task,
       title: options.title,
+      verifyCommands: [
+        options.task === 'checker:build'
+          ? 'limina checker build'
+          : 'limina checker typecheck',
+      ],
     }),
   );
 }
@@ -129,8 +166,10 @@ export async function runCheckerBuild(
       const issues = createCheckerFailureIssues({
         failedTargets: result.failedTargets,
         fallbackReason: 'Checker build finished with failures.',
+        failureKind: result.failureKind,
         fix: 'Inspect the checker build output above, then rerun `limina checker build` or `limina check`.',
         projectRootDir: result.projectRootDir,
+        problems: result.problems,
         task: 'checker:build',
         title: 'Checker build failed',
       });
@@ -213,8 +252,10 @@ export async function runBuild(
       const issues = createCheckerFailureIssues({
         failedTargets: result.failedTargets,
         fallbackReason: 'Checker build finished with failures.',
+        failureKind: result.failureKind,
         fix: 'Inspect the checker build output above, then rerun `limina checker build`.',
         projectRootDir: result.projectRootDir,
+        problems: result.problems,
         task: 'checker:build',
         title: 'Checker build failed',
       });
@@ -298,8 +339,10 @@ export async function runCheckerTypecheck(
       const issues = createCheckerFailureIssues({
         failedTargets: result.failedTargets,
         fallbackReason: 'Checker typecheck finished with failures.',
+        failureKind: result.failureKind,
         fix: 'Inspect the checker typecheck output above, then rerun `limina checker typecheck` or `limina check`.',
         projectRootDir: result.projectRootDir,
+        problems: result.problems,
         task: 'checker:typecheck',
         title: 'Checker typecheck failed',
       });

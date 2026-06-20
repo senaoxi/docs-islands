@@ -10,6 +10,7 @@ import {
 import { cac } from 'cac';
 import path from 'pathe';
 import {
+  type CheckIssueInventoryFormat,
   formatCheckIssueSnapshotInventory,
   readCheckIssueSnapshot,
   writeNotRunCheckIssueSnapshot,
@@ -57,6 +58,9 @@ interface SourceIssueSelectionFlags extends PackageSelectionFlags {
 
 interface CheckFlags extends GlobalFlags, SourceIssueSelectionFlags {
   checker?: string | string[];
+  details?: boolean;
+  fixes?: boolean;
+  format?: string;
   issues?: boolean;
   task?: string | string[];
   tool?: string | string[];
@@ -237,14 +241,37 @@ function createSourceIssueReportOptions(
   };
 }
 
+function parseIssueInventoryFormat(
+  format: string | undefined,
+): CheckIssueInventoryFormat | undefined {
+  if (!format) {
+    return undefined;
+  }
+
+  if (format === 'human' || format === 'json' || format === 'ndjson') {
+    return format;
+  }
+
+  throw new Error(
+    `Invalid check --issues --format "${format}". Expected one of: human, json, ndjson.`,
+  );
+}
+
 function assertStandaloneIssuesFlag(
   pipeline: string | undefined,
   flags: CheckFlags,
 ): void {
   if (!flags.issues) {
-    if (flags.task || flags.checker || flags.tool) {
+    if (
+      flags.task ||
+      flags.checker ||
+      flags.tool ||
+      flags.details ||
+      flags.fixes ||
+      flags.format
+    ) {
       throw new Error(
-        '`limina check --task`, `--checker`, and `--tool` require --issues.',
+        '`limina check --task`, `--checker`, `--tool`, `--details`, `--fixes`, and `--format` require --issues.',
       );
     }
 
@@ -253,10 +280,6 @@ function assertStandaloneIssuesFlag(
 
   if (pipeline) {
     throw new Error('`limina check --issues` does not accept a pipeline name.');
-  }
-
-  if (flags.verbose) {
-    throw new Error('`limina check --issues` does not accept --verbose.');
   }
 }
 
@@ -321,6 +344,9 @@ async function main(): Promise<void> {
     .option('--checker <name>', 'Filter last-run issue inventory by checker')
     .option('--tool <name>', 'Filter last-run issue inventory by package tool')
     .option('--issues', 'Show check issue filters from the last run')
+    .option('--details', 'Show detailed issues from the last run')
+    .option('--fixes', 'Show fix steps from the last run')
+    .option('--format <format>', 'Issue output format: human, json, or ndjson')
     .action(async (pipeline: string | undefined, flags: CheckFlags) => {
       assertStandaloneIssuesFlag(pipeline, flags);
 
@@ -339,6 +365,10 @@ async function main(): Promise<void> {
               tasks: parseRepeatedStrings(flags.task),
               tools: parseRepeatedStrings(flags.tool),
             },
+            details: flags.details ?? flags.verbose,
+            fixes: flags.fixes,
+            format: parseIssueInventoryFormat(flags.format),
+            rootDir: config.rootDir,
             snapshot,
           })}\n`,
         );

@@ -1,10 +1,9 @@
 # Condition Domains
 
 `graph.conditionDomains` tells Limina which condition set a real source entry
-should use when resolving imports. Limina maps the source tsconfig through the
-generated manifest, expands the generated declaration references, and checks
-that every reachable generated declaration project uses the configured
-`compilerOptions.customConditions`.
+should use when resolving imports. Limina finds the declaration build graph for
+that entry, expands its references, and checks that every reachable project uses
+the configured `compilerOptions.customConditions`.
 
 ```js
 import { defineConfig } from 'limina';
@@ -56,9 +55,9 @@ Limina only compares the expected condition set with the actual project graph.
 checker. Generated `.limina/tsconfig/checkers/.../*.dts.json` paths are accepted
 as compatibility input, but source paths are preferred. Build aggregators such
 as `tsconfig.build.json` are not valid entries because a condition domain
-describes a concrete generated declaration reference tree.
+describes one concrete declaration reference tree.
 
-Limina also runs a default check without explicit domains: for every governed
+Limina also runs a default check without explicit domains: for every checked
 declaration project, that project and all declaration projects reachable through
 its references must share the same effective `customConditions`. Explicit
 `conditionDomains` let you also write down the condition set expected by a real

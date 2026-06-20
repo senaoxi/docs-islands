@@ -127,7 +127,9 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const result = await prepareGeneratedTsconfigGraph({
         ...fixture.config,
         config: {
-          checkers: 'auto',
+          checkers: {
+            mode: 'auto',
+          },
         },
       });
 
@@ -181,7 +183,9 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const result = await prepareGeneratedTsconfigGraph({
         ...fixture.config,
         config: {
-          checkers: 'auto',
+          checkers: {
+            mode: 'auto',
+          },
         },
       });
 
@@ -253,7 +257,9 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const result = await prepareGeneratedTsconfigGraph({
         ...fixture.config,
         config: {
-          checkers: 'auto',
+          checkers: {
+            mode: 'auto',
+          },
         },
       });
 
@@ -306,7 +312,9 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const result = await prepareGeneratedTsconfigGraph({
         ...fixture.config,
         config: {
-          checkers: 'auto',
+          checkers: {
+            mode: 'auto',
+          },
         },
       });
 
@@ -355,7 +363,9 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const result = await prepareGeneratedTsconfigGraph({
         ...fixture.config,
         config: {
-          checkers: 'auto',
+          checkers: {
+            mode: 'auto',
+          },
         },
       });
 
@@ -370,6 +380,213 @@ describe('prepareGeneratedTsconfigGraph', () => {
         'packages/app/tsconfig.lib.json':
           '.limina/tsconfig/checkers/vue/projects/packages/app/tsconfig.lib.dts.json',
       });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('respects auto checker exclude for discovered entries', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/index.ts': 'export const value = 1;\n',
+      'packages/app/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/playground/src/index.ts': 'export const value = 1;\n',
+      'packages/playground/tsconfig.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: {
+            exclude: ['packages/playground/tsconfig.json'],
+            mode: 'auto',
+          },
+        },
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          exclude: ['packages/playground/tsconfig.json'],
+          include: ['packages/app/tsconfig.json'],
+          name: 'typescript',
+          preset: 'tsc',
+        },
+      ]);
+      expect(result.manifest.checkers.typescript?.sourceToDts).toEqual({
+        'packages/app/tsconfig.json':
+          '.limina/tsconfig/checkers/typescript/projects/packages/app/tsconfig.dts.json',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('respects auto checker exclude when expanding solution references', async () => {
+    const fixture = await createFixture({
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/test/index.ts': 'export const testValue = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+          {
+            path: './tsconfig.test.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/pkg/tsconfig.test.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['test/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: {
+            exclude: ['packages/pkg/tsconfig.test.json'],
+            mode: 'auto',
+          },
+        },
+      });
+
+      expect(result.manifest.checkers.typescript?.roots).toEqual([
+        'packages/pkg/tsconfig.lib.json',
+      ]);
+      expect(result.manifest.checkers.typescript?.sourceToDts).toEqual({
+        'packages/pkg/tsconfig.lib.json':
+          '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('drops auto scopes when all referenced leaves are excluded', async () => {
+    const fixture = await createFixture({
+      'packages/pkg/test/index.ts': 'export const testValue = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.test.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.test.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['test/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: {
+            exclude: ['packages/pkg/tsconfig.test.json'],
+            mode: 'auto',
+          },
+        },
+      });
+
+      expect(result.checkers).toEqual([]);
+      expect(result.manifest.checkers).toEqual({});
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not exclude test configs in auto mode by default', async () => {
+    const fixture = await createFixture({
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/test/index.ts': 'export const testValue = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+          {
+            path: './tsconfig.test.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/pkg/tsconfig.test.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['test/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {},
+      });
+
+      expect(result.manifest.checkers.typescript?.roots).toEqual([
+        'packages/pkg/tsconfig.lib.json',
+        'packages/pkg/tsconfig.test.json',
+      ]);
     } finally {
       await fixture.cleanup();
     }
@@ -396,7 +613,9 @@ describe('prepareGeneratedTsconfigGraph', () => {
         prepareGeneratedTsconfigGraph({
           ...fixture.config,
           config: {
-            checkers: 'auto',
+            checkers: {
+              mode: 'auto',
+            },
           },
         }),
       ).rejects.toThrow('Unsupported auto checker source file extension');

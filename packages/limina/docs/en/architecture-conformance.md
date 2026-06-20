@@ -75,7 +75,7 @@ For a source entry:
 import { createClient } from '@acme/core';
 ```
 
-If TypeScript resolves that entry to `packages/core/src/index.ts`, and that file is owned by `packages/core/tsconfig.lib.json`, Limina's generated app declaration leaf must reference the generated core declaration leaf:
+If TypeScript resolves that entry to `packages/core/src/index.ts`, and that file is owned by `packages/core/tsconfig.lib.json`, Limina's generated app declaration build config must reference the generated core config:
 
 ```jsonc
 // .limina/tsconfig/checkers/typescript/projects/packages/app/tsconfig.lib.dts.json
@@ -323,7 +323,7 @@ src/
   tools/
 ```
 
-so that each declaration leaf has a more natural boundary.
+so that each generated declaration build config has a more natural boundary.
 
 ## Putting It Together
 
@@ -363,9 +363,9 @@ For example:
 | workspace export cannot be resolved by TypeScript/Oxc       | Public package contract is not resolvable in the active checker/runtime profiles |
 | Declared package import resolves to source but no reference | Source entry is consumed without the matching TS project edge                    |
 | Import resolves to `dist`                                   | Artifact entry is consumed and should appear in graph export                     |
-| Cross-package relative import                               | Bypasses package exports and the package owner boundary                          |
+| Cross-package relative import                               | Bypasses package exports and the nearest package scope boundary                  |
 | Project reference crosses packages without a declaration    | TS graph declares a source dependency, but package graph does not                |
-| Generated declaration leaf has no source config             | Declaration emit has no checked source proof                                     |
+| Generated declaration config has no source config           | Declaration emit has no checked source proof                                     |
 | Source file is not covered by any checker                   | Green CI does not mean the file was checked                                      |
 | Browser runtime imports `node:fs`                           | Runtime boundary is violated                                                     |
 | dist manifest has broken exports/types                      | Source is healthy, but published artifact is unhealthy                           |

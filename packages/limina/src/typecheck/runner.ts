@@ -65,9 +65,16 @@ export interface CheckerFailureTarget {
   message?: string;
 }
 
+export type CheckerFailureKind =
+  | 'peer-dependency'
+  | 'process'
+  | 'target-selection';
+
 export interface RunCheckerBuildResult {
   failedTargets: CheckerFailureTarget[];
+  failureKind?: CheckerFailureKind;
   passed: boolean;
+  problems?: string[];
   projectRootDir: string;
   rootConfigPaths: string[];
 }
@@ -91,7 +98,9 @@ export interface RunBuildOptions {
 
 export interface RunBuildResult {
   failedTargets: CheckerFailureTarget[];
+  failureKind?: CheckerFailureKind;
   passed: boolean;
+  problems?: string[];
   projectRootDir: string;
   rootConfigPaths: string[];
   sourceConfigPath: string | null;
@@ -113,7 +122,9 @@ export interface RunCheckerTypecheckOptions {
 
 export interface RunCheckerTypecheckResult {
   failedTargets: CheckerFailureTarget[];
+  failureKind?: CheckerFailureKind;
   passed: boolean;
+  problems?: string[];
   projectRootDir: string;
   rootConfigPaths: string[];
 }
@@ -200,6 +211,7 @@ export async function runCheckerBuildImpl(
   const rootConfigPaths: string[] = [];
   const problems = collectCheckerPeerDependencyProblems({
     checkers: allCheckers,
+    imports: options.config.config?.imports,
     projectRootDir,
     resolvePackage: options.checkerPackageResolver,
   });
@@ -219,7 +231,9 @@ export async function runCheckerBuildImpl(
 
     return {
       failedTargets: [],
+      failureKind: 'peer-dependency',
       passed: false,
+      problems,
       projectRootDir,
       rootConfigPaths,
     };
@@ -1004,6 +1018,7 @@ export async function runBuildImpl(
     });
     const problems = collectCheckerPeerDependencyProblems({
       checkers: [checker],
+      imports: options.config.config?.imports,
       projectRootDir,
       resolvePackage: options.checkerPackageResolver,
     });
@@ -1023,7 +1038,9 @@ export async function runBuildImpl(
 
       return {
         failedTargets: [],
+        failureKind: 'peer-dependency',
         passed: false,
+        problems,
         projectRootDir,
         rootConfigPaths,
         sourceConfigPath: null,
@@ -1124,20 +1141,22 @@ export async function runBuildImpl(
   }
 
   if (resolvedTarget.checkerTargets.length === 0) {
+    const selectionProblem = resolvedTarget.selectedChecker
+      ? formatManagedBuildCheckerSelectionProblem({
+          availableCheckers: resolvedTarget.availableCheckers,
+          projectRootDir,
+          selectedChecker: resolvedTarget.selectedChecker,
+          sourceConfigPath: resolvedTarget.sourceConfigPath,
+        })
+      : formatTypecheckOnlyBuildProblem({
+          checkers: resolvedTarget.matchingCheckers,
+          projectRootDir,
+          sourceConfigPath: resolvedTarget.sourceConfigPath,
+        });
+
     TypecheckLogger.error(
       formatCheckIssueSummaryReport({
-        details: resolvedTarget.selectedChecker
-          ? formatManagedBuildCheckerSelectionProblem({
-              availableCheckers: resolvedTarget.availableCheckers,
-              projectRootDir,
-              selectedChecker: resolvedTarget.selectedChecker,
-              sourceConfigPath: resolvedTarget.sourceConfigPath,
-            })
-          : formatTypecheckOnlyBuildProblem({
-              checkers: resolvedTarget.matchingCheckers,
-              projectRootDir,
-              sourceConfigPath: resolvedTarget.sourceConfigPath,
-            }),
+        details: selectionProblem,
         issueCount: 1,
         pluralIssueLabel: 'build selection issues',
         singularIssueLabel: 'build selection issue',
@@ -1147,7 +1166,9 @@ export async function runBuildImpl(
 
     return {
       failedTargets: [],
+      failureKind: 'target-selection',
       passed: false,
+      problems: [selectionProblem],
       projectRootDir,
       rootConfigPaths,
       sourceConfigPath: resolvedTarget.sourceConfigPath,
@@ -1162,6 +1183,7 @@ export async function runBuildImpl(
 
   const problems = collectCheckerPeerDependencyProblems({
     checkers: buildTargetDescriptors.map(({ checker }) => checker),
+    imports: options.config.config?.imports,
     projectRootDir,
     resolvePackage: options.checkerPackageResolver,
   });
@@ -1341,6 +1363,7 @@ export async function runCheckerTypecheckImpl(
 
   const problems = collectCheckerPeerDependencyProblems({
     checkers,
+    imports: options.config.config?.imports,
     projectRootDir,
     resolvePackage: options.checkerPackageResolver,
   });
@@ -1360,7 +1383,9 @@ export async function runCheckerTypecheckImpl(
 
     return {
       failedTargets: [],
+      failureKind: 'peer-dependency',
       passed: false,
+      problems,
       projectRootDir,
       rootConfigPaths,
     };

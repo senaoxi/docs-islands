@@ -3,9 +3,8 @@ import { normalizeAbsolutePath } from '#utils/path';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'pathe';
-import { glob } from 'tinyglobby';
 
-const pnpmWorkspaceListTimeoutMs = 3000;
+const pnpmWorkspaceListTimeoutMs = 120_000;
 
 export interface PackageManifest {
   bin?: Record<string, string> | string;
@@ -351,35 +350,15 @@ export async function collectWorkspacePackages(
 export async function collectPackageOwners(
   config: ResolvedLiminaConfig,
 ): Promise<PackageOwner[]> {
-  const packageJsonPaths = await glob(['package.json', '**/package.json'], {
-    cwd: config.rootDir,
-    absolute: false,
-    ignore: [
-      '**/.git/**',
-      '**/.pnpm-store/**',
-      '**/.tsbuild/**',
-      '**/coverage/**',
-      '**/dist/**',
-      '**/node_modules/**',
-    ],
-  });
-
-  return [...new Set(packageJsonPaths)]
-    .sort()
-    .map((packageJsonPath) => {
-      const absolutePackageJsonPath = normalizeAbsolutePath(
-        path.join(config.rootDir, packageJsonPath),
-      );
-      const manifest = readJsonFile<PackageManifest>(absolutePackageJsonPath);
-      const name = getManifestPackageName(manifest);
-
-      return {
-        directory: normalizeAbsolutePath(path.dirname(absolutePackageJsonPath)),
-        manifest,
-        ...(name ? { name } : {}),
-        packageJsonPath: absolutePackageJsonPath,
-      };
-    })
+  return (await collectWorkspacePackages(config))
+    .map((workspacePackage) => ({
+      directory: workspacePackage.directory,
+      manifest: workspacePackage.manifest,
+      ...(workspacePackage.name ? { name: workspacePackage.name } : {}),
+      packageJsonPath: normalizeAbsolutePath(
+        path.join(workspacePackage.directory, 'package.json'),
+      ),
+    }))
     .sort((left, right) => right.directory.length - left.directory.length);
 }
 

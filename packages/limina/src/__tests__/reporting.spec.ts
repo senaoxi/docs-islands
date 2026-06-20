@@ -126,9 +126,9 @@ describe('check reporting', () => {
 
     expect(report).toContain('│ Found 1 check issue.');
     expect(report).toContain('│ details:');
-    expect(report).toContain('│     Checker entry is not reachable:');
+    expect(report).toContain('Checker entry is not reachable:');
     expect(report).toContain(
-      '│       reason: checker.include must reach source configs.',
+      'reason: checker.include must reach source configs.',
     );
     expect(report).not.toContain('Show all details');
   });

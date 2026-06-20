@@ -2,11 +2,21 @@ import { normalizeSlashes, toRelativePath } from '#utils/path';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'pathe';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
+import { formatCheckIssueHumanReport } from '../check-reporting/human';
+import { createLiminaCheckIssue } from '../check-reporting/structured';
 import { generatedRootDirName } from '../core/build-graph/generated/paths';
-import type { SourceCheckIssue, SourceIssueCode } from './report';
+import type {
+  SourceCheckIssue,
+  SourceIssueCode,
+  SourceUnusedModuleIssue,
+  SourceUnusedWorkspaceDependencyIssue,
+} from './report';
 
 export const SOURCE_ISSUE_SNAPSHOT_VERSION = 1;
-export const CHECK_ISSUE_SNAPSHOT_VERSION = 1;
+export const CHECK_ISSUE_SNAPSHOT_VERSION = 2;
+
+const SUPPORTED_CHECK_ISSUE_SNAPSHOT_VERSIONS = new Set([1, 2]);
 
 export type LiminaCheckTaskName =
   | 'checker:build'
@@ -21,20 +31,53 @@ export type LiminaCheckTaskName =
 
 export type SourceIssueSnapshotStatus = 'completed' | 'not-run';
 export type CheckIssueSnapshotStatus = 'completed' | 'not-run';
+export type LiminaCheckIssueSeverity = 'error' | 'info' | 'warning';
+
+export interface LiminaCheckIssueLocation {
+  column?: number;
+  filePath?: string;
+  label?: string;
+  line?: number;
+  packageManifestPath?: string;
+  scope?: string;
+}
+
+export interface LiminaCheckIssueEvidence {
+  label?: string;
+  lines?: string[];
+  value?: string;
+}
+
+export interface LiminaCheckIssueExternal {
+  code?: string;
+  message?: string;
+  tool?: string;
+  url?: string;
+}
 
 export interface LiminaCheckIssue {
   checkerName?: string;
   code: string;
+  detector?: string;
   detailLines?: string[];
+  domain?: string;
+  evidence?: LiminaCheckIssueEvidence[];
+  external?: LiminaCheckIssueExternal;
   filePath?: string;
   fix?: string;
+  fixSteps?: string[];
+  id?: string;
+  locations?: LiminaCheckIssueLocation[];
   packageManifestPath?: string;
   packageName?: string;
   reason: string;
   scope?: string;
+  severity?: LiminaCheckIssueSeverity;
+  summary?: string;
   task: LiminaCheckTaskName;
   title: string;
   tool?: string;
+  verifyCommands?: string[];
 }
 
 export interface CheckIssueSnapshot {
@@ -42,7 +85,7 @@ export interface CheckIssueSnapshot {
   createdAt: string;
   issues: LiminaCheckIssue[];
   status: CheckIssueSnapshotStatus;
-  version: typeof CHECK_ISSUE_SNAPSHOT_VERSION;
+  version: 1 | typeof CHECK_ISSUE_SNAPSHOT_VERSION;
 }
 
 export interface CheckIssueInventoryFilters {
@@ -53,6 +96,17 @@ export interface CheckIssueInventoryFilters {
   scopes?: readonly string[];
   tasks?: readonly string[];
   tools?: readonly string[];
+}
+
+export type CheckIssueInventoryFormat = 'human' | 'json' | 'ndjson';
+
+export interface CheckIssueInventoryOptions {
+  details?: boolean;
+  filters?: CheckIssueInventoryFilters;
+  fixes?: boolean;
+  format?: CheckIssueInventoryFormat;
+  rootDir?: string;
+  snapshot: CheckIssueSnapshot | null;
 }
 
 export interface SourceIssueSnapshotIssue {
@@ -86,6 +140,56 @@ function isCheckIssueSnapshotStatus(
   return value === 'completed' || value === 'not-run';
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((line) => typeof line === 'string')
+  );
+}
+
+function isLiminaCheckIssueSeverity(
+  value: unknown,
+): value is LiminaCheckIssueSeverity {
+  return value === 'error' || value === 'warning' || value === 'info';
+}
+
+function isLiminaCheckIssueLocation(
+  value: unknown,
+): value is LiminaCheckIssueLocation {
+  return (
+    isPlainRecord(value) &&
+    (value.label === undefined || typeof value.label === 'string') &&
+    (value.filePath === undefined || typeof value.filePath === 'string') &&
+    (value.packageManifestPath === undefined ||
+      typeof value.packageManifestPath === 'string') &&
+    (value.scope === undefined || typeof value.scope === 'string') &&
+    (value.line === undefined || typeof value.line === 'number') &&
+    (value.column === undefined || typeof value.column === 'number')
+  );
+}
+
+function isLiminaCheckIssueEvidence(
+  value: unknown,
+): value is LiminaCheckIssueEvidence {
+  return (
+    isPlainRecord(value) &&
+    (value.label === undefined || typeof value.label === 'string') &&
+    (value.value === undefined || typeof value.value === 'string') &&
+    (value.lines === undefined || isStringArray(value.lines))
+  );
+}
+
+function isLiminaCheckIssueExternal(
+  value: unknown,
+): value is LiminaCheckIssueExternal {
+  return (
+    isPlainRecord(value) &&
+    (value.tool === undefined || typeof value.tool === 'string') &&
+    (value.code === undefined || typeof value.code === 'string') &&
+    (value.message === undefined || typeof value.message === 'string') &&
+    (value.url === undefined || typeof value.url === 'string')
+  );
+}
+
 function isSourceIssueSnapshotIssue(
   value: unknown,
 ): value is SourceIssueSnapshotIssue {
@@ -95,6 +199,20 @@ function isSourceIssueSnapshotIssue(
     typeof value.ownerName === 'string' &&
     (value.filePath === undefined || typeof value.filePath === 'string')
   );
+}
+
+function isSourceUnusedWorkspaceDependencyIssue(
+  issue: SourceCheckIssue,
+): issue is SourceUnusedWorkspaceDependencyIssue {
+  return (
+    issue.code === LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency
+  );
+}
+
+function isSourceUnusedModuleIssue(
+  issue: SourceCheckIssue,
+): issue is SourceUnusedModuleIssue {
+  return issue.code === LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule;
 }
 
 function isSourceIssueSnapshot(value: unknown): value is SourceIssueSnapshot {
@@ -110,16 +228,45 @@ function isSourceIssueSnapshot(value: unknown): value is SourceIssueSnapshot {
   );
 }
 
-function isLiminaCheckIssue(value: unknown): value is LiminaCheckIssue {
+function hasLiminaCheckIssueBaseFields(
+  value: Record<string, unknown>,
+): boolean {
   return (
-    isPlainRecord(value) &&
     typeof value.task === 'string' &&
     typeof value.code === 'string' &&
     typeof value.title === 'string' &&
-    typeof value.reason === 'string' &&
-    (value.detailLines === undefined ||
-      (Array.isArray(value.detailLines) &&
-        value.detailLines.every((line) => typeof line === 'string'))) &&
+    typeof value.reason === 'string'
+  );
+}
+
+function hasLiminaCheckIssueStructuredFields(
+  value: Record<string, unknown>,
+): boolean {
+  return (
+    (value.id === undefined || typeof value.id === 'string') &&
+    (value.domain === undefined || typeof value.domain === 'string') &&
+    (value.detector === undefined || typeof value.detector === 'string') &&
+    (value.severity === undefined ||
+      isLiminaCheckIssueSeverity(value.severity)) &&
+    (value.summary === undefined || typeof value.summary === 'string') &&
+    (value.fixSteps === undefined || isStringArray(value.fixSteps)) &&
+    (value.verifyCommands === undefined ||
+      isStringArray(value.verifyCommands)) &&
+    (value.locations === undefined ||
+      (Array.isArray(value.locations) &&
+        value.locations.every(isLiminaCheckIssueLocation))) &&
+    (value.evidence === undefined ||
+      (Array.isArray(value.evidence) &&
+        value.evidence.every(isLiminaCheckIssueEvidence))) &&
+    (value.external === undefined || isLiminaCheckIssueExternal(value.external))
+  );
+}
+
+function hasLiminaCheckIssueLegacyFields(
+  value: Record<string, unknown>,
+): boolean {
+  return (
+    (value.detailLines === undefined || isStringArray(value.detailLines)) &&
     (value.fix === undefined || typeof value.fix === 'string') &&
     (value.packageManifestPath === undefined ||
       typeof value.packageManifestPath === 'string') &&
@@ -133,10 +280,20 @@ function isLiminaCheckIssue(value: unknown): value is LiminaCheckIssue {
   );
 }
 
+function isLiminaCheckIssue(value: unknown): value is LiminaCheckIssue {
+  return (
+    isPlainRecord(value) &&
+    hasLiminaCheckIssueBaseFields(value) &&
+    hasLiminaCheckIssueStructuredFields(value) &&
+    hasLiminaCheckIssueLegacyFields(value)
+  );
+}
+
 function isCheckIssueSnapshot(value: unknown): value is CheckIssueSnapshot {
   return (
     isPlainRecord(value) &&
-    value.version === CHECK_ISSUE_SNAPSHOT_VERSION &&
+    typeof value.version === 'number' &&
+    SUPPORTED_CHECK_ISSUE_SNAPSHOT_VERSIONS.has(value.version) &&
     typeof value.command === 'string' &&
     typeof value.createdAt === 'string' &&
     isCheckIssueSnapshotStatus(value.status) &&
@@ -184,45 +341,67 @@ function normalizeFilePath(rootDir: string, filePath: string): string {
   );
 }
 
-function getIssueScope(
-  issue: Pick<LiminaCheckIssue, 'filePath' | 'scope'>,
-): string | undefined {
+function getIssueScope(issue: LiminaCheckIssue): string | undefined {
   if (issue.scope) {
     return issue.scope;
   }
 
-  if (!issue.filePath) {
+  const filePath =
+    issue.filePath ??
+    issue.locations?.find((location) => location.filePath)?.filePath ??
+    issue.packageManifestPath ??
+    issue.locations?.find((location) => location.packageManifestPath)
+      ?.packageManifestPath;
+
+  if (!filePath) {
     return undefined;
   }
 
-  const directory = path.posix.dirname(issue.filePath);
+  const directory = path.posix.dirname(filePath);
 
   return directory === '.' ? '.' : directory;
 }
 
 function issueMatchesScope(issue: LiminaCheckIssue, scope: string): boolean {
   const issueScope = getIssueScope(issue);
+  const filePaths = getIssueFilePaths(issue);
 
   return Boolean(
     issueScope &&
       (issueScope === scope ||
         issueScope.startsWith(`${scope}/`) ||
-        issue.filePath === scope ||
-        issue.filePath?.startsWith(`${scope}/`)),
+        filePaths.some(
+          (filePath) => filePath === scope || filePath.startsWith(`${scope}/`),
+        )),
   );
+}
+
+function getIssueFilePaths(issue: LiminaCheckIssue): string[] {
+  return [
+    issue.filePath,
+    issue.packageManifestPath,
+    ...(issue.locations ?? []).flatMap((location) => [
+      location.filePath,
+      location.packageManifestPath,
+    ]),
+  ].filter((value): value is string => Boolean(value));
 }
 
 function issueMatchesFilters(
   issue: LiminaCheckIssue,
   filters: CheckIssueInventoryFilters,
+  rootDir?: string,
 ): boolean {
   const tasks = normalizeFilterValues(filters.tasks);
   const packages = normalizeFilterValues(filters.packageNames);
   const rules = normalizeFilterValues(filters.rules);
-  const files = normalizeFilterValues(filters.files);
+  const files = normalizeFilterValues(filters.files).map((filePath) =>
+    rootDir ? normalizeFilePath(rootDir, filePath) : normalizeSlashes(filePath),
+  );
   const scopes = normalizeFilterValues(filters.scopes);
   const checkers = normalizeFilterValues(filters.checkerNames);
   const tools = normalizeFilterValues(filters.tools);
+  const issueFiles = getIssueFilePaths(issue);
 
   return (
     (tasks.length === 0 || tasks.includes(issue.task)) &&
@@ -230,12 +409,14 @@ function issueMatchesFilters(
       (issue.packageName ? packages.includes(issue.packageName) : false)) &&
     (rules.length === 0 || rules.includes(issue.code)) &&
     (files.length === 0 ||
-      (issue.filePath ? files.includes(issue.filePath) : false)) &&
+      issueFiles.some((filePath) => files.includes(filePath))) &&
     (scopes.length === 0 ||
       scopes.some((scope) => issueMatchesScope(issue, scope))) &&
     (checkers.length === 0 ||
       (issue.checkerName ? checkers.includes(issue.checkerName) : false)) &&
-    (tools.length === 0 || (issue.tool ? tools.includes(issue.tool) : false))
+    (tools.length === 0 ||
+      (issue.tool ? tools.includes(issue.tool) : false) ||
+      (issue.external?.tool ? tools.includes(issue.external.tool) : false))
   );
 }
 
@@ -310,7 +491,7 @@ function toSnapshotIssue(
 ): SourceIssueSnapshotIssue {
   return {
     code: issue.code,
-    ...('filePath' in issue
+    ...('filePath' in issue && issue.filePath
       ? {
           filePath: normalizeSlashes(toRelativePath(rootDir, issue.filePath)),
         }
@@ -520,67 +701,111 @@ export async function readCheckIssueSnapshot(
 export function createTaskFailureIssue(options: {
   checkerName?: string;
   code?: string;
+  detector?: string;
   detailLines?: readonly string[];
+  domain?: string;
+  evidence?: readonly LiminaCheckIssueEvidence[];
+  external?: LiminaCheckIssueExternal;
   filePath?: string;
   fix?: string;
+  fixSteps?: readonly string[];
+  id?: string;
+  locations?: readonly LiminaCheckIssueLocation[];
   packageManifestPath?: string;
   packageName?: string;
   reason?: string;
   rootDir: string;
+  scope?: string;
+  severity?: LiminaCheckIssueSeverity;
+  summary?: string;
   task: LiminaCheckTaskName;
   title?: string;
   tool?: string;
+  verifyCommands?: readonly string[];
 }): LiminaCheckIssue {
-  const filePath = options.filePath
-    ? normalizeFilePath(options.rootDir, options.filePath)
-    : undefined;
-
-  return {
-    checkerName: options.checkerName,
-    code: options.code ?? defaultTaskFailureCode(options.task),
-    detailLines: options.detailLines ? [...options.detailLines] : undefined,
-    filePath,
-    fix: options.fix,
-    packageManifestPath: options.packageManifestPath
-      ? normalizeFilePath(options.rootDir, options.packageManifestPath)
-      : undefined,
-    packageName: options.packageName,
-    reason: options.reason ?? `${options.task} finished with failures.`,
-    scope: filePath ? getIssueScope({ filePath }) : undefined,
-    task: options.task,
-    title: options.title ?? `${options.task} failed`,
-    tool: options.tool,
-  };
+  return createLiminaCheckIssue(options);
 }
 
 export function createSourceCheckIssue(options: {
   issue: SourceCheckIssue;
   rootDir: string;
 }): LiminaCheckIssue {
-  const filePath =
-    'filePath' in options.issue
-      ? normalizeFilePath(options.rootDir, options.issue.filePath)
-      : undefined;
+  if (isSourceUnusedModuleIssue(options.issue)) {
+    return createLiminaCheckIssue({
+      code: options.issue.code,
+      detector: 'knip',
+      domain: 'source',
+      filePath: options.issue.filePath,
+      fixSteps: [
+        'Delete files that are truly unused.',
+        'Make files reachable from package manifest entries, binaries, scripts, or Knip plugin entries.',
+        `Add intentional files to source.knip.workspaces["${options.issue.ownerName}"].ignoreFiles with a reason.`,
+      ],
+      packageManifestPath: options.issue.packageJsonPath,
+      packageName: options.issue.ownerName,
+      reason:
+        'Owner-governed source modules must be reachable from package entries, binaries, scripts, or Knip plugin entries.',
+      rootDir: options.rootDir,
+      summary:
+        'Unused source module is not reachable from package entry points.',
+      task: 'source:check',
+      title: 'Unused source module',
+      tool: 'knip',
+      verifyCommands: ['limina source check'],
+    });
+  }
 
-  return {
+  if (isSourceUnusedWorkspaceDependencyIssue(options.issue)) {
+    return createLiminaCheckIssue({
+      code: options.issue.code,
+      detector: 'knip',
+      domain: 'source',
+      evidence: [
+        {
+          label: 'dependency',
+          value: `${options.issue.dependencyName} (${options.issue.sectionName}: ${options.issue.specifier})`,
+        },
+      ],
+      fixSteps: [
+        'Remove dependencies that are truly unused from the package manifest.',
+        'Make dependencies reachable from package entries, binaries, scripts, or Knip plugin entries.',
+        `Add intentional dependencies to source.knip.workspaces["${options.issue.ownerName}"].ignoreDependencies with dep and reason.`,
+      ],
+      packageManifestPath: options.issue.packageJsonPath,
+      packageName: options.issue.ownerName,
+      reason:
+        'Workspace package dependencies must be reachable from package entries, binaries, scripts, or explicitly ignored when usage is not visible to Knip analysis.',
+      rootDir: options.rootDir,
+      summary:
+        'Workspace package dependency is not visible to source analysis.',
+      task: 'source:check',
+      title: 'Unused workspace dependency',
+      tool: 'knip',
+      verifyCommands: ['limina source check'],
+    });
+  }
+
+  return createLiminaCheckIssue({
     code: options.issue.code,
-    filePath,
+    detector: options.issue.detector,
+    detailLines: options.issue.detailLines,
+    domain: 'source',
+    evidence: options.issue.evidence,
+    filePath: options.issue.filePath,
+    fix: options.issue.fix,
+    fixSteps: options.issue.fixSteps,
+    locations: options.issue.locations,
+    packageManifestPath: options.issue.packageJsonPath,
     packageName: options.issue.ownerName,
-    reason:
-      options.issue.code === 'LIMINA_SOURCE_UNUSED_MODULE'
-        ? 'Owner-governed source modules must be reachable from package entries, binaries, scripts, or Knip plugin entries.'
-        : 'Workspace package dependencies must be reachable from package entries, binaries, scripts, or explicitly ignored when usage is not visible to Knip analysis.',
-    scope: filePath ? getIssueScope({ filePath }) : undefined,
+    reason: options.issue.reason,
+    rootDir: options.rootDir,
+    scope: options.issue.scope,
+    summary: options.issue.summary,
     task: 'source:check',
-    title:
-      options.issue.code === 'LIMINA_SOURCE_UNUSED_MODULE'
-        ? 'Unused source module'
-        : 'Unused workspace dependency',
-  };
-}
-
-function defaultTaskFailureCode(task: LiminaCheckTaskName): string {
-  return `LIMINA_${task.replaceAll(/[:.-]/gu, '_').toUpperCase()}_FAILED`;
+    title: options.issue.title,
+    tool: options.issue.tool,
+    verifyCommands: options.issue.verifyCommands,
+  });
 }
 
 function sourceSnapshotToCheckSnapshot(
@@ -594,34 +819,121 @@ function sourceSnapshotToCheckSnapshot(
         ? normalizeSlashes(issue.filePath)
         : undefined;
 
-      return {
+      return createLiminaCheckIssue({
         code: issue.code,
         filePath,
         packageName: issue.ownerName,
         reason:
-          issue.code === 'LIMINA_SOURCE_UNUSED_MODULE'
+          issue.code === LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule
             ? 'Owner-governed source modules must be reachable from package entries, binaries, scripts, or Knip plugin entries.'
             : 'Workspace package dependencies must be reachable from package entries, binaries, scripts, or explicitly ignored when usage is not visible to Knip analysis.',
-        scope: filePath ? getIssueScope({ filePath }) : undefined,
+        rootDir: '.',
         task: 'source:check',
         title:
-          issue.code === 'LIMINA_SOURCE_UNUSED_MODULE'
+          issue.code === LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule
             ? 'Unused source module'
             : 'Unused workspace dependency',
-      };
+      });
     }),
     status: snapshot.status,
     version: CHECK_ISSUE_SNAPSHOT_VERSION,
   };
 }
 
-export function formatCheckIssueSnapshotInventory(options: {
-  filters?: CheckIssueInventoryFilters;
+function createInventoryPayload(options: {
+  filteredIssues: readonly LiminaCheckIssue[];
+  filters: CheckIssueInventoryFilters;
+  snapshot: CheckIssueSnapshot | null;
+}): Record<string, unknown> {
+  return {
+    command: options.snapshot?.command,
+    createdAt: options.snapshot?.createdAt,
+    filters: options.filters,
+    issueCount: options.filteredIssues.length,
+    issues: options.filteredIssues,
+    status: options.snapshot?.status ?? 'missing',
+    version: options.snapshot?.version,
+  };
+}
+
+function formatJsonInventory(options: {
+  filteredIssues: readonly LiminaCheckIssue[];
+  filters: CheckIssueInventoryFilters;
   snapshot: CheckIssueSnapshot | null;
 }): string {
+  return JSON.stringify(createInventoryPayload(options), null, 2);
+}
+
+function formatNdjsonInventory(issues: readonly LiminaCheckIssue[]): string {
+  return issues.map((issue) => JSON.stringify(issue)).join('\n');
+}
+
+function formatFixLines(issue: LiminaCheckIssue): string[] {
+  const fixes = issue.fixSteps?.length
+    ? issue.fixSteps
+    : issue.fix
+      ? [issue.fix]
+      : [];
+
+  return [
+    `${issue.title}  ${issue.code}`,
+    ...(issue.packageName ? [`package: ${issue.packageName}`] : []),
+    ...(issue.filePath ? [`file: ${issue.filePath}`] : []),
+    ...(issue.packageManifestPath
+      ? [`package manifest: ${issue.packageManifestPath}`]
+      : []),
+    ...(fixes.length > 0
+      ? [
+          '',
+          'fix steps:',
+          ...fixes.map((step, index) => `  ${index + 1}. ${step}`),
+        ]
+      : ['', 'fix steps:', '  (none recorded)']),
+    ...(issue.verifyCommands?.length
+      ? [
+          '',
+          'verify:',
+          ...issue.verifyCommands.map((command) => `  - ${command}`),
+        ]
+      : []),
+  ];
+}
+
+function formatFixInventory(options: {
+  command?: string;
+  issues: readonly LiminaCheckIssue[];
+}): string {
+  return formatCheckIssueHumanReport({
+    command: options.command,
+    issues: options.issues.map((issue) => ({
+      ...issue,
+      detailLines: formatFixLines(issue),
+      summary: issue.summary ?? issue.reason,
+    })),
+    title: 'Check issue fixes',
+    verbose: true,
+  });
+}
+
+export function formatCheckIssueSnapshotInventory(
+  options: CheckIssueInventoryOptions,
+): string {
   const filters = options.filters ?? {};
+  const format = options.format ?? 'human';
 
   if (!options.snapshot) {
+    if (format === 'json') {
+      return formatJsonInventory({
+        filteredIssues: [],
+        filters,
+        snapshot: null,
+      });
+    }
+
+    if (format === 'ndjson') {
+      return '';
+    }
+
     return [
       'No check issue snapshot found.',
       'Run `limina check` first, then run `limina check --issues`.',
@@ -629,6 +941,18 @@ export function formatCheckIssueSnapshotInventory(options: {
   }
 
   if (options.snapshot.status !== 'completed') {
+    if (format === 'json') {
+      return formatJsonInventory({
+        filteredIssues: [],
+        filters,
+        snapshot: options.snapshot,
+      });
+    }
+
+    if (format === 'ndjson') {
+      return '';
+    }
+
     return [
       'No completed check issue snapshot is available from the last run.',
       'Run `limina check` and let it reach a failing or completed task first.',
@@ -636,8 +960,36 @@ export function formatCheckIssueSnapshotInventory(options: {
   }
 
   const filteredIssues = options.snapshot.issues.filter((issue) =>
-    issueMatchesFilters(issue, filters),
+    issueMatchesFilters(issue, filters, options.rootDir),
   );
+
+  if (format === 'json') {
+    return formatJsonInventory({
+      filteredIssues,
+      filters,
+      snapshot: options.snapshot,
+    });
+  }
+
+  if (format === 'ndjson') {
+    return formatNdjsonInventory(filteredIssues);
+  }
+
+  if (options.fixes) {
+    return formatFixInventory({
+      command: options.snapshot.command,
+      issues: filteredIssues,
+    });
+  }
+
+  if (options.details) {
+    return formatCheckIssueHumanReport({
+      command: options.snapshot.command,
+      issues: filteredIssues,
+      title: 'Check issue details',
+      verbose: true,
+    });
+  }
 
   if (filteredIssues.length === 0) {
     const filterActive = hasInventoryFilters(filters);

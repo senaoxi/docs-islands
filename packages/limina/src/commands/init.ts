@@ -124,7 +124,10 @@ function createLiminaConfigContent(): string {
 
 export default defineConfig({
   config: {
-    checkers: 'auto',
+    checkers: {
+      mode: 'auto',
+      exclude: [],
+    },
   },
 });
 `;

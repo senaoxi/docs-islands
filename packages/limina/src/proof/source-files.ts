@@ -4,7 +4,11 @@ import path from 'pathe';
 import { glob } from 'tinyglobby';
 
 import { getCheckerExtensions, normalizeExtensions } from '#checkers';
-import { getActiveCheckers, type ResolvedLiminaConfig } from '#config/runner';
+import {
+  getActiveCheckers,
+  isAutoCheckerConfigMode,
+  type ResolvedLiminaConfig,
+} from '#config/runner';
 import { createExtensionPattern } from '#core/tsconfig/actions';
 import {
   normalizeAbsolutePath,
@@ -74,7 +78,8 @@ function normalizeSourceExcludePattern(pattern: string): string[] {
 function defaultSourceExtensions(config: ResolvedLiminaConfig): string[] {
   const activeCheckers = getActiveCheckers(config);
   const autoCheckerExtensions =
-    config.config?.checkers === undefined || config.config.checkers === 'auto'
+    config.config?.checkers === undefined ||
+    isAutoCheckerConfigMode(config.config.checkers)
       ? getCheckerExtensions(
           {
             include: [],

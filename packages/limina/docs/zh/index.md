@@ -22,17 +22,17 @@ hero:
 features:
   - icon: 🧭
     title: 低摩擦接入增量 build
-    details: limina init 添加 limina:build，从现有 tsconfig 和源码导入生成 TypeScript 项目引用构建图，让用户先获得 tsc -b、tsgo 或 vue-tsc 的增量构建收益。
+    details: limina init 会添加 limina:build，根据现有 tsconfig 和真实导入准备 TypeScript 构建图，让仓库先获得 tsc -b、tsgo 或 vue-tsc 的增量构建收益。
     link: /zh/getting-started
     linkText: 开始 build-first 接入
   - icon: 🕸️
     title: 自动生成类型图
-    details: 为 TypeScript、Vue、Svelte 等检查器生成类型图，让不同技术栈在统一模型下完成构建、检查与诊断。
+    details: 把 TypeScript、Vue、Svelte 等检查器纳入同一张类型关系图，让构建、检查和诊断使用同一组事实。
     link: /zh/config/checkers
     linkText: 配置检查器
   - icon: 🧱
     title: 治理项目引用关系
-    details: 检查缺失引用、非法依赖、跨运行时调用和架构规则违约，确保项目关系符合声明过的边界。
+    details: 根据真实导入检查缺失引用、非法依赖、跨运行时调用和架构规则违约，让项目关系留在声明过的边界内。
     link: /zh/built-in-tasks
     linkText: 查看图检查
   - icon: 🛡️
@@ -42,7 +42,7 @@ features:
     linkText: 查看源码检查
   - icon: 🎯
     title: 确认检查覆盖
-    details: 将源码文件与 TypeScript、Vue、Svelte、test、tools、docs 等检查范围对齐，发现未覆盖、重复覆盖或落入错误项目图的文件。
+    details: 对齐源码文件与 TypeScript、Vue、Svelte、test、tools、docs 等检查范围，找出没人检查、重复检查或归属不清的文件。
     link: /zh/config/checkers
     linkText: 配置覆盖范围
   - icon: 📦

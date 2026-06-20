@@ -34,6 +34,7 @@ import {
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 import type ts from 'typescript';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import {
   type CheckIssueReportOptions,
   formatCheckIssueHumanReport,
@@ -68,6 +69,27 @@ interface CheckerCoverageTarget {
 interface CheckerCoverageTargetCollection {
   problems: string[];
   targets: CheckerCoverageTarget[];
+}
+
+interface ProofProblemIssueHint {
+  code: string;
+  filePath?: string;
+  fix?: string;
+  reason?: string;
+  title?: string;
+}
+
+const proofProblemIssueHints = new Map<string, ProofProblemIssueHint>();
+
+function addProofProblem(
+  problems: string[],
+  lines: readonly string[],
+  hint: ProofProblemIssueHint,
+): void {
+  const problem = lines.join('\n');
+
+  problems.push(problem);
+  proofProblemIssueHints.set(problem, hint);
 }
 
 function getProofProblemTitle(problem: string): string {
@@ -130,18 +152,21 @@ function createProofCheckIssue(options: {
   config: ResolvedLiminaConfig;
   problem: string;
 }): LiminaCheckIssue {
-  const title = getProofProblemTitle(options.problem);
+  const hint = proofProblemIssueHints.get(options.problem);
+  const title = hint?.title ?? getProofProblemTitle(options.problem);
   const filePath =
+    hint?.filePath ??
     getProblemLineValue(options.problem, 'file') ??
     getProblemLineValue(options.problem, 'project') ??
     getProblemLineValue(options.problem, 'config');
 
   return createTaskFailureIssue({
-    code: getProofProblemCode(title),
+    code: hint?.code ?? getProofProblemCode(title),
     detailLines: options.problem.split('\n'),
     filePath,
-    fix: getProblemLineValue(options.problem, 'fix'),
+    fix: hint?.fix ?? getProblemLineValue(options.problem, 'fix'),
     reason:
+      hint?.reason ??
       getProblemLineValue(options.problem, 'reason') ??
       'Proof check found source coverage or checker graph proof violations.',
     rootDir: options.config.rootDir,
@@ -317,22 +342,37 @@ function collectCheckerCoverageTargets(
     const configPath = generatedGraph.checkerEntries.get(checker.name);
 
     if (!configPath) {
-      problems.push(
+      addProofProblem(
+        problems,
         [
           'Checker proof entry is missing a generated tsconfig:',
           `  checker: ${checker.name}`,
-        ].join('\n'),
+        ],
+        {
+          code: LIMINA_CHECK_ISSUE_CODES.proofCheckerCoverageInvalid,
+          reason:
+            'Every active checker needs a generated entry tsconfig before proof can validate coverage.',
+          title: 'Checker proof entry is missing a generated tsconfig',
+        },
       );
       continue;
     }
 
     if (!existsSync(configPath)) {
-      problems.push(
+      addProofProblem(
+        problems,
         [
           'Checker proof entry references a missing tsconfig:',
           `  checker: ${checker.name}`,
           `  config: ${toRelativePath(config.rootDir, configPath)}`,
-        ].join('\n'),
+        ],
+        {
+          code: LIMINA_CHECK_ISSUE_CODES.proofCheckerCoverageInvalid,
+          filePath: configPath,
+          reason:
+            'The generated checker entry referenced by proof no longer exists on disk.',
+          title: 'Checker proof entry references a missing tsconfig',
+        },
       );
       continue;
     }
@@ -1378,7 +1418,8 @@ function addUncoveredSourceProblems(options: {
     return;
   }
 
-  options.problems.push(
+  addProofProblem(
+    options.problems,
     [
       'Source files are not covered by typecheck proof:',
       ...uncoveredFiles
@@ -1391,15 +1432,20 @@ function addUncoveredSourceProblems(options: {
         ? `  ... ${uncoveredFiles.length - 20} more`
         : '',
       '  reason: every file in config.source must be covered by a checker entry or an explicit allowlist entry.',
-    ]
-      .filter(Boolean)
-      .join('\n'),
+    ].filter(Boolean),
+    {
+      code: LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile,
+      fix: 'Add uncovered files to a checker entry, exclude them from config.source, or add explicit proof.allowlist entries with reasons.',
+      reason:
+        'Every file in config.source must be covered by a checker entry or an explicit allowlist entry.',
+      title: 'Source files are not covered by typecheck proof',
+    },
   );
 
   for (const filePath of uncoveredFiles) {
     options.issues.push(
       createTaskFailureIssue({
-        code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
+        code: LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile,
         filePath,
         fix: 'Add the file to a checker entry, exclude it from config.source, or add an explicit proof.allowlist entry with a reason.',
         reason:
@@ -1425,7 +1471,8 @@ function addSourceBoundaryMismatchProblems(options: {
     return;
   }
 
-  options.problems.push(
+  addProofProblem(
+    options.problems,
     [
       'Typecheck proof source boundary does not match tsconfig coverage:',
       ...outsideSourceFiles
@@ -1442,9 +1489,14 @@ function addSourceBoundaryMismatchProblems(options: {
         : '',
       '  reason: config.source and tsconfig*.json coverage describe different module sets.',
       '  fix: include these files in config.source, exclude them from the related tsconfig*.json, or move intentionally unmanaged files out of checker coverage.',
-    ]
-      .filter(Boolean)
-      .join('\n'),
+    ].filter(Boolean),
+    {
+      code: LIMINA_CHECK_ISSUE_CODES.proofSourceBoundaryMismatch,
+      fix: 'Include these files in config.source, exclude them from the related tsconfig*.json, or move intentionally unmanaged files out of checker coverage.',
+      reason:
+        'config.source and tsconfig*.json coverage describe different module sets.',
+      title: 'Typecheck proof source boundary does not match tsconfig coverage',
+    },
   );
 }
 

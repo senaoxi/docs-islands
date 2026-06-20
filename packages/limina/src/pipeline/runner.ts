@@ -5,7 +5,7 @@ import type {
   ResolvedCheckerConfig,
   ResolvedLiminaConfig,
 } from '#config/runner';
-import { getActiveCheckers } from '#config/runner';
+import { getActiveCheckers, isAutoCheckerConfigMode } from '#config/runner';
 import { createLiminaCore, type LiminaCore } from '#core';
 import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import { spawn, spawnSync } from 'node:child_process';
@@ -107,7 +107,8 @@ function reportCheckerCapabilities(
 
 function usesAutoCheckers(config: ResolvedLiminaConfig): boolean {
   return (
-    config.config?.checkers === undefined || config.config.checkers === 'auto'
+    config.config?.checkers === undefined ||
+    isAutoCheckerConfigMode(config.config.checkers)
   );
 }
 
@@ -394,12 +395,22 @@ async function runCommandStep(
               issues: [
                 createTaskFailureIssue({
                   code: 'LIMINA_COMMAND_FAILED',
+                  evidence: [
+                    { label: 'command', value: step.command },
+                    { label: 'exit code', value: String(code ?? 1) },
+                  ],
                   fix: 'Inspect the command output above, then rerun the pipeline.',
+                  fixSteps: [
+                    'Inspect the command output above this issue.',
+                    'Fix the failing task or command configuration.',
+                    `Rerun the pipeline command that includes "${label}".`,
+                  ],
                   reason: `Pipeline command "${label}" exited with code ${code ?? 1}.`,
                   rootDir: config.rootDir,
                   task: 'command',
                   title: 'Pipeline command failed',
                   tool: step.command,
+                  verifyCommands: [step.command],
                 }),
               ],
               rootDir: config.rootDir,
@@ -431,12 +442,22 @@ async function runCommandStep(
       issues: [
         createTaskFailureIssue({
           code: 'LIMINA_COMMAND_FAILED',
+          evidence: [
+            { label: 'command', value: step.command },
+            { label: 'exit code', value: String(result.status ?? 1) },
+          ],
           fix: 'Inspect the command output above, then rerun the pipeline.',
+          fixSteps: [
+            'Inspect the command output above this issue.',
+            'Fix the failing task or command configuration.',
+            `Rerun the pipeline command that includes "${label}".`,
+          ],
           reason: `Pipeline command "${label}" exited with code ${result.status ?? 1}.`,
           rootDir: config.rootDir,
           task: 'command',
           title: 'Pipeline command failed',
           tool: step.command,
+          verifyCommands: [step.command],
         }),
       ],
       rootDir: config.rootDir,

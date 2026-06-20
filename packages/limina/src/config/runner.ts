@@ -111,7 +111,43 @@ export interface CheckerConfig {
   exclude?: string[];
 }
 
-export type CheckerConfigMode = 'auto' | Record<string, CheckerConfig>;
+export interface AutoCheckerConfig {
+  /**
+   * Enables automatic checker discovery from ordinary source tsconfig.json
+   * scopes.
+   */
+  mode: 'auto';
+  /**
+   * Optional source-level tsconfig exclusion patterns used during automatic
+   * checker discovery.
+   */
+  exclude?: string[];
+}
+
+export type CheckerConfigMode =
+  | AutoCheckerConfig
+  | Record<string, CheckerConfig>;
+
+export function isAutoCheckerConfigMode(
+  checkers: CheckerConfigMode | undefined,
+): checkers is AutoCheckerConfig {
+  return Boolean(checkers && checkers.mode === 'auto');
+}
+
+export type VueImportParser = 'compiler-sfc' | 'heuristic';
+
+/**
+ * Source import analysis settings shared by graph, proof, source, and checker
+ * tasks.
+ */
+export interface ImportAnalysisConfig {
+  /**
+   * Parser used to extract imports from Vue SFC script blocks.
+   *
+   * @default 'heuristic'
+   */
+  vue?: VueImportParser;
+}
 
 export interface ResolvedCheckerConfig {
   exclude: string[];
@@ -178,36 +214,6 @@ export interface SourceKnipEntryConfig {
 }
 
 /**
- * Explicit exception for a source module whose upward bare tsconfig.json search
- * cannot identify a unique ordinary typecheck owner.
- */
-export interface SourceTsconfigOwnershipIgnoreEntry {
-  /**
-   * Named package owner from package.json.
-   */
-  owner: string;
-  /**
-   * Workspace-root-relative file or glob patterns inside the owner package.
-   */
-  files: string[];
-  /**
-   * Why these modules may skip upward-tsconfig ownership enforcement.
-   */
-  reason: string;
-}
-
-/**
- * Bare tsconfig ownership search settings.
- */
-export interface SourceTsconfigOwnershipConfig {
-  /**
-   * Package-owned source modules intentionally exempted from upward bare
-   * tsconfig ownership enforcement.
-   */
-  ignore?: SourceTsconfigOwnershipIgnoreEntry[];
-}
-
-/**
  * Package-level Knip source analysis config interpreted by Limina.
  */
 export interface SourceKnipWorkspaceConfig {
@@ -242,6 +248,45 @@ export interface SourceKnipCheckConfig {
 }
 
 /**
+ * Explicit bare-import authorization for source files that intentionally import
+ * packages not declared by the owning source package manifest.
+ */
+export interface SourceImportAuthorityAllowRule {
+  /**
+   * Workspace-root-relative source file globs where this authorization applies.
+   */
+  files: string[];
+  /**
+   * Package names or package-name globs authorized by this rule.
+   */
+  packages?: string[];
+  /**
+   * Full import specifiers or specifier globs authorized by this rule.
+   */
+  specifiers?: string[];
+  /**
+   * Optional source owner identity. Named owners use their package name;
+   * nameless owners use their workspace-root-relative package directory.
+   */
+  owner?: string;
+  /**
+   * Why this import is legitimate even though it is not declared by the owner
+   * manifest or an allowed root devDependency fallback.
+   */
+  reason: string;
+}
+
+/**
+ * Bare package import authority settings interpreted by source checks.
+ */
+export interface SourceImportAuthorityConfig {
+  /**
+   * Explicitly authorized bare imports.
+   */
+  allow?: SourceImportAuthorityAllowRule[];
+}
+
+/**
  * Source-owned dependency usage check settings.
  */
 export interface SourceCheckConfig {
@@ -256,10 +301,9 @@ export interface SourceCheckConfig {
    */
   knip?: boolean | SourceKnipCheckConfig;
   /**
-   * Exceptions for source modules whose upward bare tsconfig.json search cannot
-   * resolve a unique ordinary typecheck owner.
+   * Bare package import authorization rules.
    */
-  tsconfigOwnership?: SourceTsconfigOwnershipConfig;
+  importAuthority?: SourceImportAuthorityConfig;
 }
 
 /**
@@ -304,6 +348,10 @@ export interface SharedLiminaConfig {
    * Checker capabilities shared by graph, proof, and tsc tasks.
    */
   checkers?: CheckerConfigMode;
+  /**
+   * Source import analysis behavior shared by graph, proof, and source checks.
+   */
+  imports?: ImportAnalysisConfig;
   /**
    * Global source file boundary used by proof checks.
    */

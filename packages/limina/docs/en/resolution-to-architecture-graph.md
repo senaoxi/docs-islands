@@ -40,7 +40,7 @@ packages/core/src/index.ts
   -> which package owns it?
   -> which source type config owns it?
   -> is it governed by another project?
-  -> should it map to a type-output module?
+  -> should it map to a declaration build config?
   -> should it generate a reference?
   -> does it violate graph rules?
 ```
@@ -60,7 +60,7 @@ import specifier -> resolved file
 Limina handles the later steps:
 
 ```text
-resolved file -> owning source type config -> type-output module
+resolved file -> owning source type config -> declaration build config
 ```
 
 The full chain is:
@@ -69,16 +69,16 @@ The full chain is:
 import specifier
   -> resolved file
   -> owning source type config
-  -> type-output module
+  -> declaration build config
 ```
 
 Accuracy comes from Limina's project model:
 
 1. Users declare source type config entries.
 2. Limina resolves the file set governed by each entry.
-3. Each governed source file can belong to a source type config.
-4. Each source type config has a matching type-output module.
-5. Cross-project source imports can map to references between type-output modules.
+3. Each checked source file can belong to a source type config.
+4. Each source type config has a matching declaration build config.
+5. Cross-project source imports can map to references between declaration build configs.
 
 In this model, the resolver only needs to solve "import to file".
 
@@ -134,7 +134,7 @@ It is:
 
 ```text
 resolves
-  -> determine package ownership
+  -> determine source owner
   -> determine source or artifact ownership
   -> apply graph rules, package boundaries, runtime boundaries, and graph-export semantics
   -> pass or fail
@@ -205,9 +205,9 @@ The full flow is:
 source import
   -> static import record
   -> resolver target
-  -> package ownership
+  -> source owner
   -> source or artifact ownership
-  -> type-output module or exported artifact edge
+  -> declaration build config or exported artifact edge
   -> graph rules, package boundaries, and runtime boundaries
   -> generated graph or diagnostic
 ```
@@ -230,7 +230,7 @@ The same successful resolution can produce different architecture meanings:
 
 | Resolution result              | Limina meaning                        |
 | ------------------------------ | ------------------------------------- |
-| Another governed source file   | May generate `references`             |
+| Another checked source file    | May generate `references`             |
 | Another package's built output | May become an exported artifact edge  |
 | External package entry         | Check dependency declaration          |
 | Current package internal file  | Check it stays inside the package     |
@@ -297,9 +297,9 @@ import specifier -> file
 Limina owns:
 
 ```text
-file -> package ownership
+file -> source owner
 file -> source type config ownership
-source type config -> type-output module
+source type config -> declaration build config
 import relationship -> references / artifact edge / package dependency / boundary diagnostic
 ```
 
@@ -320,7 +320,7 @@ Limina continues with:
 ```text
 which package owns this file?
 which source type config owns this file?
-which type-output module matches that source type config?
+which declaration build config matches that source type config?
 should this relationship generate references, an artifact edge, a package dependency check, or a boundary error?
 ```
 

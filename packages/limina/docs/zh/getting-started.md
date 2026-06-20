@@ -21,7 +21,7 @@ pnpm add -D limina typescript
 
 ## 选择接入方式
 
-如果你的工作区还没有 Limina 配置，优先使用 `limina init`。它会写入 auto-first 的 `limina.config.mjs`，添加根脚本，确保 `.limina/` 被忽略，并可以为当前项目安装可选的 Limina agent skill。
+如果你的工作区还没有 Limina 配置，优先使用 `limina init`。它会写入使用 auto 模式的 `limina.config.mjs`，添加根脚本，确保 `.limina/` 被忽略，并可以为当前项目安装可选的 Limina agent skill。
 
 如果你的仓库已经有清晰的 tsconfig 约定，直接写最小 `limina.config.mjs` 更快。很多工作区只需要自动发现 checker；需要显式控制 checker 路由时，再看[检查器入口](./config/checkers.md)。
 
@@ -80,10 +80,14 @@ import { defineConfig } from 'limina';
 
 export default defineConfig({
   config: {
-    checkers: 'auto',
+    checkers: {
+      mode: 'auto',
+    },
   },
 });
 ```
+
+这里把 `mode: 'auto'` 明确写出来，是为了让配置一眼能看出 Limina 会做什么：自动寻找源码用的 `tsconfig.json`，再按文件内容交给 `tsc` 或 `vue-tsc`。如果某些 `tsconfig.json` 暂时不想交给 Limina，可以写到 `exclude` 里；`limina init` 生成的配置会先放一个空数组，方便你直接补路径。
 
 添加根脚本：
 
@@ -101,7 +105,7 @@ export default defineConfig({
 pnpm limina:build
 ```
 
-这个 build-first 入口会先准备 Limina 生成的 checker graph，然后运行支持构建模式的检查器入口。等你准备接入完整治理流程时，再运行 `pnpm exec limina check`。默认检查流水线会依次运行：
+这个 build-first 入口会先准备 Limina 管理的检查器图，再运行支持构建模式的检查器。等这条 build 路径稳定后，再运行 `pnpm exec limina check` 接入完整检查流程。默认流水线会依次运行：
 
 1. `graph:check`（会先 prepare 生成图）
 2. `source:check`
@@ -113,9 +117,9 @@ pnpm limina:build
 
 - `graph:check` 失败，多半是导入、生成项目引用、包依赖声明或标签规则没有对齐；
 - `source:check` 失败，多半是文件归属、跨包相对导入、依赖声明或 `#imports` 有问题；
-- `proof:check` 失败，多半是检查器 include、生成声明覆盖或允许清单没有覆盖到源码；
-- `checker:build` 失败，说明 `tsc`、`tsgo` 或 `vue-tsc` 这类一等公民检查器在构建模式发现类型错误；
-- `checker:typecheck` 失败，说明 `vue-tsgo`、`svelte-check` 这类二等公民类型检查执行器发现类型错误。
+- `proof:check` 失败，多半是检查器 include、声明构建覆盖或允许清单没有覆盖到源码；
+- `checker:build` 失败，说明 `tsc`、`tsgo` 或 `vue-tsc` 这类支持构建模式的检查器发现类型错误；
+- `checker:typecheck` 失败，说明 `vue-tsgo`、`svelte-check` 这类只做类型检查的执行器发现类型错误。
 
 例如 `@acme/app` 新增了 `@acme/core` 导入，第一次跑 `pnpm exec limina check` 报图问题时，优先看提示里的导入文件和源码 tsconfig。修完后再跑同一个命令，确认图、源码归属、覆盖证明和检查器执行一起通过。
 
@@ -145,4 +149,4 @@ export default defineConfig({
 
 检查器入口始终是 `tsconfig.json`。如果包里还有 `tsconfig.lib.json` 或 `tsconfig.test.json`，让这个包的 `tsconfig.json` reference 它们；Limina 会继续跟随这些 references。
 
-内置预设包括 `tsc`、`tsgo`、`vue-tsc`、`vue-tsgo`、`svelte-check`。启用某个检查器时，请安装对应包；`tsgo` 和 `vue-tsgo` 需要 `@typescript/native-preview`，`vue-tsc` 入口还需要 `@vue/compiler-sfc`，这样 Limina 才能解析 SFC 导入。
+内置预设包括 `tsc`、`tsgo`、`vue-tsc`、`vue-tsgo`、`svelte-check`。启用某个检查器时，请安装对应包；`tsgo` 和 `vue-tsgo` 需要 `@typescript/native-preview`。Limina 默认用内置 heuristic 解析 Vue SFC import；只有显式启用 `config.imports.vue: 'compiler-sfc'` 时，才需要再安装 `@vue/compiler-sfc`。

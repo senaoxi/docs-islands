@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'pathe';
 
 import {
@@ -12,6 +13,7 @@ import {
 } from '#checkers';
 import type {
   CheckerExecutionKind,
+  ImportAnalysisConfig,
   ResolvedCheckerConfig,
 } from '#config/runner';
 import { collectGraphProjectRouteFromRoot } from '#core/tsconfig/actions';
@@ -48,16 +50,72 @@ export function getExecutionCheckers(options: {
   });
 }
 
+function resolvePackageFromRoot(options: {
+  packageName: string;
+  projectRootDir: string;
+}): string | undefined {
+  const requireFromRoot = createRequire(
+    path.join(options.projectRootDir, 'package.json'),
+  );
+
+  try {
+    return requireFromRoot.resolve(`${options.packageName}/package.json`);
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+    ) {
+      return options.packageName;
+    }
+
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'MODULE_NOT_FOUND'
+    ) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
 export function collectCheckerPeerDependencyProblems(options: {
   checkers: ResolvedCheckerConfig[];
+  imports?: ImportAnalysisConfig;
   projectRootDir: string;
   resolvePackage?: CheckerPackageResolver;
 }): string[] {
+  const resolvePackage = options.resolvePackage ?? resolvePackageFromRoot;
   const missingDependencies = collectMissingCheckerPeerDependencies({
     checkers: options.checkers,
     projectRootDir: options.projectRootDir,
-    resolvePackage: options.resolvePackage,
+    resolvePackage,
   });
+  const vueCompilerSfcCheckers = options.checkers.filter(
+    (checker) =>
+      options.imports?.vue === 'compiler-sfc' &&
+      (checker.preset === 'vue-tsc' || checker.preset === 'vue-tsgo'),
+  );
+
+  if (
+    vueCompilerSfcCheckers.length > 0 &&
+    !resolvePackage({
+      packageName: '@vue/compiler-sfc',
+      projectRootDir: options.projectRootDir,
+    })
+  ) {
+    missingDependencies.push({
+      checkerNames: vueCompilerSfcCheckers
+        .map((checker) => checker.name)
+        .sort((left, right) => left.localeCompare(right)),
+      packageName: '@vue/compiler-sfc',
+      reason: 'enabled by config.imports.vue: "compiler-sfc"',
+    });
+  }
 
   return missingDependencies.length === 0
     ? []

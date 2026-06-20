@@ -4,20 +4,68 @@
 本页描述顶层 `source` 选项，也就是 `source:check` 运行的 **Knip 驱动依赖和模块可达性检查**。它不同于 `config.source`，后者定义 proof coverage 使用的治理文件边界。`config.source` 见 [源码边界](./source-boundary.md)。
 :::
 
-`source check` 负责包权限和普通 typecheck 归属检查。Knip 驱动分支使用包入口而不是 `include` / `exclude`，报告未使用工作区依赖，以及基于 Limina 包归属模块集合识别出的未使用源码模块。
+`source check` 负责包权限和普通 typecheck 归属检查。Limina 把 pnpm 发现的 workspace package 作为 source owner，包括没有 `name`、只能用路径标识的 workspace package。嵌套 `package.json` 仍然影响 package resolution，也会形成相对导入要遵守的 package scope；但只有被 pnpm 识别为 workspace package 时才会切分 source owner。
+
+Knip 驱动分支使用包入口而不是 `include` / `exclude`，报告未使用工作区依赖，以及基于 Limina source owner 模块集合识别出的未使用源码模块。
 
 ```js
 import { defineConfig } from 'limina';
 
 export default defineConfig({
   source: {
+    importAuthority: {
+      allow: [],
+    },
     knip: {
       workspaces: {},
     },
-    tsconfigOwnership: { ignore: [] },
   },
 });
 ```
+
+## importAuthority
+
+`source.importAuthority` 控制那些没有写在 source owner manifest 里的裸包导入。
+
+公开包里的 runtime import 默认仍然严格：source owner 的 `package.json` 必须在 `dependencies`、`devDependencies`、`peerDependencies` 或 `optionalDependencies` 中声明这个包。docs、tests、config/tooling 文件、type-only import、private owner 和无名 owner 也可以由 workspace root 的 `devDependencies` 授权。
+
+如果某些文件的依赖确实由别的地方提供，可以写显式 allow rule：
+
+```js
+import { defineConfig } from 'limina';
+
+export default defineConfig({
+  source: {
+    importAuthority: {
+      allow: [
+        {
+          files: ['packages/create-app/templates/react/**'],
+          packages: ['react', 'react-dom'],
+          reason: '模板文件会在生成后的应用里声明这些依赖。',
+        },
+      ],
+    },
+  },
+});
+```
+
+```ts
+interface SourceImportAuthorityAllowRule {
+  files: string[];
+  packages?: string[];
+  specifiers?: string[];
+  owner?: string;
+  reason: string;
+}
+
+interface SourceImportAuthorityConfig {
+  allow?: SourceImportAuthorityAllowRule[];
+}
+```
+
+`files` 是工作区根相对 glob。`packages` 匹配 `react`、`@components/shared` 这样的包名；`specifiers` 匹配 `react/jsx-runtime` 这样的完整导入 specifier。三者都支持 glob。`owner` 可选；有值时，具名 source owner 用包名匹配，无名 source owner 用工作区根相对包目录匹配。
+
+这个配置适合项目模板、文档别名等依赖不是由导入方 manifest 管理的源码。真正属于这个 owner runtime 的导入，仍然优先写进 manifest。
 
 ## knip
 
@@ -55,7 +103,7 @@ interface SourceKnipCheckConfig {
 }
 ```
 
-`source.knip.workspaces` 的 key 是 pnpm workspace 中发现的包名，例如 `@acme/app`。如果 key 对应不到工作区包名，`source check` 会直接失败。
+`source.knip.workspaces` 的 key 是 pnpm workspace 中发现的包名，例如 `@acme/app`。如果 key 对应不到工作区包名，`source check` 会直接失败。没有 `name` 的 workspace package 仍然可以成为 source owner，但不能放进 `source.knip.workspaces`，因为它没有稳定的包名 key。
 
 `source.knip.workspaces[pkg]` 只配置额外可达入口和忽略规则，不再接受 `tsConfig`。如果某个包没有声明静态的 `limina checker build <config>` 脚本，Limina 会在分析这个包时不传 `--tsConfig`，交给 Knip 使用自己的默认 tsconfig 行为。
 
@@ -175,33 +223,3 @@ ignore entry 的 `dep` 必须是已存在的工作区包，并且这个依赖关
 `ignoreFiles` 只用于确实要保留、但 Knip 看不见的源码模块。
 
 ignore entry 必须使用工作区根相对文件路径，路径必须留在仓库内，并提供非空 reason。该文件还必须属于 key 指向的包的 Limina 已知源码模块集合。
-
-## tsconfigOwnership.ignore
-
-- **类型：** `Array<{ owner: string; files: string[]; reason: string }>`
-
-`source check` 会从每个受治理模块所在目录开始，向上查找裸 `tsconfig.json`，与 Rolldown 和 TypeScript 的 Go to Project Configuration 行为对齐。候选 `tsconfig.json` 可以直接 include 该模块，也可以通过传递 `references` 到达唯一普通 typecheck config。如果最近的候选没有命中该模块，Limina 会继续查父目录，直到工作区根目录。
-
-Limina 在这个搜索里只跟随普通 typecheck config，不会把 `tsconfig*.dts.json`、`tsconfig*.build.json`、`tsconfig*.base.json`、`tsconfig*.check.json` 当作归属配置。
-
-测试和 fixture 可能由工具以不符合本地 tsconfig 形状的方式加载。此时可以继续治理这些模块，但只对归属规则做局部豁免：
-
-```js
-import { defineConfig } from 'limina';
-
-export default defineConfig({
-  source: {
-    tsconfigOwnership: {
-      ignore: [
-        {
-          owner: '@acme/app',
-          files: ['packages/app/src/**/*.spec.ts'],
-          reason: 'Vitest 会直接加载测试模块。',
-        },
-      ],
-    },
-  },
-});
-```
-
-ignore entry 必须使用具名包 owner、位于该 owner 目录内的正向工作区根相对 glob，并提供非空 reason。它只跳过向上 `tsconfig.json` 归属解析；包归属、导入权限、proof coverage 和未使用模块检查仍会运行。

@@ -4,6 +4,7 @@ import { isLocalPackageDependencySpecifier } from '#core/workspace/actions';
 import { toRelativePath } from '#utils/path';
 import { createElapsedTimer } from 'logaria/helper';
 import path from 'pathe';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import {
   type CheckIssueReportOptions,
   formatCheckIssueHumanReport,
@@ -105,6 +106,125 @@ function collectOutputManifestProblems(options: {
   }
 
   return problems;
+}
+
+function getReleaseConsistencySectionCode(
+  section: string,
+  body: string,
+): string {
+  if (section.includes('tarball')) {
+    return LIMINA_CHECK_ISSUE_CODES.releaseTarballHygiene;
+  }
+
+  if (
+    section.includes('Packed package manifest') ||
+    section.includes('Output package manifest') ||
+    section.includes('Source manifest')
+  ) {
+    return LIMINA_CHECK_ISSUE_CODES.releasePackedManifest;
+  }
+
+  if (/content hash|local-only|remote-only|changed/iu.test(body)) {
+    return LIMINA_CHECK_ISSUE_CODES.releaseContentHash;
+  }
+
+  if (section.includes('registry') || section.includes('published')) {
+    return LIMINA_CHECK_ISSUE_CODES.releaseRegistry;
+  }
+
+  return LIMINA_CHECK_ISSUE_CODES.releaseConsistency;
+}
+
+function createReleaseConsistencyIssues(options: {
+  error: PackageReleaseConsistencyError;
+  label: string;
+  outputPackageJsonPath: string;
+  rootDir: string;
+}): LiminaCheckIssue[] {
+  const lines = formatErrorMessage(options.error).split('\n');
+  const issues: LiminaCheckIssue[] = [];
+  let sectionTitle = 'Release consistency issue';
+  let sectionLines: string[] = [];
+
+  const flush = (): void => {
+    if (sectionLines.length === 0) {
+      return;
+    }
+
+    const body = sectionLines.join('\n');
+    const code = getReleaseConsistencySectionCode(sectionTitle, body);
+
+    issues.push(
+      createTaskFailureIssue({
+        code,
+        detailLines: [sectionTitle, ...sectionLines],
+        domain: 'release',
+        evidence: [
+          {
+            label: sectionTitle.replace(/:$/u, ''),
+            lines: sectionLines,
+          },
+        ],
+        filePath: options.outputPackageJsonPath,
+        fix: 'Inspect the release check report, rebuild the package output, or adjust release metadata before publishing.',
+        fixSteps: [
+          'Inspect the release check section shown in this issue.',
+          'Rebuild the package output or adjust release metadata for the failing section.',
+          'Rerun the release check before publishing.',
+        ],
+        packageManifestPath: options.outputPackageJsonPath,
+        packageName: options.label,
+        reason: sectionTitle.replace(/:$/u, ''),
+        rootDir: options.rootDir,
+        summary: sectionLines[0]?.replace(/^\s*-\s*/u, '') ?? sectionTitle,
+        task: 'release:check',
+        title:
+          code === LIMINA_CHECK_ISSUE_CODES.releaseConsistency
+            ? 'Release consistency issue'
+            : sectionTitle.replace(/:$/u, ''),
+        tool: 'release',
+        verifyCommands: ['limina release check'],
+      }),
+    );
+    sectionLines = [];
+  };
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    if (/^[A-Z][^:]+:$/u.test(line.trim())) {
+      flush();
+      sectionTitle = line.trim();
+      continue;
+    }
+
+    if (/^\s+-\s+/u.test(line) || sectionLines.length > 0) {
+      sectionLines.push(line);
+    }
+  }
+
+  flush();
+
+  return issues.length > 0
+    ? issues
+    : [
+        createTaskFailureIssue({
+          code: LIMINA_CHECK_ISSUE_CODES.releaseConsistency,
+          detailLines: lines,
+          filePath: options.outputPackageJsonPath,
+          fix: 'Inspect the release check report, rebuild the package output, or adjust release metadata before publishing.',
+          packageManifestPath: options.outputPackageJsonPath,
+          packageName: options.label,
+          reason:
+            'Release check found package output or tarball consistency failures.',
+          rootDir: options.rootDir,
+          task: 'release:check',
+          title: 'Release consistency issue',
+          tool: 'release',
+        }),
+      ];
 }
 
 async function packReleaseTarball(options: {
@@ -216,19 +336,11 @@ async function runReleaseCheckEntry(options: {
   } catch (error) {
     if (error instanceof PackageReleaseConsistencyError) {
       options.issueSink?.push(
-        createTaskFailureIssue({
-          code: 'LIMINA_RELEASE_CONSISTENCY',
-          detailLines: formatErrorMessage(error).split('\n'),
-          filePath: outputPackageJsonPath,
-          fix: 'Inspect the release check report, rebuild the package output, or adjust release metadata before publishing.',
-          packageManifestPath: outputPackageJsonPath,
-          packageName: options.label,
-          reason:
-            'Release check found package output or tarball consistency failures.',
+        ...createReleaseConsistencyIssues({
+          error,
+          label: options.label,
+          outputPackageJsonPath,
           rootDir: options.config.rootDir,
-          task: 'release:check',
-          title: 'Release consistency issue',
-          tool: 'release',
         }),
       );
       ReleaseLogger.error(formatErrorMessage(error));

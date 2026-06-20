@@ -25,7 +25,7 @@ published package
 
 ## Files Need Clear Package Ownership
 
-Limina uses the nearest `package.json` to decide which package owns a file. Checked source files need an owner, and an ordinary source `tsconfig*.json` should not cover files from multiple packages.
+Limina uses pnpm workspace packages to decide which source owner owns a file. Nameless workspace packages can still become source owners by path. A nested `package.json` affects package resolution, but it does not split source ownership unless pnpm reports it as a workspace package. Checked source files need an owner, and an ordinary source `tsconfig*.json` should not cover files from multiple owners.
 
 ```text
 packages/
@@ -64,9 +64,9 @@ That import bypasses both `ui`'s public API and `app`'s dependency declaration. 
 import { Button } from '@acme/ui';
 ```
 
-Bare package imports must also be acknowledged by the nearest `package.json`: if source imports `p-map`, then `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies` must declare it. Self imports and Node built-ins are not treated as ordinary external dependency violations.
+Relative imports must stay inside the nearest `package.json` package scope. Bare package imports must also be acknowledged by the source owner: if source imports `p-map`, then the owner `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies` must declare it. Docs, tests, config/tooling files, type-only imports, private owners, and nameless owners may also use the workspace root `devDependencies`; explicit `source.importAuthority.allow` rules can cover project templates and aliases whose dependencies are provided elsewhere. Self imports and Node built-ins are not treated as ordinary external dependency violations.
 
-`#imports` stay under the same boundary: `#utils/foo` must match the current package's own `package.json#imports`, and the resolved file must remain inside that package or resolve to an authorized external package artifact.
+`#imports` stay under the same boundary: `#utils/foo` must match the current source owner's own `package.json#imports`, and the resolved file must remain inside that owner or resolve to an authorized external package artifact.
 
 ## Public Exports Must Really Resolve
 

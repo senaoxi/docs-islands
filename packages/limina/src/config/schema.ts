@@ -14,6 +14,24 @@ const unsupportedCheckerPresetReason =
 const checkerEntryConfigReason =
   'checker.entry has been removed; configure checker.include with source tsconfig selectors.';
 
+const checkerConfigReason =
+  'config.checkers must be an object auto config or an object keyed by checker name.';
+
+const checkerAutoStringConfigReason =
+  'checkers: "auto" has been removed; omit config.checkers or use { mode: "auto" }.';
+
+const autoCheckerMixedConfigReason =
+  'auto checker config must not be mixed with named checker entries.';
+
+const autoCheckerModeConfigReason =
+  'auto checker config requires mode: "auto".';
+
+const importAnalysisConfigReason =
+  'config.imports must be an object when configured.';
+
+const vueImportParserConfigReason =
+  'config.imports.vue must be "heuristic" or "compiler-sfc".';
+
 const checkerConfigShapeSchema = z
   .looseObject({})
   .superRefine((checker, ctx) => {
@@ -109,10 +127,65 @@ const sharedLiminaConfigShapeSchema = z
   .looseObject({})
   .superRefine((sharedConfig, ctx) => {
     const checkers = sharedConfig.checkers;
+    const imports = sharedConfig.imports;
     const source = sharedConfig.source;
 
-    if (checkers !== undefined && checkers !== 'auto') {
-      if (isPlainConfigRecord(checkers)) {
+    if (checkers !== undefined) {
+      if (checkers === 'auto') {
+        ctx.addIssue({
+          code: 'custom',
+          message: checkerAutoStringConfigReason,
+          path: ['checkers'],
+        });
+      } else if (!isPlainConfigRecord(checkers)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: checkerConfigReason,
+          path: ['checkers'],
+        });
+      } else if (Object.hasOwn(checkers, 'mode')) {
+        if (checkers.mode !== 'auto') {
+          ctx.addIssue({
+            code: 'custom',
+            message: autoCheckerModeConfigReason,
+            path: ['checkers', 'mode'],
+          });
+        }
+
+        const exclude = checkers.exclude;
+
+        if (exclude !== undefined && !Array.isArray(exclude)) {
+          ctx.addIssue({
+            code: 'custom',
+            message:
+              'auto checker exclude must be a string array when configured.',
+            path: ['checkers', 'exclude'],
+          });
+        } else if (Array.isArray(exclude)) {
+          for (const [index, value] of exclude.entries()) {
+            if (typeof value !== 'string' || value.trim().length === 0) {
+              ctx.addIssue({
+                code: 'custom',
+                message:
+                  'auto checker exclude entries must be non-empty string paths.',
+                path: ['checkers', 'exclude', index],
+              });
+            }
+          }
+        }
+
+        for (const key of Object.keys(checkers)) {
+          if (key === 'mode' || key === 'exclude') {
+            continue;
+          }
+
+          ctx.addIssue({
+            code: 'custom',
+            message: autoCheckerMixedConfigReason,
+            path: ['checkers', key],
+          });
+        }
+      } else {
         for (const [checkerName, checker] of Object.entries(checkers)) {
           const result = checkerConfigShapeSchema.safeParse(checker);
 
@@ -127,28 +200,51 @@ const sharedLiminaConfigShapeSchema = z
             });
           }
         }
-      } else {
+      }
+    }
+
+    if (imports !== undefined) {
+      if (!isPlainConfigRecord(imports)) {
         ctx.addIssue({
           code: 'custom',
-          message:
-            'config.checkers must be "auto" or an object keyed by checker name.',
-          path: ['checkers'],
+          message: importAnalysisConfigReason,
+          path: ['imports'],
+        });
+      } else if (
+        imports.vue !== undefined &&
+        imports.vue !== 'heuristic' &&
+        imports.vue !== 'compiler-sfc'
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message: vueImportParserConfigReason,
+          path: ['imports', 'vue'],
         });
       }
     }
 
-    if (source === null || source === undefined || typeof source !== 'object') {
+    if (source === undefined) {
       return;
     }
 
-    const sourceRecord = source as Record<string, unknown>;
-
-    if (Object.hasOwn(sourceRecord, 'tsconfigOwnership')) {
+    if (!isPlainConfigRecord(source)) {
       ctx.addIssue({
         code: 'custom',
-        message:
-          'source.tsconfigOwnership belongs at the top-level source config, not under config.source.',
-        path: ['source', 'tsconfigOwnership', 'ignore'],
+        message: 'source boundary config must be an object.',
+        path: ['source'],
+      });
+      return;
+    }
+
+    for (const key of Object.keys(source)) {
+      if (key === 'include' || key === 'exclude') {
+        continue;
+      }
+
+      ctx.addIssue({
+        code: 'custom',
+        message: 'unknown source boundary config field.',
+        path: ['source', key],
       });
     }
   });
@@ -212,22 +308,195 @@ const releaseConfigShapeSchema = z.looseObject({
   contentHash: releaseContentHashShapeSchema.optional(),
 });
 
+interface ConfigValidationContext {
+  addIssue(issue: {
+    code: 'custom';
+    message: string;
+    path: PropertyKey[];
+  }): void;
+}
+
+function validateStringArrayField(options: {
+  ctx: ConfigValidationContext;
+  path: PropertyKey[];
+  required?: boolean;
+  value: unknown;
+  valueName: string;
+}): boolean {
+  if (options.value === undefined) {
+    if (options.required) {
+      options.ctx.addIssue({
+        code: 'custom',
+        message: `${options.valueName} must be a non-empty string array.`,
+        path: options.path,
+      });
+    }
+
+    return false;
+  }
+
+  if (!Array.isArray(options.value) || options.value.length === 0) {
+    options.ctx.addIssue({
+      code: 'custom',
+      message: `${options.valueName} must be a non-empty string array.`,
+      path: options.path,
+    });
+    return false;
+  }
+
+  for (const [index, item] of options.value.entries()) {
+    if (typeof item === 'string' && item.trim().length > 0) {
+      continue;
+    }
+
+    options.ctx.addIssue({
+      code: 'custom',
+      message: `${options.valueName} entries must be non-empty strings.`,
+      path: [...options.path, index],
+    });
+  }
+
+  return true;
+}
+
+function validateSourceImportAuthorityConfig(
+  value: unknown,
+  ctx: ConfigValidationContext,
+): void {
+  if (value === undefined) {
+    return;
+  }
+
+  if (!isPlainConfigRecord(value)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'importAuthority must be an object.',
+      path: ['source', 'importAuthority'],
+    });
+    return;
+  }
+
+  const allow = value.allow;
+
+  if (allow === undefined) {
+    return;
+  }
+
+  if (!Array.isArray(allow)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'importAuthority.allow must be an array.',
+      path: ['source', 'importAuthority', 'allow'],
+    });
+    return;
+  }
+
+  for (const [index, entry] of allow.entries()) {
+    const path = ['source', 'importAuthority', 'allow', index];
+
+    if (!isPlainConfigRecord(entry)) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'importAuthority allow entries must be objects with files, packages or specifiers, and reason fields.',
+        path,
+      });
+      continue;
+    }
+
+    validateStringArrayField({
+      ctx,
+      path: [...path, 'files'],
+      required: true,
+      value: entry.files,
+      valueName: 'files',
+    });
+
+    const hasPackages = validateStringArrayField({
+      ctx,
+      path: [...path, 'packages'],
+      value: entry.packages,
+      valueName: 'packages',
+    });
+    const hasSpecifiers = validateStringArrayField({
+      ctx,
+      path: [...path, 'specifiers'],
+      value: entry.specifiers,
+      valueName: 'specifiers',
+    });
+
+    if (!hasPackages && !hasSpecifiers) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'importAuthority allow entries must declare packages or specifiers.',
+        path,
+      });
+    }
+
+    if (entry.owner !== undefined) {
+      if (typeof entry.owner !== 'string' || entry.owner.trim().length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'owner must be a non-empty string when configured.',
+          path: [...path, 'owner'],
+        });
+      }
+    }
+
+    if (typeof entry.reason !== 'string' || entry.reason.trim().length === 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'reason must be a non-empty string.',
+        path: [...path, 'reason'],
+      });
+    }
+  }
+}
+
 const liminaConfigShapeSchema = z
   .looseObject({
     config: sharedLiminaConfigShapeSchema.optional(),
     release: releaseConfigShapeSchema.optional(),
   })
   .superRefine((config, ctx) => {
-    if (!Object.hasOwn(config, 'paths')) {
+    if (Object.hasOwn(config, 'paths')) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'paths config has been removed; use graph/proof/source checks instead.',
+        path: ['paths'],
+      });
+    }
+
+    const source = config.source;
+
+    if (source === undefined) {
       return;
     }
 
-    ctx.addIssue({
-      code: 'custom',
-      message:
-        'paths config has been removed; use graph/proof/source checks instead.',
-      path: ['paths'],
-    });
+    if (!isPlainConfigRecord(source)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'source config must be an object.',
+        path: ['source'],
+      });
+      return;
+    }
+
+    for (const key of Object.keys(source)) {
+      if (key === 'knip' || key === 'importAuthority') {
+        continue;
+      }
+
+      ctx.addIssue({
+        code: 'custom',
+        message: 'unknown source config field.',
+        path: ['source', key],
+      });
+    }
+
+    validateSourceImportAuthorityConfig(source.importAuthority, ctx);
   });
 
 function formatUnknownValue(value: unknown): string {
@@ -298,14 +567,50 @@ function formatLiminaConfigShapeIssue(
       'Invalid Limina checker config:',
       '  field: config.checkers',
       `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
-      '  reason: config.checkers must be "auto" or an object keyed by checker name.',
+      `  reason: ${issue.message}`,
     ].join('\n');
   }
 
-  if (field === 'config.source.tsconfigOwnership.ignore') {
+  if (field === 'config.checkers.mode') {
+    return [
+      'Invalid Limina checker config:',
+      '  field: config.checkers.mode',
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      `  reason: ${issue.message}`,
+    ].join('\n');
+  }
+
+  if (field.startsWith('config.checkers.exclude')) {
+    return [
+      'Invalid Limina checker config:',
+      `  field: ${field}`,
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      `  reason: ${issue.message}`,
+    ].join('\n');
+  }
+
+  if (field === 'config.imports' || field.startsWith('config.imports.')) {
+    return [
+      'Invalid Limina import analysis config:',
+      `  field: ${field}`,
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      `  reason: ${issue.message}`,
+    ].join('\n');
+  }
+
+  if (field === 'config.source' || field.startsWith('config.source.')) {
+    return [
+      'Invalid Limina source boundary config:',
+      `  field: ${field}`,
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      `  reason: ${issue.message}`,
+    ].join('\n');
+  }
+
+  if (field === 'source' || field.startsWith('source.')) {
     return [
       'Invalid Limina source config:',
-      '  field: config.source.tsconfigOwnership.ignore',
+      `  field: ${field}`,
       `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
       `  reason: ${issue.message}`,
     ].join('\n');
@@ -320,7 +625,11 @@ function formatLiminaConfigShapeIssue(
         'Invalid Limina checker config:',
         `  field: ${checkerField}`,
         `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
-        '  reason: checker entries must be objects.',
+        `  reason: ${
+          issue.message === autoCheckerMixedConfigReason
+            ? issue.message
+            : 'checker entries must be objects.'
+        }`,
       ].join('\n');
     }
 

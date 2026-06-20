@@ -1,5 +1,6 @@
 import type { ResolvedLiminaConfig } from '#config/runner';
 import { createElapsedTimer } from 'logaria/helper';
+import { LiminaStructuredError } from '../check-reporting/errors';
 import { formatCheckIssueHumanReport } from '../check-reporting/human';
 import {
   appendCheckIssues,
@@ -40,19 +41,6 @@ function createGraphCheckErrorIssue(
   });
 }
 
-function formatGraphCheckFailureReport(options: {
-  command?: string;
-  issue: LiminaCheckIssue;
-  verbose?: boolean;
-}): string {
-  return formatCheckIssueHumanReport({
-    command: options.command,
-    issues: [options.issue],
-    title: 'Graph check summary',
-    verbose: options.verbose,
-  });
-}
-
 export async function runGraphPrepare(
   config: ResolvedLiminaConfig,
   options: RunGraphPrepareOptions = {},
@@ -86,18 +74,23 @@ export async function runGraphPrepare(
     });
     return true;
   } catch (error) {
+    const issues =
+      error instanceof LiminaStructuredError
+        ? error.issues
+        : [
+            createTaskFailureIssue({
+              code: 'LIMINA_GRAPH_PREPARE_FAILED',
+              filePath: config.configPath,
+              fix: 'Inspect the graph prepare error above, then rerun `limina graph prepare` or `limina check`.',
+              reason: `Graph prepare failed: ${formatErrorMessage(error)}.`,
+              rootDir: config.rootDir,
+              task: 'graph:prepare',
+              title: 'Graph prepare failed',
+            }),
+          ];
+
     await appendCheckIssues({
-      issues: [
-        createTaskFailureIssue({
-          code: 'LIMINA_GRAPH_PREPARE_FAILED',
-          filePath: config.configPath,
-          fix: 'Inspect the graph prepare error above, then rerun `limina graph prepare` or `limina check`.',
-          reason: `Graph prepare failed: ${formatErrorMessage(error)}.`,
-          rootDir: config.rootDir,
-          task: 'graph:prepare',
-          title: 'Graph prepare failed',
-        }),
-      ],
+      issues,
       rootDir: config.rootDir,
     });
     GraphLogger.error(
@@ -175,17 +168,21 @@ export async function runGraphCheck(
     return passed;
   } catch (error) {
     const errorMessage = formatErrorMessage(error);
-    const issue = createGraphCheckErrorIssue(config, errorMessage);
+    const issues =
+      error instanceof LiminaStructuredError
+        ? error.issues
+        : [createGraphCheckErrorIssue(config, errorMessage)];
 
     await appendCheckIssues({
-      issues: [issue],
+      issues,
       rootDir: config.rootDir,
     });
 
     GraphLogger.error(
-      formatGraphCheckFailureReport({
+      formatCheckIssueHumanReport({
         command: options.report?.command ?? 'limina graph check',
-        issue,
+        issues,
+        title: 'Graph check summary',
         verbose: options.report?.verbose,
       }),
     );

@@ -8,6 +8,7 @@ import {
 } from '#checkers';
 import {
   getActiveCheckers,
+  isAutoCheckerConfigMode,
   type ResolvedCheckerConfig,
   type ResolvedLiminaConfig,
 } from '#config/runner';
@@ -40,6 +41,9 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'pathe';
 import { glob } from 'tinyglobby';
 import type ts from 'typescript';
+import { LIMINA_CHECK_ISSUE_CODES } from '../../check-reporting/codes';
+import { LiminaStructuredError } from '../../check-reporting/errors';
+import { createTaskFailureIssue } from '../../check-reporting/snapshot';
 import {
   type GeneratedKnipPackageConfig,
   type GeneratedKnipPackageDiagnostic,
@@ -230,6 +234,62 @@ function stringifyJson(value: unknown): string {
 
 function formatProblemList(problems: string[], fallback: string): string {
   return problems.join('\n\n') || fallback;
+}
+
+function findGeneratedGraphProblemLineValue(
+  problem: string,
+  labels: readonly string[],
+): string | undefined {
+  for (const line of problem.split('\n')) {
+    const trimmedLine = line.trimStart();
+
+    for (const label of labels) {
+      const prefix = `${label}:`;
+
+      if (trimmedLine.startsWith(prefix)) {
+        const value = trimmedLine.slice(prefix.length).trim();
+
+        return value || undefined;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function createGeneratedGraphStructuredError(options: {
+  config: ResolvedLiminaConfig;
+  fallback: string;
+  problems: readonly string[];
+}): LiminaStructuredError {
+  const message = formatProblemList([...options.problems], options.fallback);
+
+  return new LiminaStructuredError(
+    message,
+    options.problems.map((problem) =>
+      createTaskFailureIssue({
+        code: LIMINA_CHECK_ISSUE_CODES.graphPrepareFailed,
+        detailLines: problem.split('\n'),
+        filePath:
+          findGeneratedGraphProblemLineValue(problem, [
+            'config',
+            'file',
+            'project',
+            'source config',
+          ]) ?? options.config.configPath,
+        fix: 'Inspect the generated graph diagnostic, then update checker.include, tsconfig references, or generated graph configuration before rerunning `limina graph prepare`.',
+        reason:
+          findGeneratedGraphProblemLineValue(problem, ['reason']) ??
+          options.fallback,
+        rootDir: options.config.rootDir,
+        task: 'graph:prepare',
+        title:
+          problem.split('\n')[0]?.replace(/:+$/u, '') ||
+          'Generated graph preparation failed',
+        verifyCommands: ['limina graph prepare'],
+      }),
+    ),
+  );
 }
 
 function isEmptyLeafConfig(configObject: JsonObject): boolean {
@@ -475,9 +535,11 @@ async function collectCheckerSourceConfigs(
   }
 
   if (problems.length > 0) {
-    throw new Error(
-      formatProblemList(problems, 'Failed to collect checker source configs.'),
-    );
+    throw createGeneratedGraphStructuredError({
+      config,
+      fallback: 'Failed to collect checker source configs.',
+      problems,
+    });
   }
 
   collection.rootConfigPaths = [
@@ -493,18 +555,26 @@ async function collectCheckerSourceConfigs(
 
 function isAutoCheckerMode(config: ResolvedLiminaConfig): boolean {
   return (
-    config.config?.checkers === undefined || config.config.checkers === 'auto'
+    config.config?.checkers === undefined ||
+    isAutoCheckerConfigMode(config.config.checkers)
   );
 }
 
+function getAutoCheckerExclude(config: ResolvedLiminaConfig): string[] {
+  return isAutoCheckerConfigMode(config.config?.checkers)
+    ? (config.config.checkers.exclude ?? [])
+    : [];
+}
+
 function createResolvedChecker(options: {
+  exclude?: string[];
   include: string[];
   name: string;
   preset: AutoCheckerPreset;
   rootDir: string;
 }): ResolvedCheckerConfig {
   return {
-    exclude: [],
+    exclude: options.exclude ?? [],
     extensions: getCheckerExtensions(
       {
         include: options.include,
@@ -522,6 +592,7 @@ function createResolvedChecker(options: {
 
 async function collectAutoEntryConfigPaths(
   config: ResolvedLiminaConfig,
+  excludedConfigPaths: Set<string>,
 ): Promise<string[]> {
   const paths = await glob('**/tsconfig.json', {
     absolute: true,
@@ -533,6 +604,7 @@ async function collectAutoEntryConfigPaths(
   return paths
     .map(normalizeAbsolutePath)
     .filter(isDefaultSourceTsconfigPath)
+    .filter((configPath) => !excludedConfigPaths.has(configPath))
     .sort((left, right) => left.localeCompare(right));
 }
 
@@ -561,6 +633,7 @@ function createAutoScopeProject(
 function collectAutoScope(
   config: ResolvedLiminaConfig,
   entryConfigPath: string,
+  excludedConfigPaths: Set<string>,
 ): AutoScope | null {
   const collection: CheckerSourceConfigCollection = {
     buildModulesBySourcePath: new Map(),
@@ -576,16 +649,18 @@ function collectAutoScope(
     checkerName: '__auto__',
     collection,
     config,
-    excludedConfigPaths: new Set(),
+    excludedConfigPaths,
     problems,
     sourceConfigPath: entryConfigPath,
     seenConfigs: new Set(),
   });
 
   if (problems.length > 0) {
-    throw new Error(
-      formatProblemList(problems, 'Failed to collect auto checker scope.'),
-    );
+    throw createGeneratedGraphStructuredError({
+      config,
+      fallback: 'Failed to collect auto checker scope.',
+      problems,
+    });
   }
 
   collection.rootConfigPaths = collection.buildModulesBySourcePath.has(
@@ -594,10 +669,7 @@ function collectAutoScope(
     ? [entryConfigPath]
     : [];
 
-  if (
-    collection.projectConfigPaths.size === 0 &&
-    collection.solutionConfigPaths.size === 0
-  ) {
+  if (collection.projectConfigPaths.size === 0) {
     return null;
   }
 
@@ -725,7 +797,11 @@ function collectAutoScopeDependencies(
   const entryPathsByFileName = new Map<string, Set<string>>();
   const importAnalysis =
     options.importAnalysisContext ??
-    createImportAnalysisContext({ isolated: true });
+    createImportAnalysisContext({
+      isolated: true,
+      projectRootDir: config.rootDir,
+      vueParser: config.config?.imports?.vue,
+    });
 
   for (const scope of scopes) {
     for (const project of scope.projects) {
@@ -827,9 +903,19 @@ async function resolveAutoCheckers(
     'importAnalysisContext'
   > = {},
 ): Promise<ResolvedCheckerConfig[]> {
-  const entryConfigPaths = await collectAutoEntryConfigPaths(config);
+  const autoExclude = getAutoCheckerExclude(config);
+  const excludedConfigPaths = await collectCheckerExcludedSourceConfigs(
+    config,
+    autoExclude,
+  );
+  const entryConfigPaths = await collectAutoEntryConfigPaths(
+    config,
+    excludedConfigPaths,
+  );
   const scopes = entryConfigPaths
-    .map((entryConfigPath) => collectAutoScope(config, entryConfigPath))
+    .map((entryConfigPath) =>
+      collectAutoScope(config, entryConfigPath, excludedConfigPaths),
+    )
     .filter((scope): scope is AutoScope => Boolean(scope));
   const kindsByEntry = new Map(
     scopes.map((scope) => [
@@ -859,6 +945,7 @@ async function resolveAutoCheckers(
   if (typescriptEntries.length > 0) {
     checkers.push(
       createResolvedChecker({
+        exclude: autoExclude,
         include: typescriptEntries,
         name: 'typescript',
         preset: 'tsc',
@@ -870,6 +957,7 @@ async function resolveAutoCheckers(
   if (vueEntries.length > 0) {
     checkers.push(
       createResolvedChecker({
+        exclude: autoExclude,
         include: vueEntries,
         name: 'vue',
         preset: 'vue-tsc',
@@ -1239,7 +1327,11 @@ function inferProjectReferences(
   const providerEdgesByKey = new Map<string, GeneratedProviderEdge>();
   const importAnalysis =
     options.importAnalysisContext ??
-    createImportAnalysisContext({ isolated: true });
+    createImportAnalysisContext({
+      isolated: true,
+      projectRootDir: config.rootDir,
+      vueParser: config.config?.imports?.vue,
+    });
   const ownerLookup = createFileOwnerLookup(
     ownerProjects.map((project) => ({
       checkerPresets: project.context.checkerPresets,
@@ -2029,12 +2121,11 @@ export async function prepareGeneratedTsconfigGraph(
   );
 
   if (problems.length > 0) {
-    throw new Error(
-      formatProblemList(
-        problems,
-        'Failed to prepare generated tsconfig graph.',
-      ),
-    );
+    throw createGeneratedGraphStructuredError({
+      config,
+      fallback: 'Failed to prepare generated tsconfig graph.',
+      problems,
+    });
   }
 
   const workspacePackages = options.workspacePackagesProvider

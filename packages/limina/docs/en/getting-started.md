@@ -21,7 +21,7 @@ pnpm add -D limina typescript
 
 ## Pick an Adoption Path
 
-If your workspace does not yet have a Limina config, start with `limina init`. It writes an auto-first `limina.config.mjs`, adds the root script, ensures `.limina/` is ignored, and can install the optional Limina agent skill for this project.
+If your workspace does not yet have a Limina config, start with `limina init`. It writes a `limina.config.mjs` that uses auto mode, adds the root script, ensures `.limina/` is ignored, and can install the optional Limina agent skill for this project.
 
 If your repository already has a clear tsconfig convention, write the minimal `limina.config.mjs` directly. Auto checker discovery is enough for many workspaces; use [Checker Entries](./config/checkers.md) when you need explicit checker routing.
 
@@ -80,10 +80,14 @@ import { defineConfig } from 'limina';
 
 export default defineConfig({
   config: {
-    checkers: 'auto',
+    checkers: {
+      mode: 'auto',
+    },
   },
 });
 ```
+
+Writing `mode: 'auto'` out makes the config clear at a glance: Limina will find source `tsconfig.json` files and send each one to `tsc` or `vue-tsc` based on its contents. If a `tsconfig.json` should stay out of that scan for now, put it in `exclude`; `limina init` starts with an empty array so you can add paths directly.
 
 Add a root script:
 
@@ -101,7 +105,7 @@ Run it:
 pnpm limina:build
 ```
 
-This build-first entry prepares Limina's generated checker graph and runs the build-capable checker entries. When you are ready to turn on the full governance flow, run `pnpm exec limina check`. The default check pipeline runs:
+This build-first entry prepares Limina's checker graph and runs the checkers that support build mode. Once that build path is stable, run `pnpm exec limina check` to turn on the full check flow. The default pipeline runs:
 
 1. `graph:check` (which prepares the generated graph first)
 2. `source:check`
@@ -114,8 +118,8 @@ The first failure usually tells you which layer to inspect:
 - `graph:check` usually points to imports, generated project references, package dependencies, or label rules that are out of sync;
 - `source:check` usually points to file ownership, cross-package relative imports, dependency declarations, or `#imports`;
 - `proof:check` usually points to checker includes, generated declaration coverage, or allowlists that do not cover source files;
-- `checker:build` means a first-class build execution checker such as `tsc`, `tsgo`, or `vue-tsc` found type errors;
-- `checker:typecheck` means a second-class typecheck execution checker such as `vue-tsgo` or `svelte-check` found type errors.
+- `checker:build` means a build-capable checker such as `tsc`, `tsgo`, or `vue-tsc` found type errors;
+- `checker:typecheck` means a typecheck-only runner such as `vue-tsgo` or `svelte-check` found type errors.
 
 For example, if `@acme/app` adds an import from `@acme/core` and the first `pnpm exec limina check` fails in graph checking, start with the importing file and source tsconfig shown in the report. Re-run the same command after the fix to confirm graph, source ownership, coverage proof, and checker execution together.
 
@@ -145,4 +149,4 @@ export default defineConfig({
 
 Checker entries are always `tsconfig.json` files. If a package has `tsconfig.lib.json` or `tsconfig.test.json`, reference them from that package's `tsconfig.json`; Limina will follow those references.
 
-Built-in presets are `tsc`, `tsgo`, `vue-tsc`, `vue-tsgo`, and `svelte-check`. Install the matching package when you enable a checker; `tsgo` and `vue-tsgo` require `@typescript/native-preview`, and `vue-tsc` entries also require `@vue/compiler-sfc` so Limina can parse SFC imports.
+Built-in presets are `tsc`, `tsgo`, `vue-tsc`, `vue-tsgo`, and `svelte-check`. Install the matching package when you enable a checker; `tsgo` and `vue-tsgo` require `@typescript/native-preview`. Limina parses Vue SFC imports with its built-in heuristic by default. If you opt into `config.imports.vue: 'compiler-sfc'`, also install `@vue/compiler-sfc`.

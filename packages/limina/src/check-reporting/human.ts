@@ -1,7 +1,12 @@
 import boxen from 'boxen';
 
 import { formatCheckSummaryBlock } from '../reporting';
-import type { LiminaCheckIssue } from './snapshot';
+import type {
+  LiminaCheckIssue,
+  LiminaCheckIssueEvidence,
+  LiminaCheckIssueExternal,
+  LiminaCheckIssueLocation,
+} from './snapshot';
 
 const DEFAULT_DETAIL_LIMIT = 5;
 const ISSUE_BLOCK_MIN_WIDTH = 88;
@@ -22,14 +27,21 @@ export interface CheckIssueHumanReportOptions extends CheckIssueReportOptions {
 interface IssueGroup {
   checkerName?: string;
   code: string;
+  detector?: string;
+  domain?: string;
+  external?: LiminaCheckIssueExternal;
   fix?: string;
+  fixSteps?: string[];
   issues: LiminaCheckIssue[];
   packageManifestPath?: string;
   packageName?: string;
   reason: string;
+  severity?: string;
+  summary?: string;
   task: string;
   title: string;
   tool?: string;
+  verifyCommands?: string[];
 }
 
 function plural(count: number, singular: string, pluralForm: string): string {
@@ -88,12 +100,18 @@ function getGroupKey(issue: LiminaCheckIssue): string {
     issue.task,
     issue.code,
     issue.title,
+    issue.summary ?? '',
     issue.packageName ?? '',
     issue.packageManifestPath ?? '',
     issue.checkerName ?? '',
     issue.tool ?? '',
+    issue.domain ?? '',
+    issue.detector ?? '',
+    JSON.stringify(issue.external ?? null),
     issue.reason,
     issue.fix ?? '',
+    JSON.stringify(issue.fixSteps ?? null),
+    JSON.stringify(issue.verifyCommands ?? null),
   ].join('\0');
 }
 
@@ -105,14 +123,21 @@ function groupIssues(issues: readonly LiminaCheckIssue[]): IssueGroup[] {
     const group = groups.get(key) ?? {
       checkerName: issue.checkerName,
       code: issue.code,
+      detector: issue.detector,
+      domain: issue.domain,
+      external: issue.external,
       fix: issue.fix,
+      fixSteps: issue.fixSteps,
       issues: [],
       packageManifestPath: issue.packageManifestPath,
       packageName: issue.packageName,
       reason: issue.reason,
+      severity: issue.severity,
+      summary: issue.summary,
       task: issue.task,
       title: issue.title,
       tool: issue.tool,
+      verifyCommands: issue.verifyCommands,
     };
 
     group.issues.push(issue);
@@ -130,22 +155,50 @@ function groupIssues(issues: readonly LiminaCheckIssue[]): IssueGroup[] {
   );
 }
 
-function getIssueLocation(issue: LiminaCheckIssue): string {
-  return (
+function formatLocation(location: LiminaCheckIssueLocation): string {
+  const filePath =
+    location.filePath ??
+    (location.packageManifestPath
+      ? `package manifest: ${location.packageManifestPath}`
+      : undefined);
+  const position =
+    location.line === undefined
+      ? ''
+      : `:${location.line}${location.column === undefined ? '' : `:${location.column}`}`;
+  const locationText = filePath ? `${filePath}${position}` : location.scope;
+
+  return [location.label, locationText].filter(Boolean).join(': ');
+}
+
+function getIssueLocations(issue: LiminaCheckIssue): string[] {
+  const structuredLocations = (issue.locations ?? [])
+    .map(formatLocation)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (structuredLocations.length > 0) {
+    return structuredLocations;
+  }
+
+  return [
     issue.filePath ??
-    issue.packageManifestPath ??
-    issue.scope ??
-    issue.checkerName ??
-    issue.tool ??
-    issue.title
-  );
+      issue.packageManifestPath ??
+      issue.scope ??
+      issue.checkerName ??
+      issue.tool ??
+      issue.title,
+  ].filter((value): value is string => Boolean(value));
+}
+
+function getIssueLocation(issue: LiminaCheckIssue): string {
+  return getIssueLocations(issue)[0] ?? issue.title;
 }
 
 function getGroupLocations(group: IssueGroup): string[] {
   return [
     ...new Set(
       group.issues
-        .map(getIssueLocation)
+        .flatMap(getIssueLocations)
         .map((value) => value.trim())
         .filter(Boolean),
     ),
@@ -155,6 +208,16 @@ function getGroupLocations(group: IssueGroup): string[] {
 function getGroupLocationsHeading(group: IssueGroup): string {
   if (group.issues.some((issue) => issue.filePath)) {
     return 'files:';
+  }
+
+  if (
+    group.issues.some((issue) =>
+      issue.locations?.some(
+        (location) => location.filePath || location.packageManifestPath,
+      ),
+    )
+  ) {
+    return 'locations:';
   }
 
   if (group.issues.some((issue) => issue.checkerName)) {
@@ -331,6 +394,52 @@ function indentDetailLines(lines: readonly string[]): string[] {
   return lines.map((line) => (line ? `    ${line}` : ''));
 }
 
+function formatEvidenceLine(evidence: LiminaCheckIssueEvidence): string[] {
+  const heading = [evidence.label, evidence.value].filter(Boolean).join(': ');
+
+  return [
+    ...(heading ? [`  - ${heading}`] : []),
+    ...(evidence.lines ?? []).map((line) => `    ${line}`),
+  ];
+}
+
+function formatIssueDetailLines(issue: LiminaCheckIssue): string[] {
+  return [
+    ...(issue.summary ? ['summary:', `    ${issue.summary}`] : []),
+    ...(issue.evidence?.length
+      ? ['evidence:', ...issue.evidence.flatMap(formatEvidenceLine)]
+      : []),
+    ...(issue.detailLines?.length ? indentDetailLines(issue.detailLines) : []),
+  ];
+}
+
+function formatExternalLines(
+  external: LiminaCheckIssueExternal | undefined,
+): string[] {
+  if (!external) {
+    return [];
+  }
+
+  return [
+    'external:',
+    ...(external.tool ? [`  tool: ${external.tool}`] : []),
+    ...(external.code ? [`  code: ${external.code}`] : []),
+    ...(external.message ? [`  message: ${external.message}`] : []),
+    ...(external.url ? [`  url: ${external.url}`] : []),
+  ];
+}
+
+function formatFixLines(group: IssueGroup): string[] {
+  if (group.fixSteps?.length) {
+    return [
+      'fix steps:',
+      ...group.fixSteps.map((step, index) => `  ${index + 1}. ${step}`),
+    ];
+  }
+
+  return group.fix ? ['suggested fix:', `  ${group.fix}`] : [];
+}
+
 function formatGroupDetails(
   group: IssueGroup,
   options: { detailLimit: number; verbose: boolean },
@@ -341,9 +450,9 @@ function formatGroupDetails(
       ...group.issues.flatMap((issue, index) => [
         ...(index === 0 ? [] : ['']),
         `  - ${getIssueLocation(issue)}`,
-        ...(issue.detailLines?.length
-          ? indentDetailLines(issue.detailLines)
-          : []),
+        ...formatIssueDetailLines(issue).map((line) =>
+          line ? `    ${line}` : '',
+        ),
       ]),
     ];
   }
@@ -363,10 +472,11 @@ function formatGroupDetails(
     ];
   }
 
-  if (onlyIssue?.detailLines?.length) {
-    const visibleLines = onlyIssue.detailLines.slice(0, options.detailLimit);
-    const remainingLineCount =
-      onlyIssue.detailLines.length - visibleLines.length;
+  const onlyIssueDetails = onlyIssue ? formatIssueDetailLines(onlyIssue) : [];
+
+  if (onlyIssueDetails.length > 0) {
+    const visibleLines = onlyIssueDetails.slice(0, options.detailLimit);
+    const remainingLineCount = onlyIssueDetails.length - visibleLines.length;
 
     return [
       'details:',
@@ -396,16 +506,28 @@ function formatIssueGroup(
     )}`,
     `rule: ${group.code}`,
     `task: ${group.task}`,
+    ...(group.domain ? [`domain: ${group.domain}`] : []),
+    ...(group.detector ? [`detector: ${group.detector}`] : []),
+    ...(group.severity ? [`severity: ${group.severity}`] : []),
     ...(group.packageName ? [`package: ${group.packageName}`] : []),
     ...(group.packageManifestPath
       ? [`package manifest: ${group.packageManifestPath}`]
       : []),
     ...(group.checkerName ? [`checker: ${group.checkerName}`] : []),
     ...(group.tool ? [`tool: ${group.tool}`] : []),
+    ...formatExternalLines(group.external),
     '',
+    ...(group.summary ? ['summary:', `  ${group.summary}`, ''] : []),
     'reason:',
     `  ${group.reason}`,
-    ...(group.fix ? ['', 'suggested fix:', `  ${group.fix}`] : []),
+    ...(formatFixLines(group).length > 0 ? ['', ...formatFixLines(group)] : []),
+    ...(group.verifyCommands?.length
+      ? [
+          '',
+          'verify:',
+          ...group.verifyCommands.map((command) => `  - ${command}`),
+        ]
+      : []),
     '',
     ...formatGroupDetails(group, options),
   ];
@@ -426,7 +548,9 @@ function hasTruncatedGroups(
       return group.issues.length > detailLimit;
     }
 
-    return (group.issues[0]?.detailLines?.length ?? 0) > detailLimit;
+    return group.issues[0]
+      ? formatIssueDetailLines(group.issues[0]).length > detailLimit
+      : false;
   });
 }
 

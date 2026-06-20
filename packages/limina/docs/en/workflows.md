@@ -26,7 +26,7 @@ pnpm exec limina graph export --view artifact --output .limina/dependency-graph.
 pnpm exec limina check
 ```
 
-This proves graph, source ownership, coverage, first-class checker builds, and second-class checker execution together.
+This checks graph relationships, source ownership, coverage, build-capable checkers, and typecheck-only runners together.
 
 ### Pre-publish
 
@@ -70,8 +70,8 @@ jobs:
 ::: tip
 
 - Keep source `tsconfig.json` aggregators pure with `files: []` and `references`.
-- Keep source tsconfig file sets intentional, and let Limina own generated declaration leaves under `.limina/`.
-- Keep workspace package exports intentional: consumed source entries need generated references from imports or `implicitRefs`, and consumed artifact entries appear in `limina graph export --view artifact` as scoped architecture facts.
+- Keep source tsconfig file sets intentional, and let Limina own the declaration build configs under `.limina/`.
+- Keep workspace package exports intentional: source entries need references from real imports or `implicitRefs`, and artifact entries appear in `limina graph export --view artifact` as scoped architecture facts.
 - Run source, package, and release checks; they protect different layers.
 - Keep allowlists small and explain why each exception is safe.
 
@@ -81,7 +81,7 @@ jobs:
 
 ### How do `limina checker build` and `checker typecheck` choose targets?
 
-`checker build` runs first-class build execution presets from their configured entries (`tsc -b`, `tsgo -b`, and `vue-tsc -b`). `tsgo` is backed by Microsoft's `@typescript/native-preview` package. `checker typecheck` runs second-class typecheck execution presets directly, currently `vue-tsgo --project <entry>` and `svelte-check --tsconfig <entry>`. Limina intentionally keeps `vue-tsgo` out of `checker build` because current `vue-tsgo --build` does not preserve TypeScript project-reference boundaries or provide incremental build semantics; its configured tsconfig entry still participates in Limina graph/proof coverage. Prefer `vue-tsc` for first-class Vue build checks.
+`checker build` runs presets that support build mode from configured entries: `tsc -b`, `tsgo -b`, and `vue-tsc -b`. `tsgo` is backed by Microsoft's `@typescript/native-preview` package. `checker typecheck` runs typecheck-only presets, currently `vue-tsgo --project <entry>` and `svelte-check --tsconfig <entry>`. Limina intentionally keeps `vue-tsgo` out of `checker build` because current `vue-tsgo --build` does not preserve TypeScript project-reference boundaries or provide incremental build semantics; its configured tsconfig entry still participates in Limina graph and proof checks. Prefer `vue-tsc` for Vue build checks.
 
 ### Why do package checks require a build first?
 

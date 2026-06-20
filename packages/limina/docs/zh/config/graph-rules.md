@@ -1,6 +1,6 @@
 # 图规则
 
-图规则按源码 `tsconfig*.json` 中声明的标签匹配。Limina 会把这些标签复制到 `.limina/` 下生成的声明叶子里。
+图规则按源码 `tsconfig*.json` 中声明的标签匹配。Limina 会把这些标签带到对应的生成构建配置里，并在图检查时用它们判断哪些引用或依赖不允许出现。
 
 ```js
 import { defineConfig } from 'limina';
@@ -45,7 +45,7 @@ export default defineConfig({
 
 - **类型：** `Record<string, GraphRule>`
 
-`rules` 的 key 必须和源码 tsconfig 里的 `liminaOptions.graphRules` 项对上。一个源码配置可以列出多个标签，Limina 会为它生成的声明叶子合并这些标签对应的规则。
+`rules` 的 key 必须和源码 tsconfig 里的 `liminaOptions.graphRules` 项对上。一个源码配置可以列出多个标签，Limina 会合并这些标签对应的规则。
 
 配合源码配置中的标签：
 
@@ -72,7 +72,7 @@ export default defineConfig({
 
 - **类型：** `Array<{ path: string; reason: string }>`
 
-`deny.refs` 禁止当前标签的项目引用指向某个源码 tsconfig 对应的生成声明叶子。它适合表达“客户端运行时不能依赖服务端运行时”“公开 API 不能依赖内部工具”这类项目边界。
+`deny.refs` 禁止当前标签的项目引用指向某个源码 tsconfig 对应的声明构建配置。它适合表达“客户端运行时不能依赖服务端运行时”“公开 API 不能依赖内部工具”这类项目边界。
 
 例如规则里写了：
 
@@ -83,7 +83,7 @@ export default defineConfig({
 }
 ```
 
-如果 `runtime-client` 生成叶子在 `references` 里指向了这个仅 Node 源码配置对应的生成叶子，`limina graph check` 会直接失败，并显示 `reason`。
+如果标记了 `runtime-client` 的项目在 `references` 里指向了这个仅 Node 源码配置对应的生成配置，`limina graph check` 会直接失败，并显示 `reason`。
 
 完整一点看，它对应这样的目录和配置：
 
@@ -107,7 +107,7 @@ packages/app/
 }
 ```
 
-运行 `pnpm exec limina graph check` 时，Limina 会先 prepare 生成图，找到可达的生成声明叶子，再读取每个叶子的 `references`。当它看到 `runtime-client` 生成叶子引用到 `packages/app/src/node/tsconfig.lib.json` 对应的生成项目时，会拿源码路径和 `graph.rules.runtime-client.deny.refs` 对比。
+运行 `pnpm exec limina graph check` 时，Limina 会先 prepare 生成图，再读取相关项目的 `references`。当它看到标记了 `runtime-client` 的项目引用到 `packages/app/src/node/tsconfig.lib.json` 对应的生成配置时，会拿源码路径和 `graph.rules.runtime-client.deny.refs` 对比。
 
 结果是图检查失败，并提示这条项目引用命中了禁止规则。这个结果说明问题不只是某个导入写错，而是 TypeScript 图里已经把客户端运行时和 Node 运行时建成了依赖关系。
 
@@ -117,7 +117,7 @@ packages/app/
 
 `deny.deps` 禁止源码导入某些包、`#imports` 或 Node 内置模块。`name` 可以是包名、`#subpath`（例如 `#server/*`）、`fs`、`node:fs`，也可以用 `node:*` 匹配所有 Node 内置模块。
 
-如果这个叶子覆盖的源码写了：
+如果这个标签覆盖的源码写了：
 
 ```ts
 // packages/app/src/client/load.ts

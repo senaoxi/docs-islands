@@ -22,12 +22,11 @@ export interface ResolvedImportRecord {
 
 export class ImportCore {
   readonly #config: ResolvedLiminaConfig;
-  #context: ImportAnalysisContext = createImportAnalysisContext({
-    isolated: true,
-  });
+  #context: ImportAnalysisContext;
 
   constructor(config: ResolvedLiminaConfig) {
     this.#config = config;
+    this.#context = this.#createContext();
   }
 
   get context(): ImportAnalysisContext {
@@ -35,8 +34,14 @@ export class ImportCore {
   }
 
   invalidate(): void {
-    this.#context = createImportAnalysisContext({
+    this.#context = this.#createContext();
+  }
+
+  #createContext(): ImportAnalysisContext {
+    return createImportAnalysisContext({
       isolated: true,
+      projectRootDir: this.#config.rootDir,
+      vueParser: this.#config.config?.imports?.vue,
     });
   }
 

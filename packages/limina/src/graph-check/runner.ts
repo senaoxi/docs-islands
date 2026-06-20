@@ -31,6 +31,7 @@ import {
 import { toRelativePath } from '#utils/path';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'pathe';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import {
   type CheckIssueReportOptions,
   formatCheckIssueHumanReport,
@@ -161,6 +162,29 @@ interface GraphImportResolution {
   workspaceExportResolution: WorkspacePackageExportResolution | null;
 }
 
+interface GraphProblemIssueHint {
+  code: string;
+  filePath?: string;
+  fix?: string;
+  packageManifestPath?: string;
+  packageName?: string;
+  reason?: string;
+  title?: string;
+}
+
+const graphProblemIssueHints = new Map<string, GraphProblemIssueHint>();
+
+function addGraphProblem(
+  problems: string[],
+  lines: readonly string[],
+  hint: GraphProblemIssueHint,
+): void {
+  const problem = lines.join('\n');
+
+  problems.push(problem);
+  graphProblemIssueHints.set(problem, hint);
+}
+
 function getGraphProblemTitle(problem: string): string {
   const firstLine = problem.split('\n')[0]?.trim() || 'Graph check issue';
 
@@ -256,21 +280,23 @@ function createGraphCheckIssue(options: {
   config: ResolvedLiminaConfig;
   problem: string;
 }): LiminaCheckIssue {
-  const title = getGraphProblemTitle(options.problem);
+  const hint = graphProblemIssueHints.get(options.problem);
+  const title = hint?.title ?? getGraphProblemTitle(options.problem);
   const reason =
+    hint?.reason ??
     getProblemLineValue(options.problem, 'reason') ??
     'Graph check found architecture, dependency, resolver, or config violations.';
 
   return createTaskFailureIssue({
-    code: getGraphProblemCode(title),
+    code: hint?.code ?? getGraphProblemCode(title),
     detailLines: options.problem.split('\n'),
-    filePath: getProblemFilePath(options.problem),
-    fix: getProblemLineValue(options.problem, 'fix'),
-    packageManifestPath: getProblemLineValue(
-      options.problem,
-      'package manifest',
-    ),
+    filePath: hint?.filePath ?? getProblemFilePath(options.problem),
+    fix: hint?.fix ?? getProblemLineValue(options.problem, 'fix'),
+    packageManifestPath:
+      hint?.packageManifestPath ??
+      getProblemLineValue(options.problem, 'package manifest'),
     packageName:
+      hint?.packageName ??
       getProblemLineValue(options.problem, 'referencing package') ??
       getProblemLineValue(options.problem, 'matched workspace package') ??
       getProblemLineValue(options.problem, 'package'),
@@ -347,7 +373,12 @@ function addDeniedReferenceProblems(options: {
       );
     }
 
-    options.problems.push(lines.join('\n'));
+    addGraphProblem(options.problems, lines, {
+      code: LIMINA_CHECK_ISSUE_CODES.graphAccessDenied,
+      filePath: options.project.configPath,
+      reason: deniedDepRule?.reason ?? deniedRefRule?.reason,
+      title: 'Denied graph access',
+    });
   }
 }
 
@@ -358,17 +389,23 @@ function addDeniedDepImportProblem(options: {
   problems: string[];
   rule: GraphRuleDepDeny;
 }): void {
-  options.problems.push(
-    [
-      'Denied graph access:',
-      `  rules: ${formatProjectLabels(options.project.labels)}`,
-      `  importing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
-      `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
-      `  imported specifier: ${options.importRecord.specifier}`,
-      `  denied dependency: ${options.rule.name}`,
-      `  reason: ${options.rule.reason}`,
-    ].join('\n'),
-  );
+  const lines = [
+    'Denied graph access:',
+    `  rules: ${formatProjectLabels(options.project.labels)}`,
+    `  importing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
+    `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
+    `  imported specifier: ${options.importRecord.specifier}`,
+    `  denied dependency: ${options.rule.name}`,
+    `  reason: ${options.rule.reason}`,
+  ];
+
+  addGraphProblem(options.problems, lines, {
+    code: LIMINA_CHECK_ISSUE_CODES.graphAccessDenied,
+    filePath: options.importRecord.filePath,
+    packageName: options.rule.name,
+    reason: options.rule.reason,
+    title: 'Denied graph access',
+  });
 }
 
 function addDeniedRefImportProblem(options: {
@@ -379,18 +416,23 @@ function addDeniedRefImportProblem(options: {
   rule: GraphRuleRefDeny;
   targetProjectPath: string;
 }): void {
-  options.problems.push(
-    [
-      'Denied graph access:',
-      `  rules: ${formatProjectLabels(options.project.labels)}`,
-      `  importing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
-      `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
-      `  imported specifier: ${options.importRecord.specifier}`,
-      `  target project: ${toRelativePath(options.config.rootDir, options.targetProjectPath)}`,
-      `  denied ref: ${toRelativePath(options.config.rootDir, options.rule.path)}`,
-      `  reason: ${options.rule.reason}`,
-    ].join('\n'),
-  );
+  const lines = [
+    'Denied graph access:',
+    `  rules: ${formatProjectLabels(options.project.labels)}`,
+    `  importing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
+    `  file: ${formatImportRecordLocation(options.config.rootDir, options.importRecord)}`,
+    `  imported specifier: ${options.importRecord.specifier}`,
+    `  target project: ${toRelativePath(options.config.rootDir, options.targetProjectPath)}`,
+    `  denied ref: ${toRelativePath(options.config.rootDir, options.rule.path)}`,
+    `  reason: ${options.rule.reason}`,
+  ];
+
+  addGraphProblem(options.problems, lines, {
+    code: LIMINA_CHECK_ISSUE_CODES.graphAccessDenied,
+    filePath: options.importRecord.filePath,
+    reason: options.rule.reason,
+    title: 'Denied graph access',
+  });
 }
 
 function getNodeModulesPackageName(filePath: string): string | null {
@@ -435,16 +477,29 @@ function addNamelessWorkspaceReferenceProblem(options: {
   referencePath: string;
   workspacePackage: WorkspacePackage;
 }): void {
-  options.problems.push(
-    [
-      'Project reference crosses workspace package without package identity:',
-      `  ${options.packageRole} package.json: ${toRelativePath(options.config.rootDir, path.join(options.workspacePackage.directory, 'package.json'))}`,
-      `  referencing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
-      `  referenced project: ${toRelativePath(options.config.rootDir, options.referencePath)}`,
-      '  reason: cross-package graph references need non-empty package.json names so Limina can validate dependency identity.',
-      '  fix: add a non-empty package.json name when this workspace package should participate in package dependency graph checks.',
-    ].join('\n'),
+  const packageManifestPath = path.join(
+    options.workspacePackage.directory,
+    'package.json',
   );
+  const lines = [
+    'Project reference crosses workspace package without package identity:',
+    `  ${options.packageRole} package.json: ${toRelativePath(options.config.rootDir, packageManifestPath)}`,
+    `  referencing project: ${toRelativePath(options.config.rootDir, options.project.configPath)}`,
+    `  referenced project: ${toRelativePath(options.config.rootDir, options.referencePath)}`,
+    '  reason: cross-package graph references need non-empty package.json names so Limina can validate dependency identity.',
+    '  fix: add a non-empty package.json name when this workspace package should participate in package dependency graph checks.',
+  ];
+
+  addGraphProblem(options.problems, lines, {
+    code: LIMINA_CHECK_ISSUE_CODES.graphWorkspacePackageNameMissing,
+    filePath: options.project.configPath,
+    fix: 'Add a non-empty package.json name when this workspace package should participate in package dependency graph checks.',
+    packageManifestPath,
+    reason:
+      'Cross-package graph references need non-empty package.json names so Limina can validate dependency identity.',
+    title:
+      'Project reference crosses workspace package without package identity',
+  });
 }
 
 function getResolvedWorkspacePackage(
@@ -529,18 +584,31 @@ function addWorkspaceReferenceDependencyProblems(
       continue;
     }
 
-    problems.push(
-      [
-        'Project reference crosses workspace packages without a declared dependency:',
-        `  referencing project: ${toRelativePath(config.rootDir, project.configPath)}`,
-        `  referenced project: ${toRelativePath(config.rootDir, referencePath)}`,
-        `  referencing package: ${sourcePackage.name}`,
-        `  referenced package: ${targetPackage.name}`,
-        `  package manifest: ${toRelativePath(config.rootDir, path.join(sourcePackage.directory, 'package.json'))}`,
-        `  reason: a cross-package project reference is a source dependency edge, so ${sourcePackage.name} must declare ${targetPackage.name} in dependencies, devDependencies, peerDependencies, or optionalDependencies.`,
-        `  fix: declare "${targetPackage.name}" in the referencing package manifest. If this package intentionally consumes built artifacts, remove the project reference; ${formatArtifactDependencyPolicy(targetPackage)}`,
-      ].join('\n'),
+    const packageManifestPath = path.join(
+      sourcePackage.directory,
+      'package.json',
     );
+    const lines = [
+      'Project reference crosses workspace packages without a declared dependency:',
+      `  referencing project: ${toRelativePath(config.rootDir, project.configPath)}`,
+      `  referenced project: ${toRelativePath(config.rootDir, referencePath)}`,
+      `  referencing package: ${sourcePackage.name}`,
+      `  referenced package: ${targetPackage.name}`,
+      `  package manifest: ${toRelativePath(config.rootDir, packageManifestPath)}`,
+      `  reason: a cross-package project reference is a source dependency edge, so ${sourcePackage.name} must declare ${targetPackage.name} in dependencies, devDependencies, peerDependencies, or optionalDependencies.`,
+      `  fix: declare "${targetPackage.name}" in the referencing package manifest. If this package intentionally consumes built artifacts, remove the project reference; ${formatArtifactDependencyPolicy(targetPackage)}`,
+    ];
+
+    addGraphProblem(problems, lines, {
+      code: LIMINA_CHECK_ISSUE_CODES.graphWorkspaceDependencyUndeclared,
+      filePath: project.configPath,
+      fix: `Declare "${targetPackage.name}" in the referencing package manifest. If this package intentionally consumes built artifacts, remove the project reference.`,
+      packageManifestPath,
+      packageName: sourcePackage.name,
+      reason: `A cross-package project reference is a source dependency edge, so ${sourcePackage.name} must declare ${targetPackage.name}.`,
+      title:
+        'Project reference crosses workspace packages without a declared dependency',
+    });
   }
 }
 
@@ -637,17 +705,24 @@ function addReferenceCompletenessProblems(options: {
         continue;
       }
 
-      options.problems.push(
-        [
-          'Missing project reference for workspace import:',
-          `  importing project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
-          `  expected reference: ${toRelativePath(options.config.rootDir, expectation.targetProjectPath)}`,
-          `  current references: ${formatReferences(options.config.rootDir, project.references)}`,
-          '  imports:',
-          ...formatImportRecordLines(options.config, expectation.importRecords),
-          '  fix: ensure both source tsconfig files are selected by checker.include, then run `limina graph prepare`.',
-        ].join('\n'),
-      );
+      const lines = [
+        'Missing project reference for workspace import:',
+        `  importing project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
+        `  expected reference: ${toRelativePath(options.config.rootDir, expectation.targetProjectPath)}`,
+        `  current references: ${formatReferences(options.config.rootDir, project.references)}`,
+        '  imports:',
+        ...formatImportRecordLines(options.config, expectation.importRecords),
+        '  fix: ensure both source tsconfig files are selected by checker.include, then run `limina graph prepare`.',
+      ];
+
+      addGraphProblem(options.problems, lines, {
+        code: LIMINA_CHECK_ISSUE_CODES.graphReferenceMissing,
+        filePath: project.configPath,
+        fix: 'Ensure both source tsconfig files are selected by checker.include, then run `limina graph prepare`.',
+        reason:
+          'A static workspace import reaches a declaration project that is not listed in the source declaration references.',
+        title: 'Missing project reference for workspace import',
+      });
     }
 
     if (project.fileNames.length === 0) {
@@ -691,16 +766,23 @@ function addReferenceCompletenessProblems(options: {
         continue;
       }
 
-      options.problems.push(
-        [
-          'Extra project reference not proven by static imports:',
-          `  project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
-          `  extra reference: ${toRelativePath(options.config.rootDir, referencePath)}`,
-          `  current references: ${formatReferences(options.config.rootDir, project.references)}`,
-          '  reason: tsconfig*.dts.json references must match declaration leaves reached by static import/export analysis.',
-          '  fix: remove the extra reference, import from the referenced project, or document the exception in graph.rules.<label>.allow.refs.',
-        ].join('\n'),
-      );
+      const lines = [
+        'Extra project reference not proven by static imports:',
+        `  project: ${toRelativePath(options.config.rootDir, project.configPath)}`,
+        `  extra reference: ${toRelativePath(options.config.rootDir, referencePath)}`,
+        `  current references: ${formatReferences(options.config.rootDir, project.references)}`,
+        '  reason: tsconfig*.dts.json references must match declaration leaves reached by static import/export analysis.',
+        '  fix: remove the extra reference, import from the referenced project, or document the exception in graph.rules.<label>.allow.refs.',
+      ];
+
+      addGraphProblem(options.problems, lines, {
+        code: LIMINA_CHECK_ISSUE_CODES.graphReferenceExtra,
+        filePath: project.configPath,
+        fix: 'Remove the extra reference, import from the referenced project, or document the exception in graph.rules.<label>.allow.refs.',
+        reason:
+          'tsconfig*.dts.json references must match declaration leaves reached by static import/export analysis.',
+        title: 'Extra project reference not proven by static imports',
+      });
     }
   }
 }

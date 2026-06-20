@@ -7,8 +7,8 @@
 | `graph:check`       | `limina graph check`       | 是，第 1 步         | 声明图 / 项目引用        |
 | `source:check`      | `limina source check`      | 是，第 2 步         | 包归属边界               |
 | `proof:check`       | `limina proof check`       | 是，第 3 步         | 源码覆盖 / tsconfig 形状 |
-| `checker:build`     | `limina checker build`     | 是，第 4 步         | 一等公民编译（产出声明） |
-| `checker:typecheck` | `limina checker typecheck` | 是，第 5 步         | 二等公民类型检查         |
+| `checker:build`     | `limina checker build`     | 是，第 4 步         | 构建类类型检查           |
+| `checker:typecheck` | `limina checker typecheck` | 是，第 5 步         | 只检查不产出             |
 | `package:check`     | `limina package check`     | 否，发布期          | 构建产物                 |
 | `release:check`     | `limina release check`     | 否，发布期          | 发布卫生                 |
 
@@ -16,15 +16,15 @@
 
 ## `graph:check`
 
-对应 `limina graph check`，校验 `.limina/` 下生成的声明叶子组成的项目引用图；用户可见的规范路径是被 `checker.include` 选中的源码 tsconfig。下面逐项说明它检测什么、为什么这么要求、以及一个典型例子。
+对应 `limina graph check`，校验 `.limina/` 下生成的声明构建图；用户可见的规范路径是被 `checker.include` 选中的源码 tsconfig。下面逐项说明它检测什么、为什么这么要求、以及一个典型例子。
 
 ::: tip
 这里提到的 deny/allow 规则在[图规则](./config/graph-rules.md)中定义。
 :::
 
-### 声明叶子的编译选项要齐全
+### 声明构建配置的编译选项要齐全
 
-生成的声明叶子靠 `tsc -b` 增量地只产出 `.d.ts`。Limina 会在 `limina graph prepare` 时写出这些叶子；每个叶子都会打开 `composite`、`incremental`、`declaration`、`emitDeclarationOnly`，关掉 `noEmit`，并写明 `rootDir` / `outDir` / `tsBuildInfoFile`。
+生成的声明构建配置会通过 `tsc -b` 增量地产出 `.d.ts`。Limina 会在 `limina graph prepare` 时写出这些配置；每个配置都会打开 `composite`、`incremental`、`declaration`、`emitDeclarationOnly`，关掉 `noEmit`，并写明 `rootDir` / `outDir` / `tsBuildInfoFile`。
 
 ```jsonc
 // .limina/tsconfig/checkers/typescript/projects/packages/core/tsconfig.lib.dts.json
@@ -47,7 +47,7 @@
 
 ### 每个叶子都要有配对的本地配置
 
-每个生成的 `*.dts.json` 都要通过 `liminaOptions.sourceConfig` 指回负责类型语义的普通源码 `tsconfig*.json`。`module`、`target`、`lib` 等类型相关选项来自这个源码配置，生成叶子纳入的文件也不能超出源码配置。
+每个生成的 `*.dts.json` 都要通过 `liminaOptions.sourceConfig` 指回负责类型语义的普通源码 `tsconfig*.json`。`module`、`target`、`lib` 等类型相关选项来自这个源码配置，生成配置纳入的文件也不能超出源码配置。
 
 ```text
 packages/core/
@@ -56,18 +56,18 @@ packages/core/
   tsconfig.lib.dts.json   # 生成叶子，sourceConfig -> packages/core/tsconfig.lib.json
 ```
 
-没有 `sourceConfig` 的生成叶子会被拒绝。诊断涉及生成路径时，Limina 会尽量通过 manifest 映射回源码 tsconfig 路径。
+没有 `sourceConfig` 的生成配置会被拒绝。诊断涉及生成路径时，Limina 会尽量映射回源码 tsconfig 路径。
 
 ### 源码入口导入需要匹配引用
 
-叶子的 `references` 必须和真实源码边对应：静态导入到的、由其他声明项目拥有的源码入口，以及写明原因的 `liminaOptions.implicitRefs`。代码导入了别的包的源码入口，就必须有对应引用；否则增量构建拿不到上游声明。反过来，既没有静态导入证明、也没有 `implicitRefs` 说明的引用也会被指出来，避免无用边。
+生成配置里的 `references` 必须和真实源码边对应：静态导入到的、由其他声明项目负责的源码入口，以及写明原因的 `liminaOptions.implicitRefs`。代码导入了别的包的源码入口，就必须有对应引用；否则增量构建拿不到上游声明。反过来，既没有静态导入证明、也没有 `implicitRefs` 说明的引用也会被指出来，避免留下无用边。
 
 ```ts
 // packages/app/src/main.ts
 import { createClient } from '@acme/core'; // 引用了 core
 ```
 
-生成的声明引用来自真实导入到的、由其他生成声明项目拥有的源码文件。如果源码边缺失，确认两端源码 tsconfig 都被 `checker.include` 选中，然后运行 `limina graph prepare`。解析到 `dist/*.d.ts` 这类构建声明产物的导入不要求项目引用。
+生成的声明引用来自真实导入到的、由其他生成配置负责的源码文件。如果源码边缺失，确认两端源码 tsconfig 都被 `checker.include` 选中，然后运行 `limina graph prepare`。解析到 `dist/*.d.ts` 这类构建声明产物的导入不要求项目引用。
 
 如果真实边无法从静态导入里看出来，把它写在需要补边的源码 tsconfig 上：
 
@@ -84,7 +84,7 @@ import { createClient } from '@acme/core'; // 引用了 core
 }
 ```
 
-`implicitRefs.path` 相对声明它的配置指向另一份普通源码 tsconfig。Limina 会把它映射到生成的声明项目。不要在源码叶子配置里手写 `references`；只有 solution-style 的 `tsconfig.json` 聚合器应该携带 TypeScript `references`。
+`implicitRefs.path` 相对声明它的配置指向另一份普通源码 tsconfig。Limina 会把它映射到生成的声明项目。不要在普通源码配置里手写 `references`；只有 solution-style 的 `tsconfig.json` 聚合器应该携带 TypeScript `references`。
 
 ### 工作区包导出必须可解析
 
@@ -117,11 +117,11 @@ import { createClient } from '@acme/core'; // 引用了 core
 { "liminaOptions": { "graphRules": ["runtime-client"] } }
 ```
 
-`limina graph prepare` 会把规则标签复制到生成声明叶子里。命中时报 `Denied graph access:`，并带上你在规则里写的 `reason`。
+`limina graph prepare` 会把规则标签带到生成的构建配置里。命中时报 `Denied graph access:`，并带上你在规则里写的 `reason`。
 
 ## `source:check`
 
-对应 `limina source check`，校验包归属边界——谁能导入谁、依赖有没有声明。
+对应 `limina source check`，校验 source ownership、package-scope 相对导入边界，以及依赖有没有声明。
 
 ### 不准跨包相对导入
 
@@ -132,11 +132,11 @@ import { createClient } from '@acme/core'; // 引用了 core
 import { helper } from '../../a/src/util';
 ```
 
-报 `Relative import escapes package owner scope:`。修复：在 `packages/b/package.json` 声明对 `@acme/a` 的依赖，并改成 `import { helper } from '@acme/a'`。
+报 `Relative import escapes package scope:`。修复：在 `packages/b/package.json` 声明对 `@acme/a` 的依赖，并改成 `import { helper } from '@acme/a'`。
 
 ### 裸包导入必须先声明
 
-按包名引入的依赖，必须出现在最近 `package.json` 的 `dependencies` / `devDependencies` / `peerDependencies` / `optionalDependencies` 任一中（Node 内置模块和包自身豁免），否则就是用了没声明的依赖。
+按包名引入的依赖，必须由 pnpm workspace source owner 授权。公开包里的 runtime import 必须由这个 owner 自己声明；docs、tests、config/tooling 文件、type-only import、private owner 和无名 owner 也可以由 workspace root 的 `devDependencies` 授权。其他有意存在的场景可以用 `source.importAuthority.allow` 声明。
 
 ```ts
 import pMap from 'p-map'; // 但 package.json 里没声明 p-map
@@ -153,13 +153,13 @@ import pMap from 'p-map'; // 但 package.json 里没声明 p-map
 { "imports": { "#utils/*": "./src/utils/*.ts" } }
 ```
 
-没匹配上报 `Unauthorized package import specifier:`；解析不了报 `Unresolved package import specifier:`；落到别的包报 `Package import resolves to another package owner:`。
+没匹配上报 `Unauthorized package import specifier:`；解析不了报 `Unresolved package import specifier:`；落到别的 source owner 报 `Package import resolves to another source owner:`。
 
 ### 一个 tsconfig / 模块只能属于一个归属方
 
-治理用的 tsconfig，或一个源码模块，不能横跨多个包（即多个最近的 `package.json`），否则归属不清。
+治理用的 tsconfig，或一个源码模块，不能横跨多个 pnpm workspace source owner，否则归属不清。
 
-报 `Tsconfig source file set mixes package owners:` 或 `Source module belongs to multiple package owners:`。修复：拆分 tsconfig，让每个治理单元只覆盖单个包。
+报 `Tsconfig source file set mixes source owners:` 或 `Source module belongs to multiple source owners:`。修复：拆分 tsconfig，让每个治理单元只覆盖单个包。
 
 ### 声明了却没用到的工作区依赖（Knip）
 
@@ -204,7 +204,7 @@ source: {
 
 ## `graph export`
 
-对应 `limina graph export`，导出 Limina 在受管辖 tsconfig 域内从真实导入和模块解析结果推导出的包依赖图。
+对应 `limina graph export`，导出 Limina 在被检查的 tsconfig 域内从真实导入和模块解析结果推导出的包依赖图。
 
 ```sh
 pnpm exec limina graph export --view all --output .limina/dependency-graph.json
@@ -238,7 +238,7 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 
 ### 同一文件不能被重复覆盖
 
-同一个源码文件被同一检查器的两个源码 tsconfig 同时纳入，会造成重复的生成声明归属和归属歧义。
+同一个源码文件被同一检查器的两个源码 tsconfig 同时纳入，会造成重复的声明构建归属和归属歧义。
 
 报 `Duplicate checker graph coverage:`。修复：让每个文件在同一检查器下只属于一个源码 tsconfig。
 
@@ -253,7 +253,7 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 
 不满足报 `Default tsconfig.json is not a pure aggregator:`。
 
-### 声明叶子的形状要对
+### 声明构建配置的形状要对
 
 每个生成的 `*.dts.json` 要能被生成的检查器 build 入口触达、有 `sourceConfig`、对 `tsc -b` 合法，且文件集和（非输出类）选项与源码配置对齐。
 
@@ -273,7 +273,7 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 
 ## `checker:build`
 
-对应 `limina checker build`，跑「一等公民」构建编译器，真正做类型检查并产出声明。
+对应 `limina checker build`，运行支持构建模式的检查器，真正做类型检查并产出声明。
 
 ### 先预检所有检查器的 peer 依赖
 
@@ -291,7 +291,7 @@ packages/core/src/generated/runtime.ts  # 没被任何 checker entry 覆盖
 
 ### 提示不兼容的构建检查器组合
 
-所有构建进程结束后，Limina 会检查：哪些构建类 checker preset 触达了同一个生成声明配置。这个提示不会改变退出码；它只是提醒底层 build cache 语义可能不安全。
+所有构建进程结束后，Limina 会检查：哪些构建类 checker preset 触达了同一个生成的声明构建配置。这个提示不会改变退出码；它只是提醒底层 build cache 语义可能不安全。
 
 如果触达它的 checker 全部是同一个 preset，不提示。只混用了 `tsc` 和 `vue-tsc`，也不提示。其他构建类 preset 混用，例如 `tsgo` 和 `tsc`、`tsgo` 和 `vue-tsc`，会被提示，因为它们不能安全共享同一套底层 build cache 语义。
 
@@ -319,11 +319,11 @@ Potentially incompatible build checker combination:
 
 ## `checker:typecheck`
 
-对应 `limina checker typecheck`，跑「二等公民」只检查不产出的检查器。
+对应 `limina checker typecheck`，运行只做类型检查、不产出文件的检查器。
 
 ### 只预检类型检查类 checker 的 peer 依赖
 
-这一步只预检即将运行的二等公民 checker entry，例如 `vue-tsgo` 和 `svelte-check`。执行构建的一等公民预设由 `checker:build` 处理。
+这一步只预检即将运行的只做类型检查的 checker entry，例如 `vue-tsgo` 和 `svelte-check`。执行构建的预设由 `checker:build` 处理。
 
 报 `Missing checker peer dependencies:`，并附 `Fix: pnpm add -D <包名>`。
 
@@ -338,9 +338,9 @@ checkers: { vue: { preset: 'vue-tsgo', include: ['apps/app/tsconfig.json'] } }
 
 有 `.vue` 类型错误时非零退出，报 `typecheck checks failed:`。修复：解决报出来的 `.vue` 类型错误。
 
-### 没有二等公民检查器时是空操作
+### 没有只做类型检查的检查器时是空操作
 
-如果没有显式配置二等公民检查器，例如 auto 模式，或只有 `tsc` / `tsgo` / `vue-tsc`，这一步直接通过，并打印 `No second-class checker entries configured.`；真正的类型检查在 `checker:build` 完成。
+如果没有显式配置只做类型检查的检查器，例如 auto 模式，或只有 `tsc` / `tsgo` / `vue-tsc`，这一步直接通过，并打印 `No second-class checker entries configured.`；真正的类型检查在 `checker:build` 完成。
 
 ## `package:check`
 

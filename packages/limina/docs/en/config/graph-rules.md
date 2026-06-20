@@ -1,6 +1,6 @@
 # Graph Rules
 
-Graph rules are keyed by labels declared in source `tsconfig*.json` files. Limina copies those labels into the generated declaration leaves under `.limina/`.
+Graph rules are keyed by labels declared in source `tsconfig*.json` files. Limina carries those labels into the generated build configs and uses them during graph checks to decide which references or dependencies are not allowed.
 
 ```js
 import { defineConfig } from 'limina';
@@ -45,7 +45,7 @@ export default defineConfig({
 
 - **Type:** `Record<string, GraphRule>`
 
-The `rules` key must match an entry in `liminaOptions.graphRules` in a source tsconfig. A source config can list multiple labels, and Limina merges the matching rules for its generated declaration leaf.
+The `rules` key must match an entry in `liminaOptions.graphRules` in a source tsconfig. A source config can list multiple labels, and Limina merges the matching rules for that config.
 
 Pair the rule with labels in the source config:
 
@@ -72,7 +72,7 @@ Generated references are inferred from source imports and from `liminaOptions.im
 
 - **Type:** `Array<{ path: string; reason: string }>`
 
-`deny.refs` forbids a labeled project from referencing a specific source tsconfig's generated declaration leaf. It is useful for boundaries such as "client runtime must not depend on server runtime" or "public API must not depend on internal tools".
+`deny.refs` forbids a labeled project from referencing the declaration build config for a specific source tsconfig. It is useful for boundaries such as "client runtime must not depend on server runtime" or "public API must not depend on internal tools".
 
 For example, if the rule contains:
 
@@ -83,7 +83,7 @@ For example, if the rule contains:
 }
 ```
 
-and a `runtime-client` generated leaf references the generated Node-only leaf, `limina graph check` fails and prints the configured reason.
+and a project labeled `runtime-client` references the generated Node-only config, `limina graph check` fails and prints the configured reason.
 
 In a fuller example, the repository can look like this:
 
@@ -107,7 +107,7 @@ The client source config is labeled `runtime-client`; Limina generates the refer
 }
 ```
 
-When `pnpm exec limina graph check` runs, Limina prepares the generated graph, finds reachable generated declaration leaves, and reads each leaf's `references`. When it sees the `runtime-client` generated leaf referencing the generated project for `packages/app/src/node/tsconfig.lib.json`, it compares that source path with `graph.rules.runtime-client.deny.refs`.
+When `pnpm exec limina graph check` runs, Limina prepares the generated graph and reads the relevant project `references`. When it sees a project labeled `runtime-client` referencing the generated config for `packages/app/src/node/tsconfig.lib.json`, it compares that source path with `graph.rules.runtime-client.deny.refs`.
 
 The result is a graph check failure that points at the forbidden project reference and prints the configured `reason`. This means the problem is not just one import line; the TypeScript graph itself now says client runtime depends on Node runtime.
 

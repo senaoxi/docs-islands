@@ -68,7 +68,31 @@ function isNodeModulesPackageRoot(directory: string): boolean {
   return false;
 }
 
-function findNearestPackageInfo(filePath: string): NearestPackageInfo | null {
+function isPackageInfoInsideNodeModules(
+  packageInfo: NearestPackageInfo,
+): boolean {
+  return normalizeAbsolutePath(packageInfo.directory)
+    .split('/')
+    .includes('node_modules');
+}
+
+function readPackageInfo(packageJsonPath: string): NearestPackageInfo {
+  const normalizedPackageJsonPath = normalizeAbsolutePath(packageJsonPath);
+  const directory = normalizeAbsolutePath(path.dirname(packageJsonPath));
+  const manifest = readJsonFile<PackageManifest>(normalizedPackageJsonPath);
+  const name = getManifestPackageName(manifest);
+
+  return {
+    directory,
+    manifest,
+    name,
+    packageJsonPath: normalizedPackageJsonPath,
+  };
+}
+
+export function findNearestPackageScopeInfo(
+  filePath: string,
+): NearestPackageInfo | null {
   const normalizedFilePath = normalizeAbsolutePath(filePath);
   let currentDir = normalizeAbsolutePath(path.dirname(normalizedFilePath));
 
@@ -78,25 +102,7 @@ function findNearestPackageInfo(filePath: string): NearestPackageInfo | null {
     );
 
     if (existsSync(packageJsonPath)) {
-      const manifest = readJsonFile<PackageManifest>(packageJsonPath);
-      const name = getManifestPackageName(manifest);
-      const packageInfo = {
-        directory: currentDir,
-        manifest,
-        name,
-        packageJsonPath,
-      };
-
-      if (name) {
-        return packageInfo;
-      }
-
-      // An unnamed manifest at a node_modules package root is the authoritative
-      // root for the resolved import; stop here so the caller can reject it
-      // rather than escaping into an ancestor package such as the importer.
-      if (isNodeModulesPackageRoot(currentDir)) {
-        return packageInfo;
-      }
+      return readPackageInfo(packageJsonPath);
     }
 
     const parentDir = path.dirname(currentDir);
@@ -109,15 +115,31 @@ function findNearestPackageInfo(filePath: string): NearestPackageInfo | null {
   }
 }
 
-function findOwnerForPackageInfo(
-  packageInfo: NearestPackageInfo,
-  owners: PackageOwner[],
-): PackageOwner | null {
-  return (
-    owners.find(
-      (owner) => owner.packageJsonPath === packageInfo.packageJsonPath,
-    ) ?? null
-  );
+function findNearestPackageInfo(filePath: string): NearestPackageInfo | null {
+  const normalizedFilePath = normalizeAbsolutePath(filePath);
+  let currentDir = normalizeAbsolutePath(path.dirname(normalizedFilePath));
+
+  while (true) {
+    const packageJsonPath = normalizeAbsolutePath(
+      path.join(currentDir, 'package.json'),
+    );
+
+    if (existsSync(packageJsonPath)) {
+      const packageInfo = readPackageInfo(packageJsonPath);
+
+      if (packageInfo.name || isNodeModulesPackageRoot(currentDir)) {
+        return packageInfo;
+      }
+    }
+
+    const parentDir = path.dirname(currentDir);
+
+    if (parentDir === currentDir) {
+      return null;
+    }
+
+    currentDir = parentDir;
+  }
 }
 
 function findWorkspacePackageForPackageInfo(
@@ -146,23 +168,43 @@ export function classifyResolvedPackageTarget(options: {
   resolvedFilePath: string;
 }): ResolvedPackageTarget {
   const packageInfo = findNearestPackageInfo(options.resolvedFilePath);
+  const targetOwner = findOwnerForFile(
+    options.resolvedFilePath,
+    options.owners,
+  );
 
   if (!packageInfo) {
+    if (targetOwner?.packageJsonPath === options.owner.packageJsonPath) {
+      return {
+        kind: 'current-owner',
+        packageInfo: {
+          directory: options.owner.directory,
+          manifest: options.owner.manifest,
+          ...(options.owner.name ? { name: options.owner.name } : {}),
+          packageJsonPath: options.owner.packageJsonPath,
+        },
+      };
+    }
+
     return {
       kind: 'unowned',
     };
   }
 
-  if (packageInfo.packageJsonPath === options.owner.packageJsonPath) {
+  if (
+    targetOwner?.packageJsonPath === options.owner.packageJsonPath &&
+    !isPackageInfoInsideNodeModules(packageInfo)
+  ) {
     return {
       kind: 'current-owner',
       packageInfo,
     };
   }
 
-  const targetOwner = findOwnerForPackageInfo(packageInfo, options.owners);
-
-  if (targetOwner) {
+  if (
+    targetOwner &&
+    targetOwner.packageJsonPath !== options.owner.packageJsonPath
+  ) {
     return {
       kind: 'other-owner',
       packageInfo,
