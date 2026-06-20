@@ -88,7 +88,9 @@ When a real edge cannot be seen from static imports, document it on the source t
 
 ### Workspace package exports must resolve
 
-For every workspace package that declares `exports`, graph check pre-resolves each public subpath with the active checker profiles. TypeScript resolution must reach a stable type entry or source entry: `.d.ts` family files, TypeScript source files, `.json`, or checker-supported source files such as `.vue`. Oxc resolution must also resolve; declaration-only exports may use TypeScript's `.d.ts` result as the effective Oxc result.
+For every workspace package that declares `exports`, graph check pre-resolves each real public subpath with the active checker profiles. `null` export entries are treated as denied package subpaths and skipped. Each real export must resolve to a concrete module through the runtime resolver; declaration-only exports may use TypeScript's `.d.ts` result as the effective runtime result.
+
+When governed source imports one of these exports, TypeScript resolution must reach a stable type entry or source entry: `.d.ts` family files, TypeScript source files, `.json`, or checker-supported source files such as `.vue`. Runtime-only exports that are not imported by governed source may point at JavaScript artifacts, but once source imports them they need a type entry.
 
 ```jsonc
 // the dependency's packages/core/package.json
@@ -104,7 +106,7 @@ For every workspace package that declares `exports`, graph check pre-resolves ea
 }
 ```
 
-Unresolved exports report `Workspace package export is not resolvable by TypeScript:` or `Workspace package export is not resolvable by Oxc:`. If TypeScript only resolves an export to runtime JavaScript, it reports `Workspace package export resolves to runtime JavaScript in TypeScript:`.
+Unresolved exports report `Workspace package export is not resolvable by TypeScript:` or `Workspace package export is not resolvable by Oxc:`. If governed source imports an export that only resolves to runtime JavaScript, it reports `Workspace source import uses package export without a type entry:`.
 
 ### References/dependencies that hit a deny rule are rejected
 

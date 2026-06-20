@@ -853,6 +853,20 @@ function resolveImportForReferenceExpectation(options: {
     project: options.project,
     targetPackage,
   });
+
+  if (
+    workspaceExportResolution &&
+    !workspaceExportResolution.hasTypeScriptStableEntry
+  ) {
+    addWorkspacePackageExportWithoutTypeEntryProblem({
+      context: options.context,
+      importRecord: options.importRecord,
+      project: options.project,
+      resolution: workspaceExportResolution,
+    });
+    return null;
+  }
+
   const internalResolvedFilePath = resolveInternalImport(
     options.importRecord.specifier,
     options.filePath,
@@ -931,6 +945,40 @@ function resolveImportForReferenceExpectation(options: {
     targetWorkspacePackageForResolved,
     workspaceExportResolution,
   };
+}
+
+function addWorkspacePackageExportWithoutTypeEntryProblem(options: {
+  context: ExpectedReferenceCollectionContext;
+  importRecord: ImportRecord;
+  project: ProjectInfo;
+  resolution: WorkspacePackageExportResolution;
+}): void {
+  const typeScriptResolvedFileName =
+    options.resolution.typeScriptResolvedFileName;
+  const oxcResolvedFileName = options.resolution.oxcResolvedFileName;
+
+  options.context.problems.push(
+    [
+      'Workspace source import uses package export without a type entry:',
+      `  importing project: ${toRelativePath(options.context.config.rootDir, options.project.configPath)}`,
+      `  file: ${formatImportRecordLocation(options.context.config.rootDir, options.importRecord)}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  package: ${options.resolution.packageName}`,
+      `  export: ${options.resolution.subpath}`,
+      ...(typeScriptResolvedFileName
+        ? [
+            `  TypeScript resolved file: ${toRelativePath(options.context.config.rootDir, typeScriptResolvedFileName)}`,
+          ]
+        : ['  TypeScript resolved file: (none)']),
+      ...(oxcResolvedFileName
+        ? [
+            `  runtime resolved file: ${toRelativePath(options.context.config.rootDir, oxcResolvedFileName)}`,
+          ]
+        : ['  runtime resolved file: (none)']),
+      '  reason: governed source imports through package exports must resolve to a stable type or checker source entry.',
+      '  fix: add a types/declaration branch for this export, import a typed public API, or keep this entry as a runtime-only resource outside governed source imports.',
+    ].join('\n'),
+  );
 }
 
 function getWorkspaceExportResolution(options: {

@@ -1113,10 +1113,7 @@ packages:
     }
   });
 
-  it('reports workspace package exports that TypeScript resolves to runtime JavaScript', async () => {
-    const errorSpy = vi
-      .spyOn(GraphLogger, 'error')
-      .mockImplementation(() => {});
+  it('allows runtime JavaScript package exports when governed source does not import them', async () => {
     const runtimeExportNames = [
       'file-00',
       'file-01',
@@ -1165,30 +1162,68 @@ packages:
     });
 
     try {
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports governed source imports that use package exports without type entries', async () => {
+    const errorSpy = vi
+      .spyOn(GraphLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      ...createWorkspacePackageFiles({
+        appSource:
+          "import { value } from '@example/internal/file-00';\nexport const result = value;\n",
+      }),
+      'packages/internal/dist/file-00.js': 'export const value = 1;\n',
+      'packages/internal/package.json': stringifyConfig({
+        exports: {
+          './file-00': './dist/file-00.js',
+        },
+        name: '@example/internal',
+        type: 'module',
+      }),
+    });
+
+    try {
+      await linkWorkspacePackage(
+        fixture.rootDir,
+        'packages/app',
+        'packages/internal',
+        '@example/internal',
+      );
+
       await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
       expect(errors).toContain(
-        'Workspace package export resolves to runtime JavaScript in TypeScript',
+        'Workspace source import uses package export without a type entry',
       );
-      expect(errors).toContain('│ Found 6 check issues.');
-      expect(errors).toContain('│ package: @example/internal');
-      expect(errors).toContain('│ files:');
-      expect(errors).toContain('│   - packages/internal/dist/file-00.js');
-      expect(errors).toContain('│   - packages/internal/dist/file-04.js');
-      expect(errors).not.toContain('│   - packages/internal/dist/file-05.js');
-      expect(errors).toContain('│   ... 1 more');
 
       const snapshot = await readCheckIssueSnapshot(fixture.rootDir);
+      const issue = snapshot?.issues.find(
+        (item) =>
+          item.title ===
+          'Workspace source import uses package export without a type entry',
+      );
 
       expect(snapshot?.issues).toContainEqual(
         expect.objectContaining({
-          filePath: 'packages/internal/dist/file-00.js',
+          filePath: 'packages/app/src/index.ts',
           packageName: '@example/internal',
           task: 'graph:check',
           title:
-            'Workspace package export resolves to runtime JavaScript in TypeScript',
+            'Workspace source import uses package export without a type entry',
         }),
+      );
+      expect(issue?.detailLines).toContain(
+        '  imported specifier: @example/internal/file-00',
+      );
+      expect(issue?.detailLines).toContain('  export: ./file-00');
+      expect(issue?.detailLines).toContain(
+        '  TypeScript resolved file: packages/internal/dist/file-00.js',
       );
     } finally {
       errorSpy.mockRestore();
@@ -1337,6 +1372,43 @@ packages:
         '@example/internal',
       );
 
+      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('skips null wildcard package exports because they deny access', async () => {
+    const fixture = await createFixture({
+      'packages/internal/package.json': stringifyConfig({
+        exports: {
+          '.': './src/index.ts',
+          './types/internal/*': null,
+        },
+        name: '@example/internal',
+        type: 'module',
+      }),
+      'packages/internal/src/index.ts': 'export const value = 1;\n',
+      'packages/internal/tsconfig.lib.dts.json': buildConfig({
+        include: ['src/**/*.ts'],
+        tsBuildInfoFile: './.tsbuild/lib.tsbuildinfo',
+      }),
+      'packages/internal/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+      'pnpm-workspace.yaml': `
+packages:
+  - packages/*
+`,
+      'tsconfig.build.json': stringifyConfig({
+        files: [],
+        references: [
+          {
+            path: './packages/internal/tsconfig.lib.dts.json',
+          },
+        ],
+      }),
+    });
+
+    try {
       await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();

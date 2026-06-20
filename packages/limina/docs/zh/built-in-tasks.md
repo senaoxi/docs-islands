@@ -88,7 +88,9 @@ import { createClient } from '@acme/core'; // 引用了 core
 
 ### 工作区包导出必须可解析
 
-对于每个声明了 `exports` 的工作区包，图检查会使用当前检查器配置预解析每个公开子路径。TypeScript 解析必须到达稳定类型入口或源码入口：`.d.ts` 系列文件、TypeScript 源码、`.json`，或检查器支持的源码文件，例如 `.vue`。Oxc 解析也必须成功；纯声明导出可以把 TypeScript 的 `.d.ts` 结果作为有效 Oxc 结果。
+对于每个声明了 `exports` 的工作区包，图检查会使用当前检查器配置预解析每个真实公开子路径。`null` 导出表示这个包子路径被禁止访问，会被跳过。每个真实导出都必须能通过运行时解析器落到具体模块；纯声明导出可以把 TypeScript 的 `.d.ts` 结果作为有效运行时解析结果。
+
+当受管源码 import 了其中某个导出时，TypeScript 解析必须到达稳定类型入口或源码入口：`.d.ts` 系列文件、TypeScript 源码、`.json`，或检查器支持的源码文件，例如 `.vue`。没有被受管源码 import 的运行时导出可以指向 JavaScript artifact；一旦源码 import 它，就必须提供类型入口。
 
 ```jsonc
 // 被依赖的 packages/core/package.json
@@ -104,7 +106,7 @@ import { createClient } from '@acme/core'; // 引用了 core
 }
 ```
 
-无法解析时分别报 `Workspace package export is not resolvable by TypeScript:` 或 `Workspace package export is not resolvable by Oxc:`。如果 TypeScript 只能把导出解析到运行时 JavaScript，则报 `Workspace package export resolves to runtime JavaScript in TypeScript:`。
+无法解析时分别报 `Workspace package export is not resolvable by TypeScript:` 或 `Workspace package export is not resolvable by Oxc:`。如果受管源码 import 的导出只能解析到运行时 JavaScript，则报 `Workspace source import uses package export without a type entry:`。
 
 ### 命中 deny 规则的引用/依赖会被拒
 

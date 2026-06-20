@@ -10,11 +10,7 @@ import type {
   WorkspacePackage,
 } from '#core/workspace/actions';
 import { isNamedWorkspacePackage } from '#core/workspace/actions';
-import {
-  normalizeAbsolutePath,
-  toPosixPath,
-  toRelativePath,
-} from '#utils/path';
+import { normalizeAbsolutePath, toPosixPath } from '#utils/path';
 import { existsSync, statSync } from 'node:fs';
 import path from 'pathe';
 import { glob } from 'tinyglobby';
@@ -29,6 +25,7 @@ export interface WorkspaceExportsResolutionProfile {
 }
 
 export interface WorkspacePackageExportResolution {
+  hasTypeScriptStableEntry: boolean;
   oxcResolvedFileName: string | null;
   packageName: string;
   specifier: string;
@@ -93,6 +90,10 @@ function collectExportTargets(value: PackageExportValue): string[] {
   }
 
   return [];
+}
+
+function isNullPackageExport(value: PackageExportValue): boolean {
+  return value === null;
 }
 
 function stripDotSlash(value: string): string {
@@ -251,6 +252,10 @@ async function collectPackageExportEntries(
   const entries: PackageExportEntry[] = [];
 
   for (const rawEntry of rawEntries) {
+    if (isNullPackageExport(rawEntry.value)) {
+      continue;
+    }
+
     const targets = collectExportTargets(rawEntry.value);
 
     if (rawEntry.subpath.includes('*')) {
@@ -420,25 +425,16 @@ function getEffectiveOxcResolvedFileName(options: {
   return null;
 }
 
-function formatProfile(
-  config: ResolvedLiminaConfig,
-  configPath: string,
-): string {
-  return toRelativePath(config.rootDir, configPath);
-}
-
 function addEntryProblems(options: {
-  config: ResolvedLiminaConfig;
   entry: PackageExportEntry;
   oxcResolvedPaths: string[];
   problems: string[];
-  typeScriptRuntimeResolutions: {
-    configPath: string;
-    resolvedFileName: string;
-  }[];
   typeScriptResolvedPaths: string[];
 }): void {
-  if (options.typeScriptResolvedPaths.length === 0) {
+  if (
+    options.typeScriptResolvedPaths.length === 0 &&
+    options.oxcResolvedPaths.length === 0
+  ) {
     options.problems.push(
       [
         'Workspace package export is not resolvable by TypeScript:',
@@ -458,20 +454,6 @@ function addEntryProblems(options: {
         `  export: ${options.entry.subpath}`,
         `  specifier: ${options.entry.specifier}`,
         '  reason: no active checker profile could resolve this package export through the runtime resolver.',
-      ].join('\n'),
-    );
-  }
-
-  for (const resolution of options.typeScriptRuntimeResolutions) {
-    options.problems.push(
-      [
-        'Workspace package export resolves to runtime JavaScript in TypeScript:',
-        `  package: ${options.entry.packageName}`,
-        `  export: ${options.entry.subpath}`,
-        `  specifier: ${options.entry.specifier}`,
-        `  profile: ${formatProfile(options.config, resolution.configPath)}`,
-        `  resolved file: ${toRelativePath(options.config.rootDir, resolution.resolvedFileName)}`,
-        '  reason: TypeScript resolved the export to a runtime module instead of a stable type or checker source entry.',
       ].join('\n'),
     );
   }
@@ -506,10 +488,6 @@ export async function createWorkspaceExportsResolutionIndex(options: {
     for (const entry of collectedEntries.entries) {
       const typeScriptResolvedPaths: string[] = [];
       const oxcResolvedPaths: string[] = [];
-      const typeScriptRuntimeResolutions: {
-        configPath: string;
-        resolvedFileName: string;
-      }[] = [];
 
       for (const profile of options.profiles) {
         const typeScriptResolvedFileName = resolveTypeScriptExport({
@@ -530,6 +508,10 @@ export async function createWorkspaceExportsResolutionIndex(options: {
           resolutionByProfilePath.get(profile.configPath) ?? new Map();
 
         profileResolutions.set(entry.specifier, {
+          hasTypeScriptStableEntry: Boolean(
+            typeScriptResolvedFileName &&
+              !typeScriptRuntimeModulePattern.test(typeScriptResolvedFileName),
+          ),
           oxcResolvedFileName,
           packageName: entry.packageName,
           specifier: entry.specifier,
@@ -540,13 +522,6 @@ export async function createWorkspaceExportsResolutionIndex(options: {
 
         if (typeScriptResolvedFileName) {
           typeScriptResolvedPaths.push(typeScriptResolvedFileName);
-
-          if (typeScriptRuntimeModulePattern.test(typeScriptResolvedFileName)) {
-            typeScriptRuntimeResolutions.push({
-              configPath: profile.configPath,
-              resolvedFileName: typeScriptResolvedFileName,
-            });
-          }
         }
 
         if (oxcResolvedFileName) {
@@ -555,12 +530,10 @@ export async function createWorkspaceExportsResolutionIndex(options: {
       }
 
       addEntryProblems({
-        config: options.config,
         entry,
         oxcResolvedPaths,
         problems,
         typeScriptResolvedPaths,
-        typeScriptRuntimeResolutions,
       });
     }
   }
