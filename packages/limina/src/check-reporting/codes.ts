@@ -59,6 +59,296 @@ export const LIMINA_CHECK_ISSUE_CODES = {
 export type LiminaCheckIssueCode =
   (typeof LIMINA_CHECK_ISSUE_CODES)[keyof typeof LIMINA_CHECK_ISSUE_CODES];
 
+export interface LiminaCheckIssueRuleMetadata {
+  code: LiminaCheckIssueCode;
+  description: string;
+  task: LiminaCheckTaskName;
+}
+
+const LIMINA_CHECK_ISSUE_RULE_METADATA = {
+  [LIMINA_CHECK_ISSUE_CODES.checkerBuildFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.checkerBuildFailed,
+    description: 'Checker build execution failed for one or more targets.',
+    task: 'checker:build',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.checkerPeerDependencyMissing]: {
+    code: LIMINA_CHECK_ISSUE_CODES.checkerPeerDependencyMissing,
+    description: 'A configured checker is missing a required peer dependency.',
+    task: 'checker:build',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.checkerTargetSelectionFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.checkerTargetSelectionFailed,
+    description: 'Limina could not select the checker target to execute.',
+    task: 'checker:build',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.checkerTypecheckFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.checkerTypecheckFailed,
+    description: 'Checker typecheck execution failed for one or more entries.',
+    task: 'checker:typecheck',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.commandFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.commandFailed,
+    description: 'A configured command step exited unsuccessfully.',
+    task: 'command',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphAccessDenied]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphAccessDenied,
+    description:
+      'A graph rule denied an import, reference, or dependency edge.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphCheckFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphCheckFailed,
+    description: 'Graph check failed before a more specific rule was recorded.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphConditionDomainMismatch]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphConditionDomainMismatch,
+    description: 'Condition domain compiler options do not match their entry.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphConfigInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphConfigInvalid,
+    description: 'Graph configuration contains invalid rule or domain entries.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphImportTargetUnmapped]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphImportTargetUnmapped,
+    description:
+      'A governed import target is not mapped into the source graph.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphPrepareFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphPrepareFailed,
+    description: 'Generated graph preparation failed.',
+    task: 'graph:prepare',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphReferenceExtra]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphReferenceExtra,
+    description:
+      'A TypeScript project reference exists without a matching source edge.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphReferenceMissing]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphReferenceMissing,
+    description: 'A required TypeScript project reference is missing.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphTargetUnreachable]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphTargetUnreachable,
+    description:
+      'An expected graph target is not reachable from checker entries.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceDependencyUndeclared]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphWorkspaceDependencyUndeclared,
+    description:
+      'A cross-package source reference lacks a declared dependency.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportOutsideGraph]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportOutsideGraph,
+    description:
+      'A workspace source import resolves outside governed graph coverage.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportUnresolved]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportUnresolved,
+    description: 'A workspace source import could not be resolved.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.graphWorkspacePackageNameMissing]: {
+    code: LIMINA_CHECK_ISSUE_CODES.graphWorkspacePackageNameMissing,
+    description:
+      'A workspace package in the graph is missing a package identity.',
+    task: 'graph:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.packageAttw]: {
+    code: LIMINA_CHECK_ISSUE_CODES.packageAttw,
+    description:
+      'Are The Types Wrong reported a package type-resolution issue.',
+    task: 'package:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.packageBoundary]: {
+    code: LIMINA_CHECK_ISSUE_CODES.packageBoundary,
+    description: 'A package boundary or export rule was violated.',
+    task: 'package:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.packageCheckFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.packageCheckFailed,
+    description:
+      'Package check failed before a more specific rule was recorded.',
+    task: 'package:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.packageManifestInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.packageManifestInvalid,
+    description: 'A package manifest is invalid for package checking.',
+    task: 'package:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.packagePublint]: {
+    code: LIMINA_CHECK_ISSUE_CODES.packagePublint,
+    description: 'Publint reported a package publishing issue.',
+    task: 'package:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed,
+    description: 'A configured pipeline command failed.',
+    task: 'command',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.proofAllowlistInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.proofAllowlistInvalid,
+    description: 'Proof check allowlist configuration is invalid.',
+    task: 'proof:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.proofCheckerCoverageInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.proofCheckerCoverageInvalid,
+    description: 'Checker coverage metadata is invalid for proof checking.',
+    task: 'proof:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.proofCheckFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.proofCheckFailed,
+    description: 'Proof check failed before a more specific rule was recorded.',
+    task: 'proof:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.proofDefaultTsconfigInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.proofDefaultTsconfigInvalid,
+    description:
+      'A default tsconfig does not satisfy proof-check requirements.',
+    task: 'proof:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.proofDuplicateSourceOwner]: {
+    code: LIMINA_CHECK_ISSUE_CODES.proofDuplicateSourceOwner,
+    description: 'Multiple checker entries govern the same source owner.',
+    task: 'proof:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.proofSourceBoundaryMismatch]: {
+    code: LIMINA_CHECK_ISSUE_CODES.proofSourceBoundaryMismatch,
+    description: 'Source ownership does not match proof-check boundaries.',
+    task: 'proof:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile]: {
+    code: LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile,
+    description: 'A source file is not covered by any configured checker.',
+    task: 'proof:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.releaseCheckFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.releaseCheckFailed,
+    description:
+      'Release check failed before a more specific rule was recorded.',
+    task: 'release:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.releaseConsistency]: {
+    code: LIMINA_CHECK_ISSUE_CODES.releaseConsistency,
+    description: 'Release metadata or package output is inconsistent.',
+    task: 'release:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.releaseContentHash]: {
+    code: LIMINA_CHECK_ISSUE_CODES.releaseContentHash,
+    description: 'Release content hash validation failed.',
+    task: 'release:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.releasePackedManifest]: {
+    code: LIMINA_CHECK_ISSUE_CODES.releasePackedManifest,
+    description: 'The packed package manifest is not release-ready.',
+    task: 'release:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.releaseRegistry]: {
+    code: LIMINA_CHECK_ISSUE_CODES.releaseRegistry,
+    description: 'Release registry validation failed.',
+    task: 'release:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.releaseTarballHygiene]: {
+    code: LIMINA_CHECK_ISSUE_CODES.releaseTarballHygiene,
+    description: 'Release tarball contents failed hygiene checks.',
+    task: 'release:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed,
+    description:
+      'Source check failed before a more specific rule was recorded.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceImportAuthorityInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceImportAuthorityInvalid,
+    description: 'Source import authority configuration is invalid.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceKnipBuildScriptUnsupported]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceKnipBuildScriptUnsupported,
+    description: 'A package build script cannot be mapped to source analysis.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceKnipConfigInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceKnipConfigInvalid,
+    description: 'Knip source-analysis configuration is invalid.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceOwnerInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceOwnerInvalid,
+    description: 'Source owner configuration or package ownership is invalid.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourcePackageImportInvalid]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourcePackageImportInvalid,
+    description: 'A source package import resolves to an invalid target.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourcePackageImportUnauthorized]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourcePackageImportUnauthorized,
+    description:
+      'A source import is not authorized by the nearest package owner.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceRelativeImportEscapesScope]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceRelativeImportEscapesScope,
+    description: 'A relative source import escapes its owner scope.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceTsconfigGovernance]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceTsconfigGovernance,
+    description: 'A source tsconfig is missing or outside checker governance.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule,
+    description: 'A source module is not reachable from package entry points.',
+    task: 'source:check',
+  },
+  [LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency]: {
+    code: LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency,
+    description: 'A workspace dependency is not visible to source analysis.',
+    task: 'source:check',
+  },
+} satisfies Record<LiminaCheckIssueCode, LiminaCheckIssueRuleMetadata>;
+
+const LIMINA_CHECK_ISSUE_CODE_SET: ReadonlySet<string> = new Set(
+  Object.values(LIMINA_CHECK_ISSUE_CODES),
+);
+
+export function isLiminaCheckIssueCode(
+  code: string,
+): code is LiminaCheckIssueCode {
+  return LIMINA_CHECK_ISSUE_CODE_SET.has(code);
+}
+
+export function listLiminaCheckIssueCodes(): readonly string[] {
+  return [...LIMINA_CHECK_ISSUE_CODE_SET].sort();
+}
+
+export function getLiminaCheckIssueRuleMetadata(
+  code: LiminaCheckIssueCode,
+): LiminaCheckIssueRuleMetadata {
+  return LIMINA_CHECK_ISSUE_RULE_METADATA[code];
+}
+
+export function listLiminaCheckIssueRuleMetadata(): readonly LiminaCheckIssueRuleMetadata[] {
+  return Object.values(LIMINA_CHECK_ISSUE_RULE_METADATA).sort(
+    (left, right) =>
+      left.task.localeCompare(right.task) ||
+      left.code.localeCompare(right.code),
+  );
+}
+
 export function defaultTaskFailureCode(task: LiminaCheckTaskName): string {
   return `LIMINA_${task.replaceAll(/[:.-]/gu, '_').toUpperCase()}_FAILED`;
 }

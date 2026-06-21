@@ -33,15 +33,20 @@ export async function runWithConcurrency(
 
         try {
           const target = targets[targetIndex];
+          const startedAt = performance.now();
 
           options.onTargetStart?.(target);
-          results[targetIndex] = await runner(target);
+          results[targetIndex] = {
+            ...(await runner(target)),
+            durationMs: performance.now() - startedAt,
+          };
           options.onTargetResult?.(target, results[targetIndex]);
         } catch (error) {
           const target = targets[targetIndex];
 
           results[targetIndex] = {
             configPath: target.configPath,
+            durationMs: 0,
             error: error instanceof Error ? error : new Error(String(error)),
             status: 1,
           };

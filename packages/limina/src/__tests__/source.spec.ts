@@ -22,6 +22,16 @@ import {
   readSourceIssueSnapshot,
 } from '../source-check/snapshot';
 
+const ANSI_ESCAPE = String.fromCodePoint(0x1b);
+const ANSI_PATTERN = new RegExp(
+  String.raw`${ANSI_ESCAPE}\[[\d:;<=>?]*[\u0020-\u002F]*[\u0040-\u007E]`,
+  'gu',
+);
+
+function stripAnsi(value: string): string {
+  return value.replaceAll(ANSI_PATTERN, '');
+}
+
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, text);
@@ -393,6 +403,15 @@ describe('runSourceCheck package authority', () => {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
       const errors = errorSpy.mock.calls.join('\n');
 
+      expect(errors).toContain('\u001B[31mUnauthorized bare package import');
+      expect(errors).toContain('\u001B[36mpackage:');
+      expect(errors).toContain('\u001B[34mrule:');
+      expect(errors).toContain('\u001B[36msummary:\u001B[0m');
+      expect(errors).toContain('\u001B[33mreason:\u001B[0m');
+      expect(errors).toContain('\u001B[32mfix steps:\u001B[0m');
+      expect(errors).toContain('\u001B[36mverify:\u001B[0m');
+      expect(errors).toContain('\u001B[35mevidence:\u001B[0m');
+      expect(errors).toContain('\u001B[36mfiles:\u001B[0m');
       expect(errors).toContain('fix steps:');
       expect(errors).toContain('Declare "zod" in app/package.json');
       expect(errors).toContain('or optionalDependencies.');
@@ -418,7 +437,7 @@ describe('runSourceCheck package authority', () => {
     }
   });
 
-  it('allows test file bare imports declared only by root devDependencies', async () => {
+  it('rejects test file bare imports declared only by root devDependencies without a package rule', async () => {
     const fixture = await createFixture(
       {
         ...createPackageFixture({
@@ -442,7 +461,166 @@ describe('runSourceCheck package authority', () => {
     );
 
     try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it.each([
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+    'optionalDependencies',
+  ] as const)(
+    'allows package rules to authorize root %s declarations',
+    async (section) => {
+      const fixture = await createFixture(
+        {
+          ...createPackageFixture({
+            source:
+              "import { z } from 'zod';\nexport const schema = z.string();\n",
+          }),
+          'package.json': stringifyConfig({
+            [section]: {
+              zod: '^1.0.0',
+            },
+            name: 'root',
+            private: true,
+          }),
+        },
+        {
+          source: {
+            importAuthority: {
+              allow: [
+                {
+                  files: ['app/src/**'],
+                  packages: ['zod'],
+                  reason: 'The workspace root declares shared test fixtures.',
+                },
+              ],
+            },
+            knip: false,
+          },
+        },
+      );
+
+      try {
+        await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
+
+  it('matches root package rules by package name for subpath imports', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          source:
+            "import chunk from 'lodash/chunk';\nexport const value = chunk([1], 1);\n",
+        }),
+        'package.json': stringifyConfig({
+          dependencies: {
+            lodash: '^1.0.0',
+          },
+          name: 'root',
+          private: true,
+        }),
+      },
+      {
+        source: {
+          importAuthority: {
+            allow: [
+              {
+                files: ['app/src/**'],
+                packages: ['lodash'],
+                reason: 'The workspace root declares shared test fixtures.',
+              },
+            ],
+          },
+          knip: false,
+        },
+      },
+    );
+
+    try {
       await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects package rules when the root manifest does not declare the package', async () => {
+    const errorSpy = vi
+      .spyOn(SourceLogger, 'error')
+      .mockImplementation(() => {});
+    const fixture = await createFixture(
+      createPackageFixture({
+        source: "import { z } from 'zod';\nexport const schema = z.string();\n",
+      }),
+      {
+        source: {
+          importAuthority: {
+            allow: [
+              {
+                files: ['app/src/**'],
+                packages: ['zod'],
+                reason: 'The workspace root declares shared test fixtures.',
+              },
+            ],
+          },
+          knip: false,
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+      const errors = stripAnsi(errorSpy.mock.calls.join('\n'));
+
+      expect(errors).toContain('dependency authority manifests:');
+      expect(errors).toContain('- app/package.json');
+      expect(errors).toContain('- package.json');
+    } finally {
+      errorSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects root declarations when no package rule matches', async () => {
+    const fixture = await createFixture(
+      {
+        ...createPackageFixture({
+          source:
+            "import { z } from 'zod';\nexport const schema = z.string();\n",
+        }),
+        'package.json': stringifyConfig({
+          dependencies: {
+            zod: '^1.0.0',
+          },
+          name: 'root',
+          private: true,
+        }),
+      },
+      {
+        source: {
+          importAuthority: {
+            allow: [
+              {
+                files: ['app/src/**'],
+                packages: ['react'],
+                reason: 'The workspace root declares shared test fixtures.',
+              },
+            ],
+          },
+          knip: false,
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -484,7 +662,7 @@ describe('runSourceCheck package authority', () => {
             allow: [
               {
                 files: ['app/src/template/**'],
-                packages: ['react'],
+                specifiers: ['react'],
                 reason:
                   'Template files declare dependencies in generated apps.',
               },
@@ -502,7 +680,7 @@ describe('runSourceCheck package authority', () => {
     }
   });
 
-  it('allows type-only bare imports declared only by root devDependencies', async () => {
+  it('rejects type-only bare imports declared only by root devDependencies without a package rule', async () => {
     const fixture = await createFixture({
       ...createPackageFixture({
         source:
@@ -518,7 +696,90 @@ describe('runSourceCheck package authority', () => {
     });
 
     try {
-      await expect(runSourceCheck(fixture.config)).resolves.toBe(true);
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('ignores nested non-workspace package manifests for dependency authorization', async () => {
+    const fixture = await createFixture({
+      ...createPackageFixture({
+        source: "import { z } from 'zod';\nexport const schema = z.string();\n",
+      }),
+      'app/src/package.json': stringifyConfig({
+        dependencies: {
+          zod: '^1.0.0',
+        },
+        name: '@example/nested',
+        type: 'module',
+      }),
+    });
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('ignores intermediate workspace package manifests for dependency authorization', async () => {
+    const fixture = await createFixture(
+      {
+        'pnpm-workspace.yaml': `
+packages:
+  - packages
+  - packages/*
+`,
+        'packages/package.json': stringifyConfig({
+          dependencies: {
+            zod: '^1.0.0',
+          },
+          name: '@example/group',
+          private: true,
+          type: 'module',
+        }),
+        'packages/app/package.json': stringifyConfig(
+          withDefaultBuildScript({
+            exports: {
+              '.': './src/index.ts',
+            },
+            name: '@example/app',
+            type: 'module',
+          }),
+        ),
+        'packages/app/src/index.ts':
+          "import { z } from 'zod';\nexport const schema = z.string();\n",
+        'packages/app/tsconfig.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './tsconfig.lib.json',
+            },
+          ],
+        }),
+        'packages/app/tsconfig.lib.dts.json': buildConfig({
+          include: ['src/**/*.ts'],
+        }),
+        'packages/app/tsconfig.lib.json': typecheckConfig(['src/**/*.ts']),
+        'tsconfig.build.json': stringifyConfig({
+          files: [],
+          references: [
+            {
+              path: './packages/app/tsconfig.lib.dts.json',
+            },
+          ],
+        }),
+      },
+      {
+        source: {
+          knip: false,
+        },
+      },
+    );
+
+    try {
+      await expect(runSourceCheck(fixture.config)).resolves.toBe(false);
     } finally {
       await fixture.cleanup();
     }
@@ -1362,6 +1623,32 @@ packages:
       );
       expect(errors).toContain('resolver tsconfig: app/tsconfig.json');
       expect(errors).toContain('app/tools/build.ts');
+
+      const sourceSnapshot = await readSourceIssueSnapshot(fixture.rootDir);
+
+      expect(
+        sourceSnapshot?.issues.some((issue) =>
+          issue.filePath?.endsWith('app/tools/build.ts'),
+        ),
+      ).toBe(true);
+
+      const checkSnapshot = await readCheckIssueSnapshot(fixture.rootDir);
+      const checkIssue = checkSnapshot?.issues.find(
+        (issue) =>
+          issue.title === 'Tsconfig search cannot determine module owner',
+      );
+
+      expect(checkIssue?.evidence).toEqual([
+        expect.objectContaining({
+          label: 'diagnostic',
+          lines: expect.arrayContaining([
+            'Tsconfig search cannot determine module owner:',
+            '  file: app/tools/build.ts',
+            '  resolver tsconfig: app/tsconfig.json',
+          ]),
+        }),
+      ]);
+      expect(checkIssue?.detailLines).toBeUndefined();
     } finally {
       errorSpy.mockRestore();
       await fixture.cleanup();
@@ -2385,8 +2672,8 @@ packages:
         `  file: docs/.vitepress/theme/landing/file-${index.toString().padStart(2, '0')}.vue:2 (kind: static)`,
         `  imported specifier: @components/shared/File${index}.vue`,
         '  package: @components/shared',
-        '  reason: source imports must be authorized by the source owner dependencies, devDependencies, peerDependencies, optionalDependencies, by the workspace root devDependencies when the importing context is relaxed, or by an explicit source.importAuthority.allow rule.',
-        '  fix: Declare "@components/shared" in docs/package.json dependencies, devDependencies, peerDependencies, or optionalDependencies. If "@components/shared" is supplied by a runtime, template, or alias instead of the owner manifest, add a source.importAuthority.allow rule for this file/package with a reason.',
+        '  reason: source imports must be declared by the nearest pnpm workspace source owner, by the workspace root manifest when a matching source.importAuthority.allow package rule makes it a candidate, or by an explicit source.importAuthority.allow specifier rule.',
+        '  fix: Declare "@components/shared" in docs/package.json dependencies, devDependencies, peerDependencies, or optionalDependencies. If "@components/shared" is supplied by a runtime, template, or alias instead of a dependency manifest, add a source.importAuthority.allow specifier rule for this import with a reason.',
       ].join('\n'),
     );
 
@@ -2547,8 +2834,10 @@ packages:
       expect(errors).toContain('... 1 more');
       expect(errors).toContain('Show all files:');
       expect(errors).toContain('limina check --verbose');
-      expect(errors).toMatch(/┌─+┐\n│\s*@example\/app\s+│/u);
-      expect(errors).toMatch(
+      const plainErrors = stripAnsi(errors);
+
+      expect(plainErrors).toMatch(/┌─+┐\n│\s*@example\/app\s+│/u);
+      expect(plainErrors).toMatch(
         /│ package manifest: packages\/app\/package\.json\s+│/u,
       );
     } finally {

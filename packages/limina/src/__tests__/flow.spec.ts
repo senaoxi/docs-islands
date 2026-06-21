@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LiminaFlowReporter } from '../flow';
+import { createLiminaCheckFlowReporter, LiminaFlowReporter } from '../flow';
 
 const green = (message: string): string => `\u001B[32m${message}\u001B[0m`;
 const red = (message: string): string => `\u001B[31m${message}\u001B[0m`;
@@ -95,7 +95,7 @@ describe('LiminaFlowReporter', () => {
     expect(chunks).toEqual([
       '◇    proof check\n',
       '│      proof check started\n',
-      '\r\u001B[H\u001B[2J\u001B[3J',
+      '\r\u001B[3A\u001B[J',
       '┌  limina checker typecheck\n',
       `${green('◆')}    proof check (1.00s)\n`,
     ]);
@@ -124,7 +124,7 @@ describe('LiminaFlowReporter', () => {
     expect(chunks).toEqual([
       '◇    proof check\n',
       'limina[task.proof]: proof check started\n',
-      '\r\u001B[H\u001B[2J\u001B[3J',
+      '\r\u001B[2A\u001B[J',
       `${green('◆')}    proof check (1.00s)\n`,
     ]);
   });
@@ -159,7 +159,7 @@ describe('LiminaFlowReporter', () => {
       '◇    tsc check\n',
       '◇      tsc: tsconfig.lib.json\n',
       `${green('◆')}      tsc: tsconfig.lib.json (1.00s)\n`,
-      '\r\u001B[H\u001B[2J\u001B[3J',
+      '\r\u001B[4A\u001B[J',
       '◇    pipeline: typecheck\n',
       `${green('◆')}    tsc check (2.00s)\n`,
     ]);
@@ -192,7 +192,7 @@ describe('LiminaFlowReporter', () => {
     expect(chunks).toEqual([
       '◇    checker build\n',
       `${yellow('▲')}      cache warning\n`,
-      '\r\u001B[H\u001B[2J\u001B[3J',
+      '\r\u001B[3A\u001B[J',
       '┌  limina check\n',
       `${yellow('▲')}      cache warning\n`,
       `${green('◆')}    checker build (1.00s)\n`,
@@ -225,7 +225,100 @@ describe('LiminaFlowReporter', () => {
     expect(chunks).toEqual([
       '◇    proof check\n',
       '│      proof check started\n',
-      `${red('■')}    proof check failed: bad proof (1.00s)\n`,
+      `${red('✕')}    proof check failed: bad proof (1.00s)\n`,
     ]);
+  });
+
+  it('writes only status lines in check-flow mode', () => {
+    const chunks: string[] = [];
+    const flow = createLiminaCheckFlowReporter({
+      env: {
+        CI: 'true',
+      },
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        isTTY: false,
+      },
+    });
+
+    flow.intro('limina check');
+    const task = flow.start('graph check', { depth: 1 });
+    task.info('graph check started');
+    flow.warn('capability summary', { depth: 1 });
+    flow.writeOutput('command detail\n');
+    task.fail('graph check failed', {
+      elapsedTimeMs: 1000,
+      error: new Error('detailed failure'),
+    });
+    flow.outro('limina check failed');
+
+    expect(chunks).toEqual([
+      '[start] limina check\n',
+      '  [start] graph check\n',
+      '  [fail] graph check (1.00s)\n',
+      '[done] limina check failed\n',
+    ]);
+  });
+
+  it('does not clear the whole screen in check-flow TTY mode', () => {
+    const chunks: string[] = [];
+    const flow = createLiminaCheckFlowReporter({
+      env: {},
+      forceTty: true,
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        columns: 80,
+        isTTY: true,
+      },
+    });
+
+    flow.intro('limina check');
+    const task = flow.start('source check');
+    task.info('source check started');
+    task.pass('source check', { elapsedTimeMs: 1000 });
+    flow.outro('limina check passed');
+
+    expect(chunks.join('')).not.toContain('\u001B[H\u001B[2J\u001B[3J');
+    expect(chunks).toContain(`${green('◆')}    source check (1.00s)\n`);
+  });
+
+  it('replaces failed check-flow task start lines in TTY mode', () => {
+    const chunks: string[] = [];
+    const flow = createLiminaCheckFlowReporter({
+      env: {},
+      forceTty: true,
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        columns: 80,
+        isTTY: true,
+      },
+    });
+
+    flow.intro('limina check');
+    const task = flow.start('source check');
+    task.fail('source check failed', {
+      elapsedTimeMs: 2970,
+      error: new Error('detailed failure'),
+    });
+    flow.outro('limina check failed');
+
+    const output = chunks.join('');
+
+    expect(output).not.toContain('\u001B[H\u001B[2J\u001B[3J');
+    expect(chunks).toContain(`${red('✕')}    source check (2.97s)\n`);
+    expect(output).not.toContain('source check failed');
+    expect(output).not.toContain('detailed failure');
   });
 });

@@ -136,7 +136,7 @@ import { helper } from '../../a/src/util';
 
 ### 裸包导入必须先声明
 
-按包名引入的依赖，必须由 pnpm workspace source owner 授权。公开包里的 runtime import 必须由这个 owner 自己声明；docs、tests、config/tooling 文件、type-only import、private owner 和无名 owner 也可以由 workspace root 的 `devDependencies` 授权。其他有意存在的场景可以用 `source.importAuthority.allow` 声明。
+按包名引入的依赖，必须由最近的 pnpm workspace source owner 授权。匹配的 `source.importAuthority.allow` package rule 可以让 Limina 额外检查 workspace root `package.json`，但这个 root manifest 必须存在，并且要声明这个包。真正不应该由 manifest 声明的例外，可以用 `source.importAuthority.allow` specifier rule 表达。
 
 ```ts
 import pMap from 'p-map'; // 但 package.json 里没声明 p-map

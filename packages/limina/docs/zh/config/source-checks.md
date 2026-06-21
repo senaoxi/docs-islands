@@ -27,7 +27,7 @@ export default defineConfig({
 
 `source.importAuthority` 控制那些没有写在 source owner manifest 里的裸包导入。
 
-公开包里的 runtime import 默认仍然严格：source owner 的 `package.json` 必须在 `dependencies`、`devDependencies`、`peerDependencies` 或 `optionalDependencies` 中声明这个包。docs、tests、config/tooling 文件、type-only import、private owner 和无名 owner 也可以由 workspace root 的 `devDependencies` 授权。
+runtime import 默认严格：最近的 pnpm workspace source owner `package.json` 必须在 `dependencies`、`devDependencies`、`peerDependencies` 或 `optionalDependencies` 中声明这个包。带 `packages` 的规则可以让 Limina 额外检查 workspace root `package.json` 中是否声明了匹配到的包名。root manifest 必须存在，并且仍然要在同样的依赖区里声明这个包。
 
 如果某些文件的依赖确实由别的地方提供，可以写显式 allow rule：
 
@@ -40,7 +40,7 @@ export default defineConfig({
       allow: [
         {
           files: ['packages/create-app/templates/react/**'],
-          packages: ['react', 'react-dom'],
+          specifiers: ['react', 'react-dom'],
           reason: '模板文件会在生成后的应用里声明这些依赖。',
         },
       ],
@@ -63,7 +63,7 @@ interface SourceImportAuthorityConfig {
 }
 ```
 
-`files` 是工作区根相对 glob。`packages` 匹配 `react`、`@components/shared` 这样的包名；`specifiers` 匹配 `react/jsx-runtime` 这样的完整导入 specifier。三者都支持 glob。`owner` 可选；有值时，具名 source owner 用包名匹配，无名 source owner 用工作区根相对包目录匹配。
+`files` 是工作区根相对 glob。`packages` 匹配 `react`、`@components/shared` 这样的包名；匹配后，workspace root `package.json` 会成为这个包的额外依赖声明候选 manifest。`specifiers` 匹配 `react/jsx-runtime` 这样的完整导入 specifier；只有确实不应该由任何 manifest 声明的例外才使用它。三者都支持 glob。`owner` 可选；有值时，具名 source owner 用包名匹配，无名 source owner 用工作区根相对包目录匹配。
 
 这个配置适合项目模板、文档别名等依赖不是由导入方 manifest 管理的源码。真正属于这个 owner runtime 的导入，仍然优先写进 manifest。
 

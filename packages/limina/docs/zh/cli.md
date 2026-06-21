@@ -20,9 +20,8 @@ limina [--config limina.config.mjs] [--mode mode] <command>
 | `limina check <pipeline>` | 运行 `pipelines` 中的用户命名流水线。                                                     |
 
 `limina check --issues` 会读取上一次记录下来的检查结果，并按 task、package、rule、scope、checker
-和 package tool 列出可用筛选值。可以组合 `--task <name>`、`--package <name>`、
-`--rule <code>`、`--file <path>`、`--scope <path>`、`--checker <name>` 或 `--tool <name>`，
-先缩小清单，再选择更聚焦的重跑方式。
+列出可用筛选值。可以组合 `--task <name>`、`--package <name>`、`--rule <code>`、
+`--file <path>`、`--scope <path>` 或 `--checker <name>`，先缩小清单，再选择更聚焦的重跑方式。
 
 检查任务失败时，默认先输出摘要，再按 rule code 和 owner 分组展示详情。同一组只展示一次 reason
 和 fix，并使用稳定 code，例如 `LIMINA_GRAPH_REFERENCE_MISSING` 或 `LIMINA_PACKAGE_PUBLINT`；

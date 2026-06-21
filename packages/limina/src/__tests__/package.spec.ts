@@ -1,8 +1,10 @@
 import type { ResolvedLiminaConfig } from '#config/runner';
+import type { LiminaCore } from '#core';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LiminaCheckRunTaskStats } from '../check-reporting/run-recorder';
 import { LiminaFlowReporter } from '../flow';
 
 const packageCheckMocks = vi.hoisted(() => ({
@@ -162,6 +164,7 @@ const { auditPublishedPackageBoundaries } = await import(
 );
 const { runPackageCheck } = await import('../commands/package');
 const { runReleaseCheck } = await import('../commands/release');
+const { LiminaPreflightManager } = await import('../preflight');
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -430,6 +433,24 @@ function createFlow(): {
   };
 }
 
+function createGraphRejectingPreflight(
+  config: ResolvedLiminaConfig,
+  getGraph: () => Promise<never>,
+): InstanceType<typeof LiminaPreflightManager> {
+  return new LiminaPreflightManager({
+    config,
+    core: {
+      buildGraph: {
+        getGraph,
+      },
+      imports: {
+        context: {},
+      },
+      invalidateAll: vi.fn(),
+    } as unknown as LiminaCore,
+  });
+}
+
 beforeEach(() => {
   packageCheckMocks.attwCheckOptions = [];
   packageCheckMocks.attwProblems = [];
@@ -547,6 +568,7 @@ describe('runPackageCheck and runReleaseCheck', () => {
     });
     const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-package-root-'));
     const { chunks, flow } = createFlow();
+    let stats: LiminaCheckRunTaskStats | undefined;
 
     try {
       await expect(
@@ -560,6 +582,9 @@ describe('runPackageCheck and runReleaseCheck', () => {
             },
           ]),
           flow,
+          onStats: (nextStats) => {
+            stats = nextStats;
+          },
         }),
       ).resolves.toBe(true);
 
@@ -576,8 +601,100 @@ describe('runPackageCheck and runReleaseCheck', () => {
           chunk.includes('[pass] package boundary: @example/valid'),
         ),
       ).toBe(true);
+      expect(stats).toMatchObject({
+        items: [
+          {
+            name: '@example/valid (boundary)',
+            status: 'passed',
+          },
+        ],
+        passed: 1,
+        total: 1,
+      });
     } finally {
       await pkg.cleanup();
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('does not read generated graph during package checks', async () => {
+    const pkg = await createOutputPackage({
+      'index.js': "import '@example/dep';\n",
+    });
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-package-root-'));
+    const config = createConfig(rootDir, [
+      {
+        checks: ['boundary'],
+        name: '@example/valid',
+        outDir: pkg.outDir,
+      },
+    ]);
+    const getGraph = vi.fn(async () => {
+      throw new Error('package check should not read generated graph');
+    });
+
+    try {
+      await expect(
+        runPackageCheck({
+          clearScreen: false,
+          config,
+          preflight: createGraphRejectingPreflight(config, getGraph),
+        }),
+      ).resolves.toBe(true);
+
+      expect(getGraph).not.toHaveBeenCalled();
+    } finally {
+      await pkg.cleanup();
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('does not read generated graph during release checks', async () => {
+    const rootDir = await createWorkspaceRoot();
+    const outDir = await createWorkspacePackage(rootDir, '@example/a', {});
+    const config = createConfig(rootDir, [
+      {
+        checks: ['boundary'],
+        name: '@example/a',
+        outDir,
+      },
+    ]);
+    const getGraph = vi.fn(async () => {
+      throw new Error('release check should not read generated graph');
+    });
+    let stats: LiminaCheckRunTaskStats | undefined;
+
+    try {
+      await expect(
+        runReleaseCheck({
+          clearScreen: false,
+          config,
+          onStats: (nextStats) => {
+            stats = nextStats;
+          },
+          packageNames: ['@example/a'],
+          preflight: createGraphRejectingPreflight(config, getGraph),
+        }),
+      ).resolves.toBe(true);
+
+      expect(getGraph).not.toHaveBeenCalled();
+      expect(stats).toMatchObject({
+        items: [
+          {
+            name: '@example/a',
+            status: 'passed',
+          },
+        ],
+        passed: 1,
+        total: 1,
+      });
+    } finally {
       await rm(rootDir, {
         force: true,
         recursive: true,

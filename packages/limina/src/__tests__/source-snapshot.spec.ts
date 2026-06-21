@@ -3,11 +3,14 @@ import { tmpdir } from 'node:os';
 import path from 'pathe';
 import { describe, expect, it } from 'vitest';
 import {
+  appendCheckIssues,
   CHECK_ISSUE_SNAPSHOT_VERSION,
   type CheckIssueSnapshot,
+  completeCheckIssueSnapshot,
   formatCheckIssueSnapshotInventory,
   getCheckIssueSnapshotPath,
   readCheckIssueSnapshot,
+  writeNotRunCheckIssueSnapshot,
 } from '../check-reporting/snapshot';
 import { createLiminaCheckIssue } from '../check-reporting/structured';
 import { SOURCE_ISSUE_CODES } from '../source-check/report';
@@ -16,6 +19,16 @@ import {
   SOURCE_ISSUE_SNAPSHOT_VERSION,
   type SourceIssueSnapshot,
 } from '../source-check/snapshot';
+
+const ANSI_ESCAPE = String.fromCodePoint(0x1b);
+const ANSI_PATTERN = new RegExp(
+  String.raw`${ANSI_ESCAPE}\[[\d:;<=>?]*[\u0020-\u002F]*[\u0040-\u007E]`,
+  'gu',
+);
+
+function stripAnsi(value: string): string {
+  return value.replaceAll(ANSI_PATTERN, '');
+}
 
 function createSnapshot(
   issues: SourceIssueSnapshot['issues'],
@@ -128,7 +141,7 @@ describe('check issue snapshots', () => {
     expect(issue.id).toBe(sameIssue.id);
   });
 
-  it('reads legacy v1 check snapshots and current v2 snapshots', async () => {
+  it('reads legacy v1, v2, v3, and current v4 check snapshots', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-snapshot-'));
 
     try {
@@ -166,16 +179,65 @@ describe('check issue snapshots', () => {
       await writeFile(
         snapshotPath,
         `${JSON.stringify(
-          createCheckSnapshot([
-            createLiminaCheckIssue({
-              code: 'LIMINA_GRAPH_REFERENCE_MISSING',
-              filePath: 'packages/app/src/index.ts',
-              reason: 'missing ref',
-              rootDir,
-              task: 'graph:check',
-              title: 'Missing project reference',
-            }),
-          ]),
+          {
+            ...createCheckSnapshot([
+              createLiminaCheckIssue({
+                code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
+                filePath: 'packages/app/src/internal.ts',
+                reason: 'not covered',
+                rootDir,
+                task: 'proof:check',
+                title: 'Uncovered source file',
+              }),
+            ]),
+            version: 2,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      const versionTwoSnapshot = await readCheckIssueSnapshot(rootDir);
+
+      expect(versionTwoSnapshot).toMatchObject({
+        issues: [
+          {
+            code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
+            id: expect.any(String),
+          },
+        ],
+        version: 2,
+      });
+      expect(versionTwoSnapshot?.run).toBeUndefined();
+
+      await writeFile(
+        snapshotPath,
+        `${JSON.stringify(
+          {
+            ...createCheckSnapshot([
+              createLiminaCheckIssue({
+                code: 'LIMINA_GRAPH_REFERENCE_MISSING',
+                filePath: 'packages/app/src/index.ts',
+                reason: 'missing ref',
+                rootDir,
+                task: 'graph:check',
+                title: 'Missing project reference',
+              }),
+            ]),
+            run: {
+              command: 'limina check',
+              createdAt: '2026-06-20T00:00:00.000Z',
+              result: 'blocked',
+              tasks: [
+                {
+                  kind: 'task',
+                  name: 'graph:check',
+                  status: 'failed',
+                },
+              ],
+            },
+            version: 3,
+          },
           null,
           2,
         )}\n`,
@@ -188,6 +250,81 @@ describe('check issue snapshots', () => {
             id: expect.any(String),
           },
         ],
+        run: {
+          result: 'blocked',
+          tasks: [
+            {
+              name: 'graph:check',
+              status: 'failed',
+            },
+          ],
+        },
+        version: 3,
+      });
+
+      await writeFile(
+        snapshotPath,
+        `${JSON.stringify(
+          {
+            ...createCheckSnapshot([
+              createLiminaCheckIssue({
+                code: 'LIMINA_SOURCE_PACKAGE_IMPORT_UNAUTHORIZED',
+                filePath: 'packages/app/src/index.ts',
+                reason: 'unauthorized import',
+                rootDir,
+                task: 'source:check',
+                title: 'Unauthorized import',
+              }),
+            ]),
+            run: {
+              command: 'limina check',
+              createdAt: '2026-06-20T00:00:00.000Z',
+              result: 'failed',
+              tasks: [
+                {
+                  checkItems: [
+                    {
+                      checksPassed: 0,
+                      checksTotal: 1,
+                      issues: 1,
+                      name: 'source import authority',
+                      status: 'failed',
+                    },
+                  ],
+                  kind: 'task',
+                  name: 'source:check',
+                  status: 'failed',
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      expect(await readCheckIssueSnapshot(rootDir)).toMatchObject({
+        issues: [
+          {
+            code: 'LIMINA_SOURCE_PACKAGE_IMPORT_UNAUTHORIZED',
+            id: expect.any(String),
+          },
+        ],
+        run: {
+          result: 'failed',
+          tasks: [
+            {
+              checkItems: [
+                {
+                  name: 'source import authority',
+                  status: 'failed',
+                },
+              ],
+              name: 'source:check',
+              status: 'failed',
+            },
+          ],
+        },
         version: CHECK_ISSUE_SNAPSHOT_VERSION,
       });
     } finally {
@@ -195,7 +332,114 @@ describe('check issue snapshots', () => {
     }
   });
 
-  it('formats available filters across tasks in deterministic order', () => {
+  it('preserves run metadata and existing issues across append and complete writes', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-snapshot-'));
+    const firstIssue = createLiminaCheckIssue({
+      code: 'LIMINA_GRAPH_REFERENCE_MISSING',
+      filePath: 'packages/app/src/index.ts',
+      reason: 'missing ref',
+      rootDir,
+      task: 'graph:check',
+      title: 'Missing project reference',
+    });
+    const secondIssue = createLiminaCheckIssue({
+      code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
+      filePath: 'packages/app/src/internal.ts',
+      reason: 'not covered',
+      rootDir,
+      task: 'proof:check',
+      title: 'Uncovered source file',
+    });
+
+    try {
+      await writeNotRunCheckIssueSnapshot({
+        command: 'limina check',
+        rootDir,
+        run: {
+          command: 'limina check',
+          createdAt: '2026-06-20T00:00:00.000Z',
+          result: 'running',
+          startedAt: '2026-06-20T00:00:00.000Z',
+          tasks: [
+            {
+              kind: 'task',
+              name: 'graph:check',
+              status: 'running',
+            },
+            {
+              kind: 'task',
+              name: 'proof:check',
+              status: 'planned',
+            },
+          ],
+        },
+      });
+
+      await appendCheckIssues({
+        issues: [firstIssue],
+        rootDir,
+      });
+
+      expect(await readCheckIssueSnapshot(rootDir)).toMatchObject({
+        issues: [
+          {
+            code: 'LIMINA_GRAPH_REFERENCE_MISSING',
+          },
+        ],
+        run: {
+          result: 'running',
+          tasks: [
+            {
+              kind: 'task',
+              name: 'graph:check',
+              status: 'running',
+            },
+            {
+              kind: 'task',
+              name: 'proof:check',
+              status: 'planned',
+            },
+          ],
+        },
+      });
+
+      await completeCheckIssueSnapshot({
+        rootDir,
+      });
+      await appendCheckIssues({
+        issues: [secondIssue],
+        rootDir,
+      });
+
+      expect(await readCheckIssueSnapshot(rootDir)).toMatchObject({
+        issues: [
+          {
+            code: 'LIMINA_GRAPH_REFERENCE_MISSING',
+          },
+          {
+            code: 'LIMINA_PROOF_UNCOVERED_SOURCE_FILE',
+          },
+        ],
+        run: {
+          result: 'running',
+          tasks: [
+            {
+              name: 'graph:check',
+              status: 'running',
+            },
+            {
+              name: 'proof:check',
+              status: 'planned',
+            },
+          ],
+        },
+      });
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('formats the default run summary across tasks', () => {
     const output = formatCheckIssueSnapshotInventory({
       snapshot: createCheckSnapshot([
         {
@@ -235,21 +479,18 @@ describe('check issue snapshots', () => {
       ]),
     });
 
-    expect(output).toContain('Issue filters available from last run:');
-    expect(output).toContain('tasks:\n  - package:check  2 issues');
-    expect(output).toContain('  - checker:build  1 issue');
-    expect(output).toContain('  - proof:check  1 issue');
-    expect(output).toContain('packages:\n  - @example/app  2 issues');
+    expect(output).toContain('Limina check issue summary');
+    expect(output).toContain('Status: completed');
+    expect(output).toContain('Matched: 4 / 4 issues');
+    expect(output).toContain('Issue overview:');
+    expect(output).toContain('Tasks: package:check (2)');
+    expect(output).toContain('Packages: @example/app (2)');
+    expect(output).toContain('Top rules:');
+    expect(output).toContain('2  LIMINA_PACKAGE_CHECK_FAILED');
+    expect(output).toContain('Next commands:');
     expect(output).toContain(
-      'rules:\n  - LIMINA_PACKAGE_CHECK_FAILED  2 issues',
+      'limina check --issues --rule LIMINA_PACKAGE_CHECK_FAILED --verbose',
     );
-    expect(output).toContain(
-      'scopes:\n  - .limina/checkers/typescript  1 issue',
-    );
-    expect(output).toContain('  - packages/app/src  1 issue');
-    expect(output).toContain('checkers:\n  - typescript  1 issue');
-    expect(output).toContain('tools:\n  - attw  1 issue');
-    expect(output).toContain('  - publint  1 issue');
   });
 
   it('formats empty and filtered unified snapshots', () => {
@@ -269,11 +510,12 @@ describe('check issue snapshots', () => {
       snapshot: createCheckSnapshot([]),
     });
 
-    expect(emptyOutput).toContain(
-      'No check issues were recorded from the last run.',
-    );
-    expect(emptyOutput).toContain('tasks:\n  (none)');
-    expect(emptyOutput).toContain('tools:\n  (none)');
+    expect(emptyOutput).toContain('Limina check issue summary');
+    expect(emptyOutput).toContain('Matched: 0 / 0 issues');
+    expect(emptyOutput).toContain('Tasks: (none)');
+    expect(emptyOutput).toContain('Packages: (none)');
+    expect(emptyOutput).toContain('Top rules:');
+    expect(emptyOutput).toContain('(none)');
 
     const filteredOutput = formatCheckIssueSnapshotInventory({
       filters: {
@@ -298,11 +540,15 @@ describe('check issue snapshots', () => {
       ]),
     });
 
-    expect(filteredOutput).toContain('tasks:\n  - proof:check  1 issue');
+    expect(filteredOutput).toContain('Limina check issue summary');
+    expect(filteredOutput).toContain('Filters:');
+    expect(filteredOutput).toContain('task: proof:check');
+    expect(filteredOutput).toContain('Matched: 1 / 2 issues');
+    expect(filteredOutput).toContain('Tasks: proof:check (1)');
     expect(filteredOutput).not.toContain('package:check');
   });
 
-  it('formats detailed, fix, json, and ndjson issue inventory output', () => {
+  it('formats detailed, json, and ndjson issue inventory output', () => {
     const issue = createLiminaCheckIssue({
       code: 'LIMINA_PACKAGE_PUBLINT',
       evidence: [{ label: 'publint', value: 'export is invalid' }],
@@ -325,40 +571,45 @@ describe('check issue snapshots', () => {
     });
     const snapshot = createCheckSnapshot([issue]);
     const details = formatCheckIssueSnapshotInventory({
-      details: true,
       snapshot,
-    });
-    const fixes = formatCheckIssueSnapshotInventory({
-      fixes: true,
-      snapshot,
+      verbose: true,
     });
     const json = JSON.parse(
       formatCheckIssueSnapshotInventory({
         format: 'json',
         snapshot,
       }),
-    ) as { issueCount: number; issues: CheckIssueSnapshot['issues'] };
+    ) as {
+      issueCount: number;
+      issues: CheckIssueSnapshot['issues'];
+      overview: { issueCount: number };
+      run?: CheckIssueSnapshot['run'];
+      topBlockers: { code: string }[];
+    };
     const ndjson = formatCheckIssueSnapshotInventory({
       format: 'ndjson',
       snapshot,
     });
+    const plainDetails = stripAnsi(details);
 
-    expect(details).toContain('Package export is invalid.');
-    expect(details).toContain('external:');
-    expect(details).toContain('code: EXPORT_MISSING');
-    expect(details).toContain('fix steps:');
-    expect(details).toContain('verify:');
-    expect(fixes).toContain('Fix package exports.');
-    expect(fixes).toContain('limina package check');
+    expect(plainDetails).toContain('Package export is invalid.');
+    expect(plainDetails).toContain('external:');
+    expect(plainDetails).toContain('code: EXPORT_MISSING');
+    expect(plainDetails).toContain('fix steps:');
+    expect(plainDetails).toContain('verify:');
+    expect(plainDetails).toContain('Fix package exports.');
+    expect(plainDetails).toContain('limina package check');
     expect(json.issueCount).toBe(1);
+    expect(json.overview.issueCount).toBe(1);
     expect(json.issues[0]?.id).toBe(issue.id);
+    expect(json.topBlockers[0]?.code).toBe('LIMINA_PACKAGE_PUBLINT');
     expect(JSON.parse(ndjson)).toMatchObject({
       code: 'LIMINA_PACKAGE_PUBLINT',
       id: issue.id,
     });
   });
 
-  it('filters unified inventory by rule, file, scope, package, task, checker, and tool', () => {
+  it('filters unified inventory by rule, file, scope, package, task, and checker', () => {
     const snapshot = createCheckSnapshot([
       createLiminaCheckIssue({
         checkerName: 'typescript',
@@ -390,19 +641,70 @@ describe('check issue snapshots', () => {
         rules: ['LIMINA_CHECKER_BUILD_FAILED'],
         scopes: ['.limina/checkers'],
         tasks: ['checker:build'],
-        tools: ['tsgo'],
       },
       rootDir: '/repo',
       snapshot,
     });
 
-    expect(output).toContain('tasks:\n  - checker:build  1 issue');
-    expect(output).toContain('packages:\n  - @example/app  1 issue');
-    expect(output).toContain(
-      'rules:\n  - LIMINA_CHECKER_BUILD_FAILED  1 issue',
-    );
-    expect(output).toContain('checkers:\n  - typescript  1 issue');
-    expect(output).toContain('tools:\n  - tsgo  1 issue');
+    expect(output).toContain('Limina check issue summary');
+    expect(output).toContain('Filters:');
+    expect(output).toContain('task: checker:build');
+    expect(output).toContain('Matched: 1 / 2 issues');
+    expect(output).toContain('Tasks: checker:build (1)');
+    expect(output).toContain('1  LIMINA_CHECKER_BUILD_FAILED');
     expect(output).not.toContain('@example/lib');
+  });
+
+  it('reports unmatched human filter values with help commands', () => {
+    const snapshot = createCheckSnapshot([
+      createLiminaCheckIssue({
+        checkerName: 'typescript',
+        code: 'LIMINA_CHECKER_BUILD_FAILED',
+        filePath: '/repo/.limina/checkers/typescript/tsconfig.json',
+        packageName: '@example/app',
+        reason: 'build failed',
+        rootDir: '/repo',
+        task: 'checker:build',
+        title: 'Checker build failed',
+      }),
+    ]);
+    const output = stripAnsi(
+      formatCheckIssueSnapshotInventory({
+        filters: {
+          checkerNames: ['vue'],
+          packageNames: ['@example/missing'],
+          rules: ['LIMINA_GRAPH_CHECK_FAILED'],
+          tasks: ['proof:check'],
+        },
+        rootDir: '/repo',
+        snapshot,
+      }),
+    );
+    const normalizedOutput = output
+      .replaceAll(/\s*│\s*/gu, ' ')
+      .replaceAll(/\s+/gu, ' ');
+
+    expect(output).toContain('Matched: 0 / 1 issues');
+    expect(output).toContain('Filter diagnostics:');
+    expect(output).toContain(
+      'task "proof:check" has no issues in the last snapshot.',
+    );
+    expect(normalizedOutput).toContain('limina check --issues --task --help');
+    expect(output).toContain(
+      'package "@example/missing" has no issues in the last snapshot.',
+    );
+    expect(normalizedOutput).toContain(
+      'limina check --issues --package --help',
+    );
+    expect(output).toContain(
+      'Supported rule "LIMINA_GRAPH_CHECK_FAILED" is absent from the last snapshot.',
+    );
+    expect(normalizedOutput).toContain('limina check --issues --rule --help');
+    expect(output).toContain(
+      'checker "vue" has no issues in the last snapshot.',
+    );
+    expect(normalizedOutput).toContain(
+      'limina check --issues --checker --help',
+    );
   });
 });

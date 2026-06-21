@@ -120,13 +120,15 @@ export async function runGraphCheck(
   }
 
   try {
-    const logSuccess = !options.flow?.interactive;
+    const logSuccess = !options.report?.defer && !options.flow?.interactive;
     const issues: LiminaCheckIssue[] = [];
     const passed = await runGraphCheckImpl(config, {
       core: options.core,
       generatedGraphProvider: options.generatedGraphProvider,
       issues,
       logSuccess,
+      onStats: options.onStats,
+      preflight: options.preflight,
       report: options.report,
     });
 
@@ -178,14 +180,16 @@ export async function runGraphCheck(
       rootDir: config.rootDir,
     });
 
-    GraphLogger.error(
-      formatCheckIssueHumanReport({
-        command: options.report?.command ?? 'limina graph check',
-        issues,
-        title: 'Graph check summary',
-        verbose: options.report?.verbose,
-      }),
-    );
+    if (!options.report?.defer) {
+      GraphLogger.error(
+        formatCheckIssueHumanReport({
+          command: options.report?.command ?? 'limina graph check',
+          issues,
+          title: 'Graph check summary',
+          verbose: options.report?.verbose,
+        }),
+      );
+    }
     task?.fail('graph check failed');
 
     if (options.flow) {

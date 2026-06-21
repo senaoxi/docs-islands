@@ -9,12 +9,15 @@ import {
   type CheckIssueReportOptions,
   formatCheckIssueHumanReport,
 } from '../check-reporting/human';
+import type { LiminaCheckRunTaskStats } from '../check-reporting/run-recorder';
 import {
   appendCheckIssues,
   completeCheckIssueSnapshot,
   createTaskFailureIssue,
   type LiminaCheckIssue,
+  type LiminaCheckRunCheckItemSummary,
 } from '../check-reporting/snapshot';
+import { createCheckItemStats } from '../check-reporting/stats';
 import type { LiminaFlowReporter } from '../flow';
 import { clearCliScreen, formatErrorMessage, ReleaseLogger } from '../logger';
 import {
@@ -22,13 +25,13 @@ import {
   PackageReleaseConsistencyError,
 } from '../package-check/release-consistency';
 import {
-  createPackageEntrySelectionPlan,
   type DistPackageJson,
   type PackageEntrySelectionPlan,
   type PackedPackageTarball,
   packOutputTarball,
   readDistPackageJson,
 } from '../package-check/runner';
+import { type LiminaPreflightManager, resolvePreflight } from '../preflight';
 
 export interface RunReleaseCheckOptions {
   clearScreen?: boolean;
@@ -38,7 +41,9 @@ export interface RunReleaseCheckOptions {
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   issues?: LiminaCheckIssue[];
+  onStats?: (stats: LiminaCheckRunTaskStats) => void;
   packageNames?: readonly string[];
+  preflight?: LiminaPreflightManager;
   report?: CheckIssueReportOptions;
 }
 
@@ -374,10 +379,12 @@ export async function runReleaseCheck(
   });
 
   try {
-    ReleaseLogger.info('release check started');
+    if (!options.report?.defer) {
+      ReleaseLogger.info('release check started');
+    }
 
-    const plan = createPackageEntrySelectionPlan({
-      config: options.config,
+    const preflight = resolvePreflight(options.config, options);
+    const plan = await preflight.ensurePackageEntrySelectionPlan({
       cwd,
       packageNames: options.packageNames,
       requireCwdPackageMatch: true,
@@ -391,25 +398,47 @@ export async function runReleaseCheck(
 
     let passed = true;
     const issues = options.issues ?? [];
+    const checkItems: LiminaCheckRunCheckItemSummary[] = [];
 
     for (const entry of plan.entries) {
-      passed =
-        (await runReleaseCheckEntry({
-          config: options.config,
-          flow: options.flow,
-          flowDepth: (options.flowDepth ?? 0) + 1,
-          issueSink: issues,
-          label: entry.label,
-          outDir: entry.outDir,
-        })) && passed;
+      const startedAt = performance.now();
+      const issueCountBefore = issues.length;
+      const entryPassed = await runReleaseCheckEntry({
+        config: options.config,
+        flow: options.flow,
+        flowDepth: (options.flowDepth ?? 0) + 1,
+        issueSink: issues,
+        label: entry.label,
+        outDir: entry.outDir,
+      });
+      const issueCount = Math.max(0, issues.length - issueCountBefore);
+
+      checkItems.push(
+        createCheckItemStats({
+          durationMs: performance.now() - startedAt,
+          issues: entryPassed ? 0 : Math.max(1, issueCount),
+          name: entry.label,
+          total: 1,
+        }),
+      );
+      passed = entryPassed && passed;
     }
+
+    options.onStats?.({
+      items: checkItems,
+      passed: checkItems.reduce(
+        (total, item) => total + (item.checksPassed ?? 0),
+        0,
+      ),
+      total: checkItems.length,
+    });
 
     if (passed) {
       await completeCheckIssueSnapshot({
         rootDir: options.config.rootDir,
       });
 
-      if (!options.flow?.interactive) {
+      if (!options.report?.defer && !options.flow?.interactive) {
         ReleaseLogger.success('release check finished', elapsed());
       }
 
@@ -440,15 +469,17 @@ export async function runReleaseCheck(
         issues: reportIssues,
         rootDir: options.config.rootDir,
       });
-      ReleaseLogger.error(
-        formatCheckIssueHumanReport({
-          command: options.report?.command ?? 'limina release check',
-          issues: reportIssues,
-          title: 'Release check summary',
-          verbose: options.report?.verbose,
-        }),
-        elapsed(),
-      );
+      if (!options.report?.defer) {
+        ReleaseLogger.error(
+          formatCheckIssueHumanReport({
+            command: options.report?.command ?? 'limina release check',
+            issues: reportIssues,
+            title: 'Release check summary',
+            verbose: options.report?.verbose,
+          }),
+          elapsed(),
+        );
+      }
       task?.fail('release check finished with failures');
     }
 
@@ -474,15 +505,17 @@ export async function runReleaseCheck(
       issues: [issue],
       rootDir: options.config.rootDir,
     });
-    ReleaseLogger.error(
-      formatCheckIssueHumanReport({
-        command: options.report?.command ?? 'limina release check',
-        issues: [issue],
-        title: 'Release check summary',
-        verbose: options.report?.verbose,
-      }),
-      elapsed(),
-    );
+    if (!options.report?.defer) {
+      ReleaseLogger.error(
+        formatCheckIssueHumanReport({
+          command: options.report?.command ?? 'limina release check',
+          issues: [issue],
+          title: 'Release check summary',
+          verbose: options.report?.verbose,
+        }),
+        elapsed(),
+      );
+    }
     task?.fail('release check failed', { error });
     throw error;
   }

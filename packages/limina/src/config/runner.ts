@@ -248,8 +248,8 @@ export interface SourceKnipCheckConfig {
 }
 
 /**
- * Explicit bare-import authorization for source files that intentionally import
- * packages not declared by the owning source package manifest.
+ * Explicit bare-import authority rule for imports not fully authorized by the
+ * owning source package manifest.
  */
 export interface SourceImportAuthorityAllowRule {
   /**
@@ -257,7 +257,8 @@ export interface SourceImportAuthorityAllowRule {
    */
   files: string[];
   /**
-   * Package names or package-name globs authorized by this rule.
+   * Package names or package-name globs whose declarations may also be read
+   * from the workspace root package.json when this rule matches.
    */
   packages?: string[];
   /**
@@ -270,8 +271,7 @@ export interface SourceImportAuthorityAllowRule {
    */
   owner?: string;
   /**
-   * Why this import is legitimate even though it is not declared by the owner
-   * manifest or an allowed root devDependency fallback.
+   * Why this import may use the matched authority rule.
    */
   reason: string;
 }
@@ -281,7 +281,9 @@ export interface SourceImportAuthorityAllowRule {
  */
 export interface SourceImportAuthorityConfig {
   /**
-   * Explicitly authorized bare imports.
+   * Explicit import authority rules. `packages` makes the workspace root
+   * package.json an additional declaration candidate; `specifiers` authorizes
+   * exact import specifier exceptions.
    */
   allow?: SourceImportAuthorityAllowRule[];
 }
@@ -957,6 +959,38 @@ async function resolveConfigExport(
   return normalizeConfig(config);
 }
 
+function hasSourceImportAuthorityPackageRules(config: LiminaConfig): boolean {
+  return Boolean(
+    config.source?.importAuthority?.allow?.some((rule) =>
+      rule.packages?.some((packageName) => packageName.trim().length > 0),
+    ),
+  );
+}
+
+function validateRootPackageImportAuthorityConfig(
+  config: LiminaConfig,
+  rootDir: string,
+): void {
+  if (!hasSourceImportAuthorityPackageRules(config)) {
+    return;
+  }
+
+  const rootPackageJsonPath = path.join(rootDir, 'package.json');
+
+  if (existsSync(rootPackageJsonPath)) {
+    return;
+  }
+
+  throw new Error(
+    [
+      'Invalid Limina source config:',
+      '  field: source.importAuthority.allow[].packages',
+      `  value: ${JSON.stringify(config.source?.importAuthority?.allow)}`,
+      '  reason: package allow rules enable workspace root package.json as a dependency authority manifest, but no package.json exists at the workspace root.',
+    ].join('\n'),
+  );
+}
+
 export async function loadConfig(
   options: LoadConfigOptions = {},
 ): Promise<ResolvedLiminaConfig> {
@@ -987,6 +1021,7 @@ export async function loadConfig(
     module.default,
     createConfigEnv(options),
   );
+  validateRootPackageImportAuthorityConfig(config, rootDir);
 
   return {
     ...config,

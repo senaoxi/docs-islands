@@ -3,7 +3,7 @@ import {
   normalizeExtensions,
 } from '#checkers';
 import { getActiveCheckers, type ResolvedLiminaConfig } from '#config/runner';
-import { createLiminaCore, type LiminaCore } from '#core';
+import type { LiminaCore } from '#core';
 import {
   collectGeneratedSourceConfigPaths,
   type GeneratedTsconfigGraphResult,
@@ -20,7 +20,6 @@ import {
   resolveInternalImport,
 } from '#core/import-graph/context';
 import {
-  collectSourceGraphProjectExtensions,
   getRawReferencePaths,
   isOrdinaryTypecheckConfigPath,
   readJsonConfig,
@@ -40,8 +39,13 @@ import { existsSync } from 'node:fs';
 import path from 'pathe';
 import rawPicomatch from 'picomatch';
 import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
+import type { LiminaCheckRunTaskStats } from '../check-reporting/run-recorder';
 import {
-  collectWorkspaceDependencyDeclarations,
+  type CheckCounter,
+  createCheckCounter,
+  createCheckItemAccumulator,
+} from '../check-reporting/stats';
+import {
   createWorkspaceDependencyKey,
   findPackageImportMatch,
   isBarePackageSpecifier,
@@ -61,6 +65,7 @@ import {
 import type { LiminaFlowReporter } from '../flow';
 import { isNodeBuiltinSpecifier } from '../graph-check/rules';
 import { SourceLogger } from '../logger';
+import { type LiminaPreflightManager, resolvePreflight } from '../preflight';
 import {
   collectKnipSourceIssues,
   type KnipCliRunner,
@@ -100,6 +105,8 @@ export interface RunSourceCheckOptions {
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   knipRunner?: KnipCliRunner;
+  onStats?: (stats: LiminaCheckRunTaskStats) => void;
+  preflight?: LiminaPreflightManager;
   report?: SourceIssueReportOptions;
 }
 
@@ -129,6 +136,7 @@ interface CompiledImportAuthorityAllowRule {
 }
 
 function addProjectOwnerProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   configPath: string;
   fileNames: string[];
@@ -140,6 +148,7 @@ function addProjectOwnerProblems(options: {
   const missingOwnerFiles: string[] = [];
 
   for (const fileName of options.fileNames) {
+    options.checks.add();
     const owner = findOwnerForFile(fileName, options.owners);
 
     if (!owner) {
@@ -249,7 +258,7 @@ function addPackageImportAuthorizationProblem(options: {
         (manifestPath) =>
           `    - ${toRelativePath(options.config.rootDir, manifestPath)}`,
       ),
-      '  reason: source imports must be authorized by the source owner dependencies, devDependencies, peerDependencies, optionalDependencies, by the workspace root devDependencies when the importing context is relaxed, or by an explicit source.importAuthority.allow rule.',
+      '  reason: source imports must be declared by the nearest pnpm workspace source owner, by the workspace root manifest when a matching source.importAuthority.allow package rule makes it a candidate, or by an explicit source.importAuthority.allow specifier rule.',
       `  fix: ${fix}`,
     ].join('\n'),
   );
@@ -272,14 +281,14 @@ function formatPackageImportAuthorizationFix(options: {
     (manifestPath) => manifestPath !== options.owner.packageJsonPath,
   );
   const rootManifestFix = rootManifestPath
-    ? ` Because this file is in a relaxed source context, declaring "${options.packageName}" in ${toRelativePath(options.config.rootDir, rootManifestPath)} devDependencies is also accepted.`
+    ? ` Because a source.importAuthority.allow package rule matches this import, declaring "${options.packageName}" in ${toRelativePath(options.config.rootDir, rootManifestPath)} dependencies, devDependencies, peerDependencies, or optionalDependencies is also accepted.`
     : '';
   const typeDeclarationFix =
     options.dependencySpecifier?.startsWith('@types/') &&
     options.dependencySpecifier !== options.packageName
       ? ` "${options.dependencySpecifier}" only supplies declarations and does not authorize "${options.packageName}".`
       : '';
-  const explicitAuthorityFix = ` If "${options.packageName}" is supplied by a runtime, template, or alias instead of the owner manifest, add a source.importAuthority.allow rule for this file/package with a reason.`;
+  const explicitAuthorityFix = ` If "${options.packageName}" is supplied by a runtime, template, or alias instead of a dependency manifest, add a source.importAuthority.allow specifier rule for this import with a reason.`;
   return [
     `Declare "${options.packageName}" in ${ownerManifestPath} dependencies, devDependencies, peerDependencies, or optionalDependencies.`,
     rootManifestFix,
@@ -311,49 +320,12 @@ function findWorkspaceRootPackage(options: {
   );
 }
 
-function isRootDevDependencyAuthorized(
-  manifest: WorkspacePackage['manifest'],
-  packageName: string,
-): boolean {
-  return typeof manifest.devDependencies?.[packageName] === 'string';
-}
-
-function isRelaxedDependencyAuthorityContext(options: {
-  config: ResolvedLiminaConfig;
-  importRecord: ImportRecord;
-  owner: PackageOwner;
-}): boolean {
-  if (!options.owner.name || options.owner.manifest.private === true) {
-    return true;
-  }
-
-  if (options.importRecord.kind === 'import-type') {
-    return true;
-  }
-
-  const relativePath = normalizeSlashes(
-    toRelativePath(options.config.rootDir, options.importRecord.filePath),
-  );
-  const basename = path.basename(relativePath);
-
-  return (
-    relativePath.startsWith('docs/') ||
-    relativePath.includes('/docs/') ||
-    relativePath.includes('/__tests__/') ||
-    relativePath.includes('/__tests_dts__/') ||
-    relativePath.startsWith('scripts/') ||
-    relativePath.startsWith('tools/') ||
-    relativePath.includes('/scripts/') ||
-    relativePath.includes('/tools/') ||
-    /\.(?:spec|test)\.[cm]?[jt]sx?$/u.test(basename) ||
-    /(?:^|\.)(?:config|configs)\.[cm]?[jt]sx?$/u.test(basename)
-  );
-}
-
 function getDependencyAuthorityManifestPaths(options: {
   config: ResolvedLiminaConfig;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
   importRecord: ImportRecord;
   owner: PackageOwner;
+  packageName: string;
   rootPackage: WorkspacePackage | null;
 }): string[] {
   const manifestPaths = [options.owner.packageJsonPath];
@@ -361,10 +333,12 @@ function getDependencyAuthorityManifestPaths(options: {
   if (
     options.rootPackage &&
     options.rootPackage.directory !== options.owner.directory &&
-    isRelaxedDependencyAuthorityContext({
+    isRootManifestDependencyAuthorityCandidate({
       config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
       importRecord: options.importRecord,
       owner: options.owner,
+      packageName: options.packageName,
     })
   ) {
     manifestPaths.push(getWorkspacePackageJsonPath(options.rootPackage));
@@ -386,30 +360,26 @@ function isDependencyAuthorizedBySourceAuthority(options: {
   }
 
   if (
-    isImportAuthorizedByExplicitAuthority({
+    options.rootPackage &&
+    options.rootPackage.directory !== options.owner.directory &&
+    isRootManifestDependencyAuthorityCandidate({
       config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
       importRecord: options.importRecord,
       owner: options.owner,
       packageName: options.packageName,
-      rules: options.importAuthorityAllowRules,
-    })
+    }) &&
+    isDependencyAuthorized(options.rootPackage.manifest, options.packageName)
   ) {
     return true;
   }
 
-  return Boolean(
-    options.rootPackage &&
-      options.rootPackage.directory !== options.owner.directory &&
-      isRelaxedDependencyAuthorityContext({
-        config: options.config,
-        importRecord: options.importRecord,
-        owner: options.owner,
-      }) &&
-      isRootDevDependencyAuthorized(
-        options.rootPackage.manifest,
-        options.packageName,
-      ),
-  );
+  return isImportAuthorizedByExplicitAuthority({
+    config: options.config,
+    importRecord: options.importRecord,
+    owner: options.owner,
+    rules: options.importAuthorityAllowRules,
+  });
 }
 
 function getPackageNameForAuthorization(options: {
@@ -454,6 +424,7 @@ function getSourceOwnerIdentity(options: {
 }
 
 function collectImportAuthorityAllowRules(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   problems: string[];
 }): CompiledImportAuthorityAllowRule[] {
@@ -466,6 +437,7 @@ function collectImportAuthorityAllowRules(options: {
   const rules: CompiledImportAuthorityAllowRule[] = [];
 
   for (const [index, rule] of rawRules.entries()) {
+    options.checks.add();
     const field = `source.importAuthority.allow[${index}]`;
     const files = rule.files
       .map((file) => normalizeWorkspacePattern(file))
@@ -504,36 +476,117 @@ function collectImportAuthorityAllowRules(options: {
   return rules;
 }
 
+function hasImportAuthorityPackageRules(
+  rules: CompiledImportAuthorityAllowRule[],
+): boolean {
+  return rules.some((rule) => rule.packageMatchers.length > 0);
+}
+
+function addImportAuthorityRootManifestConfigProblems(options: {
+  checks: CheckCounter;
+  config: ResolvedLiminaConfig;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  problems: string[];
+}): void {
+  options.checks.add();
+
+  if (!hasImportAuthorityPackageRules(options.importAuthorityAllowRules)) {
+    return;
+  }
+
+  const rootPackageJsonPath = path.join(options.config.rootDir, 'package.json');
+
+  if (existsSync(rootPackageJsonPath)) {
+    return;
+  }
+
+  options.problems.push(
+    [
+      'Invalid source import authority config:',
+      '  field: source.importAuthority.allow[].packages',
+      '  reason: package allow rules enable workspace root package.json as a dependency authority manifest, but no package.json exists at the workspace root.',
+      '  fix: create a workspace root package.json or remove package entries from source.importAuthority.allow rules.',
+    ].join('\n'),
+  );
+}
+
+function getImportAuthorityRuleContext(options: {
+  config: ResolvedLiminaConfig;
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+}): {
+  filePath: string;
+  ownerIdentity: string;
+} {
+  return {
+    filePath: normalizeSlashes(
+      toRelativePath(options.config.rootDir, options.importRecord.filePath),
+    ),
+    ownerIdentity: getSourceOwnerIdentity({
+      config: options.config,
+      owner: options.owner,
+    }),
+  };
+}
+
+function isImportAuthorityRuleInScope(
+  rule: CompiledImportAuthorityAllowRule,
+  context: {
+    filePath: string;
+    ownerIdentity: string;
+  },
+): boolean {
+  if (rule.ownerIdentity && rule.ownerIdentity !== context.ownerIdentity) {
+    return false;
+  }
+
+  return rule.fileMatchers.some((matches) => matches(context.filePath));
+}
+
+function isRootManifestDependencyAuthorityCandidate(options: {
+  config: ResolvedLiminaConfig;
+  importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
+  importRecord: ImportRecord;
+  owner: PackageOwner;
+  packageName: string;
+}): boolean {
+  if (options.importAuthorityAllowRules.length === 0) {
+    return false;
+  }
+
+  const context = getImportAuthorityRuleContext({
+    config: options.config,
+    importRecord: options.importRecord,
+    owner: options.owner,
+  });
+
+  return options.importAuthorityAllowRules.some((rule) => {
+    return (
+      isImportAuthorityRuleInScope(rule, context) &&
+      rule.packageMatchers.some((matches) => matches(options.packageName))
+    );
+  });
+}
+
 function isImportAuthorizedByExplicitAuthority(options: {
   config: ResolvedLiminaConfig;
   importRecord: ImportRecord;
   owner: PackageOwner;
-  packageName: string;
   rules: CompiledImportAuthorityAllowRule[];
 }): boolean {
   if (options.rules.length === 0) {
     return false;
   }
 
-  const filePath = normalizeSlashes(
-    toRelativePath(options.config.rootDir, options.importRecord.filePath),
-  );
-  const ownerIdentity = getSourceOwnerIdentity({
+  const context = getImportAuthorityRuleContext({
     config: options.config,
+    importRecord: options.importRecord,
     owner: options.owner,
   });
 
   return options.rules.some((rule) => {
-    if (rule.ownerIdentity && rule.ownerIdentity !== ownerIdentity) {
-      return false;
-    }
-
-    if (!rule.fileMatchers.some((matches) => matches(filePath))) {
-      return false;
-    }
-
     return (
-      rule.packageMatchers.some((matches) => matches(options.packageName)) ||
+      isImportAuthorityRuleInScope(rule, context) &&
       rule.specifierMatchers.some((matches) =>
         matches(options.importRecord.specifier),
       )
@@ -681,8 +734,10 @@ function addPackageImportProblem(options: {
     addPackageImportAuthorizationProblem({
       authorityManifestPaths: getDependencyAuthorityManifestPaths({
         config: options.config,
+        importAuthorityAllowRules: options.importAuthorityAllowRules,
         importRecord: options.importRecord,
         owner: options.owner,
+        packageName,
         rootPackage: options.rootPackage,
       }),
       config: options.config,
@@ -928,6 +983,7 @@ function addNearestTsconfigOwnershipProblem(options: {
 }
 
 async function addTsconfigGovernanceProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   configPaths: string[];
   generatedGraph: GeneratedTsconfigGraphResult;
@@ -967,6 +1023,8 @@ async function addTsconfigGovernanceProblems(options: {
       continue;
     }
 
+    options.checks.add();
+
     const owner = findOwnerForFile(configPath, options.owners);
 
     if (!owner) {
@@ -985,6 +1043,7 @@ async function addTsconfigGovernanceProblems(options: {
     projectFileSetsByConfigPath.set(configPath, new Set(project.fileNames));
 
     for (const fileName of project.fileNames) {
+      options.checks.add();
       const fileOwner = findOwnerForFile(fileName, options.owners);
 
       if (fileOwner?.packageJsonPath !== owner.packageJsonPath) {
@@ -1025,6 +1084,7 @@ async function addTsconfigGovernanceProblems(options: {
       toRelativePath(options.config.rootDir, right),
     ),
   )) {
+    options.checks.add();
     const ownershipResolution = resolveTsconfigOwnership({
       config: options.config,
       fileName,
@@ -1148,6 +1208,7 @@ function createKnipOwnerProjects(options: {
 }
 
 function addUnusedDependencyProblems(options: {
+  checks: CheckCounter;
   declarations: WorkspaceDependencyDeclaration[];
   ignoredDependencies: Set<string>;
   issues: SourceCheckIssue[];
@@ -1163,6 +1224,7 @@ function addUnusedDependencyProblems(options: {
   );
 
   for (const declaration of options.declarations) {
+    options.checks.add();
     const dependencyKey = createWorkspaceDependencyKey(
       declaration.importer.name,
       declaration.dependencyName,
@@ -1195,6 +1257,7 @@ function addUnusedDependencyProblems(options: {
 }
 
 function addUnusedModuleProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   ignoredModuleKeys: Set<string>;
   issues: SourceCheckIssue[];
@@ -1210,6 +1273,7 @@ function addUnusedModuleProblems(options: {
     }
 
     for (const filePath of moduleSet.files) {
+      options.checks.add();
       moduleSetByFilePath.set(filePath, moduleSet);
     }
   }
@@ -1241,21 +1305,21 @@ function addUnusedModuleProblems(options: {
 }
 
 async function addKnipBackedSourceProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   generatedGraph: GeneratedTsconfigGraphResult;
   knipRunner?: KnipCliRunner;
   ownerModuleSets: OwnerSourceModuleSet[];
   problems: string[];
   sourceIssues: SourceCheckIssue[];
+  workspaceDependencyDeclarations: WorkspaceDependencyDeclaration[];
   workspacePackages: WorkspacePackage[];
 }): Promise<void> {
   if (options.config.source?.knip === false) {
     return;
   }
 
-  const declarations = collectWorkspaceDependencyDeclarations(
-    options.workspacePackages,
-  );
+  const declarations = options.workspaceDependencyDeclarations;
   const knipWorkspaceConfigs = collectSourceKnipWorkspaceConfigs({
     config: options.config,
     problems: options.problems,
@@ -1263,6 +1327,7 @@ async function addKnipBackedSourceProblems(options: {
   });
 
   for (const diagnostic of options.generatedGraph.generatedKnipDiagnostics) {
+    options.checks.add();
     options.problems.push(
       [
         'Unsupported package build script for generated Knip tsconfig:',
@@ -1332,6 +1397,7 @@ async function addKnipBackedSourceProblems(options: {
   });
 
   addUnusedDependencyProblems({
+    checks: options.checks,
     declarations,
     ignoredDependencies,
     issues: options.sourceIssues,
@@ -1340,6 +1406,7 @@ async function addKnipBackedSourceProblems(options: {
 
   if (includeFiles) {
     addUnusedModuleProblems({
+      checks: options.checks,
       config: options.config,
       ignoredModuleKeys: unusedModuleConfig.ignoredKeys,
       issues: options.sourceIssues,
@@ -1377,6 +1444,7 @@ async function createSourceProjectEntries(
 }
 
 async function addSourceProjectOwnerProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   core: LiminaCore;
   owners: PackageOwner[];
@@ -1393,6 +1461,7 @@ async function addSourceProjectOwnerProblems(options: {
     }
 
     addProjectOwnerProblems({
+      checks: options.checks,
       config: options.config,
       configPath: project.configPath,
       fileNames: project.fileNames,
@@ -1408,6 +1477,7 @@ async function addSourceProjectOwnerProblems(options: {
     }
 
     addProjectOwnerProblems({
+      checks: options.checks,
       config: options.config,
       configPath: typecheckConfigPath,
       fileNames: (
@@ -1510,8 +1580,10 @@ function addResolvedOtherOwnerBarePackageProblems(options: {
   addPackageImportAuthorizationProblem({
     authorityManifestPaths: getDependencyAuthorityManifestPaths({
       config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
       importRecord: options.importRecord,
       owner: options.owner,
+      packageName: authorizedPackageName,
       rootPackage: options.rootPackage,
     }),
     config: options.config,
@@ -1567,8 +1639,10 @@ function addResolvedArtifactBarePackageProblems(options: {
   addPackageImportAuthorizationProblem({
     authorityManifestPaths: getDependencyAuthorityManifestPaths({
       config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
       importRecord: options.importRecord,
       owner: options.owner,
+      packageName,
       rootPackage: options.rootPackage,
     }),
     config: options.config,
@@ -1688,8 +1762,10 @@ function addBarePackageImportProblems(options: {
   addPackageImportAuthorizationProblem({
     authorityManifestPaths: getDependencyAuthorityManifestPaths({
       config: options.config,
+      importAuthorityAllowRules: options.importAuthorityAllowRules,
       importRecord: options.importRecord,
       owner: options.owner,
+      packageName: options.fallbackPackageName,
       rootPackage: options.rootPackage,
     }),
     config: options.config,
@@ -1770,6 +1846,7 @@ function addImportRecordProblems(options: {
 }
 
 function addSourceImportProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   importAnalysis: LiminaCore['imports']['context'];
   importAuthorityAllowRules: CompiledImportAuthorityAllowRule[];
@@ -1792,6 +1869,7 @@ function addSourceImportProblems(options: {
         options.config.rootDir,
         options.importAnalysis,
       )) {
+        options.checks.add();
         addImportRecordProblems({
           config: options.config,
           filePath,
@@ -1951,7 +2029,6 @@ function createStructuredSourceIssueFromProblem(options: {
 
   return {
     code: getSourceProblemCode(title),
-    detailLines: options.problem.split('\n'),
     detector: 'source',
     evidence: [
       {
@@ -1985,17 +2062,15 @@ export async function runSourceCheckImpl(
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
     knipRunner?: KnipCliRunner;
     logSuccess?: boolean;
+    onStats?: (stats: LiminaCheckRunTaskStats) => void;
+    preflight?: LiminaPreflightManager;
     report?: SourceIssueReportOptions;
   } = {},
 ): Promise<boolean> {
-  const core = options.core ?? createLiminaCore(config);
-  const generatedGraph = options.generatedGraphProvider
-    ? await options.generatedGraphProvider()
-    : await core.buildGraph.getGraph();
-  const graphRoute = collectSourceGraphProjectExtensions(
-    config,
-    generatedGraph,
-  );
+  const preflight = resolvePreflight(config, options);
+  const core = preflight.core;
+  const generatedGraph = await preflight.ensureGeneratedGraph();
+  const graphRoute = await preflight.ensureSourceGraphProjectExtensions();
   const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
   const projects = await Promise.all(
     projectPaths.map((projectPath) =>
@@ -2006,8 +2081,10 @@ export async function runSourceCheckImpl(
     ),
   );
   const sourceProjectEntries = await createSourceProjectEntries(core, projects);
-  const packages = await core.workspace.getPackages();
-  const packageOwners = await core.workspace.getPackageOwners();
+  const packages = await preflight.ensureWorkspacePackages();
+  const packageOwners = await preflight.ensurePackageOwners();
+  const workspaceDependencyDeclarations =
+    await preflight.ensureWorkspaceDependencyDeclarations();
   const rootPackage = findWorkspaceRootPackage({
     config,
     packages,
@@ -2016,39 +2093,66 @@ export async function runSourceCheckImpl(
     owners: packageOwners,
     sourceProjectEntries,
   });
-  const importAnalysis = core.imports.context;
-  const problems: string[] = [...graphRoute.problems];
-  const importAuthorityAllowRules = collectImportAuthorityAllowRules({
-    config,
-    problems,
-  });
+  const importAnalysis = preflight.importAnalysis;
+  const problems: string[] = [];
   const sourceIssues: SourceCheckIssue[] = [];
+  const checks = createCheckCounter();
+  const checkItems = createCheckItemAccumulator(
+    () => problems.length + sourceIssues.length,
+    () => checks.value,
+  );
+
+  problems.push(...graphRoute.problems);
+  checks.add(projectPaths.length);
+  checkItems.record('source graph routes');
 
   await addTsconfigGovernanceProblems({
+    checks,
     config,
     configPaths: collectGeneratedSourceConfigPaths(generatedGraph),
     generatedGraph,
     owners: packageOwners,
     problems,
   });
+  checkItems.record('tsconfig governance');
+
   await addKnipBackedSourceProblems({
+    checks,
     config,
     generatedGraph,
     knipRunner: options.knipRunner,
     ownerModuleSets,
     problems,
     sourceIssues,
+    workspaceDependencyDeclarations,
     workspacePackages: packages,
   });
+  checkItems.record('knip source usage');
 
   await addSourceProjectOwnerProblems({
+    checks,
     config,
     core,
     owners: packageOwners,
     problems,
     projects,
   });
+  checkItems.record('source project ownership');
+
+  const importAuthorityAllowRules = collectImportAuthorityAllowRules({
+    checks,
+    config,
+    problems,
+  });
+  addImportAuthorityRootManifestConfigProblems({
+    checks,
+    config,
+    importAuthorityAllowRules,
+    problems,
+  });
+
   addSourceImportProblems({
+    checks,
     config,
     importAnalysis,
     importAuthorityAllowRules,
@@ -2058,6 +2162,7 @@ export async function runSourceCheckImpl(
     rootPackage,
     sourceProjectEntries,
   });
+  checkItems.record('source import authority');
 
   const ownerNamesByManifestPath =
     createSourceProblemOwnerLookup(packageOwners);
@@ -2079,6 +2184,16 @@ export async function runSourceCheckImpl(
   });
 
   if (structuredSourceIssues.length > 0) {
+    options.onStats?.({
+      items: checkItems.getItems(),
+      passed: 0,
+      total: checks.value,
+    });
+
+    if (options.report?.defer) {
+      return false;
+    }
+
     SourceLogger.error(
       formatSourceCheckHumanReport({
         config,
@@ -2095,6 +2210,12 @@ export async function runSourceCheckImpl(
       `Checked ${sourceProjectEntries.length} source project owners; package scopes are valid.`,
     );
   }
+
+  options.onStats?.({
+    items: checkItems.getItems(),
+    passed: checks.value,
+    total: checks.value,
+  });
 
   return true;
 }

@@ -136,7 +136,7 @@ Reports `Relative import escapes package scope:`. Fix: declare a dependency on `
 
 ### A bare import must be declared first
 
-A dependency imported by package name must be authorized by the pnpm workspace source owner. Runtime imports in public packages must be declared by that owner; docs, tests, config/tooling files, type-only imports, private owners, and nameless owners may also use the workspace root `devDependencies`. Other intentional cases can be declared with `source.importAuthority.allow`.
+A dependency imported by package name must be authorized by the nearest pnpm workspace source owner. A matching `source.importAuthority.allow` package rule can also let Limina check the workspace root `package.json`, but that root manifest must exist and declare the package. True non-manifest exceptions can use `source.importAuthority.allow` specifier rules.
 
 ```ts
 import pMap from 'p-map'; // but package.json does not declare p-map

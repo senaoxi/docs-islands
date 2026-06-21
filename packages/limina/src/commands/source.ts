@@ -38,12 +38,14 @@ export async function runSourceCheck(
   }
 
   try {
-    const logSuccess = !options.flow?.interactive;
+    const logSuccess = !options.report?.defer && !options.flow?.interactive;
     const passed = await runSourceCheckImpl(config, {
       core: options.core,
       generatedGraphProvider: options.generatedGraphProvider,
       knipRunner: options.knipRunner,
       logSuccess,
+      onStats: options.onStats,
+      preflight: options.preflight,
       report: options.report,
     });
 
@@ -70,7 +72,7 @@ export async function runSourceCheck(
         }),
         rootDir: config.rootDir,
       });
-      if (!options.flow) {
+      if (!options.report?.defer && !options.flow) {
         SourceLogger.error('source check failed', elapsed());
       }
 
@@ -93,10 +95,12 @@ export async function runSourceCheck(
       ],
       rootDir: config.rootDir,
     });
-    SourceLogger.error(
-      `source check failed: ${formatErrorMessage(error)}`,
-      elapsed(),
-    );
+    if (!options.report?.defer) {
+      SourceLogger.error(
+        `source check failed: ${formatErrorMessage(error)}`,
+        elapsed(),
+      );
+    }
     task?.fail('source check failed', { error });
     throw error;
   }

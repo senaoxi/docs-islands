@@ -30,11 +30,13 @@ export async function runProofCheck(
   }
 
   try {
-    const logSuccess = !options.flow?.interactive;
+    const logSuccess = !options.report?.defer && !options.flow?.interactive;
     const passed = await runProofCheckImpl(config, {
       core: options.core,
       generatedGraphProvider: options.generatedGraphProvider,
       logSuccess,
+      onStats: options.onStats,
+      preflight: options.preflight,
       report: options.report,
     });
 
@@ -62,7 +64,7 @@ export async function runProofCheck(
         }),
         rootDir: config.rootDir,
       });
-      if (!options.flow) {
+      if (!options.report?.defer && !options.flow) {
         ProofLogger.error('proof check finished with failures', elapsed());
       }
       task?.fail('proof check finished with failures');
@@ -85,15 +87,17 @@ export async function runProofCheck(
       issues: [issue],
       rootDir: config.rootDir,
     });
-    ProofLogger.error(
-      formatCheckIssueHumanReport({
-        command: options.report?.command ?? 'limina proof check',
-        issues: [issue],
-        title: 'Proof check summary',
-        verbose: options.report?.verbose,
-      }),
-      elapsed(),
-    );
+    if (!options.report?.defer) {
+      ProofLogger.error(
+        formatCheckIssueHumanReport({
+          command: options.report?.command ?? 'limina proof check',
+          issues: [issue],
+          title: 'Proof check summary',
+          verbose: options.report?.verbose,
+        }),
+        elapsed(),
+      );
+    }
     task?.fail('proof check failed', { error });
     throw error;
   }

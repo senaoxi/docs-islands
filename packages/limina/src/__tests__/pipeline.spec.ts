@@ -1,18 +1,27 @@
 import type { ResolvedLiminaConfig } from '#config/runner';
+import { createLiminaCore } from '#core';
+import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import { createHash } from 'node:crypto';
 import {
   chmod,
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { LiminaFlowReporter } from '../flow';
+import { describe, expect, it, vi } from 'vitest';
+import { createCheckRunRecorder } from '../check-reporting/run-recorder';
 import {
+  readCheckIssueSnapshot,
+  writeNotRunCheckIssueSnapshot,
+} from '../check-reporting/snapshot';
+import { createLiminaCheckFlowReporter, LiminaFlowReporter } from '../flow';
+import {
+  describePipeline,
   normalizePipelineStep,
   runDefaultCheck,
   runPipeline,
@@ -24,7 +33,9 @@ async function createConfig(): Promise<{
   cleanup: () => Promise<void>;
   config: ResolvedLiminaConfig;
 }> {
-  const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-pipeline-'));
+  const rootDir = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'limina-pipeline-')),
+  );
   const configPath = path.join(rootDir, 'limina.config.mjs');
 
   await writeFile(configPath, 'export default {};\n');
@@ -46,6 +57,108 @@ async function createConfig(): Promise<{
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, text);
+}
+
+function stringifyJson(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+const buildCompilerOptions = {
+  composite: true,
+  declaration: true,
+  emitDeclarationOnly: true,
+  incremental: true,
+  module: 'ESNext',
+  moduleResolution: 'bundler',
+  noEmit: false,
+  outDir: './.tsbuild',
+  strict: true,
+  target: 'ES2023',
+  types: [],
+};
+
+async function createPassingCheckPipelineConfig(): Promise<{
+  cleanup: () => Promise<void>;
+  config: ResolvedLiminaConfig;
+}> {
+  const fixture = await createConfig();
+  const rootDir = fixture.config.rootDir;
+
+  await writeText(
+    path.join(rootDir, 'package.json'),
+    stringifyJson({
+      name: 'fixture',
+      private: true,
+    }),
+  );
+  await writeText(
+    path.join(rootDir, 'pnpm-workspace.yaml'),
+    'packages:\n  - packages/*\n',
+  );
+  await writeText(
+    path.join(rootDir, 'packages/app/package.json'),
+    stringifyJson({
+      exports: {
+        '.': './src/index.ts',
+      },
+      name: '@fixture/app',
+      scripts: {
+        build: 'limina checker build tsconfig.json',
+      },
+      type: 'module',
+      version: '1.0.0',
+    }),
+  );
+  await writeText(
+    path.join(rootDir, 'packages/app/src/index.ts'),
+    'export const value = 1;\n',
+  );
+  await writeText(
+    path.join(rootDir, 'node_modules/typescript/package.json'),
+    stringifyJson({
+      name: 'typescript',
+      version: '0.0.0-fixture',
+    }),
+  );
+  await writeText(
+    path.join(rootDir, 'node_modules/.bin/tsc'),
+    '#!/usr/bin/env sh\nexit 0\n',
+  );
+  await chmod(path.join(rootDir, 'node_modules/.bin/tsc'), 0o755);
+  await writeText(
+    path.join(rootDir, 'packages/app/tsconfig.json'),
+    stringifyJson({
+      compilerOptions: buildCompilerOptions,
+      include: ['src/**/*.ts'],
+    }),
+  );
+  await writeText(
+    path.join(rootDir, 'tsconfig.json'),
+    stringifyJson({
+      files: [],
+      references: [{ path: './packages/app/tsconfig.json' }],
+    }),
+  );
+
+  fixture.config.config = {
+    checkers: {
+      typescript: {
+        include: ['tsconfig.json', '**/tsconfig.json'],
+        preset: 'tsc',
+      },
+    },
+    source: {
+      include: ['packages/app/src/**/*.ts'],
+    },
+  };
+  fixture.config.source = {
+    knip: false,
+  };
+  fixture.config.pipelines = {
+    demo: ['graph:check', 'source:check', 'proof:check', 'checker:build'],
+  };
+
+  return fixture;
 }
 
 async function createOutputPackage(
@@ -121,6 +234,34 @@ function createTtyFlow(): {
   return {
     chunks,
     flow: new LiminaFlowReporter({
+      env: {},
+      forceTty: true,
+      stdout,
+    }),
+  };
+}
+
+function createCheckTtyFlow(): {
+  chunks: string[];
+  flow: LiminaFlowReporter;
+} {
+  const chunks: string[] = [];
+  const stdout = {
+    columns: 120,
+    isTTY: true,
+    write: (message: string | Uint8Array) => {
+      chunks.push(
+        message instanceof Uint8Array
+          ? Buffer.from(message).toString()
+          : message,
+      );
+      return true;
+    },
+  };
+
+  return {
+    chunks,
+    flow: createLiminaCheckFlowReporter({
       env: {},
       forceTty: true,
       stdout,
@@ -222,16 +363,15 @@ describe('runPipeline', () => {
       ).toBe(true);
       expect(
         chunks.some((chunk) =>
-          chunk.includes('[fail] default check blocked at proof:check'),
+          chunk.includes('[fail] default check finished with failures'),
         ),
       ).toBe(true);
       expect(
-        chunks.some((chunk) =>
-          chunk.includes(
-            '[skip] skipped: checker:build (blocked by proof:check)',
-          ),
-        ),
+        chunks.some((chunk) => chunk.includes('[start] checker build')),
       ).toBe(true);
+      expect(chunks.some((chunk) => chunk.includes('[skip] skipped:'))).toBe(
+        false,
+      );
     } finally {
       await fixture.cleanup();
     }
@@ -267,6 +407,154 @@ describe('runPipeline', () => {
       expect(
         chunks.filter((chunk) => chunk.includes('[pass] command:')).length,
       ).toBe(2);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('shares generated graph preflight between built-in tasks', async () => {
+    const fixture = await createConfig();
+    const generatedGraphProvider = vi.fn(
+      async () => ({ changed: false }) as GeneratedTsconfigGraphResult,
+    );
+
+    fixture.config.pipelines = {
+      demo: ['graph:prepare', 'graph:prepare'],
+    };
+
+    try {
+      await expect(
+        runPipeline(fixture.config, 'demo', {
+          generatedGraphProvider,
+        }),
+      ).resolves.toBe(true);
+
+      expect(generatedGraphProvider).toHaveBeenCalledTimes(1);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('shares generated graph preflight across graph, source, proof, and checker tasks', async () => {
+    const fixture = await createPassingCheckPipelineConfig();
+    const core = createLiminaCore(fixture.config);
+    const generatedGraphProvider = vi.fn(() => core.buildGraph.getGraph());
+    const recorder = createCheckRunRecorder({
+      command: 'limina check demo',
+      configPath: fixture.config.configPath,
+      pipeline: 'demo',
+      plannedTasks: describePipeline(fixture.config, 'demo'),
+      rootDir: fixture.config.rootDir,
+    });
+
+    try {
+      await writeNotRunCheckIssueSnapshot({
+        command: 'limina check demo',
+        rootDir: fixture.config.rootDir,
+        run: recorder.getRunSummary(),
+      });
+
+      await expect(
+        runPipeline(fixture.config, 'demo', {
+          checkRunRecorder: recorder,
+          core,
+          generatedGraphProvider,
+        }),
+      ).resolves.toBe(true);
+
+      expect(generatedGraphProvider).toHaveBeenCalledTimes(1);
+      const snapshot = await readCheckIssueSnapshot(fixture.config.rootDir);
+
+      expect(snapshot).toMatchObject({
+        run: {
+          result: 'passed',
+          tasks: [
+            {
+              checkItems: expect.arrayContaining([
+                expect.objectContaining({
+                  name: 'reference completeness',
+                  status: 'passed',
+                }),
+              ]),
+              name: 'graph:check',
+            },
+            {
+              checkItems: expect.arrayContaining([
+                expect.objectContaining({
+                  name: 'source import authority',
+                  status: 'passed',
+                }),
+              ]),
+              name: 'source:check',
+            },
+            {
+              checkItems: expect.arrayContaining([
+                expect.objectContaining({
+                  name: 'source coverage',
+                  status: 'passed',
+                }),
+              ]),
+              name: 'proof:check',
+            },
+            {
+              checkItems: expect.arrayContaining([
+                expect.objectContaining({
+                  name: 'typescript checker entry',
+                  status: 'passed',
+                }),
+              ]),
+              name: 'checker:build',
+            },
+          ],
+        },
+      });
+
+      const proofTask = snapshot?.run?.tasks.find(
+        (task) => task.name === 'proof:check',
+      );
+
+      if (!proofTask?.checkItems) {
+        throw new Error('Expected proof:check to record check items.');
+      }
+
+      const proofItemTotal = proofTask.checkItems.reduce(
+        (total, item) => total + (item.checksTotal ?? 1),
+        0,
+      );
+
+      expect(proofTask.checksPassed).toBe(proofItemTotal);
+      expect(proofTask.checksTotal).toBe(proofItemTotal);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('invalidates generated graph preflight after command steps', async () => {
+    const fixture = await createConfig();
+    const generatedGraphProvider = vi.fn(
+      async () => ({ changed: false }) as GeneratedTsconfigGraphResult,
+    );
+
+    fixture.config.pipelines = {
+      demo: [
+        'graph:prepare',
+        {
+          args: ['-e', 'process.exit(0)'],
+          command: process.execPath,
+          type: 'command',
+        },
+        'graph:prepare',
+      ],
+    };
+
+    try {
+      await expect(
+        runPipeline(fixture.config, 'demo', {
+          generatedGraphProvider,
+        }),
+      ).resolves.toBe(true);
+
+      expect(generatedGraphProvider).toHaveBeenCalledTimes(2);
     } finally {
       await fixture.cleanup();
     }
@@ -394,7 +682,10 @@ describe('runPipeline', () => {
     fixture.config.pipelines = {
       demo: [
         {
-          args: ['-e', 'console.log("command detail")'],
+          args: [
+            '-e',
+            "console.log(Buffer.from('Y29tbWFuZCBkZXRhaWw=', 'base64').toString())",
+          ],
           command: process.execPath,
           type: 'command',
         },
@@ -414,9 +705,46 @@ describe('runPipeline', () => {
       );
       expect(
         chunks.some((chunk) => chunk.includes('\u001B[H\u001B[2J\u001B[3J')),
-      ).toBe(true);
+      ).toBe(false);
+      expect(chunks.some((chunk) => chunk.includes('\u001B[J'))).toBe(true);
       expect(
         chunks.some((chunk) => chunk.includes(`${green('◆')}      command: `)),
+      ).toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('omits interactive command output in check-flow mode', async () => {
+    const fixture = await createConfig();
+    const { chunks, flow } = createCheckTtyFlow();
+
+    fixture.config.pipelines = {
+      demo: [
+        {
+          args: [
+            '-e',
+            "console.log(Buffer.from('Y29tbWFuZCBkZXRhaWw=', 'base64').toString())",
+          ],
+          command: process.execPath,
+          type: 'command',
+        },
+      ],
+    };
+
+    try {
+      await expect(runPipeline(fixture.config, 'demo', { flow })).resolves.toBe(
+        true,
+      );
+
+      expect(chunks.some((chunk) => chunk.includes('command detail'))).toBe(
+        false,
+      );
+      expect(
+        chunks.some(
+          (chunk) =>
+            chunk.includes(green('◆')) && chunk.includes('command execution'),
+        ),
       ).toBe(true);
     } finally {
       await fixture.cleanup();
@@ -456,6 +784,75 @@ describe('runPipeline', () => {
       expect(chunks.some((chunk) => chunk.includes('[skip] skipped:'))).toBe(
         true,
       );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('records blocked result and skipped tasks after a failed command step', async () => {
+    const fixture = await createConfig();
+
+    fixture.config.pipelines = {
+      demo: [
+        {
+          args: ['-e', 'process.exit(1)'],
+          command: process.execPath,
+          type: 'command',
+        },
+        {
+          args: ['-e', 'process.exit(0)'],
+          command: process.execPath,
+          type: 'command',
+        },
+      ],
+    };
+
+    const plannedTasks = describePipeline(fixture.config, 'demo');
+    const recorder = createCheckRunRecorder({
+      command: 'limina check demo',
+      configPath: fixture.config.configPath,
+      pipeline: 'demo',
+      plannedTasks,
+      rootDir: fixture.config.rootDir,
+    });
+
+    try {
+      await writeNotRunCheckIssueSnapshot({
+        command: 'limina check demo',
+        rootDir: fixture.config.rootDir,
+        run: recorder.getRunSummary(),
+      });
+
+      await expect(
+        runPipeline(fixture.config, 'demo', {
+          checkRunRecorder: recorder,
+        }),
+      ).resolves.toBe(false);
+
+      const snapshot = await readCheckIssueSnapshot(fixture.config.rootDir);
+
+      expect(snapshot?.issues).toHaveLength(1);
+      expect(snapshot?.issues[0]).toMatchObject({
+        code: 'LIMINA_COMMAND_FAILED',
+        task: 'command',
+      });
+      expect(snapshot?.run).toMatchObject({
+        blockedBy: {
+          task: plannedTasks[0]?.name,
+        },
+        result: 'blocked',
+        tasks: [
+          {
+            name: plannedTasks[0]?.name,
+            status: 'failed',
+          },
+          {
+            blockedBy: plannedTasks[0]?.name,
+            name: plannedTasks[1]?.name,
+            status: 'skipped',
+          },
+        ],
+      });
     } finally {
       await fixture.cleanup();
     }

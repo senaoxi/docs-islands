@@ -59,6 +59,7 @@ export interface LiminaFlowOutputOptions {
   stream?: 'stderr' | 'stdout';
 }
 
+const CHECK_FLOW_STATUS_ONLY_OPTION = Symbol('limina.checkFlowStatusOnly');
 const DEFAULT_CI_ENV_VALUES = new Set(['1', 'true']);
 const DEFAULT_TERMINAL_COLUMNS = 80;
 const ANSI_ESCAPE = String.fromCodePoint(0x1b);
@@ -72,7 +73,7 @@ const ANSI_RED = '\u001B[31m';
 const ANSI_YELLOW = '\u001B[33m';
 
 const FLOW_SYMBOL_BY_STATUS: Record<FlowStatus, string> = {
-  fail: '■',
+  fail: '✕',
   info: '│',
   pass: '◆',
   skip: '◇',
@@ -155,6 +156,7 @@ export class LiminaFlowReporter {
   readonly #clack: ClackAdapter;
   readonly #interactive: boolean;
   readonly #output: FlowOutput;
+  readonly #statusOnly: boolean;
   readonly #stderr: FlowWriteStream | undefined;
   readonly #stdout: FlowWriteStream | undefined;
   readonly #tracksProcessWrites: boolean;
@@ -167,7 +169,11 @@ export class LiminaFlowReporter {
   constructor(options: LiminaFlowReporterOptions = {}) {
     const env = options.env ?? process.env;
     const stdout = options.stdout ?? process.stdout;
+    const internalOptions = options as LiminaFlowReporterOptions & {
+      [CHECK_FLOW_STATUS_ONLY_OPTION]?: boolean;
+    };
 
+    this.#statusOnly = internalOptions[CHECK_FLOW_STATUS_ONLY_OPTION] === true;
     this.#interactive =
       options.forceTty ?? Boolean(stdout.isTTY && !isCiEnvironment(env));
     this.#clack = options.clack ?? prompts;
@@ -186,7 +192,7 @@ export class LiminaFlowReporter {
     this.#stdout = stdout;
     this.#stderr = options.stderr ?? process.stderr;
     this.#tracksProcessWrites =
-      this.#interactive && options.output === undefined;
+      this.#interactive && !this.#statusOnly && options.output === undefined;
   }
 
   get interactive(): boolean {
@@ -197,6 +203,7 @@ export class LiminaFlowReporter {
     if (this.#interactive) {
       this.#clack.intro(message);
       this.#interactiveHistory.push(`┌  ${message}`);
+      this.#recordTerminalWrite(`${message}\n`);
       return;
     }
 
@@ -217,7 +224,9 @@ export class LiminaFlowReporter {
     options: LiminaFlowMessageOptions = {},
   ): LiminaFlowTask {
     const depth = options.depth ?? 0;
-    const collapseOnSuccess = options.collapseOnSuccess ?? true;
+    const collapseOnSuccess = this.#statusOnly
+      ? false
+      : (options.collapseOnSuccess ?? true);
     const shouldTrackTask = this.#interactive && collapseOnSuccess;
     const persistStart = !shouldTrackTask && this.#trackedTaskCount === 0;
     const startLine = this.#terminalLineCount;
@@ -243,15 +252,36 @@ export class LiminaFlowReporter {
 
     return {
       fail: (nextMessage, nextOptions) => {
+        const failOptions = {
+          ...nextOptions,
+          depth,
+          elapsedTimeMs:
+            nextOptions?.elapsedTimeMs ?? performance.now() - startTime,
+        };
+        const failMessage = this.#statusOnly
+          ? message
+          : (nextMessage ?? message);
+
+        if (
+          !shouldTrackTask &&
+          this.#interactive &&
+          persistedStartIndex !== undefined
+        ) {
+          this.#replaceInteractiveHistoryLine(
+            persistedStartIndex,
+            'fail',
+            this.#formatFailureMessage(failMessage, nextOptions),
+            failOptions,
+          );
+          this.#redrawInteractiveHistory();
+          finishTrackedTask();
+          return;
+        }
+
         this.#emit(
           'fail',
-          formatFailureMessage(nextMessage ?? message, nextOptions?.error),
-          {
-            ...nextOptions,
-            depth,
-            elapsedTimeMs:
-              nextOptions?.elapsedTimeMs ?? performance.now() - startTime,
-          },
+          this.#formatFailureMessage(failMessage, nextOptions),
+          failOptions,
           {
             persistInteractive: true,
           },
@@ -345,12 +375,16 @@ export class LiminaFlowReporter {
   }
 
   fail(message: string, options: LiminaFlowFailureOptions = {}): void {
-    this.#emit('fail', formatFailureMessage(message, options.error), options, {
+    this.#emit('fail', this.#formatFailureMessage(message, options), options, {
       persistInteractive: true,
     });
   }
 
   info(message: string, options: LiminaFlowMessageOptions = {}): void {
+    if (this.#statusOnly) {
+      return;
+    }
+
     this.#emit('info', message, options);
   }
 
@@ -367,6 +401,10 @@ export class LiminaFlowReporter {
   }
 
   warn(message: string, options: LiminaFlowMessageOptions = {}): void {
+    if (this.#statusOnly) {
+      return;
+    }
+
     this.#emit('warn', message, options, {
       persistInteractive: options.persistInteractive,
     });
@@ -376,6 +414,10 @@ export class LiminaFlowReporter {
     message: string | Uint8Array,
     options: LiminaFlowOutputOptions = {},
   ): void {
+    if (this.#statusOnly) {
+      return;
+    }
+
     const stream = options.stream === 'stderr' ? this.#stderr : this.#stdout;
 
     if (
@@ -396,6 +438,10 @@ export class LiminaFlowReporter {
     options: LiminaFlowMessageOptions,
     meta: { persistInteractive?: boolean } = {},
   ): number | undefined {
+    if (this.#statusOnly && (status === 'info' || status === 'warn')) {
+      return undefined;
+    }
+
     const message = formatMessageWithElapsed(rawMessage, options.elapsedTimeMs);
     const depth = options.depth ?? 0;
 
@@ -514,7 +560,10 @@ export class LiminaFlowReporter {
   }
 
   #redrawInteractiveHistory(): void {
-    this.#writeControl('\r\u001B[H\u001B[2J\u001B[3J');
+    if (this.#terminalLineCount > 0) {
+      this.#writeControl(`\r\u001B[${this.#terminalLineCount}A\u001B[J`);
+    }
+
     this.#terminalLineCount = 0;
     this.#terminalColumn = 0;
 
@@ -556,6 +605,17 @@ export class LiminaFlowReporter {
     );
   }
 
+  #formatFailureMessage(
+    message: string,
+    options: LiminaFlowFailureOptions | undefined,
+  ): string {
+    if (this.#statusOnly) {
+      return message;
+    }
+
+    return formatFailureMessage(message, options?.error);
+  }
+
   #writeControl(message: string): void {
     this.#output.write(message);
   }
@@ -573,4 +633,13 @@ export function createLiminaFlowReporter(
   options: LiminaFlowReporterOptions = {},
 ): LiminaFlowReporter {
   return new LiminaFlowReporter(options);
+}
+
+export function createLiminaCheckFlowReporter(
+  options: LiminaFlowReporterOptions = {},
+): LiminaFlowReporter {
+  return new LiminaFlowReporter({
+    ...options,
+    [CHECK_FLOW_STATUS_ONLY_OPTION]: true,
+  } as LiminaFlowReporterOptions);
 }

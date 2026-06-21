@@ -64,7 +64,7 @@ That import bypasses both `ui`'s public API and `app`'s dependency declaration. 
 import { Button } from '@acme/ui';
 ```
 
-Relative imports must stay inside the nearest `package.json` package scope. Bare package imports must also be acknowledged by the source owner: if source imports `p-map`, then the owner `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies` must declare it. Docs, tests, config/tooling files, type-only imports, private owners, and nameless owners may also use the workspace root `devDependencies`; explicit `source.importAuthority.allow` rules can cover project templates and aliases whose dependencies are provided elsewhere. Self imports and Node built-ins are not treated as ordinary external dependency violations.
+Relative imports must stay inside the nearest `package.json` package scope. Bare package imports must also be acknowledged by the nearest pnpm workspace source owner: if source imports `p-map`, then the owner `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies` must declare it. A matching `source.importAuthority.allow` package rule may add the workspace root `package.json` as a second declaration candidate, and specifier rules can cover project templates and aliases whose dependencies are provided elsewhere. Self imports and Node built-ins are not treated as ordinary external dependency violations.
 
 `#imports` stay under the same boundary: `#utils/foo` must match the current source owner's own `package.json#imports`, and the resolved file must remain inside that owner or resolve to an authorized external package artifact.
 

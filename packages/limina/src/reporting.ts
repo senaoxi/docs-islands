@@ -1,9 +1,19 @@
 import boxen from 'boxen';
 
 const CHECK_SUMMARY_BLOCK_MIN_WIDTH = 88;
-const CHECK_SUMMARY_BLOCK_PADDING = 4;
 const CHECK_BLOCK_HORIZONTAL_PADDING = 2;
 const CHECK_BLOCK_BORDER_WIDTH = 2;
+const ANSI_RESET = '\u001B[0m';
+const ANSI_BLUE = '\u001B[34m';
+const ANSI_CYAN = '\u001B[36m';
+const ANSI_GREEN = '\u001B[32m';
+const ANSI_MAGENTA = '\u001B[35m';
+const ANSI_YELLOW = '\u001B[33m';
+const SUMMARY_LABEL_PREFIX_PATTERN =
+  /^(\s*(?:-\s+|\d+\.\s+)?)([A-Za-z][A-Za-z ]*)(:)(\s*)/u;
+
+type CheckSummaryBlockColor = 'green' | 'red';
+type AnsiColor = string;
 
 function plural(count: number, singular: string, pluralForm: string): string {
   return count === 1 ? singular : pluralForm;
@@ -31,6 +41,63 @@ function getBlockContentWidth(blockWidth: number): number {
     1,
     blockWidth - CHECK_BLOCK_BORDER_WIDTH - CHECK_BLOCK_HORIZONTAL_PADDING,
   );
+}
+
+function colorText(color: AnsiColor, text: string): string {
+  return `${color}${text}${ANSI_RESET}`;
+}
+
+function getSummaryLabelColor(label: string): AnsiColor {
+  switch (label.toLowerCase()) {
+    case 'fix':
+    case 'fixes':
+    case 'fix steps':
+    case 'suggested fix':
+    case 'suggested fixes': {
+      return ANSI_GREEN;
+    }
+    case 'reason': {
+      return ANSI_YELLOW;
+    }
+    case 'details':
+    case 'evidence':
+    case 'external':
+    case 'issue overview': {
+      return ANSI_MAGENTA;
+    }
+    case 'verbose': {
+      return ANSI_MAGENTA;
+    }
+    case 'by rule':
+    case 'executed tasks':
+    case 'failed task':
+    case 'passed tasks':
+    case 'rule':
+    case 'rules':
+    case 'task':
+    case 'tasks':
+    case 'top rules': {
+      return ANSI_BLUE;
+    }
+    default: {
+      return ANSI_CYAN;
+    }
+  }
+}
+
+function colorSummaryLabel(line: string): string {
+  const match = SUMMARY_LABEL_PREFIX_PATTERN.exec(line);
+
+  if (!match) {
+    return line;
+  }
+
+  const [, indent = '', label = '', colon = '', spacing = ''] = match;
+  const labelText = `${label}${colon}`;
+
+  return `${indent}${colorText(getSummaryLabelColor(label), labelText)}${spacing}${line.slice(
+    match[0].length,
+  )}`;
 }
 
 function getLineWrapPrefix(line: string): {
@@ -182,17 +249,27 @@ export function formatCheckDetailBlock(lines: readonly string[]): string[] {
 }
 
 export function formatCheckSummaryBlock(options: {
+  borderColor?: CheckSummaryBlockColor;
+  colorLine?: (line: string) => string;
   lines: readonly string[];
   title: string;
 }): string[] {
-  const width = Math.max(
-    CHECK_SUMMARY_BLOCK_MIN_WIDTH,
-    options.title.length + CHECK_SUMMARY_BLOCK_PADDING,
-    ...options.lines.map((line) => line.length + CHECK_SUMMARY_BLOCK_PADDING),
+  const width = CHECK_SUMMARY_BLOCK_MIN_WIDTH;
+  const contentWidth = getBlockContentWidth(width);
+  const shouldColorLabels = Boolean(options.borderColor);
+  const wrappedLines = options.lines.flatMap((line) =>
+    wrapDetailLine(line, contentWidth),
   );
+  const coloredLines = shouldColorLabels
+    ? wrappedLines.map((line) => colorSummaryLabel(line))
+    : wrappedLines;
+  const renderedLines = options.colorLine
+    ? coloredLines.map((line) => options.colorLine?.(line) ?? line)
+    : coloredLines;
 
-  return boxen(options.lines.join('\n'), {
-    borderStyle: 'single',
+  return boxen(renderedLines.join('\n'), {
+    borderStyle: 'round',
+    ...(options.borderColor ? { borderColor: options.borderColor } : {}),
     padding: {
       left: 1,
       right: 1,

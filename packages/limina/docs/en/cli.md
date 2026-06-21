@@ -20,10 +20,10 @@ For what each task detects, with examples, see [Built-in Tasks](./built-in-tasks
 | `limina check <pipeline>` | Run a named user pipeline from `pipelines`.                                                                       |
 
 `limina check --issues` reads the last recorded check result and lists filter
-values by task, package, rule, scope, checker, and package tool. Combine it
+values by task, package, rule, scope, and checker. Combine it
 with `--task <name>`, `--package <name>`, `--rule <code>`, `--file <path>`,
-`--scope <path>`, `--checker <name>`, or `--tool <name>` to narrow the
-inventory before choosing a focused rerun.
+`--scope <path>`, or `--checker <name>` to narrow the inventory before
+choosing a focused rerun.
 
 Failed check tasks print a summary first, then grouped details. Groups share a
 stable rule code such as `LIMINA_GRAPH_REFERENCE_MISSING` or

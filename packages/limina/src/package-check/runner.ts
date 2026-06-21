@@ -29,20 +29,21 @@ import path from 'pathe';
 import type { publint } from 'publint';
 import type { formatMessage } from 'publint/utils';
 import type { CheckIssueReportOptions } from '../check-reporting/human';
+import type { LiminaCheckRunTaskStats } from '../check-reporting/run-recorder';
 import type {
   LiminaCheckIssueEvidence,
   LiminaCheckIssueExternal,
+  LiminaCheckRunCheckItemSummary,
 } from '../check-reporting/snapshot';
 import {
   createTaskFailureIssue,
   type LiminaCheckIssue,
 } from '../check-reporting/snapshot';
+import { createCheckItemStats } from '../check-reporting/stats';
 import type { LiminaFlowReporter } from '../flow';
 import { formatErrorMessage, PackageLogger } from '../logger';
-import {
-  createPackageEntrySelectionPlan,
-  type PackageEntrySelectionPlan,
-} from './entry-selection';
+import { type LiminaPreflightManager, resolvePreflight } from '../preflight';
+import type { PackageEntrySelectionPlan } from './entry-selection';
 import {
   collectBuiltPackageManifestProblems,
   collectSelfSpecifierMatchers,
@@ -87,7 +88,9 @@ export interface RunPackageCheckOptions {
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   issues?: LiminaCheckIssue[];
+  onStats?: (stats: LiminaCheckRunTaskStats) => void;
   packageNames?: readonly string[];
+  preflight?: LiminaPreflightManager;
   report?: CheckIssueReportOptions;
   tool?: PackageCheckToolSelection;
 }
@@ -1016,9 +1019,8 @@ export async function runPackageCheckImpl(
   options: RunPackageCheckOptions,
 ): Promise<boolean> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
-
-  const plan = createPackageEntrySelectionPlan({
-    config: options.config,
+  const preflight = resolvePreflight(options.config, options);
+  const plan = await preflight.ensurePackageEntrySelectionPlan({
     cwd,
     packageNames: options.packageNames,
     requireCwdPackageMatch: false,
@@ -1044,21 +1046,49 @@ export async function runPackageCheckImpl(
   }
 
   let passed = true;
+  const checkItems: LiminaCheckRunCheckItemSummary[] = [];
 
   for (const entry of runnableEntries) {
-    passed =
-      (await runPackageCheckEntry({
-        attwProfile: options.attwProfile,
-        checks: entry.checks,
-        config: options.config,
-        flow: options.flow,
-        flowDepth: (options.flowDepth ?? 0) + 1,
-        issueSink: options.issues,
-        label: entry.label,
-        outDir: entry.outDir,
-        rawEntry: entry.rawEntry,
-      })) && passed;
+    const startedAt = performance.now();
+    const issueCountBefore = options.issues?.length ?? 0;
+    const entryPassed = await runPackageCheckEntry({
+      attwProfile: options.attwProfile,
+      checks: entry.checks,
+      config: options.config,
+      flow: options.flow,
+      flowDepth: (options.flowDepth ?? 0) + 1,
+      issueSink: options.issues,
+      label: entry.label,
+      outDir: entry.outDir,
+      rawEntry: entry.rawEntry,
+    });
+    const issueCount = Math.max(
+      0,
+      (options.issues?.length ?? issueCountBefore) - issueCountBefore,
+    );
+
+    checkItems.push(
+      createCheckItemStats({
+        durationMs: performance.now() - startedAt,
+        issues: entryPassed ? 0 : Math.max(1, issueCount),
+        name: `${entry.label} (${entry.checks.join(', ')})`,
+        total: entry.checks.length,
+      }),
+    );
+    passed = entryPassed && passed;
   }
+
+  options.onStats?.({
+    items: checkItems,
+    passed: checkItems.reduce(
+      (total, item) => total + (item.checksPassed ?? 0),
+      0,
+    ),
+    total: checkItems.reduce(
+      (total, item) => total + (item.checksTotal ?? 0),
+      0,
+    ),
+  });
 
   return passed;
 }

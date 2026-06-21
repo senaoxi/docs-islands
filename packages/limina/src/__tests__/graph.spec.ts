@@ -16,6 +16,11 @@ import { runGraphCheck, type RunGraphCheckOptions } from '../commands/graph';
 import { GraphLogger } from '../logger';
 
 const requireFromTest = createRequire(import.meta.url);
+const ANSI_ESCAPE = String.fromCodePoint(0x1b);
+const ANSI_PATTERN = new RegExp(
+  String.raw`${ANSI_ESCAPE}\[[\d:;<=>?]*[\u0020-\u002F]*[\u0040-\u007E]`,
+  'gu',
+);
 const defaultCheckers: NonNullable<ResolvedLiminaConfig['config']>['checkers'] =
   {
     typescript: {
@@ -23,6 +28,10 @@ const defaultCheckers: NonNullable<ResolvedLiminaConfig['config']>['checkers'] =
       include: ['tsconfig.json', '**/tsconfig.json'],
     },
   };
+
+function stripAnsi(value: string): string {
+  return value.replaceAll(ANSI_PATTERN, '');
+}
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -1736,7 +1745,7 @@ describe('runGraphCheck graph rules', () => {
 
     try {
       await expect(runGraphCheck(fixture.config)).resolves.toBe(false);
-      const errors = errorSpy.mock.calls.join('\n');
+      const errors = stripAnsi(errorSpy.mock.calls.join('\n'));
 
       expect(errors).toContain('Graph check summary');
       expect(errors).toContain('│ Found 1 check issue.');
@@ -1805,7 +1814,7 @@ describe('runGraphCheck graph rules', () => {
         }),
       ).resolves.toBe(false);
 
-      const errors = errorSpy.mock.calls.join('\n');
+      const errors = stripAnsi(errorSpy.mock.calls.join('\n'));
 
       expect(errors).toContain('Graph check summary');
       expect(errors).toContain('│ Found 1 check issue.');

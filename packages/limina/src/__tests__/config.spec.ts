@@ -574,6 +574,48 @@ export default {
     }
   });
 
+  it('rejects package import authority rules when the workspace root package.json is missing', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `
+export default {
+  source: {
+    importAuthority: {
+      allow: [
+        {
+          files: ['packages/app/src/**'],
+          packages: ['zod'],
+          reason: 'The root manifest declares shared dependencies.',
+        },
+      ],
+    },
+  },
+};
+`,
+      );
+
+      await expect(
+        loadConfig({
+          cwd: rootDir,
+        }),
+      ).rejects.toThrow(
+        'package allow rules enable workspace root package.json as a dependency authority manifest',
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
   it('loads promised config objects', async () => {
     const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
 

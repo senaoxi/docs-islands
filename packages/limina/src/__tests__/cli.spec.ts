@@ -15,6 +15,15 @@ import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
+const ANSI_ESCAPE = String.fromCodePoint(0x1b);
+const ANSI_PATTERN = new RegExp(
+  String.raw`${ANSI_ESCAPE}\[[\d:;<=>?]*[\u0020-\u002F]*[\u0040-\u007E]`,
+  'gu',
+);
+
+function stripAnsi(value: string): string {
+  return value.replaceAll(ANSI_PATTERN, '');
+}
 
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -332,6 +341,78 @@ describe('limina CLI', () => {
     });
   });
 
+  it('hides checker build process output from the check command', async () => {
+    await withCliBuildFixture(async ({ cliPath, rootDir }) => {
+      const secretError = 'SECRET_CHECKER_BUILD_FAILURE';
+
+      await writeText(
+        path.join(rootDir, 'packages/pkg/package.json'),
+        stringifyConfig({
+          exports: {
+            '.': './src/index.ts',
+          },
+          name: '@example/pkg',
+          scripts: {
+            build: 'limina checker build tsconfig.json',
+          },
+          type: 'module',
+        }),
+      );
+      await writeText(
+        path.join(rootDir, 'node_modules/.bin/tsc'),
+        [
+          '#!/usr/bin/env sh',
+          `printf "%s\\n" "${secretError}" >&2`,
+          'exit 2',
+          '',
+        ].join('\n'),
+      );
+      await chmod(path.join(rootDir, 'node_modules/.bin/tsc'), 0o755);
+
+      let stdout = '';
+      let stderr = '';
+
+      try {
+        await execFileAsync(
+          process.execPath,
+          [
+            cliPath,
+            '--config',
+            path.join(rootDir, 'limina.config.mjs'),
+            'check',
+          ],
+          {
+            cwd: rootDir,
+            env: {
+              ...process.env,
+              CI: 'true',
+            },
+          },
+        );
+        throw new Error('Expected limina check to fail.');
+      } catch (error) {
+        expect(error).toMatchObject({
+          code: 1,
+        });
+        stdout =
+          typeof (error as { stdout?: unknown }).stdout === 'string'
+            ? (error as { stdout: string }).stdout
+            : '';
+        stderr =
+          typeof (error as { stderr?: unknown }).stderr === 'string'
+            ? (error as { stderr: string }).stderr
+            : '';
+      }
+
+      expect(stdout).toContain('Limina check summary');
+      expect(stdout).toContain('checker:build');
+      expect(`${stdout}\n${stderr}`).not.toContain(secretError);
+      expect(`${stdout}\n${stderr}`).not.toContain(
+        `Checker build failed: ${secretError}`,
+      );
+    });
+  }, 30_000);
+
   it('rejects removed and invalid checker build options from the public command', async () => {
     const cliPath = fileURLToPath(
       new URL('../../bin/limina.js', import.meta.url),
@@ -591,14 +672,15 @@ describe('limina CLI', () => {
         }),
       );
 
-      await expect(
-        execFileAsync(
+      let checkFailureStdout = '';
+
+      try {
+        await execFileAsync(
           process.execPath,
           [
             cliPath,
             '--config',
             path.join(rootDir, 'limina.config.mjs'),
-            'source',
             'check',
           ],
           {
@@ -608,10 +690,33 @@ describe('limina CLI', () => {
               CI: 'true',
             },
           },
-        ),
-      ).rejects.toMatchObject({
-        code: 1,
-      });
+        );
+        throw new Error('Expected limina check to fail.');
+      } catch (error) {
+        expect(error).toMatchObject({
+          code: 1,
+        });
+        checkFailureStdout =
+          typeof (error as { stdout?: unknown }).stdout === 'string'
+            ? (error as { stdout: string }).stdout
+            : '';
+      }
+      const checkFailurePlainStdout = stripAnsi(checkFailureStdout);
+
+      expect(checkFailurePlainStdout).toContain('Limina check summary');
+      expect(checkFailurePlainStdout).not.toContain('Result: FAILED');
+      expect(checkFailurePlainStdout).not.toContain('Blocked at: source:check');
+      expect(checkFailurePlainStdout).toContain('Executed tasks: 5 / 5');
+      expect(checkFailurePlainStdout).toContain('✕ source:check');
+      expect(checkFailurePlainStdout).toContain('✕ knip source usage');
+      expect(checkFailurePlainStdout).toContain('Next commands:');
+      expect(checkFailurePlainStdout).toContain(
+        'Verbose: limina check --issues --verbose',
+      );
+      expect(checkFailureStdout).toContain(
+        `${ANSI_ESCAPE}[34mExecuted tasks:${ANSI_ESCAPE}[0m 5 / 5`,
+      );
+      expect(checkFailurePlainStdout).not.toContain('Source check summary');
 
       const result = await execFileAsync(
         process.execPath,
@@ -631,15 +736,19 @@ describe('limina CLI', () => {
         },
       );
 
-      expect(result.stdout).toContain('Issue filters available from last run:');
-      expect(result.stdout).toContain('tasks:\n  - source:check  1 issue');
-      expect(result.stdout).toContain('packages:\n  - @example/app  1 issue');
+      expect(result.stdout).toContain('Limina check issue summary');
+      expect(result.stdout).toContain('Matched: 3 / 3 issues');
+      expect(result.stdout).toContain('Command: limina check');
+      expect(result.stdout).toContain('Issue overview:');
+      expect(result.stdout).toContain('source:check (1)');
+      expect(result.stdout).toContain('checker:build (1)');
+      expect(result.stdout).toContain('proof:check (1)');
+      expect(result.stdout).toContain('Packages: @example/app (1)');
+      expect(result.stdout).toContain('1  LIMINA_SOURCE_UNUSED_MODULE');
+      expect(result.stdout).toContain('Next commands:');
       expect(result.stdout).toContain(
-        'rules:\n  - LIMINA_SOURCE_UNUSED_MODULE  1 issue',
+        'limina check --issues --rule LIMINA_CHECKER_PEER_DEPENDENCY_MISSING --verbose',
       );
-      expect(result.stdout).toContain('scopes:\n  - app/src/theme  1 issue');
-      expect(result.stdout).toContain('checkers:\n  (none)');
-      expect(result.stdout).toContain('tools:\n  - knip  1 issue');
 
       const detailsResult = await execFileAsync(
         process.execPath,
@@ -649,7 +758,7 @@ describe('limina CLI', () => {
           path.join(rootDir, 'limina.config.mjs'),
           'check',
           '--issues',
-          '--details',
+          '--verbose',
         ],
         {
           cwd: rootDir,
@@ -662,29 +771,6 @@ describe('limina CLI', () => {
       expect(detailsResult.stdout).toContain('Check issue details');
       expect(detailsResult.stdout).toContain('Unused source module');
       expect(detailsResult.stdout).toContain('fix steps:');
-
-      const fixesResult = await execFileAsync(
-        process.execPath,
-        [
-          cliPath,
-          '--config',
-          path.join(rootDir, 'limina.config.mjs'),
-          'check',
-          '--issues',
-          '--fixes',
-        ],
-        {
-          cwd: rootDir,
-          env: {
-            ...process.env,
-            CI: 'true',
-          },
-        },
-      );
-      expect(fixesResult.stdout).toContain('Check issue fixes');
-      expect(fixesResult.stdout).toContain(
-        'Delete files that are truly unused.',
-      );
 
       const jsonResult = await execFileAsync(
         process.execPath,
@@ -705,15 +791,43 @@ describe('limina CLI', () => {
           },
         },
       );
-      expect(JSON.parse(jsonResult.stdout)).toMatchObject({
-        issueCount: 1,
-        issues: [
-          {
+      const jsonPayload = JSON.parse(jsonResult.stdout) as {
+        issueCount: number;
+        issues: { code: string; task?: string; tool?: string }[];
+        overview: { issueCount: number };
+        topBlockers: { code: string; task: string }[];
+      };
+
+      expect(jsonPayload).toMatchObject({
+        issueCount: 3,
+        overview: {
+          issueCount: 3,
+        },
+      });
+      expect(jsonPayload.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
             code: 'LIMINA_SOURCE_UNUSED_MODULE',
             tool: 'knip',
-          },
-        ],
-      });
+          }),
+          expect.objectContaining({
+            code: 'LIMINA_PROOF_DEFAULT_TSCONFIG_INVALID',
+            task: 'proof:check',
+          }),
+          expect.objectContaining({
+            code: 'LIMINA_CHECKER_PEER_DEPENDENCY_MISSING',
+            task: 'checker:build',
+          }),
+        ]),
+      );
+      expect(jsonPayload.topBlockers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'LIMINA_SOURCE_UNUSED_MODULE',
+            task: 'source:check',
+          }),
+        ]),
+      );
 
       const ndjsonResult = await execFileAsync(
         process.execPath,
@@ -734,10 +848,20 @@ describe('limina CLI', () => {
           },
         },
       );
-      expect(JSON.parse(ndjsonResult.stdout)).toMatchObject({
-        code: 'LIMINA_SOURCE_UNUSED_MODULE',
-        tool: 'knip',
-      });
+      const ndjsonIssues = ndjsonResult.stdout
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { code: string; tool?: string });
+
+      expect(ndjsonIssues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'LIMINA_SOURCE_UNUSED_MODULE',
+            tool: 'knip',
+          }),
+        ]),
+      );
+      expect(ndjsonResult.stdout).not.toContain('Limina check issue summary');
 
       const ruleFilteredResult = await execFileAsync(
         process.execPath,
@@ -758,8 +882,13 @@ describe('limina CLI', () => {
           },
         },
       );
+      expect(ruleFilteredResult.stdout).toContain('Filters:');
       expect(ruleFilteredResult.stdout).toContain(
-        'rules:\n  - LIMINA_SOURCE_UNUSED_MODULE  1 issue',
+        'rule: LIMINA_SOURCE_UNUSED_MODULE',
+      );
+      expect(ruleFilteredResult.stdout).toContain('Matched: 1 / 3 issues');
+      expect(ruleFilteredResult.stdout).toContain(
+        '1  LIMINA_SOURCE_UNUSED_MODULE',
       );
 
       const packageFilteredResult = await execFileAsync(
@@ -781,9 +910,9 @@ describe('limina CLI', () => {
           },
         },
       );
-      expect(packageFilteredResult.stdout).toContain(
-        'packages:\n  - @example/app  1 issue',
-      );
+      expect(packageFilteredResult.stdout).toContain('Filters:');
+      expect(packageFilteredResult.stdout).toContain('package: @example/app');
+      expect(packageFilteredResult.stdout).toContain('Matched: 1 / 3 issues');
 
       const unmatchedRuleResult = await execFileAsync(
         process.execPath,
@@ -804,11 +933,26 @@ describe('limina CLI', () => {
           },
         },
       );
-      expect(unmatchedRuleResult.stdout).toContain(
-        'No issues matched the selected filters.',
-      );
+      const normalizedUnmatchedRuleOutput = stripAnsi(
+        unmatchedRuleResult.stdout,
+      )
+        .replaceAll(/\s*│\s*/gu, ' ')
+        .replaceAll(/\s+/gu, ' ');
+      expect(unmatchedRuleResult.stdout).toContain('Matched: 0 / 3 issues');
       expect(unmatchedRuleResult.stdout).toContain(
         'rule: LIMINA_GRAPH_CHECK_FAILED',
+      );
+      expect(unmatchedRuleResult.stdout).toContain('Top rules:');
+      expect(unmatchedRuleResult.stdout).toContain('(none)');
+      expect(unmatchedRuleResult.stdout).toContain('Filter diagnostics:');
+      expect(normalizedUnmatchedRuleOutput).toContain(
+        'Supported rule "LIMINA_GRAPH_CHECK_FAILED"',
+      );
+      expect(normalizedUnmatchedRuleOutput).toContain(
+        'absent from the last snapshot.',
+      );
+      expect(normalizedUnmatchedRuleOutput).toContain(
+        'limina check --issues --rule --help',
       );
     } finally {
       await rm(rootDir, {
@@ -816,7 +960,7 @@ describe('limina CLI', () => {
         recursive: true,
       });
     }
-  }, 20_000);
+  }, 40_000);
 
   it('reports missing and invalid check issue inventory requests', async () => {
     const rootDir = await realpath(
@@ -833,7 +977,28 @@ describe('limina CLI', () => {
       );
       await writeText(
         path.join(rootDir, 'limina.config.mjs'),
-        'export default {};\n',
+        `export default ${JSON.stringify(
+          {
+            config: {
+              checkers: {
+                typescript: {
+                  include: ['packages/app/tsconfig.json'],
+                  preset: 'tsc',
+                },
+              },
+            },
+            package: {
+              entries: [
+                {
+                  name: '@example/pkg-entry',
+                  outDir: 'packages/pkg/dist',
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )};\n`,
       );
 
       const result = await execFileAsync(
@@ -855,6 +1020,273 @@ describe('limina CLI', () => {
       );
 
       expect(result.stdout).toContain('No check issue snapshot found.');
+      await writeText(
+        path.join(rootDir, '.limina/check/last-run.json'),
+        stringifyConfig({
+          command: 'limina check',
+          createdAt: '2026-06-21T00:00:00.000Z',
+          issues: [],
+          run: {
+            command: 'limina check',
+            createdAt: '2026-06-21T00:00:00.000Z',
+            pipeline: 'default',
+            result: 'passed',
+            tasks: [
+              {
+                kind: 'task',
+                name: 'source:check',
+                status: 'passed',
+              },
+            ],
+          },
+          status: 'completed',
+          version: 4,
+        }),
+      );
+
+      const emptyTaskHelpResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--task',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const emptyTaskHelpPlainStdout = stripAnsi(emptyTaskHelpResult.stdout);
+      expect(emptyTaskHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(emptyTaskHelpPlainStdout).toContain('Check issue tasks:');
+      expect(emptyTaskHelpPlainStdout).toContain('- source:check  0 issues');
+      expect(emptyTaskHelpPlainStdout).not.toContain(
+        'No task filters are available',
+      );
+
+      const emptyPackageHelpResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--package',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const emptyPackageHelpPlainStdout = stripAnsi(
+        emptyPackageHelpResult.stdout,
+      );
+      expect(emptyPackageHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(emptyPackageHelpPlainStdout).toContain('Check issue packages:');
+      expect(emptyPackageHelpPlainStdout).toContain(
+        '- @example/pkg-entry  0 issues',
+      );
+      expect(emptyPackageHelpPlainStdout).not.toContain(
+        'No package filters are available',
+      );
+
+      const emptyShortPackageHelpResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '-p',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const emptyShortPackageHelpPlainStdout = stripAnsi(
+        emptyShortPackageHelpResult.stdout,
+      );
+      expect(emptyShortPackageHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(emptyShortPackageHelpPlainStdout).toContain(
+        'Check issue packages:',
+      );
+      expect(emptyShortPackageHelpPlainStdout).toContain(
+        '- @example/pkg-entry  0 issues',
+      );
+
+      const emptyCheckerHelpResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--checker',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const emptyCheckerHelpPlainStdout = stripAnsi(
+        emptyCheckerHelpResult.stdout,
+      );
+      expect(emptyCheckerHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(emptyCheckerHelpPlainStdout).toContain('Check issue checkers:');
+      expect(emptyCheckerHelpPlainStdout).toContain('- typescript  0 issues');
+      expect(emptyCheckerHelpPlainStdout).not.toContain(
+        'No checker filters are available',
+      );
+
+      await writeText(
+        path.join(rootDir, '.limina/check/last-run.json'),
+        stringifyConfig({
+          command: 'limina check',
+          createdAt: '2026-06-21T00:00:00.000Z',
+          issues: [
+            {
+              checkerName: 'typescript',
+              code: 'LIMINA_CHECKER_BUILD_FAILED',
+              packageName: '@example/app',
+              reason: 'Checker build failed.',
+              task: 'checker:build',
+              title: 'Checker build failed',
+            },
+          ],
+          status: 'completed',
+          version: 4,
+        }),
+      );
+
+      const ruleHelpResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--rule',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const ruleHelpPlainStdout = stripAnsi(ruleHelpResult.stdout);
+      expect(ruleHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(ruleHelpPlainStdout).toContain('Supported check issue rules:');
+      expect(ruleHelpPlainStdout).toContain('source:check');
+      expect(ruleHelpPlainStdout).toContain(
+        'LIMINA_SOURCE_TSCONFIG_GOVERNANCE',
+      );
+      expect(ruleHelpPlainStdout).toContain(
+        'source tsconfig is missing or outside checker governance',
+      );
+      expect(ruleHelpPlainStdout).not.toContain('Usage:');
+
+      const taskHelpResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--task',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const taskHelpPlainStdout = stripAnsi(taskHelpResult.stdout);
+      expect(taskHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(taskHelpPlainStdout).toContain('Check issue tasks:');
+      expect(taskHelpPlainStdout).toContain('- checker:build  1 issue');
+
+      const packageHelpResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--package',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const packageHelpPlainStdout = stripAnsi(packageHelpResult.stdout);
+      expect(packageHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(packageHelpPlainStdout).toContain('Check issue packages:');
+      expect(packageHelpPlainStdout).toContain('- @example/app  1 issue');
+      expect(packageHelpPlainStdout).toContain(
+        '- @example/pkg-entry  0 issues',
+      );
+
+      const checkerHelpResult = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--checker',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const checkerHelpPlainStdout = stripAnsi(checkerHelpResult.stdout);
+      expect(checkerHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(checkerHelpPlainStdout).toContain('Check issue checkers:');
+      expect(checkerHelpPlainStdout).toContain('- typescript  1 issue');
+
       await expect(
         execFileAsync(process.execPath, [cliPath, 'check', 'demo', '--issues']),
       ).rejects.toMatchObject({
@@ -871,16 +1303,87 @@ describe('limina CLI', () => {
         ]),
       ).rejects.toMatchObject({
         stderr: expect.stringContaining(
-          '`limina check --task`, `--checker`, `--tool`, `--details`, `--fixes`, and `--format` require --issues.',
+          '`limina check --task`, `--checker`, and `--format` require --issues.',
         ),
       });
+      await Promise.all([
+        expect(
+          execFileAsync(process.execPath, [
+            cliPath,
+            'check',
+            '--issues',
+            '--tool',
+            'knip',
+          ]),
+        ).rejects.toMatchObject({
+          stderr: expect.stringContaining('Unknown option `--tool`'),
+        }),
+        expect(
+          execFileAsync(process.execPath, [
+            cliPath,
+            'check',
+            '--issues',
+            '--fixes',
+          ]),
+        ).rejects.toMatchObject({
+          stderr: expect.stringContaining('Unknown option `--fixes`'),
+        }),
+        expect(
+          execFileAsync(process.execPath, [
+            cliPath,
+            'check',
+            '--issues',
+            '--details',
+          ]),
+        ).rejects.toMatchObject({
+          stderr: expect.stringContaining('Unknown option `--details`'),
+        }),
+      ]);
+      try {
+        await execFileAsync(
+          process.execPath,
+          [
+            cliPath,
+            '--config',
+            path.join(rootDir, 'limina.config.mjs'),
+            'check',
+            '--issues',
+            '--rule',
+            'LIMINA_NOT_A_REAL_RULE',
+          ],
+          {
+            cwd: rootDir,
+            env: {
+              ...process.env,
+              CI: 'true',
+            },
+          },
+        );
+        throw new Error('Expected unknown rule to fail.');
+      } catch (error) {
+        const stderr =
+          typeof (error as { stderr?: unknown }).stderr === 'string'
+            ? (error as { stderr: string }).stderr
+            : '';
+
+        expect(stderr).toContain(
+          'Unknown check --rule code "LIMINA_NOT_A_REAL_RULE".',
+        );
+        expect(stderr).toContain(
+          'Run `limina check --issues --rule --help` to see supported rule codes.',
+        );
+        expect(stderr).not.toContain(
+          'Expected one of the built-in Limina rule codes',
+        );
+        expect(stderr).not.toContain('LIMINA_SOURCE_UNUSED_MODULE');
+      }
     } finally {
       await rm(rootDir, {
         force: true,
         recursive: true,
       });
     }
-  }, 15_000);
+  }, 40_000);
 
   it('runs release check with repeated package filters from the public command', async () => {
     const rootDir = await realpath(

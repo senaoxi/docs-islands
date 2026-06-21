@@ -10,6 +10,8 @@ import {
 } from '#core/import-graph/context';
 import { toRelativePath } from '#utils/path';
 
+import type { CheckCounter } from '../check-reporting/stats';
+
 const requiredDtsCompilerOptions: [keyof ts.CompilerOptions, unknown][] = [
   ['composite', true],
   ['incremental', true],
@@ -78,12 +80,14 @@ export function addDtsOptionProblems(
   config: ResolvedLiminaConfig,
   project: ProjectInfo,
   problems: string[],
+  checks: CheckCounter,
 ): void {
   if (!isDtsProjectConfig(project.configPath)) {
     return;
   }
 
   for (const [optionName, expected] of requiredDtsCompilerOptions) {
+    checks.add();
     const actual = project.options[optionName];
 
     if (actual === expected) {
@@ -103,6 +107,8 @@ export function addDtsOptionProblems(
   }
 
   for (const optionName of requiredDtsPathOptions) {
+    checks.add();
+
     if (project.options[optionName]) {
       continue;
     }
@@ -122,12 +128,15 @@ export function addTypecheckParityProblems(
   config: ResolvedLiminaConfig,
   dtsProject: ProjectInfo,
   problems: string[],
+  checks: CheckCounter,
 ): void {
   if (!isDtsProjectConfig(dtsProject.configPath)) {
     return;
   }
 
   const typecheckConfigPath = getTypecheckConfigPath(dtsProject.configPath);
+
+  checks.add();
 
   if (!existsSync(typecheckConfigPath)) {
     problems.push(
@@ -148,6 +157,7 @@ export function addTypecheckParityProblems(
   );
 
   for (const optionName of comparableTypecheckOptions) {
+    checks.add();
     const buildValue = dtsProject.options[optionName];
     const typecheckValue = typecheckProject.options[optionName];
 
@@ -172,6 +182,8 @@ export function addTypecheckParityProblems(
   const missingFiles = dtsProject.fileNames.filter(
     (fileName) => !typecheckFiles.has(fileName) && !fileName.endsWith('.d.ts'),
   );
+
+  checks.add();
 
   if (missingFiles.length === 0) {
     return;

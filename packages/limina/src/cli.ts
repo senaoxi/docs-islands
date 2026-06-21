@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import {
   type BuildCheckerPreset,
+  getActiveCheckers,
   type LiminaCommand,
   loadConfig,
   type PackageAttwProfile,
@@ -9,12 +10,21 @@ import {
 } from '#config/runner';
 import { cac } from 'cac';
 import path from 'pathe';
+import { isLiminaCheckIssueCode } from './check-reporting/codes';
+import {
+  type CheckIssueFilterHelpKind,
+  type CheckIssueFilterHelpValue,
+  formatCheckIssueRuleHelp,
+  formatCheckIssueSnapshotFilterHelp,
+} from './check-reporting/filter-help';
+import { createCheckRunRecorder } from './check-reporting/run-recorder';
 import {
   type CheckIssueInventoryFormat,
   formatCheckIssueSnapshotInventory,
   readCheckIssueSnapshot,
   writeNotRunCheckIssueSnapshot,
 } from './check-reporting/snapshot';
+import { formatCheckRunSummaryHuman } from './check-reporting/summary';
 import {
   runGraphCheck,
   runGraphExport,
@@ -31,12 +41,24 @@ import {
   runCheckerTypecheck,
 } from './commands/typecheck';
 import {
+  collectWorkspacePackages,
+  isNamedWorkspacePackage,
+} from './core/workspace/actions';
+import {
   type DependencyGraphView,
   stringifyDependencyGraph,
 } from './dependency-graph/runner';
-import { createLiminaFlowReporter } from './flow';
+import {
+  createLiminaCheckFlowReporter,
+  createLiminaFlowReporter,
+} from './flow';
 import { clearCliScreen, CliLogger, formatErrorMessage } from './logger';
-import { runDefaultCheck, runPipeline } from './pipeline/runner';
+import {
+  describeDefaultCheckPipeline,
+  describePipeline,
+  runDefaultCheck,
+  runPipeline,
+} from './pipeline/runner';
 import type { SourceIssueReportOptions } from './source-check/report';
 import { writeNotRunSourceIssueSnapshot } from './source-check/snapshot';
 
@@ -58,12 +80,9 @@ interface SourceIssueSelectionFlags extends PackageSelectionFlags {
 
 interface CheckFlags extends GlobalFlags, SourceIssueSelectionFlags {
   checker?: string | string[];
-  details?: boolean;
-  fixes?: boolean;
   format?: string;
   issues?: boolean;
   task?: string | string[];
-  tool?: string | string[];
 }
 
 interface SourceFlags extends GlobalFlags, SourceIssueSelectionFlags {}
@@ -241,6 +260,27 @@ function createSourceIssueReportOptions(
   };
 }
 
+function assertKnownCheckRuleCodes(rules: string[] | undefined): void {
+  if (!rules) {
+    return;
+  }
+
+  const unknown = rules.filter((rule) => !isLiminaCheckIssueCode(rule));
+  if (unknown.length === 0) {
+    return;
+  }
+
+  const label = unknown.length > 1 ? 'codes' : 'code';
+  const quoted = unknown.map((rule) => `"${rule}"`).join(', ');
+
+  throw new Error(
+    [
+      `Unknown check --rule ${label} ${quoted}.`,
+      'Run `limina check --issues --rule --help` to see supported rule codes.',
+    ].join('\n'),
+  );
+}
+
 function parseIssueInventoryFormat(
   format: string | undefined,
 ): CheckIssueInventoryFormat | undefined {
@@ -262,16 +302,9 @@ function assertStandaloneIssuesFlag(
   flags: CheckFlags,
 ): void {
   if (!flags.issues) {
-    if (
-      flags.task ||
-      flags.checker ||
-      flags.tool ||
-      flags.details ||
-      flags.fixes ||
-      flags.format
-    ) {
+    if (flags.task || flags.checker || flags.format) {
       throw new Error(
-        '`limina check --task`, `--checker`, `--tool`, `--details`, `--fixes`, and `--format` require --issues.',
+        '`limina check --task`, `--checker`, and `--format` require --issues.',
       );
     }
 
@@ -299,10 +332,240 @@ function parseDependencyGraphView(
   );
 }
 
-function createCliFlow() {
-  clearCliScreen();
+function createCliFlow(
+  options: { check?: boolean; clearScreen?: boolean } = {},
+) {
+  if (options.clearScreen ?? true) {
+    clearCliScreen();
+  }
 
-  return createLiminaFlowReporter();
+  return options.check
+    ? createLiminaCheckFlowReporter()
+    : createLiminaFlowReporter();
+}
+
+function readGlobalFlagsFromArgv(argv: readonly string[]): GlobalFlags {
+  const flags: GlobalFlags = {};
+
+  for (let index = 2; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === '--config') {
+      const value = argv[index + 1];
+
+      if (value && !value.startsWith('-')) {
+        flags.config = value;
+        index += 1;
+      }
+
+      continue;
+    }
+
+    if (arg?.startsWith('--config=')) {
+      flags.config = arg.slice('--config='.length);
+      continue;
+    }
+
+    if (arg === '--mode') {
+      const value = argv[index + 1];
+
+      if (value && !value.startsWith('-')) {
+        flags.mode = value;
+        index += 1;
+      }
+
+      continue;
+    }
+
+    if (arg?.startsWith('--mode=')) {
+      flags.mode = arg.slice('--mode='.length);
+    }
+  }
+
+  return flags;
+}
+
+function parseCheckIssueFilterHelpKind(
+  argv: readonly string[],
+): CheckIssueFilterHelpKind | null {
+  const args = argv.slice(2);
+  let commandName: string | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === '--config' || arg === '--mode') {
+      index += 1;
+      continue;
+    }
+
+    if (arg?.startsWith('--config=') || arg?.startsWith('--mode=')) {
+      continue;
+    }
+
+    if (!arg?.startsWith('-')) {
+      commandName = arg;
+      break;
+    }
+  }
+
+  if (commandName !== 'check' || !args.includes('--issues')) {
+    return null;
+  }
+
+  const filters = new Map<string, CheckIssueFilterHelpKind>([
+    ['--checker', 'checker'],
+    ['--package', 'package'],
+    ['-p', 'package'],
+    ['--rule', 'rule'],
+    ['--task', 'task'],
+  ]);
+
+  for (const [index, arg] of args.entries()) {
+    const helpKind = filters.get(arg);
+
+    if (!helpKind) {
+      continue;
+    }
+
+    const nextArg = args[index + 1];
+
+    if (nextArg === '--help' || nextArg === '-h') {
+      return helpKind;
+    }
+  }
+
+  return null;
+}
+
+function uniqueSortedValues(
+  values: readonly (string | undefined)[],
+): CheckIssueFilterHelpValue[] {
+  return [
+    ...new Set(
+      values
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ]
+    .sort((left, right) => left.localeCompare(right))
+    .map((name) => ({ name }));
+}
+
+function getSnapshotIssuePackageNames(
+  snapshot: Awaited<ReturnType<typeof readCheckIssueSnapshot>>,
+): string[] {
+  return (
+    snapshot?.issues.flatMap((issue) =>
+      issue.packageName ? [issue.packageName] : [],
+    ) ?? []
+  );
+}
+
+function getSnapshotIssueCheckerNames(
+  snapshot: Awaited<ReturnType<typeof readCheckIssueSnapshot>>,
+): string[] {
+  return (
+    snapshot?.issues.flatMap((issue) =>
+      issue.checkerName ? [issue.checkerName] : [],
+    ) ?? []
+  );
+}
+
+function getCheckIssueTaskHelpValues(
+  snapshot: Awaited<ReturnType<typeof readCheckIssueSnapshot>>,
+): CheckIssueFilterHelpValue[] {
+  return uniqueSortedValues([
+    ...describeDefaultCheckPipeline().map((task) => task.name),
+    ...(snapshot?.run?.tasks.map((task) => task.name) ?? []),
+    ...(snapshot?.issues.map((issue) => issue.task) ?? []),
+  ]);
+}
+
+function getCheckIssueCheckerHelpValues(options: {
+  config: ResolvedLiminaConfig;
+  snapshot: Awaited<ReturnType<typeof readCheckIssueSnapshot>>;
+}): CheckIssueFilterHelpValue[] {
+  return uniqueSortedValues([
+    ...getActiveCheckers(options.config).map((checker) => checker.name),
+    ...getSnapshotIssueCheckerNames(options.snapshot),
+  ]);
+}
+
+async function getWorkspacePackageNames(
+  config: ResolvedLiminaConfig,
+): Promise<string[]> {
+  try {
+    return (await collectWorkspacePackages(config))
+      .filter(isNamedWorkspacePackage)
+      .map((workspacePackage) => workspacePackage.name);
+  } catch {
+    return [];
+  }
+}
+
+async function getCheckIssuePackageHelpValues(options: {
+  config: ResolvedLiminaConfig;
+  snapshot: Awaited<ReturnType<typeof readCheckIssueSnapshot>>;
+}): Promise<CheckIssueFilterHelpValue[]> {
+  return uniqueSortedValues([
+    ...getSnapshotIssuePackageNames(options.snapshot),
+    ...(options.config.package?.entries ?? []).map((entry) => entry.name),
+    ...(await getWorkspacePackageNames(options.config)),
+  ]);
+}
+
+async function getCheckIssueFilterHelpValues(options: {
+  config: ResolvedLiminaConfig;
+  helpKind: Exclude<CheckIssueFilterHelpKind, 'rule'>;
+  snapshot: Awaited<ReturnType<typeof readCheckIssueSnapshot>>;
+}): Promise<CheckIssueFilterHelpValue[]> {
+  if (options.helpKind === 'task') {
+    return getCheckIssueTaskHelpValues(options.snapshot);
+  }
+
+  if (options.helpKind === 'checker') {
+    return getCheckIssueCheckerHelpValues({
+      config: options.config,
+      snapshot: options.snapshot,
+    });
+  }
+
+  return getCheckIssuePackageHelpValues({
+    config: options.config,
+    snapshot: options.snapshot,
+  });
+}
+
+async function printCheckIssueFilterHelpIfRequested(
+  argv: readonly string[],
+): Promise<boolean> {
+  const helpKind = parseCheckIssueFilterHelpKind(argv);
+
+  if (!helpKind) {
+    return false;
+  }
+
+  if (helpKind === 'rule') {
+    process.stdout.write(`${formatCheckIssueRuleHelp()}\n`);
+    return true;
+  }
+
+  const config = await load(readGlobalFlagsFromArgv(argv), 'check');
+  const snapshot = await readCheckIssueSnapshot(config.rootDir);
+
+  process.stdout.write(
+    `${formatCheckIssueSnapshotFilterHelp({
+      availableValues: await getCheckIssueFilterHelpValues({
+        config,
+        helpKind,
+        snapshot,
+      }),
+      helpKind,
+      snapshot,
+    })}\n`,
+  );
+  return true;
 }
 
 async function main(): Promise<void> {
@@ -342,15 +605,15 @@ async function main(): Promise<void> {
     .option('--scope <glob>', 'Filter check issue details by path scope')
     .option('--task <name>', 'Filter last-run issue inventory by task')
     .option('--checker <name>', 'Filter last-run issue inventory by checker')
-    .option('--tool <name>', 'Filter last-run issue inventory by package tool')
     .option('--issues', 'Show check issue filters from the last run')
-    .option('--details', 'Show detailed issues from the last run')
-    .option('--fixes', 'Show fix steps from the last run')
     .option('--format <format>', 'Issue output format: human, json, or ndjson')
     .action(async (pipeline: string | undefined, flags: CheckFlags) => {
       assertStandaloneIssuesFlag(pipeline, flags);
 
       if (flags.issues) {
+        const rules = parseRepeatedStrings(flags.rule);
+        assertKnownCheckRuleCodes(rules);
+
         const config = await load(flags, 'check');
         const snapshot = await readCheckIssueSnapshot(config.rootDir);
 
@@ -360,60 +623,93 @@ async function main(): Promise<void> {
               checkerNames: parseRepeatedStrings(flags.checker),
               files: parseRepeatedStrings(flags.file),
               packageNames: parsePackageNames(flags.package),
-              rules: parseRepeatedStrings(flags.rule),
+              rules,
               scopes: parseRepeatedStrings(flags.scope),
               tasks: parseRepeatedStrings(flags.task),
-              tools: parseRepeatedStrings(flags.tool),
             },
-            details: flags.details ?? flags.verbose,
-            fixes: flags.fixes,
             format: parseIssueInventoryFormat(flags.format),
             rootDir: config.rootDir,
             snapshot,
+            verbose: flags.verbose,
           })}\n`,
         );
         return;
       }
 
-      const flow = createCliFlow();
+      const flow = createCliFlow({
+        check: true,
+        clearScreen: false,
+      });
       flow.intro('limina check');
       const config = await load(flags, 'check');
       const packageNames = parsePackageNames(flags.package);
-      const sourceIssueReport = createSourceIssueReportOptions(
-        flags,
-        pipeline ? `limina check ${pipeline}` : 'limina check',
-      );
+      const command = pipeline ? `limina check ${pipeline}` : 'limina check';
+      const plannedTasks = pipeline
+        ? describePipeline(config, pipeline)
+        : describeDefaultCheckPipeline();
+      const checkRunRecorder = createCheckRunRecorder({
+        command,
+        configPath: config.configPath,
+        pipeline: pipeline ?? 'default',
+        plannedTasks,
+        rootDir: config.rootDir,
+      });
+      const sourceIssueReport = {
+        ...createSourceIssueReportOptions(flags, command),
+        defer: true,
+      };
       const checkIssueReport = {
         command: sourceIssueReport.command,
+        defer: true,
         verbose: flags.verbose,
       };
 
       await writeNotRunCheckIssueSnapshot({
-        command: sourceIssueReport.command ?? 'limina check',
+        command: sourceIssueReport.command ?? command,
         rootDir: config.rootDir,
+        run: checkRunRecorder.getRunSummary(),
       });
 
-      const passed = pipeline
-        ? await runPipeline(config, pipeline, {
-            cwd: process.cwd(),
-            flow,
-            packageNames,
-            checkIssueReport,
-            sourceIssueReport,
-          })
-        : await runDefaultCheck(config, {
-            cwd: process.cwd(),
-            flow,
-            packageNames,
-            checkIssueReport,
-            sourceIssueReport,
-          });
+      let passed = false;
+
+      try {
+        passed = pipeline
+          ? await runPipeline(config, pipeline, {
+              checkIssueReport,
+              checkRunRecorder,
+              cwd: process.cwd(),
+              flow,
+              packageNames,
+              sourceIssueReport,
+            })
+          : await runDefaultCheck(config, {
+              checkIssueReport,
+              checkRunRecorder,
+              cwd: process.cwd(),
+              flow,
+              packageNames,
+              sourceIssueReport,
+            });
+      } catch {
+        passed = false;
+      }
 
       if (!passed) {
         process.exitCode = 1;
       }
 
       flow.outro(passed ? 'limina check passed' : 'limina check failed');
+
+      const snapshot = await readCheckIssueSnapshot(config.rootDir);
+      if (snapshot) {
+        process.stdout.write(
+          `\n${formatCheckRunSummaryHuman({
+            issues: snapshot.issues,
+            rootDir: config.rootDir,
+            snapshot,
+          })}\n`,
+        );
+      }
     });
 
   cli
@@ -750,9 +1046,13 @@ async function main(): Promise<void> {
       flow.outro(passed ? 'limina release passed' : 'limina release failed');
     });
 
-  cli.parse(process.argv, { run: false });
-
   try {
+    if (await printCheckIssueFilterHelpIfRequested(process.argv)) {
+      return;
+    }
+
+    cli.parse(process.argv, { run: false });
+
     const commandName = cli.args[0];
 
     if (!cli.matchedCommand && commandName) {

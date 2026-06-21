@@ -6,11 +6,18 @@ import type {
   ResolvedLiminaConfig,
 } from '#config/runner';
 import { getActiveCheckers, isAutoCheckerConfigMode } from '#config/runner';
-import { createLiminaCore, type LiminaCore } from '#core';
+import type { LiminaCore } from '#core';
 import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
+import { toRelativePath } from '#utils/path';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'pathe';
 import type { CheckIssueReportOptions } from '../check-reporting/human';
+import type {
+  CheckRunRecorder,
+  LiminaCheckRunTaskPlan,
+  LiminaCheckRunTaskStats,
+} from '../check-reporting/run-recorder';
+import { createCheckItemStats } from '../check-reporting/stats';
 import { runGraphCheck, runGraphPrepare } from '../commands/graph';
 import { runPackageCheck } from '../commands/package';
 import { runProofCheck } from '../commands/proof';
@@ -18,25 +25,46 @@ import { runReleaseCheck } from '../commands/release';
 import { runSourceCheck } from '../commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from '../commands/typecheck';
 import type { LiminaFlowReporter } from '../flow';
+import { LiminaPreflightManager } from '../preflight';
 import type { SourceIssueReportOptions } from '../source-check/report';
 import {
   appendCheckIssues,
   completeCheckIssueSnapshot,
   createTaskFailureIssue,
 } from '../source-check/snapshot';
-import { prepareVueTsgoCache } from '../typecheck/targets';
+import type { CheckerFailureTarget } from '../typecheck/runner';
+import {
+  prepareVueTsgoCache,
+  type TypecheckTargetResult,
+} from '../typecheck/targets';
 
-interface RunPipelineOptions {
+export interface RunPipelineOptions {
+  checkRunRecorder?: CheckRunRecorder;
   checkIssueReport?: CheckIssueReportOptions;
   core?: LiminaCore;
   cwd?: string;
   flow?: LiminaFlowReporter;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   packageNames?: readonly string[];
+  preflight?: LiminaPreflightManager;
   sourceIssueReport?: SourceIssueReportOptions;
 }
 
 type NormalizedPipelineStep = Exclude<PipelineStep, string>;
+
+interface BuiltinTaskResult {
+  passed: boolean;
+  stats?: LiminaCheckRunTaskStats;
+}
+
+interface CheckerTaskStatsInput {
+  failedTargets: readonly CheckerFailureTarget[];
+  passed: boolean;
+  problems?: readonly string[];
+  projectRootDir: string;
+  rootConfigPaths: readonly string[];
+  targetResults?: readonly TypecheckTargetResult[];
+}
 
 const builtInTaskNames = new Set<string>([
   'checker:build',
@@ -142,6 +170,33 @@ function getPipelineStepLabel(step: NormalizedPipelineStep): string {
   return [step.command, ...(step.args ?? [])].join(' ');
 }
 
+function describePipelineStep(
+  step: NormalizedPipelineStep,
+): LiminaCheckRunTaskPlan {
+  return {
+    kind: step.type,
+    name: getPipelineStepLabel(step),
+  };
+}
+
+function getPipelineSteps(
+  config: ResolvedLiminaConfig,
+  pipelineName: string,
+): readonly PipelineStep[] {
+  const steps = config.pipelines?.[pipelineName];
+
+  if (!steps) {
+    throw new Error(
+      [
+        `Pipeline instruction "${pipelineName}" was not found.`,
+        `Define it in ${path.relative(config.rootDir, config.configPath)} under the "pipelines" field, then run "limina check ${pipelineName}" again.`,
+      ].join('\n'),
+    );
+  }
+
+  return steps;
+}
+
 function createCommandStepEnvironment(
   cwd: string,
   step: Extract<PipelineStep, { type: 'command' }>,
@@ -215,73 +270,209 @@ async function prepareCommandStepCache(
   );
 }
 
+function createCheckerTaskStats(
+  result: CheckerTaskStatsInput,
+): LiminaCheckRunTaskStats {
+  if (result.rootConfigPaths.length === 0) {
+    const issues = result.passed
+      ? 0
+      : Math.max(1, result.problems?.length ?? 1);
+
+    return {
+      items: [
+        createCheckItemStats({
+          issues,
+          name: result.passed
+            ? 'second-class checker entries'
+            : 'checker dependency preflight',
+          total: result.passed ? 0 : 1,
+        }),
+      ],
+      passed: 0,
+      total: result.passed ? 0 : 1,
+    };
+  }
+
+  const failedConfigPaths = new Set(
+    result.failedTargets.map((target) => target.configPath),
+  );
+  const targetResultsByConfigPath = new Map(
+    result.targetResults?.map((targetResult) => [
+      targetResult.configPath,
+      targetResult,
+    ]),
+  );
+
+  return {
+    items: result.rootConfigPaths.map((configPath) =>
+      createCheckItemStats({
+        durationMs: targetResultsByConfigPath.get(configPath)?.durationMs,
+        issues: failedConfigPaths.has(configPath) ? 1 : 0,
+        name: formatCheckerEntryName(result.projectRootDir, configPath),
+        total: 1,
+      }),
+    ),
+    passed: Math.max(
+      0,
+      result.rootConfigPaths.length - result.failedTargets.length,
+    ),
+    total: result.rootConfigPaths.length,
+  };
+}
+
+function createCommandTaskStats(options: {
+  durationMs: number;
+  passed: boolean;
+}): LiminaCheckRunTaskStats {
+  return {
+    items: [
+      createCheckItemStats({
+        durationMs: options.durationMs,
+        issues: options.passed ? 0 : 1,
+        name: 'command execution',
+        total: 1,
+      }),
+    ],
+    passed: options.passed ? 1 : 0,
+    total: 1,
+  };
+}
+
+function renderFlowCheckItems(
+  flow: LiminaFlowReporter | undefined,
+  stats: LiminaCheckRunTaskStats | undefined,
+): void {
+  if (!flow || !stats?.items?.length) {
+    return;
+  }
+
+  for (const item of stats.items) {
+    const options = {
+      depth: 2,
+      ...(item.durationMs === undefined
+        ? {}
+        : { elapsedTimeMs: item.durationMs }),
+    };
+
+    if (item.status === 'passed') {
+      flow.pass(item.name, options);
+      continue;
+    }
+
+    flow.fail(item.name, options);
+  }
+}
+
+function formatCheckerEntryName(
+  projectRootDir: string,
+  configPath: string,
+): string {
+  const relativePath = toRelativePath(projectRootDir, configPath);
+  const checkerEntryMatch = /^\.limina\/tsconfig\/checkers\/([^/]+)\//u.exec(
+    relativePath,
+  );
+
+  return checkerEntryMatch
+    ? `${checkerEntryMatch[1]} checker entry`
+    : relativePath;
+}
+
 async function runBuiltinTask(
   config: ResolvedLiminaConfig,
   taskName: BuiltinTaskName,
   options: RunPipelineOptions = {},
-): Promise<boolean> {
+): Promise<BuiltinTaskResult> {
+  let stats: LiminaCheckRunTaskStats | undefined;
+  const onStats = (nextStats: LiminaCheckRunTaskStats): void => {
+    stats = nextStats;
+  };
+
   switch (taskName) {
     case 'graph:check': {
-      return runGraphCheck(config, {
+      const passed = await runGraphCheck(config, {
         clearScreen: false,
         core: options.core,
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        onStats,
+        preflight: options.preflight,
+        report: options.checkIssueReport,
       });
+
+      return { passed, stats };
     }
     case 'graph:prepare': {
-      return runGraphPrepare(config, {
+      const passed = await runGraphPrepare(config, {
         clearScreen: false,
         core: options.core,
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        preflight: options.preflight,
       });
+
+      return { passed, stats };
     }
     case 'proof:check': {
-      return runProofCheck(config, {
+      const passed = await runProofCheck(config, {
         clearScreen: false,
         core: options.core,
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        onStats,
+        preflight: options.preflight,
         report: options.checkIssueReport,
       });
+
+      return { passed, stats };
     }
     case 'source:check': {
-      return runSourceCheck(config, {
+      const passed = await runSourceCheck(config, {
         clearScreen: false,
         core: options.core,
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        onStats,
+        preflight: options.preflight,
         report: createSourceIssueReportOptions(options),
       });
+
+      return { passed, stats };
     }
     case 'package:check': {
-      return runPackageCheck({
+      const passed = await runPackageCheck({
         clearScreen: false,
         config,
         core: options.core,
         cwd: options.cwd,
         flow: options.flow,
         flowDepth: 1,
+        onStats,
         packageNames: options.packageNames,
+        preflight: options.preflight,
         report: options.checkIssueReport,
       });
+
+      return { passed, stats };
     }
     case 'release:check': {
-      return runReleaseCheck({
+      const passed = await runReleaseCheck({
         clearScreen: false,
         config,
         core: options.core,
         cwd: options.cwd,
         flow: options.flow,
         flowDepth: 1,
+        onStats,
         packageNames: options.packageNames,
+        preflight: options.preflight,
         report: options.checkIssueReport,
       });
+
+      return { passed };
     }
     case 'checker:typecheck': {
       const result = await runCheckerTypecheck({
@@ -292,10 +483,14 @@ async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        preflight: options.preflight,
         report: options.checkIssueReport,
       });
 
-      return result.passed;
+      return {
+        passed: result.passed,
+        stats: createCheckerTaskStats(result),
+      };
     }
     case 'checker:build': {
       const result = await runCheckerBuild({
@@ -306,10 +501,14 @@ async function runBuiltinTask(
         flow: options.flow,
         flowDepth: 1,
         generatedGraphProvider: options.generatedGraphProvider,
+        preflight: options.preflight,
         report: options.checkIssueReport,
       });
 
-      return result.passed;
+      return {
+        passed: result.passed,
+        stats: createCheckerTaskStats(result),
+      };
     }
     default: {
       return assertNeverTaskName(taskName);
@@ -342,6 +541,21 @@ export function normalizePipelineStep(
     command,
     type: 'command',
   };
+}
+
+export function describeDefaultCheckPipeline(): LiminaCheckRunTaskPlan[] {
+  return defaultCheckPipeline
+    .map(normalizePipelineStep)
+    .map(describePipelineStep);
+}
+
+export function describePipeline(
+  config: ResolvedLiminaConfig,
+  pipelineName: string,
+): LiminaCheckRunTaskPlan[] {
+  return getPipelineSteps(config, pipelineName)
+    .map(normalizePipelineStep)
+    .map(describePipelineStep);
 }
 
 async function runCommandStep(
@@ -475,60 +689,117 @@ export async function runPipeline(
   pipelineName: string,
   options: RunPipelineOptions = {},
 ): Promise<boolean> {
-  const steps = config.pipelines?.[pipelineName];
-
-  if (!steps) {
-    throw new Error(
-      [
-        `Pipeline instruction "${pipelineName}" was not found.`,
-        `Define it in ${path.relative(config.rootDir, config.configPath)} under the "pipelines" field, then run "limina check ${pipelineName}" again.`,
-      ].join('\n'),
-    );
-  }
-
-  const normalizedSteps = steps.map(normalizePipelineStep);
+  const normalizedSteps = getPipelineSteps(config, pipelineName).map(
+    normalizePipelineStep,
+  );
   const pipelineTask = options.flow?.start(`pipeline: ${pipelineName}`, {
     collapseOnSuccess: false,
   });
-  const core = options.core ?? createLiminaCore(config);
+  const preflight =
+    options.preflight ??
+    new LiminaPreflightManager({
+      config,
+      core: options.core,
+      generatedGraphProvider: options.generatedGraphProvider,
+    });
+  const core = preflight.core;
   const taskOptions = {
     ...options,
     core,
+    generatedGraphProvider: () => preflight.ensureGeneratedGraph(),
+    preflight,
   };
+  let hasFailure = false;
 
   for (const [stepIndex, step] of normalizedSteps.entries()) {
-    const passed = await (step.type === 'task'
-      ? runBuiltinTask(config, step.name, taskOptions)
-      : runCommandStep(config, step, options));
+    const label = getPipelineStepLabel(step);
 
-    if (step.type === 'command') {
-      core.invalidateAll();
-    }
+    await options.checkRunRecorder?.start(label);
 
-    if (!passed) {
-      const label = getPipelineStepLabel(step);
+    let passed: boolean;
+    let stats: LiminaCheckRunTaskStats | undefined;
 
+    try {
+      if (step.type === 'task') {
+        const result = await runBuiltinTask(config, step.name, taskOptions);
+
+        passed = result.passed;
+        stats = result.stats;
+      } else {
+        const startedAt = performance.now();
+
+        passed = await runCommandStep(config, step, options);
+        stats = createCommandTaskStats({
+          durationMs: performance.now() - startedAt,
+          passed,
+        });
+      }
+    } catch (error) {
+      await options.checkRunRecorder?.block(
+        label,
+        error instanceof Error ? error.message : String(error),
+      );
       pipelineTask?.fail(`pipeline blocked: ${pipelineName} at ${label}`);
 
       for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
-        options.flow?.skip(
-          `skipped: ${getPipelineStepLabel(remainingStep)} (blocked by ${label})`,
-          {
-            depth: 1,
-          },
-        );
+        const remainingLabel = getPipelineStepLabel(remainingStep);
+
+        options.flow?.skip(`skipped: ${remainingLabel} (blocked by ${label})`, {
+          depth: 1,
+        });
+        await options.checkRunRecorder?.skip(remainingLabel, label);
       }
 
-      return false;
+      await options.checkRunRecorder?.finish('blocked');
+      throw error;
     }
+
+    if (step.type === 'command') {
+      preflight.invalidateAll();
+    }
+
+    renderFlowCheckItems(options.flow, stats);
+
+    if (!passed) {
+      if (step.type === 'command') {
+        await options.checkRunRecorder?.block(label, `${label} failed`, stats);
+        pipelineTask?.fail(`pipeline blocked: ${pipelineName} at ${label}`);
+
+        for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
+          const remainingLabel = getPipelineStepLabel(remainingStep);
+
+          options.flow?.skip(
+            `skipped: ${remainingLabel} (blocked by ${label})`,
+            {
+              depth: 1,
+            },
+          );
+          await options.checkRunRecorder?.skip(remainingLabel, label);
+        }
+
+        await options.checkRunRecorder?.finish('blocked');
+        return false;
+      }
+
+      await options.checkRunRecorder?.fail(label, `${label} failed`, stats);
+      hasFailure = true;
+      continue;
+    }
+
+    await options.checkRunRecorder?.pass(label, stats);
   }
 
-  pipelineTask?.pass();
+  if (hasFailure) {
+    pipelineTask?.fail(`pipeline finished with failures: ${pipelineName}`);
+  } else {
+    pipelineTask?.pass();
+  }
   await completeCheckIssueSnapshot({
     rootDir: config.rootDir,
   });
+  await options.checkRunRecorder?.finish(hasFailure ? 'failed' : 'passed');
 
-  return true;
+  return !hasFailure;
 }
 
 export async function runDefaultCheck(
@@ -539,40 +810,100 @@ export async function runDefaultCheck(
   const pipelineTask = options.flow?.start('default check', {
     collapseOnSuccess: false,
   });
-  const core = options.core ?? createLiminaCore(config);
+  const preflight =
+    options.preflight ??
+    new LiminaPreflightManager({
+      config,
+      core: options.core,
+      generatedGraphProvider: options.generatedGraphProvider,
+    });
+  const core = preflight.core;
   const taskOptions = {
     ...options,
     core,
+    generatedGraphProvider: () => preflight.ensureGeneratedGraph(),
+    preflight,
   };
+  let hasFailure = false;
 
   if (!usesAutoCheckers(config)) {
     reportCheckerCapabilities(config, options.flow);
   }
 
   for (const [stepIndex, step] of normalizedSteps.entries()) {
-    const passed = await (step.type === 'task'
-      ? runBuiltinTask(config, step.name, taskOptions)
-      : runCommandStep(config, step, options));
+    const label = getPipelineStepLabel(step);
 
-    if (step.type === 'command') {
-      core.invalidateAll();
-    }
+    await options.checkRunRecorder?.start(label);
 
-    if (!passed) {
-      const label = getPipelineStepLabel(step);
+    let passed: boolean;
+    let stats: LiminaCheckRunTaskStats | undefined;
 
+    try {
+      if (step.type === 'task') {
+        const result = await runBuiltinTask(config, step.name, taskOptions);
+
+        passed = result.passed;
+        stats = result.stats;
+      } else {
+        const startedAt = performance.now();
+
+        passed = await runCommandStep(config, step, options);
+        stats = createCommandTaskStats({
+          durationMs: performance.now() - startedAt,
+          passed,
+        });
+      }
+    } catch (error) {
+      await options.checkRunRecorder?.block(
+        label,
+        error instanceof Error ? error.message : String(error),
+      );
       pipelineTask?.fail(`default check blocked at ${label}`);
 
       for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
-        options.flow?.skip(
-          `skipped: ${getPipelineStepLabel(remainingStep)} (blocked by ${label})`,
-          {
-            depth: 1,
-          },
-        );
+        const remainingLabel = getPipelineStepLabel(remainingStep);
+
+        options.flow?.skip(`skipped: ${remainingLabel} (blocked by ${label})`, {
+          depth: 1,
+        });
+        await options.checkRunRecorder?.skip(remainingLabel, label);
       }
 
-      return false;
+      await options.checkRunRecorder?.finish('blocked');
+      throw error;
+    }
+
+    if (step.type === 'command') {
+      preflight.invalidateAll();
+    }
+
+    renderFlowCheckItems(options.flow, stats);
+
+    if (passed) {
+      await options.checkRunRecorder?.pass(label, stats);
+    } else {
+      if (step.type === 'command') {
+        await options.checkRunRecorder?.block(label, `${label} failed`, stats);
+        pipelineTask?.fail(`default check blocked at ${label}`);
+
+        for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
+          const remainingLabel = getPipelineStepLabel(remainingStep);
+
+          options.flow?.skip(
+            `skipped: ${remainingLabel} (blocked by ${label})`,
+            {
+              depth: 1,
+            },
+          );
+          await options.checkRunRecorder?.skip(remainingLabel, label);
+        }
+
+        await options.checkRunRecorder?.finish('blocked');
+        return false;
+      }
+
+      await options.checkRunRecorder?.fail(label, `${label} failed`, stats);
+      hasFailure = true;
     }
 
     if (usesAutoCheckers(config) && step.type === 'task') {
@@ -580,16 +911,21 @@ export async function runDefaultCheck(
         reportCheckerCapabilities(
           config,
           options.flow,
-          (await core.buildGraph.getGraph()).checkers,
+          (await preflight.ensureGeneratedGraph()).checkers,
         );
       }
     }
   }
 
-  pipelineTask?.pass();
+  if (hasFailure) {
+    pipelineTask?.fail('default check finished with failures');
+  } else {
+    pipelineTask?.pass();
+  }
   await completeCheckIssueSnapshot({
     rootDir: config.rootDir,
   });
+  await options.checkRunRecorder?.finish(hasFailure ? 'failed' : 'passed');
 
-  return true;
+  return !hasFailure;
 }

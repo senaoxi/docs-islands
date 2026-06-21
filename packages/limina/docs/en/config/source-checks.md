@@ -27,7 +27,7 @@ export default defineConfig({
 
 `source.importAuthority` controls bare package imports that are not declared by the source owner manifest.
 
-Runtime imports in public packages are strict by default: the source owner `package.json` must declare the package in `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies`. Docs, tests, config/tooling files, type-only imports, private owners, and nameless owners may also use the workspace root `devDependencies`.
+Runtime imports are strict by default: the nearest pnpm workspace source owner `package.json` must declare the package in `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies`. A rule with `packages` lets Limina also check the workspace root `package.json` for the matched package name. The root manifest must exist and must still declare that package in one of the same dependency sections.
 
 For files whose dependencies are intentionally supplied somewhere else, add an explicit allow rule:
 
@@ -40,7 +40,7 @@ export default defineConfig({
       allow: [
         {
           files: ['packages/create-app/templates/react/**'],
-          packages: ['react', 'react-dom'],
+          specifiers: ['react', 'react-dom'],
           reason: 'Template files declare these dependencies in generated apps.',
         },
       ],
@@ -63,7 +63,7 @@ interface SourceImportAuthorityConfig {
 }
 ```
 
-`files` are workspace-root-relative globs. `packages` match package names such as `react` or `@components/shared`; `specifiers` match full import specifiers such as `react/jsx-runtime`. Glob syntax is supported for all three. `owner` is optional; when present it matches a named source owner by package name, or a nameless source owner by workspace-root-relative package directory.
+`files` are workspace-root-relative globs. `packages` match package names such as `react` or `@components/shared`; when they match, the workspace root `package.json` becomes an additional dependency declaration candidate for that package. `specifiers` match full import specifiers such as `react/jsx-runtime`; use them for true exceptions where no manifest should declare the import. Glob syntax is supported for all three. `owner` is optional; when present it matches a named source owner by package name, or a nameless source owner by workspace-root-relative package directory.
 
 Use this for source that is intentionally not governed by the importing owner manifest, such as project templates or documentation aliases. Prefer a manifest dependency whenever the import is part of the owner's real runtime.
 

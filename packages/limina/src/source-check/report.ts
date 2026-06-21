@@ -27,6 +27,7 @@ export type SourceIssueCode = string;
 
 export interface SourceIssueReportOptions {
   command?: string;
+  defer?: boolean;
   files?: readonly string[];
   packageNames?: readonly string[];
   rules?: readonly string[];
@@ -80,6 +81,16 @@ const DEFAULT_COMMAND = 'limina check';
 const ISSUE_BLOCK_MIN_WIDTH = 88;
 const ISSUE_BLOCK_HORIZONTAL_PADDING = 2;
 const ISSUE_BLOCK_BORDER_WIDTH = 2;
+const ANSI_RESET = '\u001B[0m';
+const ANSI_BLUE = '\u001B[34m';
+const ANSI_CYAN = '\u001B[36m';
+const ANSI_GREEN = '\u001B[32m';
+const ANSI_MAGENTA = '\u001B[35m';
+const ANSI_RED = '\u001B[31m';
+const ANSI_YELLOW = '\u001B[33m';
+const LABEL_PREFIX_PATTERN = /^(\s*(?:-\s+|\d+\.\s+)?)([A-Za-z][A-Za-z ]*):/u;
+
+type AnsiColor = string;
 
 const picomatch = rawPicomatch as unknown as (
   pattern: string,
@@ -88,6 +99,56 @@ const picomatch = rawPicomatch as unknown as (
 
 function plural(count: number, singular: string, pluralForm: string): string {
   return count === 1 ? singular : pluralForm;
+}
+
+function colorText(color: AnsiColor, text: string): string {
+  return `${color}${text}${ANSI_RESET}`;
+}
+
+function getLabelColor(label: string): AnsiColor {
+  switch (label.toLowerCase()) {
+    case 'fix':
+    case 'fix steps':
+    case 'suggested fix':
+    case 'suggested fixes': {
+      return ANSI_GREEN;
+    }
+    case 'reason': {
+      return ANSI_YELLOW;
+    }
+    case 'details':
+    case 'evidence': {
+      return ANSI_MAGENTA;
+    }
+    case 'rule': {
+      return ANSI_BLUE;
+    }
+    default: {
+      return ANSI_CYAN;
+    }
+  }
+}
+
+function colorIssueTitleLine(line: string): string {
+  return colorText(ANSI_RED, line);
+}
+
+function colorIssueLabelLine(line: string): string {
+  const match = LABEL_PREFIX_PATTERN.exec(line);
+
+  if (!match) {
+    return line;
+  }
+
+  const prefix = match[1] ?? '';
+  const label = match[2] ?? '';
+  return `${prefix}${colorText(getLabelColor(label), line.slice(prefix.length))}`;
+}
+
+function colorIssueBlockLines(lines: readonly string[]): string[] {
+  return lines.map((line, index) =>
+    index === 0 ? colorIssueTitleLine(line) : colorIssueLabelLine(line),
+  );
 }
 
 function uniqueSorted(values: Iterable<string>): string[] {
@@ -1261,8 +1322,9 @@ function formatIssueBlock(
   const wrappedLines = lines.flatMap((line) =>
     wrapIssueLine(line, contentWidth),
   );
+  const coloredLines = colorIssueBlockLines(wrappedLines);
 
-  return boxen(wrappedLines.join('\n'), {
+  return boxen(coloredLines.join('\n'), {
     borderStyle: 'single',
     padding: {
       left: 1,

@@ -27,7 +27,9 @@ export async function runPackageCheck(
   });
 
   try {
-    PackageLogger.info('package check started');
+    if (!options.report?.defer) {
+      PackageLogger.info('package check started');
+    }
 
     const issues: LiminaCheckIssue[] = [];
     const passed = await runPackageCheckImpl({
@@ -40,7 +42,7 @@ export async function runPackageCheck(
         rootDir: options.config.rootDir,
       });
 
-      if (!options.flow?.interactive) {
+      if (!options.report?.defer && !options.flow?.interactive) {
         PackageLogger.success('package check finished', elapsed());
       }
 
@@ -71,15 +73,17 @@ export async function runPackageCheck(
         issues: reportIssues,
         rootDir: options.config.rootDir,
       });
-      PackageLogger.error(
-        formatCheckIssueHumanReport({
-          command: options.report?.command ?? 'limina package check',
-          issues: reportIssues,
-          title: 'Package check summary',
-          verbose: options.report?.verbose,
-        }),
-        elapsed(),
-      );
+      if (!options.report?.defer) {
+        PackageLogger.error(
+          formatCheckIssueHumanReport({
+            command: options.report?.command ?? 'limina package check',
+            issues: reportIssues,
+            title: 'Package check summary',
+            verbose: options.report?.verbose,
+          }),
+          elapsed(),
+        );
+      }
       task?.fail('package check finished with failures');
     }
 
@@ -105,15 +109,17 @@ export async function runPackageCheck(
       issues: [issue],
       rootDir: options.config.rootDir,
     });
-    PackageLogger.error(
-      formatCheckIssueHumanReport({
-        command: options.report?.command ?? 'limina package check',
-        issues: [issue],
-        title: 'Package check summary',
-        verbose: options.report?.verbose,
-      }),
-      elapsed(),
-    );
+    if (!options.report?.defer) {
+      PackageLogger.error(
+        formatCheckIssueHumanReport({
+          command: options.report?.command ?? 'limina package check',
+          issues: [issue],
+          title: 'Package check summary',
+          verbose: options.report?.verbose,
+        }),
+        elapsed(),
+      );
+    }
     task?.fail('package check failed', { error });
     throw error;
   }

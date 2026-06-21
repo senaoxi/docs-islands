@@ -1,5 +1,5 @@
 import type { ResolvedLiminaConfig } from '#config/runner';
-import { createLiminaCore, type LiminaCore } from '#core';
+import type { LiminaCore } from '#core';
 import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import type { ImportAnalysisContext } from '#core/import-analysis/runner';
 import {
@@ -18,10 +18,7 @@ import {
   resolveInternalImport,
   shouldResolveThroughGraph,
 } from '#core/import-graph/context';
-import {
-  collectSourceGraphProjectExtensions,
-  formatReferences,
-} from '#core/tsconfig/actions';
+import { formatReferences } from '#core/tsconfig/actions';
 import {
   findPackageForSpecifier,
   type ImporterInfo,
@@ -36,10 +33,16 @@ import {
   type CheckIssueReportOptions,
   formatCheckIssueHumanReport,
 } from '../check-reporting/human';
+import type { LiminaCheckRunTaskStats } from '../check-reporting/run-recorder';
 import {
   createTaskFailureIssue,
   type LiminaCheckIssue,
 } from '../check-reporting/snapshot';
+import {
+  type CheckCounter,
+  createCheckCounter,
+  createCheckItemAccumulator,
+} from '../check-reporting/stats';
 import {
   createWorkspaceExportsResolutionIndex,
   type WorkspaceExportsResolutionIndex,
@@ -54,6 +57,7 @@ import {
 } from '../dependency-graph/runner';
 import type { LiminaFlowReporter } from '../flow';
 import { GraphLogger } from '../logger';
+import { type LiminaPreflightManager, resolvePreflight } from '../preflight';
 import {
   addConditionDomainProblems,
   addDefaultCustomConditionProblems,
@@ -80,6 +84,8 @@ export interface RunGraphCheckOptions {
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  onStats?: (stats: LiminaCheckRunTaskStats) => void;
+  preflight?: LiminaPreflightManager;
   report?: CheckIssueReportOptions;
 }
 
@@ -89,6 +95,7 @@ export interface RunGraphPrepareOptions {
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  preflight?: LiminaPreflightManager;
 }
 
 export interface RunGraphExportOptions {
@@ -320,6 +327,7 @@ function createGraphCheckIssues(options: {
 }
 
 function addDeniedReferenceProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   packages: WorkspacePackage[];
   problems: string[];
@@ -332,6 +340,8 @@ function addDeniedReferenceProblems(options: {
   }
 
   for (const referencePath of options.project.references) {
+    options.checks.add();
+
     if (!options.projectsByPath.has(referencePath)) {
       continue;
     }
@@ -531,6 +541,7 @@ function addWorkspaceReferenceDependencyProblems(
   packages: WorkspacePackage[],
   importers: ImporterInfo[],
   problems: string[],
+  checks: CheckCounter,
 ): void {
   if (!isDtsProjectConfig(project.configPath)) {
     return;
@@ -546,6 +557,8 @@ function addWorkspaceReferenceDependencyProblems(
   }
 
   for (const referencePath of project.references) {
+    checks.add();
+
     if (!projectsByPath.has(referencePath)) {
       continue;
     }
@@ -667,6 +680,7 @@ function formatImportRecordLines(
 }
 
 function addReferenceCompletenessProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   expectedReferencesByProjectPath: Map<
     string,
@@ -691,6 +705,8 @@ function addReferenceCompletenessProblems(options: {
       (left, right) =>
         left.targetProjectPath.localeCompare(right.targetProjectPath),
     )) {
+      options.checks.add();
+
       if (project.references.has(expectation.targetProjectPath)) {
         continue;
       }
@@ -730,6 +746,8 @@ function addReferenceCompletenessProblems(options: {
     }
 
     for (const referencePath of [...project.references].sort()) {
+      options.checks.add();
+
       if (project.configPath.endsWith('/tsconfig.dts.json')) {
         const generatedChecker = getGeneratedCheckerNamespace(
           project.configPath,
@@ -1441,17 +1459,15 @@ export async function runGraphCheckImpl(
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
     issues?: LiminaCheckIssue[];
     logSuccess?: boolean;
+    onStats?: (stats: LiminaCheckRunTaskStats) => void;
+    preflight?: LiminaPreflightManager;
     report?: CheckIssueReportOptions;
   } = {},
 ): Promise<boolean> {
-  const core = options.core ?? createLiminaCore(config);
-  const generatedGraph = options.generatedGraphProvider
-    ? await options.generatedGraphProvider()
-    : await core.buildGraph.getGraph();
-  const graphRoute = collectSourceGraphProjectExtensions(
-    config,
-    generatedGraph,
-  );
+  const preflight = resolvePreflight(config, options);
+  const core = preflight.core;
+  const generatedGraph = await preflight.ensureGeneratedGraph();
+  const graphRoute = await preflight.ensureSourceGraphProjectExtensions();
   const projectPaths = [...graphRoute.projectExtensionsByPath.keys()].sort();
   const projects = await Promise.all(
     projectPaths.map((projectPath) =>
@@ -1465,9 +1481,16 @@ export async function runGraphCheckImpl(
     projects.map((project) => [project.configPath, project]),
   );
   const fileOwnerLookup = createFileOwnerLookup(projects);
-  const packages = await core.workspace.getPackages();
-  const importers = await core.workspace.getImporters();
-  const problems: string[] = [...graphRoute.problems];
+  const packages = await preflight.ensureWorkspacePackages();
+  const importers = await preflight.ensureImporters();
+  const problems: string[] = [];
+  const checks = createCheckCounter();
+  const checkItems = createCheckItemAccumulator(
+    () => problems.length,
+    () => checks.value,
+  );
+
+  problems.push(...graphRoute.problems);
   const customConditionConsistencyContext =
     createCustomConditionConsistencyContext(projectsByPath);
   const workspaceExports = await createWorkspaceExportsResolutionIndex({
@@ -1477,6 +1500,8 @@ export async function runGraphCheckImpl(
   });
 
   problems.push(...workspaceExports.problems);
+  checks.add(projectPaths.length);
+  checkItems.record('source graph routes');
 
   const graphRules = normalizeGraphRules({
     config,
@@ -1494,9 +1519,10 @@ export async function runGraphCheckImpl(
       problems.push(project.labelProblem);
     }
 
-    addDtsOptionProblems(config, project, problems);
-    addTypecheckParityProblems(config, project, problems);
+    addDtsOptionProblems(config, project, problems, checks);
+    addTypecheckParityProblems(config, project, problems, checks);
     addDeniedReferenceProblems({
+      checks,
       config,
       packages,
       problems,
@@ -1511,29 +1537,34 @@ export async function runGraphCheckImpl(
       packages,
       importers,
       problems,
+      checks,
     );
   }
+  checkItems.record('project references');
 
   addDefaultCustomConditionProblems({
+    checks,
     config,
     consistencyContext: customConditionConsistencyContext,
     problems,
     projects,
   });
   addConditionDomainProblems({
+    checks,
     config,
     consistencyContext: customConditionConsistencyContext,
     generatedGraph,
     problems,
     projectsByPath,
   });
+  checkItems.record('condition domains');
 
   const expectedReferencesByProjectPath = collectExpectedReferences({
     config,
     fileOwnerLookup,
     generatedGraph,
     graphRules,
-    importAnalysis: core.imports.context,
+    importAnalysis: preflight.importAnalysis,
     importers,
     packages,
     problems,
@@ -1544,6 +1575,7 @@ export async function runGraphCheckImpl(
   });
 
   addReferenceCompletenessProblems({
+    checks,
     config,
     expectedReferencesByProjectPath,
     generatedGraph,
@@ -1552,6 +1584,7 @@ export async function runGraphCheckImpl(
     projects,
     projectsByPath,
   });
+  checkItems.record('reference completeness');
 
   if (problems.length > 0) {
     const issues = createGraphCheckIssues({
@@ -1559,15 +1592,22 @@ export async function runGraphCheckImpl(
       problems,
     });
 
+    options.onStats?.({
+      items: checkItems.getItems(),
+      passed: 0,
+      total: checks.value,
+    });
     options.issues?.push(...issues);
-    GraphLogger.error(
-      formatCheckIssueHumanReport({
-        command: options.report?.command ?? 'limina graph check',
-        issues,
-        title: 'Graph check summary',
-        verbose: options.report?.verbose,
-      }),
-    );
+    if (!options.report?.defer) {
+      GraphLogger.error(
+        formatCheckIssueHumanReport({
+          command: options.report?.command ?? 'limina graph check',
+          issues,
+          title: 'Graph check summary',
+          verbose: options.report?.verbose,
+        }),
+      );
+    }
     return false;
   }
 
@@ -1577,6 +1617,12 @@ export async function runGraphCheckImpl(
     );
   }
 
+  options.onStats?.({
+    items: checkItems.getItems(),
+    passed: checks.value,
+    total: checks.value,
+  });
+
   return true;
 }
 
@@ -1584,11 +1630,11 @@ export async function runGraphPrepareImpl(
   config: ResolvedLiminaConfig,
   options: RunGraphPrepareOptions = {},
 ): Promise<GeneratedTsconfigGraphResult> {
-  const core = options.core ?? createLiminaCore(config);
+  const preflight = resolvePreflight(config, options);
 
-  return options.generatedGraphProvider
-    ? await options.generatedGraphProvider()
-    : await core.buildGraph.prepareGraph({ write: true });
+  return options.preflight || options.generatedGraphProvider
+    ? await preflight.ensureGeneratedGraph()
+    : await preflight.core.buildGraph.prepareGraph({ write: true });
 }
 
 export async function runGraphExportImpl(

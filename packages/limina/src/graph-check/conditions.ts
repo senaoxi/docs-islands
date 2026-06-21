@@ -13,6 +13,8 @@ import {
   toRelativePath,
 } from '#utils/path';
 
+import type { CheckCounter } from '../check-reporting/stats';
+
 interface CustomConditionSubtreeSummary {
   consistentConditions: string[] | null;
   mismatchProblems: string[];
@@ -194,6 +196,7 @@ function addUniqueProblems(
 }
 
 export function addDefaultCustomConditionProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   consistencyContext: CustomConditionConsistencyContext;
   problems: string[];
@@ -205,6 +208,8 @@ export function addDefaultCustomConditionProblems(options: {
     if (!isDtsProjectConfig(project.configPath)) {
       continue;
     }
+
+    options.checks.add();
 
     const summary = collectCustomConditionSubtreeSummary(
       options.config,
@@ -331,6 +336,7 @@ function parseConditionDomainEntry(options: {
 }
 
 export function addConditionDomainProblems(options: {
+  checks: CheckCounter;
   config: ResolvedLiminaConfig;
   consistencyContext: CustomConditionConsistencyContext;
   generatedGraph: GeneratedTsconfigGraphResult;
@@ -356,6 +362,8 @@ export function addConditionDomainProblems(options: {
   const seenSubtreeProblems = new Set<string>();
 
   for (const [index, domain] of domains.entries()) {
+    options.checks.add();
+
     const normalizedDomain = parseConditionDomainEntry({
       domain,
       index,

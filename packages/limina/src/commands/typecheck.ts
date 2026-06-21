@@ -42,6 +42,7 @@ function createCheckerFailureIssues(options: {
   fallbackReason: string;
   failureKind?: CheckerFailureKind;
   fix: string;
+  hideExecutionDetails?: boolean;
   projectRootDir: string;
   problems?: readonly string[];
   task: Extract<LiminaCheckTaskName, 'checker:build' | 'checker:typecheck'>;
@@ -62,19 +63,26 @@ function createCheckerFailureIssues(options: {
     return [
       createTaskFailureIssue({
         code: failureCode,
-        detailLines: options.problems ? [...options.problems] : undefined,
-        evidence: options.problems?.length
-          ? [
-              {
-                label: 'checker diagnostic',
-                lines: [...options.problems],
-              },
-            ]
-          : undefined,
+        ...(!options.hideExecutionDetails && options.problems
+          ? { detailLines: [...options.problems] }
+          : {}),
+        ...(!options.hideExecutionDetails && options.problems?.length
+          ? {
+              evidence: [
+                {
+                  label: 'checker diagnostic',
+                  lines: [...options.problems],
+                },
+              ],
+            }
+          : {}),
         fix: options.fix,
         fixSteps: [options.fix],
-        reason: options.fallbackReason,
+        reason: options.hideExecutionDetails
+          ? options.title
+          : options.fallbackReason,
         rootDir: options.projectRootDir,
+        ...(options.hideExecutionDetails ? { summary: options.title } : {}),
         task: options.task,
         title: options.title,
         verifyCommands: [
@@ -86,8 +94,10 @@ function createCheckerFailureIssues(options: {
     ];
   }
 
-  return options.failedTargets.map((target) =>
-    createTaskFailureIssue({
+  return options.failedTargets.map((target) => {
+    const message = options.hideExecutionDetails ? undefined : target.message;
+
+    return createTaskFailureIssue({
       checkerName: target.checkerName,
       code: defaultFailureCode,
       evidence: [
@@ -95,7 +105,7 @@ function createCheckerFailureIssues(options: {
           label: 'exit code',
           value: String(target.exitCode),
         },
-        ...(target.message ? [{ label: 'error', value: target.message }] : []),
+        ...(message ? [{ label: 'error', value: message }] : []),
       ],
       filePath: target.configPath,
       fix: options.fix,
@@ -105,9 +115,10 @@ function createCheckerFailureIssues(options: {
           ? `Checker "${target.checkerName}" failed.`
           : 'Checker target failed.',
         `Exit code: ${target.exitCode}.`,
-        ...(target.message ? [`Error: ${target.message}.`] : []),
+        ...(message ? [`Error: ${message}.`] : []),
       ].join(' '),
       rootDir: options.projectRootDir,
+      ...(options.hideExecutionDetails ? { summary: options.title } : {}),
       task: options.task,
       title: options.title,
       verifyCommands: [
@@ -115,8 +126,8 @@ function createCheckerFailureIssues(options: {
           ? 'limina checker build'
           : 'limina checker typecheck',
       ],
-    }),
-  );
+    });
+  });
 }
 
 function formatCheckerIssueReport(options: {
@@ -145,7 +156,7 @@ export async function runCheckerBuild(
     depth: options.flowDepth ?? 0,
   });
 
-  if (!options.flow) {
+  if (!options.report?.defer && !options.flow) {
     TypecheckLogger.info('checker build started');
   }
 
@@ -157,7 +168,7 @@ export async function runCheckerBuild(
         rootDir: options.config.rootDir,
       });
 
-      if (!options.flow?.interactive) {
+      if (!options.report?.defer && !options.flow?.interactive) {
         TypecheckLogger.success('checker build finished', elapsed());
       }
 
@@ -168,6 +179,7 @@ export async function runCheckerBuild(
         fallbackReason: 'Checker build finished with failures.',
         failureKind: result.failureKind,
         fix: 'Inspect the checker build output above, then rerun `limina checker build` or `limina check`.',
+        ...(options.report?.defer ? { hideExecutionDetails: true } : {}),
         projectRootDir: result.projectRootDir,
         problems: result.problems,
         task: 'checker:build',
@@ -178,25 +190,31 @@ export async function runCheckerBuild(
         issues,
         rootDir: options.config.rootDir,
       });
-      TypecheckLogger.error(
-        formatCheckerIssueReport({
-          command: options.report?.command ?? 'limina checker build',
-          issues,
-          title: 'Checker build summary',
-          verbose: options.report?.verbose,
-        }),
-        elapsed(),
-      );
+      if (!options.report?.defer) {
+        TypecheckLogger.error(
+          formatCheckerIssueReport({
+            command: options.report?.command ?? 'limina checker build',
+            issues,
+            title: 'Checker build summary',
+            verbose: options.report?.verbose,
+          }),
+          elapsed(),
+        );
+      }
       task?.fail('checker build finished with failures');
     }
     return result;
   } catch (error) {
+    const errorMessage = formatErrorMessage(error);
     const issue = createTaskFailureIssue({
       code: 'LIMINA_CHECKER_BUILD_FAILED',
-      detailLines: [formatErrorMessage(error)],
+      ...(options.report?.defer ? {} : { detailLines: [errorMessage] }),
       fix: 'Inspect the checker build error above, then rerun `limina checker build` or `limina check`.',
-      reason: `Checker build failed: ${formatErrorMessage(error)}.`,
+      reason: options.report?.defer
+        ? 'Checker build failed.'
+        : `Checker build failed: ${errorMessage}.`,
       rootDir: options.config.rootDir,
+      ...(options.report?.defer ? { summary: 'Checker build failed' } : {}),
       task: 'checker:build',
       title: 'Checker build failed',
     });
@@ -205,15 +223,17 @@ export async function runCheckerBuild(
       issues: [issue],
       rootDir: options.config.rootDir,
     });
-    TypecheckLogger.error(
-      formatCheckerIssueReport({
-        command: options.report?.command ?? 'limina checker build',
-        issues: [issue],
-        title: 'Checker build summary',
-        verbose: options.report?.verbose,
-      }),
-      elapsed(),
-    );
+    if (!options.report?.defer) {
+      TypecheckLogger.error(
+        formatCheckerIssueReport({
+          command: options.report?.command ?? 'limina checker build',
+          issues: [issue],
+          title: 'Checker build summary',
+          verbose: options.report?.verbose,
+        }),
+        elapsed(),
+      );
+    }
     task?.fail('checker build failed', { error });
     throw error;
   }
@@ -231,7 +251,7 @@ export async function runBuild(
     depth: options.flowDepth ?? 0,
   });
 
-  if (!options.flow) {
+  if (!options.report?.defer && !options.flow) {
     TypecheckLogger.info('build started');
   }
 
@@ -243,7 +263,7 @@ export async function runBuild(
         rootDir: options.config.rootDir,
       });
 
-      if (!options.flow?.interactive) {
+      if (!options.report?.defer && !options.flow?.interactive) {
         TypecheckLogger.success('build finished', elapsed());
       }
 
@@ -264,15 +284,17 @@ export async function runBuild(
         issues,
         rootDir: options.config.rootDir,
       });
-      TypecheckLogger.error(
-        formatCheckerIssueReport({
-          command: options.report?.command ?? 'limina checker build',
-          issues,
-          title: 'Build summary',
-          verbose: options.report?.verbose,
-        }),
-        elapsed(),
-      );
+      if (!options.report?.defer) {
+        TypecheckLogger.error(
+          formatCheckerIssueReport({
+            command: options.report?.command ?? 'limina checker build',
+            issues,
+            title: 'Build summary',
+            verbose: options.report?.verbose,
+          }),
+          elapsed(),
+        );
+      }
       task?.fail('build finished with failures');
     }
 
@@ -292,15 +314,17 @@ export async function runBuild(
       issues: [issue],
       rootDir: options.config.rootDir,
     });
-    TypecheckLogger.error(
-      formatCheckerIssueReport({
-        command: options.report?.command ?? 'limina checker build',
-        issues: [issue],
-        title: 'Build summary',
-        verbose: options.report?.verbose,
-      }),
-      elapsed(),
-    );
+    if (!options.report?.defer) {
+      TypecheckLogger.error(
+        formatCheckerIssueReport({
+          command: options.report?.command ?? 'limina checker build',
+          issues: [issue],
+          title: 'Build summary',
+          verbose: options.report?.verbose,
+        }),
+        elapsed(),
+      );
+    }
     task?.fail('build failed', { error });
     throw error;
   }
@@ -318,7 +342,7 @@ export async function runCheckerTypecheck(
     depth: options.flowDepth ?? 0,
   });
 
-  if (!options.flow) {
+  if (!options.report?.defer && !options.flow) {
     TypecheckLogger.info('checker typecheck started');
   }
 
@@ -330,7 +354,7 @@ export async function runCheckerTypecheck(
         rootDir: options.config.rootDir,
       });
 
-      if (!options.flow?.interactive) {
+      if (!options.report?.defer && !options.flow?.interactive) {
         TypecheckLogger.success('checker typecheck finished', elapsed());
       }
 
@@ -351,15 +375,17 @@ export async function runCheckerTypecheck(
         issues,
         rootDir: options.config.rootDir,
       });
-      TypecheckLogger.error(
-        formatCheckerIssueReport({
-          command: options.report?.command ?? 'limina checker typecheck',
-          issues,
-          title: 'Checker typecheck summary',
-          verbose: options.report?.verbose,
-        }),
-        elapsed(),
-      );
+      if (!options.report?.defer) {
+        TypecheckLogger.error(
+          formatCheckerIssueReport({
+            command: options.report?.command ?? 'limina checker typecheck',
+            issues,
+            title: 'Checker typecheck summary',
+            verbose: options.report?.verbose,
+          }),
+          elapsed(),
+        );
+      }
       task?.fail('checker typecheck finished with failures');
     }
 
@@ -379,15 +405,17 @@ export async function runCheckerTypecheck(
       issues: [issue],
       rootDir: options.config.rootDir,
     });
-    TypecheckLogger.error(
-      formatCheckerIssueReport({
-        command: options.report?.command ?? 'limina checker typecheck',
-        issues: [issue],
-        title: 'Checker typecheck summary',
-        verbose: options.report?.verbose,
-      }),
-      elapsed(),
-    );
+    if (!options.report?.defer) {
+      TypecheckLogger.error(
+        formatCheckerIssueReport({
+          command: options.report?.command ?? 'limina checker typecheck',
+          issues: [issue],
+          title: 'Checker typecheck summary',
+          verbose: options.report?.verbose,
+        }),
+        elapsed(),
+      );
+    }
     task?.fail('checker typecheck failed', { error });
     throw error;
   }

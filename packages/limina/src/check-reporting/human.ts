@@ -12,9 +12,20 @@ const DEFAULT_DETAIL_LIMIT = 5;
 const ISSUE_BLOCK_MIN_WIDTH = 88;
 const ISSUE_BLOCK_HORIZONTAL_PADDING = 2;
 const ISSUE_BLOCK_BORDER_WIDTH = 2;
+const ANSI_RESET = '\u001B[0m';
+const ANSI_BLUE = '\u001B[34m';
+const ANSI_CYAN = '\u001B[36m';
+const ANSI_GREEN = '\u001B[32m';
+const ANSI_MAGENTA = '\u001B[35m';
+const ANSI_RED = '\u001B[31m';
+const ANSI_YELLOW = '\u001B[33m';
+const LABEL_PREFIX_PATTERN = /^(\s*(?:-\s+|\d+\.\s+)?)([A-Za-z][A-Za-z ]*):/u;
+
+type AnsiColor = string;
 
 export interface CheckIssueReportOptions {
   command?: string;
+  defer?: boolean;
   verbose?: boolean;
 }
 
@@ -46,6 +57,47 @@ interface IssueGroup {
 
 function plural(count: number, singular: string, pluralForm: string): string {
   return count === 1 ? singular : pluralForm;
+}
+
+function colorText(color: AnsiColor, text: string): string {
+  return `${color}${text}${ANSI_RESET}`;
+}
+
+function getSeverityColor(severity: string | undefined): AnsiColor {
+  if (severity === 'warning') {
+    return ANSI_YELLOW;
+  }
+
+  if (severity === 'info') {
+    return ANSI_CYAN;
+  }
+
+  return ANSI_RED;
+}
+
+function getLabelColor(label: string): AnsiColor {
+  switch (label.toLowerCase()) {
+    case 'fix':
+    case 'fix steps':
+    case 'suggested fix': {
+      return ANSI_GREEN;
+    }
+    case 'reason': {
+      return ANSI_YELLOW;
+    }
+    case 'evidence':
+    case 'external':
+    case 'details': {
+      return ANSI_MAGENTA;
+    }
+    case 'rule':
+    case 'task': {
+      return ANSI_BLUE;
+    }
+    default: {
+      return ANSI_CYAN;
+    }
+  }
 }
 
 function countBy(
@@ -370,7 +422,63 @@ function getRequiredListLineWidth(lines: readonly string[]): number {
   );
 }
 
-function formatIssueBlock(lines: readonly string[]): string[] {
+function colorIssueTitleLine(
+  line: string,
+  severity: string | undefined,
+): string {
+  const color = getSeverityColor(severity);
+  const suffixStart = line.lastIndexOf('  ');
+
+  if (suffixStart === -1) {
+    return colorText(color, line);
+  }
+
+  const title = line.slice(0, suffixStart);
+  const suffix = line.slice(suffixStart);
+  const suffixParts = suffix.trim().split(/\s+/u);
+  const hasIssueCountSuffix =
+    suffixParts.length === 2 &&
+    /^\d+$/u.test(suffixParts[0] ?? '') &&
+    (suffixParts[1] === 'issue' || suffixParts[1] === 'issues');
+
+  if (!title || !hasIssueCountSuffix) {
+    return colorText(color, line);
+  }
+
+  return `${colorText(color, title)}${suffix}`;
+}
+
+function colorIssueLabelLine(line: string): string {
+  const match = LABEL_PREFIX_PATTERN.exec(line);
+
+  if (!match) {
+    return line;
+  }
+
+  const prefix = match[1] ?? '';
+  const label = match[2] ?? '';
+  const labelText = `${label}:`;
+  const labelStart = prefix.length;
+  const labelEnd = labelStart + labelText.length;
+
+  return `${prefix}${colorText(getLabelColor(label), labelText)}${line.slice(labelEnd)}`;
+}
+
+function colorIssueBlockLines(
+  lines: readonly string[],
+  options: { severity?: string },
+): string[] {
+  return lines.map((line, index) =>
+    index === 0
+      ? colorIssueTitleLine(line, options.severity)
+      : colorIssueLabelLine(line),
+  );
+}
+
+function formatIssueBlock(
+  lines: readonly string[],
+  options: { severity?: string } = {},
+): string[] {
   const width = Math.max(
     ISSUE_BLOCK_MIN_WIDTH,
     getRequiredListLineWidth(lines) +
@@ -379,8 +487,9 @@ function formatIssueBlock(lines: readonly string[]): string[] {
   );
   const contentWidth = getContentWidth(width);
   const wrappedLines = lines.flatMap((line) => wrapLine(line, contentWidth));
+  const coloredLines = colorIssueBlockLines(wrappedLines, options);
 
-  return boxen(wrappedLines.join('\n'), {
+  return boxen(coloredLines.join('\n'), {
     borderStyle: 'single',
     padding: {
       left: 1,
@@ -403,13 +512,40 @@ function formatEvidenceLine(evidence: LiminaCheckIssueEvidence): string[] {
   ];
 }
 
+function linesEqual(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((line, index) => line === right[index])
+  );
+}
+
+function hasMatchingEvidenceLines(
+  evidence: readonly LiminaCheckIssueEvidence[] | undefined,
+  detailLines: readonly string[],
+): boolean {
+  return (
+    evidence?.some(
+      (item) => item.lines !== undefined && linesEqual(item.lines, detailLines),
+    ) ?? false
+  );
+}
+
 function formatIssueDetailLines(issue: LiminaCheckIssue): string[] {
+  const detailLines =
+    issue.detailLines?.length &&
+    !hasMatchingEvidenceLines(issue.evidence, issue.detailLines)
+      ? indentDetailLines(issue.detailLines)
+      : [];
+
   return [
     ...(issue.summary ? ['summary:', `    ${issue.summary}`] : []),
     ...(issue.evidence?.length
       ? ['evidence:', ...issue.evidence.flatMap(formatEvidenceLine)]
       : []),
-    ...(issue.detailLines?.length ? indentDetailLines(issue.detailLines) : []),
+    ...detailLines,
   ];
 }
 
@@ -614,6 +750,7 @@ export function formatCheckIssueHumanReport(
           detailLimit,
           verbose: options.verbose ?? false,
         }),
+        { severity: group.severity },
       ),
     ]),
   ].join('\n');

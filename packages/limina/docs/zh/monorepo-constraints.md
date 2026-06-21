@@ -64,7 +64,7 @@ import { Button } from '../../ui/src/Button';
 import { Button } from '@acme/ui';
 ```
 
-相对导入必须留在最近 `package.json` 形成的 package scope 内。裸包导入也必须被 source owner 承认。也就是说，源码里 import 了 `p-map`，当前 source owner 的 `dependencies`、`devDependencies`、`peerDependencies` 或 `optionalDependencies` 至少要有一处声明它。docs、tests、config/tooling 文件、type-only import、private owner 和无名 owner 也可以由 workspace root 的 `devDependencies` 授权；项目模板、文档别名等由别处提供依赖的场景，可以用显式 `source.importAuthority.allow` 规则说明。包自身导入和 Node 内置模块不按普通外部依赖处理。
+相对导入必须留在最近 `package.json` 形成的 package scope 内。裸包导入也必须被最近的 pnpm workspace source owner 承认。也就是说，源码里 import 了 `p-map`，当前 source owner 的 `dependencies`、`devDependencies`、`peerDependencies` 或 `optionalDependencies` 至少要有一处声明它。匹配的 `source.importAuthority.allow` package rule 可以把 workspace root `package.json` 加为第二个声明候选；项目模板、文档别名等由别处提供依赖的场景，可以用 specifier rule 说明。包自身导入和 Node 内置模块不按普通外部依赖处理。
 
 `#imports` 也遵守同样的边界：`#utils/foo` 必须匹配当前 source owner 自己的 `package.json#imports`，解析结果也必须留在当前 source owner 内，或者落到一个已经声明的外部产物包里。
 

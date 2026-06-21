@@ -6,22 +6,74 @@ import {
   formatCheckSummaryBlock,
 } from '../reporting';
 
+const ANSI_ESCAPE = String.fromCodePoint(0x1b);
+const ANSI_PATTERN = new RegExp(
+  String.raw`${ANSI_ESCAPE}\[[\d:;<=>?]*[\u0020-\u002F]*[\u0040-\u007E]`,
+  'gu',
+);
+
+function stripAnsi(value: string): string {
+  return value.replaceAll(ANSI_PATTERN, '');
+}
+
+function countOccurrences(value: string, search: string): number {
+  return value.split(search).length - 1;
+}
+
 describe('check reporting', () => {
   it('formats left-aligned titled summary boxes for check tasks', () => {
     const lines = formatCheckSummaryBlock({
       lines: [
         'Found 2 graph check issues.',
         'Found 1 failed checker build target.',
+        'By rule: limina check --issues --rule LIMINA_SOURCE_PACKAGE_IMPORT_UNAUTHORIZED --verbose',
       ],
       title: 'Graph check summary',
     });
+    const plainLines = lines.map(stripAnsi);
 
-    expect(lines[0]).toContain('Graph check summary');
-    expect(lines[1]).toMatch(/^│ Found 2 graph check issues\.\s+│$/u);
-    expect(lines[2]).toMatch(/^│ Found 1 failed checker build target\.\s+│$/u);
-    expect(lines.slice(1, 3).map((line) => line.indexOf('Found'))).toEqual([
-      2, 2,
-    ]);
+    expect(plainLines.every((line) => line.length === 88)).toBe(true);
+    expect(plainLines[0]).toContain('Graph check summary');
+    expect(plainLines[1]).toMatch(/^│ Found 2 graph check issues\.\s+│$/u);
+    expect(plainLines[2]).toMatch(
+      /^│ Found 1 failed checker build target\.\s+│$/u,
+    );
+    expect(plainLines[3]).toMatch(
+      /^│ By rule: limina check --issues --rule LIMINA_SOURCE_PACKAGE_IMPORT_UNAUTHORIZED\s+│$/u,
+    );
+    expect(plainLines[4]).toMatch(/^│ {10}--verbose\s+│$/u);
+    expect(plainLines.slice(1, 3).map((line) => line.indexOf('Found'))).toEqual(
+      [2, 2],
+    );
+  });
+
+  it('accepts semantic colors for summary box labels', () => {
+    const report = formatCheckSummaryBlock({
+      borderColor: 'green',
+      lines: [
+        'Command: limina check',
+        'Verbose: limina check --issues --verbose',
+        'Fix steps: rebuild the package output',
+        'By rule: limina check --issues --rule LIMINA_SOURCE_PACKAGE_IMPORT_UNAUTHORIZED',
+        'Reason: source imports must be authorized.',
+      ],
+      title: 'Limina check summary',
+    }).join('\n');
+    const plainReport = stripAnsi(report);
+
+    expect(plainReport).toContain('Limina check summary');
+    expect(plainReport).toContain('Command: limina check');
+    expect(report).toContain('\u001B[36mCommand:\u001B[0m limina check');
+    expect(report).toContain(
+      '\u001B[35mVerbose:\u001B[0m limina check --issues --verbose',
+    );
+    expect(report).toContain(
+      '\u001B[32mFix steps:\u001B[0m rebuild the package output',
+    );
+    expect(report).toContain('\u001B[34mBy rule:\u001B[0m limina check');
+    expect(report).toContain(
+      '\u001B[33mReason:\u001B[0m source imports must be authorized.',
+    );
   });
 
   it('formats detail blocks with the same left-aligned box shape', () => {
@@ -64,7 +116,7 @@ describe('check reporting', () => {
       title: 'Proof check summary',
     });
 
-    expect(report).toMatch(/^┌ Proof check summary /u);
+    expect(report).toMatch(/^╭ Proof check summary /u);
     expect(report).toContain('│ Found 2 proof check issues.');
     expect(report).toContain('│ detail line 1');
     expect(report).toContain('│ detail line 2');
@@ -86,22 +138,23 @@ describe('check reporting', () => {
       })),
       title: 'Graph check summary',
     });
+    const plainReport = stripAnsi(report);
 
-    expect(report).toContain('│ Found 46 check issues.');
-    expect(report).toContain(
+    expect(plainReport).toContain('│ Found 46 check issues.');
+    expect(plainReport).toContain(
       '│ Top rules: LIMINA_GRAPH_REFERENCE_MISSING (46)',
     );
-    expect(report).toContain(
+    expect(plainReport).toContain(
       '│ Show all details: limina graph check --verbose',
     );
-    expect(report).toContain(
+    expect(plainReport).toContain(
       '│ Missing project reference for workspace import  46 issues',
     );
-    expect(report).toContain('│ files:');
-    expect(report).toContain('│   - packages/app/src/file-00.ts');
-    expect(report).toContain('│   - packages/app/src/file-04.ts');
-    expect(report).not.toContain('│   - packages/app/src/file-05.ts');
-    expect(report).toContain('│   ... 41 more');
+    expect(plainReport).toContain('│ files:');
+    expect(plainReport).toContain('│   - packages/app/src/file-00.ts');
+    expect(plainReport).toContain('│   - packages/app/src/file-04.ts');
+    expect(plainReport).not.toContain('│   - packages/app/src/file-05.ts');
+    expect(plainReport).toContain('│   ... 41 more');
   });
 
   it('shows every structured check issue detail in verbose mode', () => {
@@ -123,13 +176,94 @@ describe('check reporting', () => {
       title: 'Proof check summary',
       verbose: true,
     });
+    const plainReport = stripAnsi(report);
 
-    expect(report).toContain('│ Found 1 check issue.');
-    expect(report).toContain('│ details:');
-    expect(report).toContain('Checker entry is not reachable:');
-    expect(report).toContain(
+    expect(plainReport).toContain('│ Found 1 check issue.');
+    expect(plainReport).toContain('│ details:');
+    expect(plainReport).toContain('Checker entry is not reachable:');
+    expect(plainReport).toContain(
       'reason: checker.include must reach source configs.',
     );
-    expect(report).not.toContain('Show all details');
+    expect(plainReport).not.toContain('Show all details');
+  });
+
+  it('deduplicates detail lines that exactly match evidence lines', () => {
+    const diagnosticLines = [
+      'Tsconfig search cannot determine module owner:',
+      '  file: packages/vite/src/types/alias.d.ts',
+      '  reason: no tsconfig includes the module.',
+    ];
+    const report = formatCheckIssueHumanReport({
+      command: 'limina check',
+      issues: [
+        {
+          code: 'LIMINA_SOURCE_TSCONFIG_SEARCH_CANNOT_DETERMINE_MODULE_OWNER',
+          detailLines: diagnosticLines,
+          evidence: [{ label: 'diagnostic', lines: diagnosticLines }],
+          reason: 'no tsconfig includes the module.',
+          task: 'source:check',
+          title: 'Tsconfig search cannot determine module owner',
+        },
+      ],
+      title: 'Check issue details',
+      verbose: true,
+    });
+    const plainReport = stripAnsi(report);
+
+    expect(plainReport).toContain('evidence:');
+    expect(
+      countOccurrences(
+        plainReport,
+        'Tsconfig search cannot determine module owner:',
+      ),
+    ).toBe(1);
+  });
+
+  it('colors structured check issue titles and section headings', () => {
+    const report = formatCheckIssueHumanReport({
+      command: 'limina source check',
+      issues: [
+        {
+          code: 'LIMINA_SOURCE_PACKAGE_IMPORT_UNAUTHORIZED',
+          detector: 'source',
+          evidence: [
+            {
+              label: 'diagnostic',
+              lines: [
+                'source owner: packages/css/package.json',
+                'reason: source imports must be authorized.',
+                'fix: declare the dependency.',
+              ],
+            },
+          ],
+          filePath: 'packages/css/src/preprocessors.ts',
+          fixSteps: ['Declare the dependency in packages/css/package.json.'],
+          packageManifestPath: 'packages/css/package.json',
+          packageName: '@tsdown/css',
+          reason: 'source imports must be authorized.',
+          severity: 'error',
+          summary: 'Unauthorized bare package import',
+          task: 'source:check',
+          title: 'Unauthorized bare package import',
+          tool: 'limina',
+          verifyCommands: ['limina source check'],
+        },
+      ],
+      title: 'Check issue details',
+      verbose: true,
+    });
+
+    expect(report).toContain(
+      '\u001B[31mUnauthorized bare package import\u001B[0m  1 issue',
+    );
+    expect(report).toContain('\u001B[36mpackage:\u001B[0m @tsdown/css');
+    expect(report).toContain('\u001B[34mrule:\u001B[0m');
+    expect(report).toContain('\u001B[36msummary:\u001B[0m');
+    expect(report).toContain('\u001B[33mreason:\u001B[0m');
+    expect(report).toContain('\u001B[32mfix steps:\u001B[0m');
+    expect(report).toContain('\u001B[36mverify:\u001B[0m');
+    expect(report).toContain('\u001B[35mevidence:\u001B[0m');
+    expect(report).toContain('\u001B[36msource owner:\u001B[0m');
+    expect(report).toContain('\u001B[32mfix:\u001B[0m');
   });
 });

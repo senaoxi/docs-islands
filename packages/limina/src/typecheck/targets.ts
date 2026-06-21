@@ -31,6 +31,7 @@ export interface TypecheckTarget {
 
 export interface TypecheckTargetResult {
   configPath: string;
+  durationMs?: number;
   error?: Error;
   status: number;
 }
@@ -38,6 +39,8 @@ export interface TypecheckTargetResult {
 export type TypecheckRunner = (
   target: TypecheckTarget,
 ) => Promise<TypecheckTargetResult> | TypecheckTargetResult;
+
+type CheckerProcessStdio = 'ignore' | 'inherit';
 
 export function getExecutionCheckers(options: {
   checkers: ResolvedCheckerConfig[];
@@ -249,11 +252,14 @@ export async function prepareVueTsgoCache(
   );
 }
 
-export function createDefaultRunner(): TypecheckRunner {
+export function createDefaultRunner(
+  options: { stdio?: CheckerProcessStdio } = {},
+): TypecheckRunner {
   return async (target) => {
     await prepareVueTsgoCache(target);
 
     const processEnvironment = createCheckerProcessEnvironment(target);
+    const stdio = options.stdio ?? 'inherit';
 
     return await new Promise<TypecheckTargetResult>((resolve) => {
       let settled = false;
@@ -270,7 +276,7 @@ export function createDefaultRunner(): TypecheckRunner {
         cwd: target.cwd,
         env: processEnvironment,
         shell: process.platform === 'win32',
-        stdio: 'inherit',
+        stdio,
       });
 
       child.on('error', (error) => {

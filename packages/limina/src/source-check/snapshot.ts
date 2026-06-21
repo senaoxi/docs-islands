@@ -5,6 +5,11 @@ import path from 'pathe';
 import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import { formatCheckIssueHumanReport } from '../check-reporting/human';
 import { createLiminaCheckIssue } from '../check-reporting/structured';
+import {
+  createIssueOverview,
+  formatCheckIssueSnapshotSummaryHuman,
+  selectTopBlockers,
+} from '../check-reporting/summary';
 import { generatedRootDirName } from '../core/build-graph/generated/paths';
 import type {
   SourceCheckIssue,
@@ -14,9 +19,9 @@ import type {
 } from './report';
 
 export const SOURCE_ISSUE_SNAPSHOT_VERSION = 1;
-export const CHECK_ISSUE_SNAPSHOT_VERSION = 2;
+export const CHECK_ISSUE_SNAPSHOT_VERSION = 4;
 
-const SUPPORTED_CHECK_ISSUE_SNAPSHOT_VERSIONS = new Set([1, 2]);
+const SUPPORTED_CHECK_ISSUE_SNAPSHOT_VERSIONS = new Set([1, 2, 3, 4]);
 
 export type LiminaCheckTaskName =
   | 'checker:build'
@@ -32,6 +37,61 @@ export type LiminaCheckTaskName =
 export type SourceIssueSnapshotStatus = 'completed' | 'not-run';
 export type CheckIssueSnapshotStatus = 'completed' | 'not-run';
 export type LiminaCheckIssueSeverity = 'error' | 'info' | 'warning';
+export type LiminaCheckRunResult =
+  | 'blocked'
+  | 'failed'
+  | 'not-run'
+  | 'passed'
+  | 'running';
+export type LiminaCheckRunTaskKind = 'command' | 'task';
+export type LiminaCheckRunTaskStatus =
+  | 'failed'
+  | 'passed'
+  | 'planned'
+  | 'running'
+  | 'skipped';
+export type LiminaCheckRunCheckItemStatus = 'failed' | 'passed';
+
+export interface LiminaCheckRunBlockedBy {
+  reason?: string;
+  task: string;
+}
+
+export interface LiminaCheckRunCheckItemSummary {
+  checksPassed?: number;
+  checksTotal?: number;
+  durationMs?: number;
+  issues?: number;
+  name: string;
+  status: LiminaCheckRunCheckItemStatus;
+}
+
+export interface LiminaCheckRunTaskSummary {
+  blockedBy?: string;
+  checkItems?: LiminaCheckRunCheckItemSummary[];
+  checksPassed?: number;
+  checksTotal?: number;
+  completedAt?: string;
+  durationMs?: number;
+  kind: LiminaCheckRunTaskKind;
+  name: string;
+  reason?: string;
+  startedAt?: string;
+  status: LiminaCheckRunTaskStatus;
+}
+
+export interface LiminaCheckRunSummary {
+  blockedBy?: LiminaCheckRunBlockedBy;
+  command: string;
+  completedAt?: string;
+  configPath?: string;
+  createdAt: string;
+  durationMs?: number;
+  pipeline?: string;
+  result: LiminaCheckRunResult;
+  startedAt?: string;
+  tasks: LiminaCheckRunTaskSummary[];
+}
 
 export interface LiminaCheckIssueLocation {
   column?: number;
@@ -84,8 +144,9 @@ export interface CheckIssueSnapshot {
   command: string;
   createdAt: string;
   issues: LiminaCheckIssue[];
+  run?: LiminaCheckRunSummary;
   status: CheckIssueSnapshotStatus;
-  version: 1 | typeof CHECK_ISSUE_SNAPSHOT_VERSION;
+  version: 1 | 2 | 3 | typeof CHECK_ISSUE_SNAPSHOT_VERSION;
 }
 
 export interface CheckIssueInventoryFilters {
@@ -95,18 +156,16 @@ export interface CheckIssueInventoryFilters {
   rules?: readonly string[];
   scopes?: readonly string[];
   tasks?: readonly string[];
-  tools?: readonly string[];
 }
 
 export type CheckIssueInventoryFormat = 'human' | 'json' | 'ndjson';
 
 export interface CheckIssueInventoryOptions {
-  details?: boolean;
   filters?: CheckIssueInventoryFilters;
-  fixes?: boolean;
   format?: CheckIssueInventoryFormat;
   rootDir?: string;
   snapshot: CheckIssueSnapshot | null;
+  verbose?: boolean;
 }
 
 export interface SourceIssueSnapshotIssue {
@@ -150,6 +209,111 @@ function isLiminaCheckIssueSeverity(
   value: unknown,
 ): value is LiminaCheckIssueSeverity {
   return value === 'error' || value === 'warning' || value === 'info';
+}
+
+function isLiminaCheckRunResult(value: unknown): value is LiminaCheckRunResult {
+  return (
+    value === 'blocked' ||
+    value === 'failed' ||
+    value === 'not-run' ||
+    value === 'passed' ||
+    value === 'running'
+  );
+}
+
+function isLiminaCheckRunTaskKind(
+  value: unknown,
+): value is LiminaCheckRunTaskKind {
+  return value === 'command' || value === 'task';
+}
+
+function isLiminaCheckRunCheckItemStatus(
+  value: unknown,
+): value is LiminaCheckRunCheckItemStatus {
+  return value === 'failed' || value === 'passed';
+}
+
+function isLiminaCheckRunTaskStatus(
+  value: unknown,
+): value is LiminaCheckRunTaskStatus {
+  return (
+    value === 'failed' ||
+    value === 'passed' ||
+    value === 'planned' ||
+    value === 'running' ||
+    value === 'skipped'
+  );
+}
+
+function isLiminaCheckRunBlockedBy(
+  value: unknown,
+): value is LiminaCheckRunBlockedBy {
+  return (
+    isPlainRecord(value) &&
+    typeof value.task === 'string' &&
+    (value.reason === undefined || typeof value.reason === 'string')
+  );
+}
+
+function isLiminaCheckRunCheckItemSummary(
+  value: unknown,
+): value is LiminaCheckRunCheckItemSummary {
+  return (
+    isPlainRecord(value) &&
+    typeof value.name === 'string' &&
+    isLiminaCheckRunCheckItemStatus(value.status) &&
+    (value.checksPassed === undefined ||
+      typeof value.checksPassed === 'number') &&
+    (value.checksTotal === undefined ||
+      typeof value.checksTotal === 'number') &&
+    (value.durationMs === undefined || typeof value.durationMs === 'number') &&
+    (value.issues === undefined || typeof value.issues === 'number')
+  );
+}
+
+function isLiminaCheckRunTaskSummary(
+  value: unknown,
+): value is LiminaCheckRunTaskSummary {
+  return (
+    isPlainRecord(value) &&
+    typeof value.name === 'string' &&
+    isLiminaCheckRunTaskKind(value.kind) &&
+    isLiminaCheckRunTaskStatus(value.status) &&
+    (value.startedAt === undefined || typeof value.startedAt === 'string') &&
+    (value.completedAt === undefined ||
+      typeof value.completedAt === 'string') &&
+    (value.checksPassed === undefined ||
+      typeof value.checksPassed === 'number') &&
+    (value.checksTotal === undefined ||
+      typeof value.checksTotal === 'number') &&
+    (value.checkItems === undefined ||
+      (Array.isArray(value.checkItems) &&
+        value.checkItems.every(isLiminaCheckRunCheckItemSummary))) &&
+    (value.durationMs === undefined || typeof value.durationMs === 'number') &&
+    (value.blockedBy === undefined || typeof value.blockedBy === 'string') &&
+    (value.reason === undefined || typeof value.reason === 'string')
+  );
+}
+
+function isLiminaCheckRunSummary(
+  value: unknown,
+): value is LiminaCheckRunSummary {
+  return (
+    isPlainRecord(value) &&
+    typeof value.command === 'string' &&
+    typeof value.createdAt === 'string' &&
+    isLiminaCheckRunResult(value.result) &&
+    Array.isArray(value.tasks) &&
+    value.tasks.every(isLiminaCheckRunTaskSummary) &&
+    (value.startedAt === undefined || typeof value.startedAt === 'string') &&
+    (value.completedAt === undefined ||
+      typeof value.completedAt === 'string') &&
+    (value.durationMs === undefined || typeof value.durationMs === 'number') &&
+    (value.configPath === undefined || typeof value.configPath === 'string') &&
+    (value.pipeline === undefined || typeof value.pipeline === 'string') &&
+    (value.blockedBy === undefined ||
+      isLiminaCheckRunBlockedBy(value.blockedBy))
+  );
 }
 
 function isLiminaCheckIssueLocation(
@@ -298,7 +462,8 @@ function isCheckIssueSnapshot(value: unknown): value is CheckIssueSnapshot {
     typeof value.createdAt === 'string' &&
     isCheckIssueSnapshotStatus(value.status) &&
     Array.isArray(value.issues) &&
-    value.issues.every(isLiminaCheckIssue)
+    value.issues.every(isLiminaCheckIssue) &&
+    (value.run === undefined || isLiminaCheckRunSummary(value.run))
   );
 }
 
@@ -400,7 +565,6 @@ function issueMatchesFilters(
   );
   const scopes = normalizeFilterValues(filters.scopes);
   const checkers = normalizeFilterValues(filters.checkerNames);
-  const tools = normalizeFilterValues(filters.tools);
   const issueFiles = getIssueFilePaths(issue);
 
   return (
@@ -413,60 +577,8 @@ function issueMatchesFilters(
     (scopes.length === 0 ||
       scopes.some((scope) => issueMatchesScope(issue, scope))) &&
     (checkers.length === 0 ||
-      (issue.checkerName ? checkers.includes(issue.checkerName) : false)) &&
-    (tools.length === 0 ||
-      (issue.tool ? tools.includes(issue.tool) : false) ||
-      (issue.external?.tool ? tools.includes(issue.external.tool) : false))
+      (issue.checkerName ? checkers.includes(issue.checkerName) : false))
   );
-}
-
-function hasInventoryFilters(filters: CheckIssueInventoryFilters): boolean {
-  return Boolean(
-    filters.tasks?.length ||
-      filters.packageNames?.length ||
-      filters.rules?.length ||
-      filters.files?.length ||
-      filters.scopes?.length ||
-      filters.checkerNames?.length ||
-      filters.tools?.length,
-  );
-}
-
-function formatInventoryFilters(filters: CheckIssueInventoryFilters): string[] {
-  const lines = [
-    ...(filters.tasks?.length ? [`  task: ${filters.tasks.join(', ')}`] : []),
-    ...(filters.packageNames?.length
-      ? [`  package: ${filters.packageNames.join(', ')}`]
-      : []),
-    ...(filters.rules?.length ? [`  rule: ${filters.rules.join(', ')}`] : []),
-    ...(filters.files?.length ? [`  file: ${filters.files.join(', ')}`] : []),
-    ...(filters.scopes?.length
-      ? [`  scope: ${filters.scopes.join(', ')}`]
-      : []),
-    ...(filters.checkerNames?.length
-      ? [`  checker: ${filters.checkerNames.join(', ')}`]
-      : []),
-    ...(filters.tools?.length ? [`  tool: ${filters.tools.join(', ')}`] : []),
-  ];
-
-  return lines.length > 0 ? ['Filters:', ...lines] : [];
-}
-
-function collectGroup(
-  issues: readonly LiminaCheckIssue[],
-  getValue: (issue: LiminaCheckIssue) => string | undefined,
-): Map<string, number> {
-  const groups = new Map<string, number>();
-
-  for (const issue of issues) {
-    const value = getValue(issue);
-
-    if (value) {
-      incrementCount(groups, value);
-    }
-  }
-
-  return groups;
 }
 
 function createSnapshot(options: {
@@ -536,11 +648,13 @@ export async function writeCheckIssueSnapshot(
 export async function writeNotRunCheckIssueSnapshot(options: {
   command: string;
   rootDir: string;
+  run?: LiminaCheckRunSummary;
 }): Promise<void> {
   await writeCheckIssueSnapshot(options.rootDir, {
     command: options.command,
     createdAt: new Date().toISOString(),
     issues: [],
+    run: options.run,
     status: 'not-run',
     version: CHECK_ISSUE_SNAPSHOT_VERSION,
   });
@@ -550,11 +664,13 @@ export async function writeCompletedCheckIssueSnapshot(options: {
   command: string;
   issues?: readonly LiminaCheckIssue[];
   rootDir: string;
+  run?: LiminaCheckRunSummary;
 }): Promise<void> {
   await writeCheckIssueSnapshot(options.rootDir, {
     command: options.command,
     createdAt: new Date().toISOString(),
     issues: [...(options.issues ?? [])],
+    run: options.run,
     status: 'completed',
     version: CHECK_ISSUE_SNAPSHOT_VERSION,
   });
@@ -563,6 +679,7 @@ export async function writeCompletedCheckIssueSnapshot(options: {
 export async function completeCheckIssueSnapshot(options: {
   command?: string;
   rootDir: string;
+  run?: LiminaCheckRunSummary;
 }): Promise<void> {
   const current = await readCheckIssueSnapshot(options.rootDir);
 
@@ -574,6 +691,7 @@ export async function completeCheckIssueSnapshot(options: {
     command: options.command ?? current?.command ?? 'limina check',
     issues: current?.issues ?? [],
     rootDir: options.rootDir,
+    run: options.run ?? current.run,
   });
 }
 
@@ -592,6 +710,7 @@ export async function appendCheckIssues(options: {
     command: options.command ?? current?.command ?? 'limina check',
     issues: [...(current?.issues ?? []), ...options.issues],
     rootDir: options.rootDir,
+    run: current?.run,
   });
 }
 
@@ -851,7 +970,10 @@ function createInventoryPayload(options: {
     filters: options.filters,
     issueCount: options.filteredIssues.length,
     issues: options.filteredIssues,
+    overview: createIssueOverview(options.filteredIssues),
+    run: options.snapshot?.run,
     status: options.snapshot?.status ?? 'missing',
+    topBlockers: selectTopBlockers(options.filteredIssues),
     version: options.snapshot?.version,
   };
 }
@@ -866,53 +988,6 @@ function formatJsonInventory(options: {
 
 function formatNdjsonInventory(issues: readonly LiminaCheckIssue[]): string {
   return issues.map((issue) => JSON.stringify(issue)).join('\n');
-}
-
-function formatFixLines(issue: LiminaCheckIssue): string[] {
-  const fixes = issue.fixSteps?.length
-    ? issue.fixSteps
-    : issue.fix
-      ? [issue.fix]
-      : [];
-
-  return [
-    `${issue.title}  ${issue.code}`,
-    ...(issue.packageName ? [`package: ${issue.packageName}`] : []),
-    ...(issue.filePath ? [`file: ${issue.filePath}`] : []),
-    ...(issue.packageManifestPath
-      ? [`package manifest: ${issue.packageManifestPath}`]
-      : []),
-    ...(fixes.length > 0
-      ? [
-          '',
-          'fix steps:',
-          ...fixes.map((step, index) => `  ${index + 1}. ${step}`),
-        ]
-      : ['', 'fix steps:', '  (none recorded)']),
-    ...(issue.verifyCommands?.length
-      ? [
-          '',
-          'verify:',
-          ...issue.verifyCommands.map((command) => `  - ${command}`),
-        ]
-      : []),
-  ];
-}
-
-function formatFixInventory(options: {
-  command?: string;
-  issues: readonly LiminaCheckIssue[];
-}): string {
-  return formatCheckIssueHumanReport({
-    command: options.command,
-    issues: options.issues.map((issue) => ({
-      ...issue,
-      detailLines: formatFixLines(issue),
-      summary: issue.summary ?? issue.reason,
-    })),
-    title: 'Check issue fixes',
-    verbose: true,
-  });
 }
 
 export function formatCheckIssueSnapshotInventory(
@@ -962,6 +1037,14 @@ export function formatCheckIssueSnapshotInventory(
   const filteredIssues = options.snapshot.issues.filter((issue) =>
     issueMatchesFilters(issue, filters, options.rootDir),
   );
+  const issueSummary = formatCheckIssueSnapshotSummaryHuman({
+    filteredIssueCount: filteredIssues.length,
+    filters,
+    issues: filteredIssues,
+    rootDir: options.rootDir,
+    snapshot: options.snapshot,
+    totalIssueCount: options.snapshot.issues.length,
+  });
 
   if (format === 'json') {
     return formatJsonInventory({
@@ -975,80 +1058,20 @@ export function formatCheckIssueSnapshotInventory(
     return formatNdjsonInventory(filteredIssues);
   }
 
-  if (options.fixes) {
-    return formatFixInventory({
-      command: options.snapshot.command,
-      issues: filteredIssues,
-    });
-  }
-
-  if (options.details) {
-    return formatCheckIssueHumanReport({
-      command: options.snapshot.command,
-      issues: filteredIssues,
-      title: 'Check issue details',
-      verbose: true,
-    });
-  }
-
-  if (filteredIssues.length === 0) {
-    const filterActive = hasInventoryFilters(filters);
-    const showGroups = !filterActive || options.snapshot.issues.length > 0;
-
+  if (options.verbose) {
     return [
-      filterActive
-        ? 'No issues matched the selected filters.'
-        : 'No check issues were recorded from the last run.',
+      issueSummary,
       '',
-      ...formatInventoryFilters(filters),
-      ...(showGroups
-        ? [
-            ...(filterActive ? [''] : []),
-            ...formatCheckIssueGroups(options.snapshot.issues),
-          ]
-        : []),
-    ]
-      .filter((line, index, lines) => line || lines[index - 1] !== '')
-      .join('\n')
-      .trim();
+      formatCheckIssueHumanReport({
+        command: options.snapshot.command,
+        issues: filteredIssues,
+        title: 'Check issue details',
+        verbose: true,
+      }),
+    ].join('\n');
   }
 
-  return [
-    'Issue filters available from last run:',
-    '',
-    ...formatCheckIssueGroups(filteredIssues),
-  ].join('\n');
-}
-
-function formatCheckIssueGroups(issues: readonly LiminaCheckIssue[]): string[] {
-  return [
-    ...formatCountGroup(
-      'tasks',
-      collectGroup(issues, (issue) => issue.task),
-    ),
-    '',
-    ...formatCountGroup(
-      'packages',
-      collectGroup(issues, (issue) => issue.packageName),
-    ),
-    '',
-    ...formatCountGroup(
-      'rules',
-      collectGroup(issues, (issue) => issue.code),
-    ),
-    '',
-    ...formatCountGroup('scopes', collectGroup(issues, getIssueScope)),
-    '',
-    ...formatCountGroup(
-      'checkers',
-      collectGroup(issues, (issue) => issue.checkerName),
-    ),
-    '',
-    ...formatCountGroup(
-      'tools',
-      collectGroup(issues, (issue) => issue.tool),
-    ),
-  ];
+  return issueSummary;
 }
 
 export function formatSourceIssueSnapshotInventory(
