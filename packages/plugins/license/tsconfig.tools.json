@@ -8,17 +8,5 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["rolldown.config.ts", "package.json", "eslint.config.mjs", "packagePlugin.ts"],
-  "exclude": [
-    "dist",
-    "cache",
-    "**/*cache*/**",
-    "coverage",
-    "node_modules",
-    ".eslintcache",
-    "vitest.config.ts",
-    "**/__tests__/**",
-    "**/*.spec.ts",
-    "**/*.test.ts"
-  ]
+  "include": ["eslint.config.mjs"],
 }

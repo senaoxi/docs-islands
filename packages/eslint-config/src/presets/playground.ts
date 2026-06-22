@@ -1,6 +1,6 @@
 import type { defineConfig } from 'eslint/config';
-import { baseTestFileRules, testFilePatterns } from '../config';
-import eslintGeneralConfig from '../general';
+import { baseTestFileRules, testFilePatterns } from '../config/index.js';
+import eslintGeneralConfig from '../general.js';
 
 type Config = ReturnType<typeof defineConfig>;
 

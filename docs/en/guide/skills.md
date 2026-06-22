@@ -1,6 +1,6 @@
 # Agent Skills
 
-Docs Islands publishes optional agent skills for using its packages with AI coding agents. These skills package the practical usage rules for `logaria` and `@docs-islands/vitepress`, so the agent can load focused guidance when it is changing logger calls, VitePress configuration, Markdown islands, render strategies, diagnostics, or related integration code.
+Docs Islands publishes optional agent skills for using its packages with AI coding agents. These skills package practical usage rules for `logaria` and `@docs-islands/vitepress`, so the agent can load focused guidance when it is changing logger calls, VitePress configuration, Markdown islands, render strategies, diagnostics, or related integration code.
 
 ## Install
 
@@ -23,10 +23,14 @@ Install the logaria skill:
 npx skills add senaoxi/docs-islands --skill logaria
 ```
 
-Install both skills globally for Codex:
+Install the skills globally for Codex:
 
 ```bash
-npx skills add senaoxi/docs-islands --global --agent codex --skill logaria --skill logaria --skill docs-islands-vitepress
+npx skills add senaoxi/docs-islands \
+  --global \
+  --agent codex \
+  --skill logaria \
+  --skill docs-islands-vitepress
 ```
 
 Restart the target agent after installing global skills so it can load the new skill metadata.

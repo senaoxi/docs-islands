@@ -25,7 +25,7 @@ import {
   testFilePatterns,
   typescriptFiles,
   untypedModuleTypeScriptRules,
-} from './config';
+} from './config/index.js';
 
 type Config = ReturnType<typeof defineConfig>;
 type Rules = NonNullable<Config[number]['rules']>;

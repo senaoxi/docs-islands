@@ -16,13 +16,14 @@ npx skills add senaoxi/docs-islands --list
 npx skills add senaoxi/docs-islands --skill logaria
 ```
 
+
 安装 VitePress skill：
 
 ```bash
 npx skills add senaoxi/docs-islands --skill docs-islands-vitepress
 ```
 
-将两个 skills 全局安装到 Codex：
+将这些 skills 全局安装到 Codex：
 
 ```bash
 npx skills add senaoxi/docs-islands \

@@ -1,4 +1,8 @@
 {
+  "$schema": "../../../../node_modules/limina/schemas/tsconfig-schema.json",
+  "liminaOptions": {
+    "graphRules": ["runtime-shared"],
+  },
   // Runtime local check kept stable for package scripts. Declaration leaf: ./tsconfig.lib.dts.json.
   "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {

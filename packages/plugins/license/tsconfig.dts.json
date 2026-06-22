@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "noEmit": false,
+    "allowJs": true,
+    "isolatedDeclarations": false,
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "declarationMap": true,
+    "types": ["node"],
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+  },
+}

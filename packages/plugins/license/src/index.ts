@@ -118,7 +118,8 @@ export default function licensePlugin(
         licenses.length > 0 ? `\n${licenses.join(', ')}\n` : '';
       const bundledDependenciesText =
         dependencyLicenseTexts.length > 0 ? `\n${dependencyLicenseTexts}` : '';
-      const licenseText = normalizeGeneratedLicenseText(`<!-- markdownlint-disable MD003 MD009 MD025 MD035 MD026 -->
+      const licenseText =
+        normalizeGeneratedLicenseText(`<!-- markdownlint-disable MD003 MD009 MD025 MD035 MD026 -->
 # ${licenseTitle}
 
 ${packageName} is released under the MIT license:
@@ -245,5 +246,5 @@ function formatDependencyInfosText(depInfos: DependencyInfo[]): string {
 }
 
 function normalizeGeneratedLicenseText(text: string): string {
-  return `${text.replaceAll(/[ \t]+$/gm, '').replace(/\n+$/u, '')}\n`;
+  return `${text.replaceAll(/[\t ]+$/gm, '').replace(/\n+$/u, '')}\n`;
 }

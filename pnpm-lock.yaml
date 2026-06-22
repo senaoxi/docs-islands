@@ -314,6 +314,7 @@ overrides:
   '@eslint/eslintrc>js-yaml': 4.1.1
   '@swc/core': 1.13.5
   '@types/node': 20.19.0
+  form-data: 4.0.6
   gray-matter>js-yaml: 3.14.2
   lodash: 4.18.0
   minimatch@^10.0.0: ^10.2.3
@@ -324,6 +325,8 @@ overrides:
   minimatch@^9.0.0>brace-expansion: 5.0.6
   picomatch@^2.0.0: 2.3.2
   picomatch@^4.0.0: 4.0.4
+  tmp: 0.2.7
+  undici: 7.28.0
   undici-types: ^6.24.0
 packageExtensionsChecksum: sha256-vhDAe6BgimWFsmz+UxtjXHqTCFk+ZMMj4bFR4F3qCvw=
 pnpmfileChecksum: sha256-x3x6qzOGjFrkKfMAQHGX/Ewnd3zcLHAUIpmDMRU6wjs=
@@ -614,9 +617,6 @@ importers:
         specifier: catalog:prod
         version: 0.2.15
     devDependencies:
-      '@docs-islands/utils':
-        specifier: workspace:*
-        version: link:../../utils
       '@eslint/js':
         specifier: catalog:lint
         version: 9.39.2
@@ -686,12 +686,6 @@ importers:
       prettier:
         specifier: catalog:format
         version: 3.5.3
-      rolldown:
-        specifier: catalog:dev
-        version: 1.0.0-rc.4
-      rolldown-plugin-dts:
-        specifier: catalog:dev
-        version: 0.23.1(@typescript/native-preview@7.0.0-dev.20260527.1)(oxc-resolver@11.20.0)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       typescript:
         specifier: catalog:dev
         version: 5.9.3
@@ -729,8 +723,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/plugin-license':
-        specifier: link:../plugins/license/dist
-        version: link:../plugins/license/dist
+        specifier: workspace:*
+        version: link:../plugins/license
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:../../utils
@@ -843,10 +837,6 @@ importers:
         specifier: catalog:dev
         version: 5.106.2(@swc/core@1.13.5(@swc/helpers@0.5.17))(esbuild@0.27.3)
   packages/plugins/license:
-    dependencies:
-      logaria:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
     devDependencies:
       '@docs-islands/eslint-config':
         specifier: workspace:*
@@ -860,12 +850,12 @@ importers:
       eslint:
         specifier: catalog:lint
         version: 9.39.2(jiti@2.7.0)
+      logaria:
+        specifier: catalog:prod
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.59.0))(rolldown@1.0.0-rc.4)
       rolldown:
         specifier: catalog:dev
         version: 1.0.0-rc.4
-      rolldown-plugin-dts:
-        specifier: catalog:dev
-        version: 0.23.1(@typescript/native-preview@7.0.0-dev.20260527.1)(oxc-resolver@11.20.0)(rolldown@1.0.0-rc.4)(typescript@5.9.3)(vue-tsc@3.2.4(typescript@5.9.3))
       rollup-plugin-license:
         specifier: catalog:dev
         version: 3.6.0(picomatch@4.0.4)(rollup@4.59.0)
@@ -903,8 +893,8 @@ importers:
         specifier: workspace:*
         version: link:../eslint-config
       '@docs-islands/plugin-license':
-        specifier: link:../plugins/license/dist
-        version: link:../plugins/license/dist
+        specifier: workspace:*
+        version: link:../plugins/license
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:../../utils
@@ -5614,9 +5604,9 @@ packages:
       integrity: sha512-dKx12eRCVIzqCxFGplyFKJMPvLEWgmNtUrpTiJIR5u97zEhRG8ySrtboPHZXx7daLxQVrl643cTzbab2tkQjxg==
     engines:
       node: '>= 0.4'
-  form-data@4.0.5:
+  form-data@4.0.6:
     resolution:
-      integrity: sha512-8RipRLol37bNs2bhoV67fiTEvdTrbMUYcFTiy3+wuuOnUog2QBHCZWXDRijWQfAkhBj2Uf5UnVaiWwA5vdd82w==
+      integrity: sha512-vKatAh4SlVfgbv+YtmhiRjhEMJsYpsG1Y2rMQtR+SVSbytsSD1YGzDIcrAJmdFec88u/+VoGmxnl+80gL1tRCQ==
     engines:
       node: '>= 6'
   format@0.2.2:
@@ -5812,6 +5802,11 @@ packages:
   hasown@2.0.2:
     resolution:
       integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==
+    engines:
+      node: '>= 0.4'
+  hasown@2.0.4:
+    resolution:
+      integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==
     engines:
       node: '>= 0.4'
   hast-util-to-html@9.0.5:
@@ -7786,9 +7781,9 @@ packages:
     resolution:
       integrity: sha512-ASdhgQIBSay0R/eXggAkQ53G4nTJqTXqC2kbaBbdDwM7SkjyZyO0OaaN1/FH7U/yCeqOHDwFO5j8+Os/IS1dXw==
     hasBin: true
-  tmp@0.2.6:
+  tmp@0.2.7:
     resolution:
-      integrity: sha512-5sJPdPjfI5Kx+qbrDesxkglRBxW//g7hCsqspEjwkewGvBMGIKMOTKzLt1hFVJzyadba3lDUN20O9qhvbQUSTA==
+      integrity: sha512-e0votIpp4Uo2AJYSzVHV6xCcawuiez3DzqDAbrTc3YxBkplN6e+dM13ZeIcZnDg/QpSuU2zfZ3rzwY8ukEnaXw==
     engines:
       node: '>=14.14'
   to-regex-range@5.0.1:
@@ -7923,9 +7918,9 @@ packages:
   undici-types@6.24.0:
     resolution:
       integrity: sha512-7sP0dVSecE8+Kylk0j81SymYqJwdFL6pPlIJqYjv5V7r4o8su/Vi50kBDuuV9X9uC8Mt/RfFFCFVvr/nzuPonw==
-  undici@7.24.3:
+  undici@7.28.0:
     resolution:
-      integrity: sha512-eJdUmK/Wrx2d+mnWWmwwLRyA7OQCkLap60sk3dOK4ViZR7DKwwptwuIvFBg2HaiP9ESaEdhtpSymQPvytpmkCA==
+      integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==
     engines:
       node: '>=20.18.1'
   unicorn-magic@0.3.0:
@@ -10361,7 +10356,7 @@ snapshots:
   axios@1.16.0:
     dependencies:
       follow-redirects: 1.16.0(debug@4.4.3)
-      form-data: 4.0.5
+      form-data: 4.0.6
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
     - debug
@@ -10465,7 +10460,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 7.24.3
+      undici: 7.28.0
       whatwg-mimetype: 4.0.0
   chokidar@3.6.0:
     dependencies:
@@ -11186,12 +11181,12 @@ snapshots:
   for-each@0.3.5:
     dependencies:
       is-callable: 1.2.7
-  form-data@4.0.5:
+  form-data@4.0.6:
     dependencies:
       asynckit: 0.4.0
       combined-stream: 1.0.8
       es-set-tostringtag: 2.1.0
-      hasown: 2.0.2
+      hasown: 2.0.4
       mime-types: 2.1.35
   format@0.2.2: {}
   fs-constants@1.0.0: {}
@@ -11300,6 +11295,9 @@ snapshots:
     dependencies:
       has-symbols: 1.1.0
   hasown@2.0.2:
+    dependencies:
+      function-bind: 1.1.2
+  hasown@2.0.4:
     dependencies:
       function-bind: 1.1.2
   hast-util-to-html@9.0.5:
@@ -11545,7 +11543,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.0
-      undici: 7.24.3
+      undici: 7.28.0
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -12150,7 +12148,7 @@ snapshots:
       figures: 3.2.0
       flat: 5.0.2
       follow-redirects: 1.16.0(debug@4.4.3)
-      form-data: 4.0.5
+      form-data: 4.0.6
       fs-constants: 1.0.0
       function-bind: 1.1.2
       get-caller-file: 2.0.5
@@ -12201,7 +12199,7 @@ snapshots:
       strip-bom: 3.0.0
       supports-color: 7.2.0
       tar-stream: 2.2.0
-      tmp: 0.2.6
+      tmp: 0.2.7
       tree-kill: 1.2.2
       tsconfig-paths: 4.2.0
       tslib: 2.8.1
@@ -12983,7 +12981,7 @@ snapshots:
   tldts@7.0.23:
     dependencies:
       tldts-core: 7.0.23
-  tmp@0.2.6: {}
+  tmp@0.2.7: {}
   to-regex-range@5.0.1:
     dependencies:
       is-number: 7.0.0
@@ -13077,7 +13075,7 @@ snapshots:
       has-symbols: 1.1.0
       which-boxed-primitive: 1.1.1
   undici-types@6.24.0: {}
-  undici@7.24.3: {}
+  undici@7.28.0: {}
   unicorn-magic@0.3.0: {}
   unified@11.0.5:
     dependencies:

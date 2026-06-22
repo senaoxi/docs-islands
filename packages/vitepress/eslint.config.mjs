@@ -43,6 +43,18 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/__tests__/theme/**/*.ts'],
+    languageOptions: {
+      parser: typescriptESlintParser,
+      parserOptions: {
+        project: ['./tsconfig.test.json'],
+        projectService: false,
+        ecmaVersion: supportedEcmaVersion,
+        sourceType: 'module',
+      },
+    },
+  },
+  {
     files: testFilePatterns,
     rules: baseTestFileRules,
   },
