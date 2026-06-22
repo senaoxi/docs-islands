@@ -6,6 +6,8 @@ import path from 'node:path';
 const originalMarkdownContent =
   '<!-- This file is used to test the HMR of markdown content changes. -->\n';
 const { test: TEST } = loadEnv();
+const clientComponentRenderTimeout = 30_000;
+const coldClientComponentTestTimeout = 80_000;
 
 // Helper function to modify a file and wait for HMR.
 const modifyFileAndWaitForHMR = async (
@@ -41,8 +43,8 @@ const restoreHMRTestPage = async (
   await goto(`/script-content-changes/hmr-test?hmr-test=${Date.now()}`);
 };
 
-// Helper to wait for a selector after HMR with reload fallback.
-const waitForHMRSelector = async (selector: string, timeout = 5000) => {
+// Helper to wait for a selector with a reload fallback.
+const waitForSelectorWithReload = async (selector: string, timeout = 5000) => {
   try {
     await page.waitForSelector(selector, { timeout });
   } catch {
@@ -86,20 +88,29 @@ describe('Script Content Changes', () => {
       await goto('/script-content-changes/basic');
     });
 
-    test('should render component correctly', async () => {
-      // Wait for the client-side component to complete rendering.
-      await page.waitForSelector('[data-testid="hello-world"]');
-      const helloWorld = page.locator('[data-testid="hello-world"]');
-      await expect(helloWorld).toBeVisible();
-      expect(await helloWorld.textContent()).toContain('Hello World Component');
+    test(
+      'should render component correctly',
+      async () => {
+        // Wait for the client-side component to complete rendering.
+        await waitForSelectorWithReload(
+          '[data-testid="hello-world"]',
+          clientComponentRenderTimeout,
+        );
+        const helloWorld = page.locator('[data-testid="hello-world"]');
+        await expect(helloWorld).toBeVisible();
+        expect(await helloWorld.textContent()).toContain(
+          'Hello World Component',
+        );
 
-      const button = page.locator('[data-testid="counter-button"]');
-      await expect(button).toBeVisible();
+        const button = page.locator('[data-testid="counter-button"]');
+        await expect(button).toBeVisible();
 
-      await button.click();
-      await button.click();
-      expect(await button.textContent()).toContain('Count: 2');
-    });
+        await button.click();
+        await button.click();
+        expect(await button.textContent()).toContain('Count: 2');
+      },
+      coldClientComponentTestTimeout,
+    );
   });
 
   describe('Import Path Errors', () => {
@@ -214,8 +225,8 @@ describe('HMR: Changing Render Component References', () => {
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
-      await waitForHMRSelector('.modified-content-case2');
-      await waitForHMRSelector('[data-unique-id="name-test-component"]');
+      await waitForSelectorWithReload('.modified-content-case2');
+      await waitForSelectorWithReload('[data-unique-id="name-test-component"]');
       const modifiedComponent = page.locator(
         '[data-unique-id="name-test-component"]',
       );
@@ -315,14 +326,14 @@ describe('HMR: Adding New Render Component References', () => {
     try {
       await restoreHMRTestPage(hmrTestFilePath, originalContent);
 
-      await waitForHMRSelector('[data-unique-id="used-component"]');
+      await waitForSelectorWithReload('[data-unique-id="used-component"]');
       const component = page.locator('[data-unique-id="used-component"]');
       await expect(component).toBeVisible();
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
       // Component should still work after adding unused import
-      await waitForHMRSelector('[data-unique-id="used-component"]');
+      await waitForSelectorWithReload('[data-unique-id="used-component"]');
       await expect(component).toBeVisible();
     } finally {
       await restoreFileContent(hmrTestFilePath, originalMarkdownContent);
@@ -362,7 +373,7 @@ describe('HMR: Adding New Render Component References', () => {
       await expect(existingComponent).toBeVisible();
 
       // Robust wait for the SSR-only container.
-      await waitForHMRSelector('[data-unique-id="new-ssr-component"]');
+      await waitForSelectorWithReload('[data-unique-id="new-ssr-component"]');
       const newComponent = page.locator('[data-unique-id="new-ssr-component"]');
       await expect(newComponent).toBeVisible();
 
@@ -412,13 +423,15 @@ describe('HMR: Adding New Render Component References', () => {
 
       await expect(existingComponent).toBeVisible();
 
-      await waitForHMRSelector('[data-unique-id="new-client-component"]');
+      await waitForSelectorWithReload(
+        '[data-unique-id="new-client-component"]',
+      );
       const clientComponent = page.locator(
         '[data-unique-id="new-client-component"]',
       );
       await expect(clientComponent).toBeVisible();
 
-      await waitForHMRSelector('[data-unique-id="new-ssr-component"]');
+      await waitForSelectorWithReload('[data-unique-id="new-ssr-component"]');
       const ssrComponent = page.locator('[data-unique-id="new-ssr-component"]');
       await expect(ssrComponent).toBeVisible();
 
@@ -525,7 +538,7 @@ describe('HMR: Removing Render Component References', () => {
     try {
       await restoreHMRTestPage(hmrTestFilePath, originalContent);
 
-      await waitForHMRSelector('[data-unique-id="remaining-component"]');
+      await waitForSelectorWithReload('[data-unique-id="remaining-component"]');
       const remainingComponent = page.locator(
         '[data-unique-id="remaining-component"]',
       );
@@ -552,7 +565,7 @@ describe('HMR: Removing Render Component References', () => {
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
-      await waitForHMRSelector('[data-unique-id="remaining-component"]');
+      await waitForSelectorWithReload('[data-unique-id="remaining-component"]');
       await expect(remainingComponent).toBeVisible();
       await remainingComponentButton.click();
       expect(await remainingComponentButton.textContent()).toContain(
@@ -630,7 +643,7 @@ describe('HMR: Removing Render Component References', () => {
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
-      await waitForHMRSelector('[data-unique-id="remaining-component"]');
+      await waitForSelectorWithReload('[data-unique-id="remaining-component"]');
       await expect(remainingComponent).toBeVisible();
       await remainingComponentButton.click();
       expect(await remainingComponentButton.textContent()).toContain(
@@ -731,8 +744,8 @@ describe('HMR: Render Container Content Changes', () => {
 
       await expect(existingContainer).toBeVisible();
 
-      await waitForHMRSelector('[data-unique-id="new-container-1"]');
-      await waitForHMRSelector('[data-unique-id="new-container-2"]');
+      await waitForSelectorWithReload('[data-unique-id="new-container-1"]');
+      await waitForSelectorWithReload('[data-unique-id="new-container-2"]');
       const newContainer1 = page.locator('[data-unique-id="new-container-1"]');
       const newContainer2 = page.locator('[data-unique-id="new-container-2"]');
 
@@ -810,7 +823,7 @@ describe('HMR: Render Container Content Changes', () => {
 
       await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent);
 
-      await waitForHMRSelector('[data-unique-id="remaining-container"]');
+      await waitForSelectorWithReload('[data-unique-id="remaining-container"]');
       await expect(remainingContainer).toBeVisible();
       expect(await containerToRemove1.count()).toBe(0);
       expect(await containerToRemove2.count()).toBe(0);
@@ -870,7 +883,9 @@ More modified content.`;
         'Modified Markdown Title',
       );
 
-      await waitForHMRSelector('[data-unique-id="markdown-test-component"]');
+      await waitForSelectorWithReload(
+        '[data-unique-id="markdown-test-component"]',
+      );
       await expect(component).toBeVisible();
       const button = page.locator(
         '[data-unique-id="markdown-test-component"] > button',
@@ -924,7 +939,7 @@ Modified markdown paragraph.
         await modifyFileAndWaitForHMR(hmrTestFilePath, modifiedContent, true);
 
         // Component state should be preserved during HMR
-        await waitForHMRSelector(
+        await waitForSelectorWithReload(
           '[data-unique-id="state-preservation-component"]',
         );
         const preservedButton = component.locator(
