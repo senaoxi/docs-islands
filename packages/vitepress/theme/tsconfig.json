@@ -7,4 +7,9 @@
     "types": ["vite/client"],
   },
   "include": ["./"],
+  "exclude": [
+    "../../../**/.tsbuild/**",
+    "../../../**/*cache",
+    "../../../**/*dist",
+  ],
 }

@@ -8,8 +8,8 @@ import {
   nodeEsmGlobals,
   supportedEcmaVersion,
   untypedModuleTypeScriptRules,
-} from '../config';
-import eslintGeneralConfig from '../general';
+} from '../config/index.js';
+import eslintGeneralConfig from '../general.js';
 
 type Config = ReturnType<typeof defineConfig>;
 

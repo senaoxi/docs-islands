@@ -25,14 +25,15 @@ pipelines: {
 For every entry selected by the CLI plan:
 
 1. **Manifest presence** — `<outDir>/package.json` must exist.
-2. **Tarball pack** (only if `publint` or `attw` is enabled) — Limina runs `@publint/pack` against `outDir` (with `ignoreScripts: true` and `packageManager: 'pnpm'`) into a temporary directory and feeds the buffer to both tools.
-3. **publint** — runs `publint` in strict mode (overridable) against the tarball. Every error and warning is logged; any message of type `error` or `warning` fails the check.
-4. **attw (Are The Types Wrong)** — calls `@arethetypeswrong/core`'s `checkPackage` on the tarball. Problems are filtered by the active profile, then any remaining problem fails the check.
-5. **boundary** — extracts bare-package import specifiers from every `.js`/`.mjs`/`.cjs` in the output via `es-module-lexer` and validates each.
+2. **Manifest readiness** — output dependencies must not expose `workspace:`, `link:`, `file:`, or `catalog:` specifiers.
+3. **Tarball pack** (only if `publint` or `attw` is enabled) — Limina runs `@publint/pack` against `outDir` (with `ignoreScripts: true` and `packageManager: 'pnpm'`) into a temporary directory and feeds the buffer to both tools.
+4. **publint** — runs `publint` with its strict option enabled by default against the tarball. Limina logs every message returned by publint and fails if any message remains after publint's own `level` filtering.
+5. **attw (Are The Types Wrong)** — calls `@arethetypeswrong/core`'s `checkPackage` on the tarball. Problems are filtered by the active profile and `ignoreRules`; remaining problems fail unless `attw.level` is `warn`.
+6. **boundary** — extracts bare-package import specifiers from every `.js`/`.mjs`/`.cjs` in the output via `es-module-lexer` and validates each.
 
 The temporary tarball directory is removed after the entry completes (success or failure).
 
-`package:check` does not enforce publish-only hygiene such as README/license files, `private: true`, source maps, registry metadata, or workspace publish order. Those belong to `release:check`.
+`package:check` does not enforce publish-only hygiene such as README/license files, `private: true`, source maps, registry metadata, dependency artifact hashes, or workspace publish order. Those belong to `release:check`.
 
 ## What release check owns
 
@@ -48,15 +49,26 @@ For every selected release entry, Limina reads `<outDir>/package.json`, rejects 
 ## publint configuration
 
 ```ts
-publint?: { strict?: boolean }   // default { strict: true }
+publint?: boolean | {
+  level?: 'error' | 'warning' | 'suggestion';
+  strict?: boolean;
+}
 ```
 
-Strict mode emits warnings as failure conditions in addition to errors. Set `strict: false` to allow warnings to log without failing the check.
+`strict` defaults to `true`. `level` is passed through to publint; any message returned by publint after that filtering is logged and fails the subcheck. `publint: false` removes publint from the entry's enabled check set; an object config enables it.
 
 ## attw configuration
 
 ```ts
-attw?: { profile?: 'strict' | 'node16' | 'esm-only' }   // default 'esm-only'
+attw?: boolean | {
+  entrypoints?: string[];
+  entrypointsLegacy?: boolean;
+  excludeEntrypoints?: (string | RegExp)[];
+  ignoreRules?: PackageAttwIgnoreRule[];
+  includeEntrypoints?: string[];
+  level?: 'error' | 'warn';
+  profile?: 'strict' | 'node16' | 'esm-only';
+}
 ```
 
 | Profile    | Ignored resolutions                                              |
@@ -66,6 +78,9 @@ attw?: { profile?: 'strict' | 'node16' | 'esm-only' }   // default 'esm-only'
 | `esm-only` | `node16-cjs` — pure ESM packages skip the CJS resolution failure |
 
 CLI override: `--attw-profile <name>` swaps the profile for one invocation without editing the config.
+
+`entrypoints`, `entrypointsLegacy`, `excludeEntrypoints`, and `includeEntrypoints` are passed to ATTW's `checkPackage`. `ignoreRules` filters problem kinds after profile filtering. If `level` is `warn`, remaining ATTW problems are logged as warnings and the ATTW subcheck passes; otherwise remaining problems fail the subcheck.
+`attw: false` removes ATTW from the entry's enabled check set; an object config enables it.
 
 Reported problem kinds (with formatted output):
 
@@ -85,6 +100,21 @@ Reported problem kinds (with formatted output):
 | `CJSOnlyExportsDefault`   | CJS exports only default in a file              |
 
 The check requires `result.types` to be set; a package with no type entry fails immediately with `package has no types`.
+
+Accepted `ignoreRules` names:
+
+- `cjs-only-exports-default`
+- `cjs-resolves-to-esm`
+- `fallback-condition`
+- `false-cjs`
+- `false-esm`
+- `false-export-default`
+- `internal-resolution-error`
+- `missing-export-equals`
+- `named-exports`
+- `no-resolution`
+- `unexpected-module-syntax`
+- `untyped-resolution`
 
 ## boundary configuration
 
@@ -213,6 +243,25 @@ pnpm exec limina package check --tool boundary
 ### Release tarball is not publishable
 
 Run `limina release check --package <name>` and fix the reported tarball issue: remove `private: true`, add missing README/license files to the packed output, exclude `*.map` files, or strip `sourceMappingURL` comments from emitted JavaScript.
+
+## Release content hash configuration
+
+`release:check` can compare workspace dependency artifact contents against npm registry metadata.
+
+```ts
+release: {
+  contentHash: {
+    baselineTag: 'latest',
+    builtinIgnore: true,
+    ignore: ['client/**'],
+  },
+}
+```
+
+- `baselineTag` defaults to `latest` and may be a function receiving `{ importerName, dependencyName }`.
+- `builtinIgnore: true` enables Limina's built-in artifact ignore set only when `ignore` is omitted or a function returns `undefined`.
+- `ignore` may be an array of package-relative glob patterns or a function returning an array/`undefined`.
+- Empty tags and empty ignore patterns are rejected.
 
 ## Programmatic boundary auditor
 

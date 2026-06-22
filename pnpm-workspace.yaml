@@ -20,6 +20,7 @@ auditConfig:
   ignoreGhsas:
     - GHSA-67mh-4wv8-2f99
     - GHSA-4w7w-66w2-5vf9
+    - GHSA-fx2h-pf6j-xcff
 
 autoInstallPeers: false
 
@@ -76,6 +77,7 @@ catalogs:
     semver: ^7.8.1
     shiki: ^2.5.0
     tsx: ^4.21.0
+    boxen: ^8.0.1
     typescript: ~5.9.3
     vue-json-pretty: ^2.6.0
     vue-router: 4.6.4
@@ -168,6 +170,7 @@ overrides:
   '@eslint/eslintrc>js-yaml': 4.1.1
   '@swc/core': 1.13.5
   '@types/node': 20.19.0
+  form-data: 4.0.6
   gray-matter>js-yaml: 3.14.2
   lodash: 4.18.0
   minimatch@^10.0.0: ^10.2.3
@@ -178,6 +181,8 @@ overrides:
   minimatch@^9.0.0>brace-expansion: 5.0.6
   picomatch@^2.0.0: 2.3.2
   picomatch@^4.0.0: 4.0.4
+  tmp: 0.2.7
+  undici: 7.28.0
   undici-types: ^6.24.0
 
 packageExtensions:

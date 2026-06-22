@@ -3,9 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rolldown --config rolldown.config.ts",
-    "build:watch": "rolldown --config rolldown.config.ts --watch",
-    "typecheck": "limina checker build",
+    "build": "limina checker build tsconfig.dts.json",
+    "build:watch": "limina checker build tsconfig.dts.json -w",
     "lint": "eslint . --config ./dist/general.js --fix --cache",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -40,31 +39,16 @@
     "@typescript-eslint/parser": "catalog:lint",
     "typescript-eslint": "catalog:lint",
     "typescript": "catalog:dev",
-    "@docs-islands/utils": "workspace:*",
     "limina": "workspace:*",
-    "rolldown": "catalog:dev",
-    "rolldown-plugin-dts": "catalog:dev",
     "globals": "catalog:test",
     "del-cli": "catalog:dev",
     "vitest": "catalog:test"
   },
   "exports": {
-    ".": {
-      "types": "./src/general.ts",
-      "default": "./dist/general.js"
-    },
-    "./presets": {
-      "types": "./src/presets/index.ts",
-      "default": "./dist/presets/index.js"
-    },
-    "./plugins": {
-      "types": "./src/plugins/index.ts",
-      "default": "./dist/plugins/index.js"
-    },
-    "./config": {
-      "types": "./src/config/index.ts",
-      "default": "./dist/config/index.js"
-    },
+    ".": "./dist/general.js",
+    "./presets": "./dist/presets/index.js",
+    "./plugins": "./dist/plugins/index.js",
+    "./config": "./dist/config/index.js",
     "./package.json": "./package.json"
   }
 }

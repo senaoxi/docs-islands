@@ -8,8 +8,11 @@ import eslintPluginVue from 'eslint-plugin-vue';
 import type { defineConfig } from 'eslint/config';
 import globals from 'globals';
 import vueParser from 'vue-eslint-parser';
-import { supportedEcmaVersion, untypedTypeScriptRules } from '../config';
-import eslintGeneralConfig from '../general';
+import {
+  supportedEcmaVersion,
+  untypedTypeScriptRules,
+} from '../config/index.js';
+import eslintGeneralConfig from '../general.js';
 
 type Config = ReturnType<typeof defineConfig>;
 

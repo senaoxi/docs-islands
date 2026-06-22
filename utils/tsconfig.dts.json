@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "noEmit": false,
+    "allowJs": true,
+    "isolatedDeclarations": false,
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "declarationMap": true,
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+  },
+  "include": ["./src", "./bin/link-guard.js"]
+}

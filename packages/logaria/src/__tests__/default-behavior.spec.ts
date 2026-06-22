@@ -61,6 +61,25 @@ describe('Integration: Default Behavior', () => {
       ]);
     });
 
+    it('keeps summary box reports left aligned', () => {
+      setLoggerConfig({
+        debug: false,
+      });
+
+      const logger = createLogger({
+        main: '@docs-islands/test',
+      }).getLoggerByGroup('test.case.summary');
+      const summary = [
+        '┌ Source check summary ───────────────────────┐',
+        '│ Found 1 unused source module in 1 package.  │',
+        '└─────────────────────────────────────────────┘',
+      ].join('\n');
+
+      logger.error(summary);
+
+      expectConsoleMessages(consoleErrorSpy, [summary]);
+    });
+
     it('Case 25: No rules with debug=true outputs all levels with elapsed time', () => {
       setLoggerConfig({
         debug: true,
