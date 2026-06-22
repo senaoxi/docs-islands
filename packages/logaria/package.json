@@ -35,6 +35,7 @@
     "build": "rolldown --config rolldown.config.ts",
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "test": "vitest run",
+    "test:unit": "vitest run",
     "clean": "del-cli .tsbuild .eslintcache dist coverage node_modules"
   },
   "dependencies": {
