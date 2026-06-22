@@ -1,6 +1,6 @@
 # Limina Config Schema Reference
 
-Source-backed reference for the current `LiminaConfig` surface.
+Source-backed reference for the `LiminaConfig` surface.
 
 ## File Format
 
@@ -13,7 +13,10 @@ import { defineConfig } from 'limina';
 
 export default defineConfig({
   config: {
-    checkers: 'auto',
+    checkers: {
+      mode: 'auto',
+      exclude: [],
+    },
   },
 });
 ```
@@ -32,6 +35,7 @@ interface LiminaConfigEnv {
 ```ts
 interface LiminaConfig {
   config?: SharedLiminaConfig;
+  execution?: ExecutionConfig;
   graph?: GraphConfig;
   package?: PackageConfig;
   pipelines?: Record<string, PipelineStep[]>;
@@ -41,14 +45,19 @@ interface LiminaConfig {
 }
 ```
 
-Removed top-level `paths` is rejected.
+Top-level `paths` is not part of `LiminaConfig`.
 
 ## `config.checkers`
 
-Checker configuration is either public zero-config auto mode or an object keyed by checker name:
+Checker configuration is either omitted/explicit auto mode or an object keyed by checker name:
 
 ```ts
-type CheckerConfigMode = 'auto' | Record<string, CheckerConfig>;
+type CheckerConfigMode = AutoCheckerConfig | Record<string, CheckerConfig>;
+
+interface AutoCheckerConfig {
+  mode: 'auto';
+  exclude?: string[];
+}
 
 interface CheckerConfig {
   preset: 'tsc' | 'tsgo' | 'vue-tsc' | 'vue-tsgo' | 'svelte-check';
@@ -59,12 +68,14 @@ interface CheckerConfig {
 
 Rules:
 
-- `config.checkers` may be omitted; omission is equivalent to `config.checkers: 'auto'` for generated graph preparation and the default check pipeline.
+- `config.checkers` may be omitted; omission enables auto mode for generated graph preparation and the default check pipeline.
+- Explicit auto mode uses `config.checkers: { mode: 'auto', exclude?: string[] }`.
+- Auto mode must not be mixed with named checker entries.
 - Manual `include` entries are workspace-root-relative glob selectors that must match ordinary `tsconfig.json` entry files only. Non-entry `tsconfig.*.json` files become governed only when a selected `tsconfig.json` reaches them through ordinary references.
 - `exclude` is optional and filters matched source entry configs.
-- Built-in checker adapters own extension discovery. `extensions` is rejected.
-- `entry` and `routes` are removed and rejected with migration errors.
-- Custom checker preset strings are rejected because the current source has no public adapter registry.
+- Built-in checker adapters own extension discovery.
+- Manual checker entries consist of `preset`, `include`, and optional `exclude`.
+- Checker presets must be one of Limina's built-in presets.
 
 | Preset         | Source graph | Execution | Required peer packages                   |
 | -------------- | ------------ | --------- | ---------------------------------------- |
@@ -74,7 +85,7 @@ Rules:
 | `vue-tsgo`     | yes          | typecheck | `vue-tsgo`, `@typescript/native-preview` |
 | `svelte-check` | no           | typecheck | `svelte-check`                           |
 
-`getActiveCheckers(config)` returns manually configured checkers sorted by name. In auto mode it returns an empty array at plain config-validation time; generated graph preparation resolves real auto checkers by scanning ordinary `**/tsconfig.json` scopes.
+`getActiveCheckers(config)` returns manually configured checkers sorted by name. In omitted/auto mode it returns an empty array at plain config-validation time; generated graph preparation resolves real auto checkers by scanning ordinary `**/tsconfig.json` scopes.
 
 ## Auto Checker Mode
 
@@ -84,6 +95,20 @@ Auto mode scans ordinary `tsconfig.json` files outside ignored generated/build f
 - Scopes that contain Vue-only files become `vue` (`vue-tsc`).
 - A TypeScript scope that imports or references a Vue scope is promoted to `vue-tsc`, so a generated `tsc` consumer does not depend on a Vue provider.
 - Unsupported auto-scope extensions fail with a suggestion to configure checkers manually.
+
+## `config.imports`
+
+Import analysis settings shared by graph, proof, source, and checker tasks.
+
+```ts
+interface ImportAnalysisConfig {
+  vue?: 'heuristic' | 'compiler-sfc';
+}
+```
+
+- Omitted `vue` uses the heuristic Vue SFC script parser.
+- `vue: 'compiler-sfc'` uses `@vue/compiler-sfc` for Vue import extraction.
+- Any other value is rejected.
 
 ## `config.source`
 
@@ -108,7 +133,7 @@ Source-owned dependency usage checks.
 ```ts
 interface SourceCheckConfig {
   knip?: boolean | SourceKnipCheckConfig;
-  tsconfigOwnership?: SourceTsconfigOwnershipConfig;
+  importAuthority?: SourceImportAuthorityConfig;
 }
 
 interface SourceKnipCheckConfig {
@@ -136,13 +161,15 @@ interface SourceKnipIgnoredFileConfig {
   reason: string;
 }
 
-interface SourceTsconfigOwnershipConfig {
-  ignore?: SourceTsconfigOwnershipIgnoreEntry[];
+interface SourceImportAuthorityConfig {
+  allow?: SourceImportAuthorityAllowRule[];
 }
 
-interface SourceTsconfigOwnershipIgnoreEntry {
-  owner: string;
+interface SourceImportAuthorityAllowRule {
   files: string[];
+  packages?: string[];
+  specifiers?: string[];
+  owner?: string;
   reason: string;
 }
 ```
@@ -156,13 +183,17 @@ interface SourceTsconfigOwnershipIgnoreEntry {
 - `entry` adds package-owned source modules that should be treated as reachable roots.
 - `ignoreDependencies` suppresses declared workspace dependency findings by `dep` and `reason`.
 - `ignoreFiles` suppresses unused source module findings by `file` and `reason`.
-- Raw Knip `tsConfig` is no longer supported; Limina uses Knip defaults unless a package has a static script such as `limina checker build tsconfig.json`.
+- Limina uses Knip defaults unless a package has a static script such as `limina checker build tsconfig.json`; `source.knip.workspaces` accepts `entry`, `ignoreDependencies`, and `ignoreFiles`.
 
-`source.tsconfigOwnership` behavior:
+`source.importAuthority` behavior:
 
-- Source modules are resolved by searching upward for a bare `tsconfig.json` whose ordinary references reach exactly one owner config.
-- `ignore` is for owner-scoped file globs that intentionally skip this ownership requirement.
-- `source.tsconfigOwnership` belongs at top-level `source`, not under `config.source`; the misplaced shape is rejected.
+- Source imports must normally be authorized by the nearest pnpm workspace package manifest.
+- `allow[].packages` lets matching files also use the workspace root `package.json` as an authority manifest for listed package names or package-name globs. The root manifest must exist and must declare the package.
+- `allow[].specifiers` explicitly authorizes full import specifiers or specifier globs for matching files.
+- `allow[].files` is required and matches workspace-root-relative source file globs.
+- Each allow entry must include `packages` or `specifiers`, plus a non-empty `reason`.
+- `owner` optionally scopes the rule to a source owner identity: package name for named owners, or workspace-root-relative package directory for nameless owners.
+- Tsconfig-governance failures are fixed by changing `tsconfig.json` ownership/coverage.
 
 ## `graph`
 
@@ -179,7 +210,7 @@ interface GraphConditionDomain {
 }
 ```
 
-`conditionDomains` describes declaration reference trees that must share configured TypeScript `customConditions`. `entry` is a workspace-root-relative generated or source-mapped declaration entry checked by graph validation.
+`conditionDomains` describes declaration reference trees that must share configured TypeScript `customConditions`. `entry` is a workspace-root-relative source tsconfig selected by an active checker.
 
 ## `graph.rules`
 
@@ -202,7 +233,7 @@ Rules:
 - `deny.refs[].path` and `allow.refs[].path` resolve relative to the workspace root and must point to a reachable generated declaration project or a source tsconfig that maps to one through the generated graph.
 - `deny.deps[].name` accepts package roots, `package.json#imports` specifiers with optional `*`, Node builtins such as `fs` or `node:fs`, and `node:*`.
 - Relative paths, absolute paths, URL/data/file specifiers, and package subpaths such as `@scope/pkg/subpath` are rejected as deny dependency names.
-- Removed legacy `deny.workspaceDeps` and `deny.nodeBuiltins` are rejected; use `deny.deps`.
+- Use `deny.deps` for workspace package, `package.json#imports`, and Node builtin rules.
 
 ## `liminaOptions.implicitRefs`
 
@@ -308,6 +339,30 @@ Rules:
 
 `limina release check` also uses `package.entries` selection, rejects `private: true`, packs `outDir`, checks tarball hygiene, and validates source/output manifest consistency plus workspace publish dependency consistency.
 
+## `execution`
+
+Bounded parallelism settings shared by pipeline tasks, checker execution, package checks, and release checks.
+
+```ts
+type ExecutionConcurrency = number | 'auto';
+
+interface ExecutionConfig {
+  checkerBuild?: ExecutionConcurrency;
+  checkerTypecheck?: ExecutionConcurrency;
+  failFast?: boolean;
+  packageEntries?: ExecutionConcurrency;
+  releaseEntries?: ExecutionConcurrency;
+  tasks?: ExecutionConcurrency;
+}
+```
+
+Rules:
+
+- Concurrency values must be positive integers or `'auto'`.
+- `failFast` must be boolean when configured.
+- Unknown `execution` fields are rejected.
+- Defaults are `tasks: 'auto'`, `checkerBuild: 'auto'`, `checkerTypecheck: 2`, `packageEntries: 'auto'`, `releaseEntries: 2`, and `failFast: false`.
+
 ## `pipelines`
 
 ```ts
@@ -353,4 +408,4 @@ import { defineConfig, type LiminaConfig } from 'limina';
 - The package root is config-only: `defineConfig` plus config authoring types are public.
 - Runtime helpers such as `loadConfig`, checker resolution helpers, command runners, generated graph helpers, and resolved runtime types are internal.
 
-Deeper runtime validation for graph rules, package entries, proof allowlist, Knip workspace config, tsconfig ownership ignores, and `implicitRefs` happens inside the relevant commands.
+Deeper runtime validation for graph rules, package entries, proof allowlist, Knip workspace config, import authority rules, tsconfig governance, and `implicitRefs` happens inside the relevant commands.

@@ -1,6 +1,6 @@
 # Limina Architecture Reference
 
-The current mental model Limina expects, and the structural rules it enforces.
+The mental model Limina expects, and the structural rules it enforces.
 
 ## Two Validation Surfaces
 
@@ -178,13 +178,13 @@ graph: {
 - `#imports` specifiers match the current package's `imports` field and do not escape to another workspace owner.
 - Node builtins and self-package imports are exempt from normal external dependency authorization.
 - Knip-backed checks find unused workspace dependencies and unused source modules unless `source.knip` is `false`.
-- `source.tsconfigOwnership` verifies that package-owned source modules map upward to a unique ordinary `tsconfig.json` owner unless explicitly ignored.
+- Tsconfig governance verifies that package-owned source modules map upward to one ordinary `tsconfig.json` owner. Fix the source `tsconfig.json` coverage/reference shape when this fails.
 
 ## What `proof:check` Adds
 
 `proof:check` validates source coverage and generated graph alignment:
 
-- Source-level `tsconfig*.dts.json` configs are rejected; declaration configs are generated under `.limina`.
+- Declaration configs are generated under `.limina`; source-level `tsconfig*.dts.json` files are invalid.
 - Source leaf configs must not hand-maintain `references`.
 - Generated declaration configs and their source configs have matching files.
 - Type-affecting compiler options match between generated declaration configs and source configs.
@@ -212,4 +212,4 @@ graph: {
 
 `svelte-check` is typecheck-only and has no source graph capability, so `checker:typecheck` runs `svelte-check --tsconfig <generated entry>`.
 
-Prefer `vue-tsc` for first-class Vue project-reference builds. Current `vue-tsgo --build` does not preserve TypeScript project-reference boundaries or incremental build semantics, so Limina treats it as second-class execution.
+Prefer `vue-tsc` for first-class Vue project-reference builds. `vue-tsgo --build` does not preserve TypeScript project-reference boundaries or incremental build semantics, so Limina treats it as second-class execution.

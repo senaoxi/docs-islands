@@ -1,6 +1,6 @@
 # Limina Troubleshooting Reference
 
-Failure-by-failure cause and fix for current Limina error classes. Search for the leading error sentence.
+Failure-by-failure cause and fix for Limina error classes. Search for the leading error sentence.
 
 ## Config Loading
 
@@ -26,40 +26,50 @@ Failure-by-failure cause and fix for current Limina error classes. Search for th
 
 ## Config Shape
 
-### `config.checkers must be "auto" or an object keyed by checker name.`
+### `config.checkers must be an object auto config or an object keyed by checker name.`
 
-- **Cause**: `config.checkers` is neither omitted/`'auto'` nor an object.
-- **Fix**: Use `config.checkers: 'auto'` or an object like `{ typescript: { preset: 'tsc', include: ['packages/*/tsconfig.json'] } }`.
+- **Cause**: `config.checkers` is neither omitted nor an object.
+- **Fix**: Omit `config.checkers`, use `{ mode: 'auto', exclude: [] }`, or use named checker entries like `{ typescript: { preset: 'tsc', include: ['packages/*/tsconfig.json'] } }`.
+
+### `Invalid Limina checker config: config.checkers`
+
+- **Cause**: Auto checker config is not omitted or `{ mode: 'auto', exclude?: string[] }`.
+- **Fix**: Omit `config.checkers`, or write `config.checkers: { mode: 'auto', exclude: [] }`.
+
+### `auto checker config must not be mixed with named checker entries.`
+
+- **Cause**: `config.checkers` contains `mode: 'auto'` and one or more named checker entries.
+- **Fix**: Choose auto mode or manual named checker mode; do not combine them.
 
 ### `checker include must be a non-empty string array.`
 
 - **Cause**: A manual checker is missing `include` or has an invalid value.
 - **Fix**: Set `include` to workspace-root-relative selectors for ordinary `tsconfig.json` entry files.
 
-### `checker.entry has been removed; configure checker.include with source tsconfig selectors.`
+### `Invalid Limina checker entry config`
 
-- **Cause**: Old checker config uses `entry`.
-- **Fix**: Replace it with `include: ['path/to/tsconfig.json']`.
+- **Cause**: Checker entries are selected through `include`.
+- **Fix**: Use `include: ['path/to/tsconfig.json']`.
 
-### `checker extensions are fixed by built-in presets and cannot be configured.`
+### `Invalid Limina checker config: extensions`
 
-- **Cause**: Old checker config uses `extensions`.
-- **Fix**: Remove `extensions`; built-in checker adapters resolve supported extensions.
+- **Cause**: Built-in checker adapters resolve supported extensions.
+- **Fix**: Keep manual checker config to `preset`, `include`, and optional `exclude`.
 
-### `checker routes are not supported; configure checker.include with source tsconfig selectors.`
+### `Invalid Limina checker config: routes`
 
-- **Cause**: Old checker config uses `routes`.
+- **Cause**: Source graph routing comes from selected source `tsconfig.json` entries, ordinary source references, and `liminaOptions.implicitRefs`.
 - **Fix**: Configure source `tsconfig.json` entries through `include`; use ordinary source references or `liminaOptions.implicitRefs` for source edges.
 
 ### `Unsupported Limina checker preset:`
 
 - **Cause**: Preset is not one of `tsc`, `tsgo`, `vue-tsc`, `vue-tsgo`, or `svelte-check`.
-- **Fix**: Use a built-in preset. The current implementation has no public custom adapter registry.
+- **Fix**: Use a built-in preset.
 
-### `source.tsconfigOwnership belongs at the top-level source config, not under config.source.`
+### `unknown source config field.`
 
-- **Cause**: `tsconfigOwnership` was placed under `config.source`.
-- **Fix**: Move it to top-level `source.tsconfigOwnership`.
+- **Cause**: The top-level `source` object contains a field other than `knip` or `importAuthority`.
+- **Fix**: Remove unsupported fields. Tsconfig governance failures must be fixed by changing the relevant `tsconfig.json` coverage/reference shape.
 
 ### `Invalid Limina release config: ... release.contentHash`
 
@@ -93,9 +103,9 @@ Failure-by-failure cause and fix for current Limina error classes. Search for th
 - **Cause**: Two checkers with the same preset govern the same source tsconfig after solution references expand.
 - **Fix**: Split or narrow checker selectors so only one checker owns that source config for the preset.
 
-### `Source config contains files unsupported by its checker coverage:`
+### `Source config contains files outside checker coverage:`
 
-- **Cause**: A source config includes files whose extension is not supported by the checker preset covering it.
+- **Cause**: A source config includes files outside the extension capability of the checker preset covering it.
 - **Fix**: Add a checker with the needed capability through another `tsconfig.json` entry, or move the file to a config covered by the right checker.
 
 ### `Unsupported auto checker source file extension:`
@@ -167,20 +177,20 @@ Failure-by-failure cause and fix for current Limina error classes. Search for th
 - **Cause**: A `#imports` specifier does not match `package.json#imports`, resolves to another workspace owner, cannot be resolved, or escapes the current owner without a declared artifact dependency.
 - **Fix**: Correct `imports`, keep owner-local aliases inside the package, import other workspace packages by package name, or declare the artifact dependency.
 
-### `Source module has ambiguous tsconfig ownership:` / `Source module has no tsconfig ownership:`
+### `Tsconfig search cannot determine module owner:` / `Source module belongs to multiple tsconfig governance units:`
 
 - **Cause**: Upward bare `tsconfig.json` search cannot identify exactly one ordinary typecheck owner for a package-owned source module.
-- **Fix**: Make one `tsconfig.json` between the module directory and workspace root include or reference exactly one owner config, or add a scoped `source.tsconfigOwnership.ignore` entry with a reason.
+- **Fix**: Make one `tsconfig.json` between the module directory and workspace root include or reference exactly one owner config.
 
 ### `Invalid source Knip workspace config:`
 
 - **Cause**: `source.knip.workspaces` is not package-keyed object config, or a key does not name a workspace package.
 - **Fix**: Key entries by existing package names, for example `source.knip.workspaces["@example/app"]`.
 
-### `Unsupported source Knip workspace config: ... tsConfig`
+### `Invalid source Knip workspace config: ... tsConfig`
 
-- **Cause**: `source.knip.workspaces[...].tsConfig` is configured; this field is removed.
-- **Fix**: Remove `tsConfig`, or add a static package script such as `"build": "limina checker build tsconfig.json"` when the package needs a specific Knip tsconfig source.
+- **Cause**: `source.knip.workspaces` accepts `entry`, `ignoreDependencies`, and `ignoreFiles`.
+- **Fix**: Keep package-specific Knip config to those fields, or add a static package script such as `"build": "limina checker build tsconfig.json"` when the package needs a specific Knip tsconfig source.
 
 ### `Invalid source Knip entry config:` / `Invalid source Knip dependency ignore config:` / `Invalid source Knip file ignore config:`
 
@@ -189,9 +199,9 @@ Failure-by-failure cause and fix for current Limina error classes. Search for th
 
 ## Proof Check
 
-### `Source-level DTS config is no longer supported:`
+### `Source-level DTS config is invalid:`
 
-- **Cause**: A source-level `tsconfig*.dts.json` is checked in.
+- **Cause**: Declaration configs are generated under `.limina`.
 - **Fix**: Delete it from source. Limina generates declaration configs under `.limina` from checker `include` source tsconfigs.
 
 ### `Default tsconfig.json references a non-typecheck config:`
@@ -221,7 +231,7 @@ Failure-by-failure cause and fix for current Limina error classes. Search for th
 
 ### `DTS config file set does not match its local typecheck config:` / `DTS config overrides a typecheck compiler option from its local typecheck config:`
 
-- **Cause**: Generated declaration config output no longer reflects source config file/type semantics.
+- **Cause**: Generated declaration config output differs from source config file/type semantics.
 - **Fix**: Fix the source config/base config and regenerate `.limina` with `limina graph prepare`.
 
 ### `Duplicate checker graph coverage:`
@@ -268,12 +278,12 @@ Failure-by-failure cause and fix for current Limina error classes. Search for th
 
 ### `Unknown option: --checker. Use --preset instead.`
 
-- **Cause**: Removed checker build option.
+- **Cause**: Checker build selects presets with `--preset`.
 - **Fix**: Use `--preset tsc`, `--preset tsgo`, or `--preset vue-tsc`.
 
 ### `Unknown option: --project. Pass the config as a positional argument.`
 
-- **Cause**: Removed checker build option.
+- **Cause**: Checker build receives the config as a positional argument.
 - **Fix**: Run `limina checker build path/to/tsconfig.json`.
 
 ### `checker typecheck does not accept --preset.` / `checker typecheck does not accept --watch.`
@@ -281,10 +291,32 @@ Failure-by-failure cause and fix for current Limina error classes. Search for th
 - **Cause**: These flags only apply to targeted checker build.
 - **Fix**: Run `limina checker typecheck` with no config/preset/watch.
 
-### `No source-only checker entries configured.`
+### `No second-class checker entries configured.`
 
 - **Cause**: No `vue-tsgo` or `svelte-check` typecheck-only entries exist.
 - **Fix**: This is okay if all configured checkers are build-capable.
+
+## Check Issue Inventory
+
+### `limina check --issues does not accept a pipeline name`
+
+- **Cause**: `--issues` reads the last-run issue snapshot instead of running a pipeline.
+- **Fix**: Drop the pipeline name, for example `limina check --issues --verbose`.
+
+### `limina check --task, --checker, and --format require --issues`
+
+- **Cause**: Last-run issue inventory filters were used while running the check pipeline.
+- **Fix**: Add `--issues`, or remove those filters from the pipeline run.
+
+### `Invalid check --issues --format "...". Expected one of: human, json, ndjson.`
+
+- **Cause**: Unsupported issue inventory output format.
+- **Fix**: Use `--format human`, `--format json`, or `--format ndjson`.
+
+### `Unknown check --rule code "...".`
+
+- **Cause**: `--rule` was given a value outside Limina's stable issue code list.
+- **Fix**: Run `limina check --issues --rule --help` to see supported rule codes.
 
 ## Package Check
 
