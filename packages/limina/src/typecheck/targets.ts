@@ -17,6 +17,7 @@ import type {
   ResolvedCheckerConfig,
 } from '#config/runner';
 import { collectGraphProjectRouteFromRoot } from '#core/tsconfig/actions';
+import { uniqueValues } from '#utils/collections';
 
 export interface TypecheckTarget {
   args: string[];
@@ -241,7 +242,7 @@ export async function prepareVueTsgoCache(
     .filter((cachePath): cachePath is string => Boolean(cachePath));
 
   await Promise.all(
-    [...new Set(cachePaths)].map((cachePath) =>
+    uniqueValues(cachePaths).map((cachePath) =>
       rm(cachePath, {
         force: true,
         maxRetries: 3,

@@ -2,12 +2,15 @@
 import {
   type BuildCheckerPreset,
   getActiveCheckers,
+  isAutoCheckerConfigMode,
   type LiminaCommand,
   loadConfig,
   type PackageAttwProfile,
   type PackageCheckToolSelection,
   type ResolvedLiminaConfig,
 } from '#config/runner';
+import { resolveGeneratedGraphCheckers } from '#core/build-graph/runner';
+import { uniqueTrimmedNonEmptySortedStrings } from '#utils/collections';
 import { cac } from 'cac';
 import path from 'pathe';
 import { isLiminaCheckIssueCode } from './check-reporting/codes';
@@ -441,15 +444,7 @@ function parseCheckIssueFilterHelpKind(
 function uniqueSortedValues(
   values: readonly (string | undefined)[],
 ): CheckIssueFilterHelpValue[] {
-  return [
-    ...new Set(
-      values
-        .map((value) => value?.trim())
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ]
-    .sort((left, right) => left.localeCompare(right))
-    .map((name) => ({ name }));
+  return uniqueTrimmedNonEmptySortedStrings(values).map((name) => ({ name }));
 }
 
 function getSnapshotIssuePackageNames(
@@ -472,6 +467,13 @@ function getSnapshotIssueCheckerNames(
   );
 }
 
+function usesAutoCheckers(config: ResolvedLiminaConfig): boolean {
+  return (
+    config.config?.checkers === undefined ||
+    isAutoCheckerConfigMode(config.config.checkers)
+  );
+}
+
 function getCheckIssueTaskHelpValues(
   snapshot: Awaited<ReturnType<typeof readCheckIssueSnapshot>>,
 ): CheckIssueFilterHelpValue[] {
@@ -482,12 +484,16 @@ function getCheckIssueTaskHelpValues(
   ]);
 }
 
-function getCheckIssueCheckerHelpValues(options: {
+async function getCheckIssueCheckerHelpValues(options: {
   config: ResolvedLiminaConfig;
   snapshot: Awaited<ReturnType<typeof readCheckIssueSnapshot>>;
-}): CheckIssueFilterHelpValue[] {
+}): Promise<CheckIssueFilterHelpValue[]> {
+  const checkers = usesAutoCheckers(options.config)
+    ? await resolveGeneratedGraphCheckers(options.config)
+    : getActiveCheckers(options.config);
+
   return uniqueSortedValues([
-    ...getActiveCheckers(options.config).map((checker) => checker.name),
+    ...checkers.map((checker) => checker.name),
     ...getSnapshotIssueCheckerNames(options.snapshot),
   ]);
 }

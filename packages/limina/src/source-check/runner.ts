@@ -14,7 +14,6 @@ import {
   getTypecheckConfigPath,
   type ImportRecord,
   isDtsProjectConfig,
-  isRelativeSpecifier,
   parseProject,
   type ProjectInfo,
   resolveInternalImport,
@@ -29,6 +28,14 @@ import {
   type PackageOwner,
   type WorkspacePackage,
 } from '#core/workspace/actions';
+import { uniqueSortedStrings, uniqueValues } from '#utils/collections';
+import {
+  isBarePackageSpecifier,
+  isPackageImportSpecifier,
+  isRelativeSpecifier,
+  isUrlOrDataOrFileSpecifier,
+  isVirtualModuleSpecifier,
+} from '#utils/module-specifier';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
@@ -48,11 +55,7 @@ import {
 import {
   createWorkspaceDependencyKey,
   findPackageImportMatch,
-  isBarePackageSpecifier,
   isDependencyAuthorized,
-  isPackageImportSpecifier,
-  isUrlOrDataOrFileSpecifier,
-  isVirtualModuleSpecifier,
   type WorkspaceDependencyDeclaration,
 } from '../core/packages/authority';
 import {
@@ -791,7 +794,7 @@ function getSourceGovernanceContext(
   const checkers = generatedGraph?.checkers ?? getActiveCheckers(config);
 
   return {
-    checkerPresets: [...new Set(checkers.map((checker) => checker.preset))],
+    checkerPresets: uniqueValues(checkers.map((checker) => checker.preset)),
     extensions: normalizeExtensions(
       checkers.flatMap((checker) => checker.extensions),
     ),
@@ -1121,11 +1124,9 @@ async function addTsconfigGovernanceProblems(options: {
       continue;
     }
 
-    const uniqueOwners = [
-      ...new Set(
-        [...governanceUnits.values()].map((unit) => unit.owner.packageJsonPath),
-      ),
-    ];
+    const uniqueOwners = uniqueValues(
+      [...governanceUnits.values()].map((unit) => unit.owner.packageJsonPath),
+    );
 
     options.problems.push(
       [
@@ -1180,14 +1181,12 @@ function createKnipOwnerProjects(options: {
 }): KnipOwnerProject[] {
   return options.ownerModuleSets.map((moduleSet) => ({
     directory: moduleSet.owner.directory,
-    entryFiles: [
-      ...new Set([
-        ...(options.entryPatternsByOwnerName.get(
-          moduleSet.owner.name as string,
-        ) ?? []),
-        ...collectManifestSourceEntryPatterns(moduleSet),
-      ]),
-    ].sort(),
+    entryFiles: uniqueSortedStrings([
+      ...(options.entryPatternsByOwnerName.get(
+        moduleSet.owner.name as string,
+      ) ?? []),
+      ...collectManifestSourceEntryPatterns(moduleSet),
+    ]),
     ignoreFiles: moduleSet.files
       .filter((filePath) =>
         options.ignoredModuleKeys.has(

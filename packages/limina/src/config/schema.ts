@@ -1,5 +1,6 @@
 import { getCheckerAdapter } from '#checkers';
 import type { LiminaConfig } from '#config/runner';
+import { formatUnknownValue } from '#utils/values';
 import { z } from 'zod';
 
 const checkerExtensionsConfigReason =
@@ -498,14 +499,6 @@ const liminaConfigShapeSchema = z
 
     validateSourceImportAuthorityConfig(source.importAuthority, ctx);
   });
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
-}
 
 function formatZodPath(pathSegments: readonly PropertyKey[]): string {
   return pathSegments

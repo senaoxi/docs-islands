@@ -12,6 +12,7 @@ import type {
 import type { LiminaCore } from '#core';
 import { getPackageRootSpecifier } from '#core/workspace/actions';
 import { toRelativePath } from '#utils/path';
+import { isPlainRecord } from '#utils/values';
 import type {
   checkPackage,
   CheckPackageOptions,
@@ -121,10 +122,6 @@ const nodeBuiltinSpecifiers = new Set(
   ),
 );
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function createMissingPeerDependencyError(options: {
   command: string;
   error: unknown;
@@ -228,13 +225,13 @@ async function loadAttwPeer(): Promise<{
 function isPackagePublintCheckConfig(
   value: PackageEntry['publint'],
 ): value is PackagePublintCheckConfig {
-  return isRecord(value);
+  return isPlainRecord(value);
 }
 
 function isPackageAttwCheckConfig(
   value: PackageEntry['attw'],
 ): value is PackageAttwCheckConfig {
-  return isRecord(value);
+  return isPlainRecord(value);
 }
 
 function getPackagePublintCheckConfig(

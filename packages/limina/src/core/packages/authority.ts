@@ -1,12 +1,18 @@
-import path from 'pathe';
-
-import { isRelativeSpecifier } from '#core/import-graph/context';
 import type {
   NamedWorkspacePackage,
   PackageManifest,
   WorkspacePackage,
 } from '#core/workspace/actions';
 import { isNamedWorkspacePackage } from '#core/workspace/actions';
+import { isPlainRecord } from '#utils/values';
+import path from 'pathe';
+
+export {
+  isBarePackageSpecifier,
+  isPackageImportSpecifier,
+  isUrlOrDataOrFileSpecifier,
+  isVirtualModuleSpecifier,
+} from '#utils/module-specifier';
 
 export interface PackageImportMatch {
   key: string;
@@ -37,37 +43,6 @@ const dependencySectionNames: DependencySectionName[] = [
   'peerDependencies',
   'optionalDependencies',
 ];
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-export function isUrlOrDataOrFileSpecifier(specifier: string): boolean {
-  return (
-    specifier.startsWith('data:') ||
-    specifier.startsWith('file:') ||
-    specifier.startsWith('http:') ||
-    specifier.startsWith('https:')
-  );
-}
-
-export function isVirtualModuleSpecifier(specifier: string): boolean {
-  return specifier.startsWith('virtual:');
-}
-
-export function isPackageImportSpecifier(specifier: string): boolean {
-  return specifier.startsWith('#');
-}
-
-export function isBarePackageSpecifier(specifier: string): boolean {
-  return (
-    !isRelativeSpecifier(specifier) &&
-    !isPackageImportSpecifier(specifier) &&
-    !isUrlOrDataOrFileSpecifier(specifier) &&
-    !isVirtualModuleSpecifier(specifier) &&
-    !path.isAbsolute(specifier)
-  );
-}
 
 function collectDependencyDeclarations(
   manifest: PackageManifest,

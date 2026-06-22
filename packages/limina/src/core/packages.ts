@@ -1,4 +1,5 @@
 import type { PackageOwner, WorkspacePackage } from '#core/workspace/actions';
+import { uniqueSortedStrings } from '#utils/collections';
 import { isPathInsideDirectory } from '#utils/path';
 import type { BuildGraphCore } from './build-graph';
 import type { WorkspaceDependencyDeclaration } from './packages/authority';
@@ -94,29 +95,23 @@ export class PackageDomainCore {
       owners.find((candidate) =>
         isPathInsideDirectory(workspacePackage.directory, candidate.directory),
       ) ?? null;
-    const sourceConfigPaths = [
-      ...new Set(
-        [...graph.sourceToDts.values()].flatMap((sourceToDts) => [
-          ...sourceToDts.keys(),
-        ]),
-      ),
-    ]
-      .filter((configPath) =>
-        isPathInsideDirectory(configPath, workspacePackage.directory),
-      )
-      .sort();
+    const sourceConfigPaths = uniqueSortedStrings(
+      [...graph.sourceToDts.values()].flatMap((sourceToDts) => [
+        ...sourceToDts.keys(),
+      ]),
+    ).filter((configPath) =>
+      isPathInsideDirectory(configPath, workspacePackage.directory),
+    );
     const projects = await Promise.all(
       sourceConfigPaths.map((configPath) =>
         this.#tsconfig.getProject(configPath),
       ),
     );
-    const sourceModulePaths = [
-      ...new Set(projects.flatMap((project) => project.ownedFileNames)),
-    ]
-      .filter((filePath) =>
-        isPathInsideDirectory(filePath, workspacePackage.directory),
-      )
-      .sort();
+    const sourceModulePaths = uniqueSortedStrings(
+      projects.flatMap((project) => project.ownedFileNames),
+    ).filter((filePath) =>
+      isPathInsideDirectory(filePath, workspacePackage.directory),
+    );
 
     return {
       owner,

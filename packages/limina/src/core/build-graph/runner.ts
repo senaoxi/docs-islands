@@ -31,6 +31,7 @@ import {
   collectWorkspacePackages,
   type WorkspacePackage,
 } from '#core/workspace/actions';
+import { uniqueSortedStrings } from '#utils/collections';
 import {
   normalizeAbsolutePath,
   toPosixPath,
@@ -399,7 +400,7 @@ function collectCheckerSourceConfigModules(options: {
 
     options.collection.solutionReferencesBySourcePath.set(
       options.sourceConfigPath,
-      [...new Set(referenceSourceConfigPaths)].sort(),
+      uniqueSortedStrings(referenceSourceConfigPaths),
     );
 
     return;
@@ -542,13 +543,11 @@ async function collectCheckerSourceConfigs(
     });
   }
 
-  collection.rootConfigPaths = [
-    ...new Set(
-      sourcePaths.filter((sourcePath) =>
-        collection.buildModulesBySourcePath.has(sourcePath),
-      ),
+  collection.rootConfigPaths = uniqueSortedStrings(
+    sourcePaths.filter((sourcePath) =>
+      collection.buildModulesBySourcePath.has(sourcePath),
     ),
-  ].sort();
+  );
 
   return collection;
 }
@@ -969,7 +968,7 @@ async function resolveAutoCheckers(
   return checkers;
 }
 
-async function resolveGeneratedGraphCheckers(
+export async function resolveGeneratedGraphCheckers(
   config: ResolvedLiminaConfig,
   options: Pick<
     PrepareGeneratedTsconfigGraphOptions,
@@ -1012,12 +1011,10 @@ function createSourceProject(options: {
       rootDir: options.config.rootDir,
       sourceConfigPath: options.sourceConfigPath,
     }),
-    fileNames: [
-      ...new Set([
-        ...ownedFileNames,
-        ...readRelativeTypeFiles(options.config, options.sourceConfigPath),
-      ]),
-    ].sort(),
+    fileNames: uniqueSortedStrings([
+      ...ownedFileNames,
+      ...readRelativeTypeFiles(options.config, options.sourceConfigPath),
+    ]),
     graphRules: readGraphRules(options.config, options.sourceConfigPath),
     ownedFileNames,
     options: parsed.options,
@@ -1958,13 +1955,11 @@ function createResult(options: {
 export function collectGeneratedSourceConfigPaths(
   generatedGraph: GeneratedTsconfigGraphResult,
 ): string[] {
-  return [
-    ...new Set(
-      [...generatedGraph.sourceToBuild.values()].flatMap((sourceToBuild) => [
-        ...sourceToBuild.keys(),
-      ]),
-    ),
-  ].sort((left, right) => left.localeCompare(right));
+  return uniqueSortedStrings(
+    [...generatedGraph.sourceToBuild.values()].flatMap((sourceToBuild) => [
+      ...sourceToBuild.keys(),
+    ]),
+  );
 }
 
 export async function prepareGeneratedTsconfigGraph(

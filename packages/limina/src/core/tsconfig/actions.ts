@@ -7,11 +7,13 @@ import {
 import type { CheckerPreset } from '#config/runner';
 import { getActiveCheckers, type ResolvedLiminaConfig } from '#config/runner';
 import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
+import { uniqueValues } from '#utils/collections';
 import {
   normalizeAbsolutePath,
   toPosixPath,
   toRelativePath,
 } from '#utils/path';
+import { formatUnknownValue } from '#utils/values';
 import { existsSync, statSync } from 'node:fs';
 import path from 'pathe';
 import ts from 'typescript';
@@ -172,14 +174,6 @@ export function getRawReferencePathsForConfig(
   return collectReferencePathInfosForConfig(rootDir, configPath).references.map(
     (reference) => reference.resolvedPath,
   );
-}
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
 }
 
 export function collectReferencePathInfosForConfig(
@@ -584,9 +578,10 @@ export function collectSourceGraphProjectExtensions(
       };
 
       projectContextsByPath.set(projectPath, {
-        checkerPresets: [
-          ...new Set([...projectContext.checkerPresets, route.checkerPreset]),
-        ],
+        checkerPresets: uniqueValues([
+          ...projectContext.checkerPresets,
+          route.checkerPreset,
+        ]),
         extensions: normalizeExtensions([
           ...projectContext.extensions,
           ...routeExtensions,

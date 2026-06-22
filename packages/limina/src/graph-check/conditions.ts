@@ -7,11 +7,13 @@ import {
   isDtsProjectConfig,
   type ProjectInfo,
 } from '#core/import-graph/context';
+import { uniqueValues } from '#utils/collections';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   toRelativePath,
 } from '#utils/path';
+import { formatUnknownValue, isPlainRecord } from '#utils/values';
 
 import type { CheckCounter } from '../check-reporting/stats';
 
@@ -35,7 +37,7 @@ function normalizeCustomConditions(
     return [];
   }
 
-  return [...new Set(value)];
+  return uniqueValues(value);
 }
 
 function getProjectCustomConditions(project: ProjectInfo): string[] {
@@ -51,18 +53,6 @@ function customConditionsEqual(
   right: readonly string[],
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function formatConditionValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
 }
 
 function createGeneratedGraphPathAliases(
@@ -241,7 +231,7 @@ function addConditionDomainShapeProblem(options: {
       'Invalid graph condition domain config:',
       `  field: ${options.field}`,
       ...(Object.hasOwn(options, 'value')
-        ? [`  value: ${formatConditionValue(options.value)}`]
+        ? [`  value: ${formatUnknownValue(options.value)}`]
         : []),
       `  reason: ${options.reason}`,
     ].join('\n'),

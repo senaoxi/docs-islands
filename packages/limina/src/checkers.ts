@@ -5,8 +5,13 @@ import type {
   CheckerPreset,
   ResolvedCheckerConfig,
 } from '#config/runner';
+import { uniqueSortedStrings, uniqueValues } from '#utils/collections';
+import {
+  resolvePathMappedModuleCandidate,
+  resolveRelativeModuleCandidate,
+} from '#utils/module-resolution';
 import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
-import { existsSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'pathe';
 import ts from 'typescript';
@@ -244,9 +249,7 @@ function resolveContextCheckerPresets(
   context: CheckerProjectParseContext,
 ): CheckerPreset[] {
   return context.checkerPresets.length > 0
-    ? [...new Set(context.checkerPresets)].sort((left, right) =>
-        left.localeCompare(right),
-      )
+    ? (uniqueSortedStrings(context.checkerPresets) as CheckerPreset[])
     : (['tsc'] satisfies CheckerPreset[]);
 }
 
@@ -565,153 +568,6 @@ function resolveVueProjectExtensionsForChecker(
   ]);
 }
 
-function isRelativeSpecifier(specifier: string): boolean {
-  return (
-    specifier === '.' ||
-    specifier === '..' ||
-    specifier.startsWith('./') ||
-    specifier.startsWith('../')
-  );
-}
-
-function pathHasExtension(value: string): boolean {
-  return path.extname(value).length > 0;
-}
-
-function candidatePathsForBasePath(
-  basePath: string,
-  extensions: string[],
-): string[] {
-  if (pathHasExtension(basePath)) {
-    return [basePath];
-  }
-
-  return extensions.flatMap((extension) => [
-    `${basePath}${extension}`,
-    path.join(basePath, `index${extension}`),
-  ]);
-}
-
-function resolveCandidatePath(candidatePath: string): string | null {
-  if (!existsSync(candidatePath)) {
-    return null;
-  }
-
-  if (!statSync(candidatePath).isFile()) {
-    return null;
-  }
-
-  return normalizeAbsolutePath(candidatePath);
-}
-
-function resolveRelativeModuleCandidate(options: {
-  containingFile: string;
-  extensions: string[];
-  specifier: string;
-}): string | null {
-  if (!isRelativeSpecifier(options.specifier)) {
-    return null;
-  }
-
-  const resolvedSpecifierPath = path.resolve(
-    path.dirname(options.containingFile),
-    options.specifier,
-  );
-
-  for (const candidatePath of candidatePathsForBasePath(
-    resolvedSpecifierPath,
-    options.extensions,
-  )) {
-    const resolvedPath = resolveCandidatePath(candidatePath);
-
-    if (resolvedPath) {
-      return resolvedPath;
-    }
-  }
-
-  return null;
-}
-
-function matchPathPattern(pattern: string, specifier: string): string | null {
-  const wildcardIndex = pattern.indexOf('*');
-
-  if (wildcardIndex === -1) {
-    return pattern === specifier ? '' : null;
-  }
-
-  const prefix = pattern.slice(0, wildcardIndex);
-  const suffix = pattern.slice(wildcardIndex + 1);
-
-  if (!specifier.startsWith(prefix) || !specifier.endsWith(suffix)) {
-    return null;
-  }
-
-  return specifier.slice(prefix.length, specifier.length - suffix.length);
-}
-
-function applyPathPattern(pattern: string, matchedText: string): string {
-  return pattern.includes('*') ? pattern.replace('*', matchedText) : pattern;
-}
-
-function getPathsBasePath(compilerOptions: ts.CompilerOptions): string | null {
-  const pathsBasePath = (compilerOptions as { pathsBasePath?: unknown })
-    .pathsBasePath;
-
-  if (typeof pathsBasePath === 'string') {
-    return pathsBasePath;
-  }
-
-  return compilerOptions.baseUrl ?? null;
-}
-
-function resolvePathMappedModuleCandidate(options: {
-  compilerOptions: ts.CompilerOptions;
-  extensions: string[];
-  specifier: string;
-}): string | null {
-  const paths = options.compilerOptions.paths;
-  const pathsBasePath = getPathsBasePath(options.compilerOptions);
-
-  if (!paths || !pathsBasePath) {
-    return null;
-  }
-
-  const pathEntries = Object.entries(paths).sort(([left], [right]) => {
-    const leftPrefixLength = left.split('*')[0]?.length ?? left.length;
-    const rightPrefixLength = right.split('*')[0]?.length ?? right.length;
-
-    return rightPrefixLength - leftPrefixLength;
-  });
-
-  for (const [alias, targets] of pathEntries) {
-    const matchedText = matchPathPattern(alias, options.specifier);
-
-    if (matchedText === null) {
-      continue;
-    }
-
-    for (const target of targets) {
-      const resolvedTargetPath = path.resolve(
-        pathsBasePath,
-        applyPathPattern(target, matchedText),
-      );
-
-      for (const candidatePath of candidatePathsForBasePath(
-        resolvedTargetPath,
-        options.extensions,
-      )) {
-        const resolvedPath = resolveCandidatePath(candidatePath);
-
-        if (resolvedPath) {
-          return resolvedPath;
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
 function resolveTypeScriptModuleName(
   options: CheckerModuleResolveOptions,
 ): string | null {
@@ -747,11 +603,9 @@ function mergeParsedProjectConfigs(
       ...extensions,
       ...parsedConfigs.flatMap((parsedConfig) => parsedConfig.extensions),
     ]),
-    fileNames: [
-      ...new Set(
-        parsedConfigs.flatMap((parsedConfig) => parsedConfig.fileNames),
-      ),
-    ].sort(),
+    fileNames: uniqueSortedStrings(
+      parsedConfigs.flatMap((parsedConfig) => parsedConfig.fileNames),
+    ),
     options: firstConfig.options,
   };
 }
@@ -1177,7 +1031,7 @@ export function getResolvedCheckers(config: {
 }
 
 export function normalizeExtensions(extensions: string[]): string[] {
-  return [...new Set(extensions)].sort((left, right) => {
+  return uniqueValues(extensions).sort((left, right) => {
     const lengthDelta = right.length - left.length;
 
     return lengthDelta === 0 ? left.localeCompare(right) : lengthDelta;

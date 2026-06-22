@@ -1,4 +1,5 @@
 import type { ResolvedLiminaConfig } from '#config/runner';
+import { uniqueSortedStrings, uniqueValues } from '#utils/collections';
 import {
   normalizeAbsolutePath,
   normalizeSlashes,
@@ -149,10 +150,6 @@ function colorIssueBlockLines(lines: readonly string[]): string[] {
   return lines.map((line, index) =>
     index === 0 ? colorIssueTitleLine(line) : colorIssueLabelLine(line),
   );
-}
-
-function uniqueSorted(values: Iterable<string>): string[] {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
 function hasFilters(options: SourceIssueReportOptions): boolean {
@@ -590,7 +587,7 @@ function formatGenericSourceIssueGroup(
     return [];
   }
 
-  const locations = uniqueSorted(
+  const locations = uniqueSortedStrings(
     group.issues.map(getGenericSourceIssueLocation),
   );
   const visibleLocations = options.verbose
@@ -830,8 +827,8 @@ function formatNoMatchedIssues(
   issues: readonly SourceCheckIssue[],
   options: SourceIssueReportOptions,
 ): string[] {
-  const packages = uniqueSorted(issues.map((issue) => issue.ownerName));
-  const rules = uniqueSorted(issues.map((issue) => issue.code));
+  const packages = uniqueSortedStrings(issues.map((issue) => issue.ownerName));
+  const rules = uniqueSortedStrings(issues.map((issue) => issue.code));
 
   return [
     'No issues matched the selected filters.',
@@ -988,7 +985,7 @@ function getLegacyGroupKey(problem: LegacyProblem): string {
 function groupLegacyProblems(
   legacyProblems: readonly string[],
 ): LegacyProblemGroup[] {
-  const uniqueProblems = [...new Set(legacyProblems)];
+  const uniqueProblems = uniqueValues(legacyProblems);
   const groups = new Map<string, LegacyProblemGroup>();
 
   for (const rawProblem of uniqueProblems) {
@@ -1072,7 +1069,7 @@ function getLegacyProblemPrimaryLocation(problem: LegacyProblem): string {
 }
 
 function getLegacyProblemLocations(group: LegacyProblemGroup): string[] {
-  return uniqueSorted(group.items.map(getLegacyProblemPrimaryLocation));
+  return uniqueSortedStrings(group.items.map(getLegacyProblemPrimaryLocation));
 }
 
 function formatLegacyGroupHeader(group: LegacyProblemGroup): string[] {
@@ -1349,7 +1346,7 @@ export function formatSourceCheckHumanReport(options: {
   report?: SourceIssueReportOptions;
 }): string {
   const report = options.report ?? {};
-  const availableRules = uniqueSorted(
+  const availableRules = uniqueSortedStrings(
     options.issues.map((issue) => issue.code),
   );
   const unknownRuleLines = formatUnknownRules(report.rules, availableRules);
@@ -1405,7 +1402,7 @@ export function formatSourceCheckHumanReport(options: {
     const summaryLines: string[] = [];
 
     if (unusedModuleIssueCount > 0) {
-      const packageCount = uniqueSorted(
+      const packageCount = uniqueSortedStrings(
         unusedModuleGroups.flatMap((group) =>
           group[0] ? [group[0].ownerName] : [],
         ),
@@ -1417,7 +1414,7 @@ export function formatSourceCheckHumanReport(options: {
     }
 
     if (unusedDependencyIssueCount > 0) {
-      const packageCount = uniqueSorted(
+      const packageCount = uniqueSortedStrings(
         unusedDependencyGroups.flatMap((group) =>
           group[0] ? [group[0].ownerName] : [],
         ),
@@ -1429,7 +1426,7 @@ export function formatSourceCheckHumanReport(options: {
     }
 
     if (genericIssueCount > 0) {
-      const packageCount = uniqueSorted(
+      const packageCount = uniqueSortedStrings(
         genericIssueGroups.flatMap((group) =>
           group.issues[0] ? [group.issues[0].ownerName] : [],
         ),

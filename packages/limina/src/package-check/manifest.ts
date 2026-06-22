@@ -1,4 +1,5 @@
 import { isLocalPackageDependencySpecifier } from '#core/workspace/actions';
+import { isPlainRecord } from '#utils/values';
 
 export interface DistPackageJson {
   dependencies?: Record<string, string>;
@@ -27,10 +28,6 @@ interface PackageDependencyEntry {
   specifier: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function collectPackageDependencyEntries(
   manifest: DistPackageJson,
 ): PackageDependencyEntry[] {
@@ -45,7 +42,7 @@ function collectPackageDependencyEntries(
   for (const sectionName of sectionNames) {
     const section = manifest[sectionName];
 
-    if (!isRecord(section)) {
+    if (!isPlainRecord(section)) {
       continue;
     }
 
@@ -113,7 +110,7 @@ export function collectSelfSpecifierMatchers(
   const exact = new Set<string>([packageName]);
   const prefixes: string[] = [];
 
-  if (!isRecord(exportsField)) {
+  if (!isPlainRecord(exportsField)) {
     return {
       exact,
       prefixes,

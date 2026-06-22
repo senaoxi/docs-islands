@@ -1,4 +1,5 @@
 import { normalizeSlashes, toRelativePath } from '#utils/path';
+import { isPlainRecord } from '#utils/values';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'pathe';
@@ -181,10 +182,6 @@ export interface SourceIssueSnapshot {
   legacyProblemCount: number;
   status: SourceIssueSnapshotStatus;
   version: typeof SOURCE_ISSUE_SNAPSHOT_VERSION;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function isSourceIssueSnapshotStatus(

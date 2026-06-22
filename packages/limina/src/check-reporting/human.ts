@@ -1,5 +1,6 @@
 import boxen from 'boxen';
 
+import { uniqueSortedStrings } from '#utils/collections';
 import { formatCheckSummaryBlock } from '../reporting';
 import type {
   LiminaCheckIssue,
@@ -247,14 +248,12 @@ function getIssueLocation(issue: LiminaCheckIssue): string {
 }
 
 function getGroupLocations(group: IssueGroup): string[] {
-  return [
-    ...new Set(
-      group.issues
-        .flatMap(getIssueLocations)
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  ].sort((left, right) => left.localeCompare(right));
+  return uniqueSortedStrings(
+    group.issues
+      .flatMap(getIssueLocations)
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 }
 
 function getGroupLocationsHeading(group: IssueGroup): string {

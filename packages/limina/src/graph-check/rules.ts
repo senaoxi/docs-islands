@@ -4,7 +4,17 @@ import {
   getPackageRootSpecifier,
   type WorkspacePackage,
 } from '#core/workspace/actions';
+import {
+  isPackageImportSpecifier,
+  isRelativeSpecifier,
+  isUrlOrDataOrFileSpecifier,
+} from '#utils/module-specifier';
 import { normalizeAbsolutePath } from '#utils/path';
+import {
+  formatUnknownValue,
+  isNonEmptyString,
+  isPlainRecord,
+} from '#utils/values';
 import { builtinModules } from 'node:module';
 import path from 'pathe';
 
@@ -45,49 +55,11 @@ const nodeBuiltinNames = new Set(
   }),
 );
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
-}
-
 function addRuleEntryConfigProblem(
   problems: string[],
   details: string[],
 ): void {
   problems.push(['Invalid graph rule config:', ...details].join('\n'));
-}
-
-function isUrlOrDataOrFileSpecifier(specifier: string): boolean {
-  return (
-    specifier.startsWith('data:') ||
-    specifier.startsWith('file:') ||
-    specifier.startsWith('http:') ||
-    specifier.startsWith('https:')
-  );
-}
-
-function isRelativeSpecifier(specifier: string): boolean {
-  return (
-    specifier === '.' ||
-    specifier === '..' ||
-    specifier.startsWith('./') ||
-    specifier.startsWith('../')
-  );
-}
-
-function isPackageImportPattern(name: string): boolean {
-  return name.startsWith('#');
 }
 
 function matchWildcardPattern(pattern: string, value: string): boolean {
@@ -145,7 +117,7 @@ function createNormalizedDep(
     };
   }
 
-  if (isPackageImportPattern(name)) {
+  if (isPackageImportSpecifier(name)) {
     return {
       kind: 'package-import',
       matchAllNodeBuiltins: false,
@@ -609,7 +581,7 @@ export function getDeniedDepRuleForSpecifier(
 
   if (
     isRelativeSpecifier(specifier) ||
-    isPackageImportPattern(specifier) ||
+    isPackageImportSpecifier(specifier) ||
     isUrlOrDataOrFileSpecifier(specifier) ||
     path.isAbsolute(specifier)
   ) {

@@ -3,21 +3,10 @@ import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import type { WorkspacePackage } from '#core/workspace/actions';
 import { isNamedWorkspacePackage } from '#core/workspace/actions';
 import { toRelativePath } from '#utils/path';
+import { formatUnknownValue, isPlainRecord } from '#utils/values';
 import type { KnipSourceAnalysisGroup } from './knip';
 
 export type SourceKnipWorkspaceConfigRecord = Record<string, unknown>;
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
-}
 
 export function formatSourceKnipWorkspaceField(packageName: string): string {
   return `source.knip.workspaces[${JSON.stringify(packageName)}]`;

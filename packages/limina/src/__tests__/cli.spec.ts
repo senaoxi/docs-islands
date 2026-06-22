@@ -1385,6 +1385,84 @@ describe('limina CLI', () => {
     }
   }, 40_000);
 
+  it('prints checker filter help from auto checker discovery', async () => {
+    const rootDir = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'limina-cli-auto-issues-')),
+    );
+    const cliPath = fileURLToPath(
+      new URL('../../bin/limina.js', import.meta.url),
+    );
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages:\n  - app\n',
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `export default ${JSON.stringify(
+          {
+            config: {
+              checkers: {
+                mode: 'auto',
+              },
+            },
+          },
+          null,
+          2,
+        )};\n`,
+      );
+      await writeText(
+        path.join(rootDir, 'app/src/index.ts'),
+        'export const value = 1;\n',
+      );
+      await writeText(
+        path.join(rootDir, 'app/tsconfig.json'),
+        stringifyConfig({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*.ts'],
+        }),
+      );
+
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          '--config',
+          path.join(rootDir, 'limina.config.mjs'),
+          'check',
+          '--issues',
+          '--checker',
+          '--help',
+        ],
+        {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            CI: 'true',
+          },
+        },
+      );
+      const plainStdout = stripAnsi(result.stdout);
+
+      expect(result.stdout).toContain(`${ANSI_ESCAPE}[`);
+      expect(plainStdout).toContain('Check issue checkers:');
+      expect(plainStdout).toContain('- typescript  0 issues');
+      expect(plainStdout).not.toContain('No check issue snapshot found.');
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  }, 15_000);
+
   it('runs release check with repeated package filters from the public command', async () => {
     const rootDir = await realpath(
       await mkdtemp(path.join(tmpdir(), 'limina-cli-release-')),

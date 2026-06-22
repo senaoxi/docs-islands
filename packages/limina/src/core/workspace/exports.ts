@@ -10,8 +10,12 @@ import type {
   WorkspacePackage,
 } from '#core/workspace/actions';
 import { isNamedWorkspacePackage } from '#core/workspace/actions';
-import { normalizeAbsolutePath, toPosixPath } from '#utils/path';
-import { existsSync, statSync } from 'node:fs';
+import {
+  candidatePathsForBasePath,
+  resolveExistingFilePath,
+} from '#utils/module-resolution';
+import { toPosixPath } from '#utils/path';
+import { isPlainRecord } from '#utils/values';
 import path from 'pathe';
 import { glob } from 'tinyglobby';
 import type ts from 'typescript';
@@ -60,10 +64,6 @@ type PackageExportValue = unknown;
 const typeScriptRuntimeModulePattern = /\.(?:cjs|mjs|jsx|js)$/u;
 const typeScriptDeclarationModulePattern = /\.d\.(?:cts|mts|ts)$/u;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function isSubpathExportMap(exportsField: Record<string, unknown>): boolean {
   return Object.keys(exportsField).some(
     (key) => key === '.' || key.startsWith('./'),
@@ -85,7 +85,7 @@ function collectExportTargets(value: PackageExportValue): string[] {
     return value.flatMap(collectExportTargets);
   }
 
-  if (isRecord(value)) {
+  if (isPlainRecord(value)) {
     return Object.values(value).flatMap(collectExportTargets);
   }
 
@@ -236,7 +236,7 @@ async function collectPackageExportEntries(
     subpath: string;
     value: PackageExportValue;
   }[] =
-    isRecord(exportsField) && isSubpathExportMap(exportsField)
+    isPlainRecord(exportsField) && isSubpathExportMap(exportsField)
       ? Object.entries(exportsField)
           .filter(([subpath]) => subpath === '.' || subpath.startsWith('./'))
           .map(([subpath, value]) => ({
@@ -311,18 +311,6 @@ function pathMatchesExtension(filePath: string, extensions: string[]): boolean {
   );
 }
 
-function resolveCandidatePath(candidatePath: string): string | null {
-  if (!existsSync(candidatePath)) {
-    return null;
-  }
-
-  if (!statSync(candidatePath).isFile()) {
-    return null;
-  }
-
-  return normalizeAbsolutePath(candidatePath);
-}
-
 function resolveTargetWithCheckerExtensions(options: {
   entry: PackageExportEntry;
   extensions: string[];
@@ -337,29 +325,17 @@ function resolveTargetWithCheckerExtensions(options: {
       stripDotSlash(target),
     );
 
-    if (path.extname(targetPath)) {
-      const resolvedPath = resolveCandidatePath(targetPath);
+    for (const candidatePath of candidatePathsForBasePath(
+      targetPath,
+      normalizeExtensions(options.extensions),
+    )) {
+      const resolvedPath = resolveExistingFilePath(candidatePath);
 
       if (
         resolvedPath &&
         pathMatchesExtension(resolvedPath, options.extensions)
       ) {
         return resolvedPath;
-      }
-
-      continue;
-    }
-
-    for (const extension of normalizeExtensions(options.extensions)) {
-      for (const candidatePath of [
-        `${targetPath}${extension}`,
-        path.join(targetPath, `index${extension}`),
-      ]) {
-        const resolvedPath = resolveCandidatePath(candidatePath);
-
-        if (resolvedPath) {
-          return resolvedPath;
-        }
       }
     }
   }

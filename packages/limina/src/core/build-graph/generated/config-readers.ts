@@ -7,28 +7,18 @@ import {
   readJsonConfig,
   resolveReferencePath,
 } from '#core/tsconfig/actions';
+import { uniqueValues } from '#utils/collections';
 import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
+import {
+  formatUnknownValue,
+  isNonEmptyString,
+  isPlainRecord,
+} from '#utils/values';
 
 export interface ImplicitRef {
   path: string;
   reason: string;
   targetConfigPath: string;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
 }
 
 export function isDefaultTsconfigPath(configPath: string): boolean {
@@ -60,14 +50,12 @@ export function readGraphRules(
   const graphRules = (liminaOptions as { graphRules?: unknown }).graphRules;
 
   return Array.isArray(graphRules)
-    ? [
-        ...new Set(
-          graphRules.filter(
-            (label): label is string =>
-              typeof label === 'string' && label.trim().length > 0,
-          ),
+    ? uniqueValues(
+        graphRules.filter(
+          (label): label is string =>
+            typeof label === 'string' && label.trim().length > 0,
         ),
-      ].map((label) => label.trim())
+      ).map((label) => label.trim())
     : [];
 }
 
@@ -358,5 +346,5 @@ export function collectTypeRootCandidates(options: {
     currentDir = parentDir;
   }
 
-  return [...new Set(candidates)];
+  return uniqueValues(candidates);
 }

@@ -24,6 +24,7 @@ import {
   readJsonConfig,
   resolveReferencePath,
 } from '#core/tsconfig/actions';
+import { uniqueSortedStrings, uniqueValues } from '#utils/collections';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
@@ -308,7 +309,7 @@ function getActiveCheckerContext(
   const checkers = generatedGraph?.checkers ?? getActiveCheckers(config);
 
   return {
-    checkerPresets: [...new Set(checkers.map((checker) => checker.preset))],
+    checkerPresets: uniqueValues(checkers.map((checker) => checker.preset)),
     extensions: normalizeExtensions(
       checkers.flatMap((checker) => checker.extensions),
     ),
@@ -566,12 +567,10 @@ function collectProjectContextsByPath(
       });
 
       projectContextsByPath.set(projectPath, {
-        checkerPresets: [
-          ...new Set([
-            ...existingContext.checkerPresets,
-            ...routeContext.checkerPresets,
-          ]),
-        ],
+        checkerPresets: uniqueValues([
+          ...existingContext.checkerPresets,
+          ...routeContext.checkerPresets,
+        ]),
         extensions: normalizeExtensions([
           ...existingContext.extensions,
           ...routeContext.extensions,
@@ -1315,9 +1314,9 @@ function addDuplicateGraphCoverageProblems(options: {
     }
 
     for (const presetOwners of ownersByPreset.values()) {
-      const uniqueOwners = [
-        ...new Set(presetOwners.map((owner) => owner.configPath)),
-      ];
+      const uniqueOwners = uniqueValues(
+        presetOwners.map((owner) => owner.configPath),
+      );
 
       if (uniqueOwners.length <= 1) {
         continue;
@@ -1382,7 +1381,7 @@ function addDuplicateTypecheckOwnershipProblems(options: {
         toRelativePath(options.config.rootDir, right),
       ),
   )) {
-    const uniqueOwners = [...new Set(owners)];
+    const uniqueOwners = uniqueValues(owners);
 
     if (uniqueOwners.length <= 1) {
       continue;
@@ -1528,11 +1527,9 @@ export async function runProofCheckImpl(
   const graphRouteCollection = await preflight.ensureGraphProjectRoutes();
   const entryRouteCollection =
     await preflight.ensureCheckerEntryProjectRoutes();
-  const entryProjectPaths = [
-    ...new Set(
-      entryRouteCollection.routes.flatMap((route) => route.projectPaths),
-    ),
-  ].sort();
+  const entryProjectPaths = uniqueSortedStrings(
+    entryRouteCollection.routes.flatMap((route) => route.projectPaths),
+  );
   const entryProjectPathSet = new Set(entryProjectPaths);
   const entryProjectContextsByPath = collectProjectContextsByPath(
     config,

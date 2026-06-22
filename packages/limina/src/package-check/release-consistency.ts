@@ -13,6 +13,7 @@ import {
   type PublishDependencySectionName,
 } from '#core/workspace/actions';
 import { toRelativePath } from '#utils/path';
+import { isPlainRecord } from '#utils/values';
 import { unpack } from '@publint/pack';
 import { NpmPackageJsonLint } from 'npm-package-json-lint';
 import path from 'pathe';
@@ -219,10 +220,6 @@ const PACKED_MANIFEST_LINT_CONFIG = {
   },
 } as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function isLinkDependencySpecifier(specifier: string): boolean {
   return specifier.startsWith('link:');
 }
@@ -382,7 +379,7 @@ async function fetchRegistryPackageMetadata(
   }
 
   const metadata = (await response.json()) as unknown;
-  const registryMetadata = isRecord(metadata)
+  const registryMetadata = isPlainRecord(metadata)
     ? (metadata as RegistryPackageMetadata)
     : null;
 
@@ -394,13 +391,13 @@ function findRegistryVersionMetadata(
   metadata: RegistryPackageMetadata,
   version: string,
 ): RegistryVersionMetadata | null {
-  if (!isRecord(metadata.versions)) {
+  if (!isPlainRecord(metadata.versions)) {
     return null;
   }
 
   const versionMetadata = metadata.versions[version];
 
-  return isRecord(versionMetadata)
+  return isPlainRecord(versionMetadata)
     ? (versionMetadata as RegistryVersionMetadata)
     : null;
 }
@@ -409,7 +406,7 @@ function findRegistryDistTagVersion(
   metadata: RegistryPackageMetadata,
   distTag: string,
 ): string | null {
-  if (!isRecord(metadata['dist-tags'])) {
+  if (!isPlainRecord(metadata['dist-tags'])) {
     return null;
   }
 
@@ -423,7 +420,7 @@ function findRegistryDistTagVersion(
 function getRegistryTarballUrl(
   versionMetadata: RegistryVersionMetadata,
 ): string | null {
-  if (!isRecord(versionMetadata.dist)) {
+  if (!isPlainRecord(versionMetadata.dist)) {
     return null;
   }
 
@@ -607,7 +604,7 @@ function readPackedPackageVersion(
       Buffer.from(packageJsonFile.data).toString('utf8'),
     ) as unknown;
 
-    if (!isRecord(manifest) || typeof manifest.version !== 'string') {
+    if (!isPlainRecord(manifest) || typeof manifest.version !== 'string') {
       return null;
     }
 

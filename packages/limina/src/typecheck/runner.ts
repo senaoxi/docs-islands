@@ -21,6 +21,7 @@ import {
   isOrdinarySourceTypecheckConfigPath,
   resolveProjectConfigPath,
 } from '#core/tsconfig/actions';
+import { uniqueSortedStrings } from '#utils/collections';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
@@ -683,9 +684,9 @@ async function resolveBuildTarget(
   const buildCapableTargets = managedTargets.filter(
     ({ checker }) => getCheckerAdapter(checker.preset)?.execution === 'build',
   );
-  const availableCheckers = [
-    ...new Set(buildCapableTargets.map(({ checker }) => checker.preset)),
-  ].sort();
+  const availableCheckers = uniqueSortedStrings(
+    buildCapableTargets.map(({ checker }) => checker.preset),
+  );
   const checkerTargets = options.checker
     ? buildCapableTargets.filter(
         ({ checker }) => checker.preset === options.checker,
@@ -707,7 +708,7 @@ async function resolveBuildTarget(
 function shouldWarnForBuildCheckerPresetCombination(
   presets: string[],
 ): boolean {
-  const uniquePresets = [...new Set(presets)].sort();
+  const uniquePresets = uniqueSortedStrings(presets);
 
   if (uniquePresets.length <= 1) {
     return false;

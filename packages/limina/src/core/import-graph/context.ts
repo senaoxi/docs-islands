@@ -24,6 +24,9 @@ import {
   normalizeAbsolutePath,
   toRelativePath,
 } from '#utils/path';
+import { formatUnknownValue } from '#utils/values';
+
+export { isRelativeSpecifier } from '#utils/module-specifier';
 
 export interface ProjectInfo {
   checkerPresets: CheckerProjectParseContext['checkerPresets'];
@@ -36,15 +39,6 @@ export interface ProjectInfo {
   options: ts.CompilerOptions;
   references: Set<string>;
   resolverConfigPath: string;
-}
-
-export function isRelativeSpecifier(specifier: string): boolean {
-  return (
-    specifier === '.' ||
-    specifier === '..' ||
-    specifier.startsWith('./') ||
-    specifier.startsWith('../')
-  );
 }
 
 export function isDtsProjectConfig(configPath: string): boolean {
@@ -60,14 +54,6 @@ export function formatImportRecordLocation(
   importRecord: ImportRecord,
 ): string {
   return `${toRelativePath(rootDir, importRecord.filePath)}:${importRecord.line} (kind: ${importRecord.kind})`;
-}
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
 }
 
 function readProjectGraphRules(

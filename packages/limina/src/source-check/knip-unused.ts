@@ -7,12 +7,14 @@ import type {
   WorkspacePackage,
 } from '#core/workspace/actions';
 import { isNamedWorkspacePackage } from '#core/workspace/actions';
+import { uniqueSortedStrings } from '#utils/collections';
 import {
   isPathInsideDirectory,
   normalizeAbsolutePath,
   normalizeSlashes,
   toRelativePath,
 } from '#utils/path';
+import { formatUnknownValue, isPlainRecord } from '#utils/values';
 import {
   createWorkspaceDependencyKey,
   type WorkspaceDependencyDeclaration,
@@ -37,18 +39,6 @@ export interface OwnerSourceModuleSet {
 export interface UnusedModuleConfig {
   entryPatternsByOwnerName: Map<string, string[]>;
   ignoredKeys: Set<string>;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function formatUnknownValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-
-  return JSON.stringify(value);
 }
 
 export function createPackageDependencyIssueKey(
@@ -512,7 +502,7 @@ export function collectUnusedModuleConfig(options: {
         if (ownerRelativePatterns.length > 0) {
           entryPatternsByOwnerName.set(
             ownerName,
-            [...new Set(ownerRelativePatterns)].sort(),
+            uniqueSortedStrings(ownerRelativePatterns),
           );
         }
       } else {

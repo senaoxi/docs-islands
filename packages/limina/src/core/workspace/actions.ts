@@ -1,4 +1,5 @@
 import type { ResolvedLiminaConfig } from '#config/runner';
+import { uniqueBy } from '#utils/collections';
 import { normalizeAbsolutePath } from '#utils/path';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -225,18 +226,10 @@ function getPnpmCommandCandidates(): {
     },
   );
 
-  const seen = new Set<string>();
-
-  return candidates.filter((candidate) => {
-    const key = `${candidate.command}\0${candidate.argsPrefix.join('\0')}`;
-
-    if (seen.has(key)) {
-      return false;
-    }
-
-    seen.add(key);
-    return true;
-  });
+  return uniqueBy(
+    candidates,
+    (candidate) => `${candidate.command}\0${candidate.argsPrefix.join('\0')}`,
+  );
 }
 
 function formatCommandError(error: unknown): string {

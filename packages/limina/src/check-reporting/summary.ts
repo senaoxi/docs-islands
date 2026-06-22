@@ -1,3 +1,4 @@
+import { uniqueValues } from '#utils/collections';
 import { normalizeSlashes } from '#utils/path';
 import path from 'pathe';
 import { generatedRootDirName } from '../core/build-graph/generated/paths';
@@ -842,13 +843,11 @@ function getFailedTask(run: LiminaCheckRunSummary | undefined): string | null {
     return run.blockedBy.task;
   }
 
-  const failedTasks = [
-    ...new Set(
-      run?.tasks
-        .filter((task) => task.status === 'failed')
-        .map((task) => task.name),
-    ),
-  ];
+  const failedTasks = uniqueValues(
+    run?.tasks
+      .filter((task) => task.status === 'failed')
+      .map((task) => task.name) ?? [],
+  );
 
   return failedTasks.length === 1 ? failedTasks[0] : null;
 }

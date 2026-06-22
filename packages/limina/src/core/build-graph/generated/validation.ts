@@ -6,6 +6,7 @@ import type {
   ResolvedCheckerConfig,
   ResolvedLiminaConfig,
 } from '#config/runner';
+import { uniqueSortedStrings } from '#utils/collections';
 import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import {
   capabilityDiscoveryExtensions,
@@ -65,9 +66,7 @@ export function addDuplicateCheckerOwnershipProblems(options: {
   }
 
   for (const ownership of ownersByPresetAndSourcePath.values()) {
-    const checkerNames = [...new Set(ownership.checkerNames)].sort(
-      (left, right) => left.localeCompare(right),
-    );
+    const checkerNames = uniqueSortedStrings(ownership.checkerNames);
 
     if (checkerNames.length < 2) {
       continue;
@@ -110,9 +109,7 @@ export function addOverlappingCheckerEntryProblems(options: {
   }
 
   for (const [entryConfigPath, checkerNames] of checkerNamesByEntryPath) {
-    const uniqueCheckerNames = [...new Set(checkerNames)].sort((left, right) =>
-      left.localeCompare(right),
-    );
+    const uniqueCheckerNames = uniqueSortedStrings(checkerNames);
 
     if (uniqueCheckerNames.length < 2) {
       continue;
