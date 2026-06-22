@@ -1,6 +1,6 @@
 # Limina CLI Reference
 
-Every public command, action, flag, and exit-code rule currently emitted by `limina`.
+Every public command, action, flag, and exit-code rule emitted by `limina`.
 
 Invocation form:
 
@@ -30,12 +30,23 @@ What it does:
 
 1. Locates the pnpm workspace root (`pnpm-workspace.yaml`).
 2. Confirms the workspace root.
-3. Writes an auto-first `limina.config.mjs` with `config.checkers: 'auto'`.
+3. Writes an auto-first `limina.config.mjs` with `config.checkers: { mode: 'auto', exclude: [] }`.
 4. Ensures `.limina/` is ignored in the root `.gitignore`.
 5. Creates or updates the root `package.json` with `"limina:build": "limina checker build"` and missing `limina` / `typescript` devDependencies.
-6. Removes a legacy root `"limina:check": "limina check"` script when it still has that exact value.
-7. Deletes an existing root `.limina` file or directory, but does not create `.limina` graph files.
+6. Normalizes the root script surface around `"limina:build": "limina checker build"`.
+7. Clears an existing root `.limina` path and leaves graph generation to `limina graph prepare`, graph-consuming commands, or `limina check`.
 8. In interactive mode, asks whether to install the Limina skill for the current project. `--yes` skips skill installation and prints the manual command.
+
+The generated config uses this explicit auto form:
+
+```js
+config: {
+  checkers: {
+    mode: 'auto',
+    exclude: [],
+  },
+},
+```
 
 Refusal conditions:
 
@@ -48,17 +59,55 @@ Exit code: non-zero on any refusal or write error.
 
 Run the built-in default pipeline.
 
-Order: `graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck`. Stops on the first failure; remaining steps are reported as skipped.
+Order: `graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck`. The default check schedules these built-in tasks as independent bounded work and reports every completed task; task failures do not hide later built-in task results.
 
 `-p, --package <name>` passes one or more package entry names to package-aware tasks when they appear in a pipeline. The built-in default pipeline does not include `package:check` or `release:check`.
 
 Exit code: 1 if any step fails, 0 otherwise.
+
+Flags accepted while running a check:
+
+| Flag                | Effect                                                                            |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `--verbose`         | Show full issue details in deferred reports and the final check issue guidance.   |
+| `--rule <code>`     | Filter source issue details by stable rule code while source issues are printed.  |
+| `--file <path>`     | Filter source issue details by exact workspace-root-relative file path.           |
+| `--scope <glob>`    | Filter source issue details by path scope.                                        |
+| `--package <name>`  | Filter package-aware pipeline tasks and source/check issue reports by package.    |
+| `--task <name>`     | Requires `--issues`; not valid while running the check pipeline.                  |
+| `--checker <name>`  | Requires `--issues`; not valid while running the check pipeline.                  |
+| `--format <format>` | Requires `--issues`; use `human`, `json`, or `ndjson` for issue inventory output. |
+| `--issues`          | Read the last-run issue inventory instead of running the pipeline.                |
 
 ## `limina check <pipeline> [-p name]`
 
 Run the user-defined pipeline at `pipelines[<name>]`. This only runs configured pipelines; there is no fallback to the default.
 
 Exit code: 1 if the name is missing or any step fails.
+
+## `limina check --issues [filters]`
+
+Read `.limina/check/last-run.json` and print a filtered issue inventory from the last recorded check-like command. This is a standalone reporting mode:
+
+- It does not accept a pipeline name.
+- `--task`, `--checker`, and `--format` require `--issues`.
+- `--format` accepts `human`, `json`, or `ndjson`; omitted means human output.
+- `--verbose` is the only detail-expansion knob.
+- Filters may be repeated: `--task`, `--checker`, `--package`/`-p`, `--rule`, `--file`, and `--scope`.
+- `--rule` rejects unknown stable rule codes and suggests `limina check --issues --rule --help`.
+- Filter help is available through `--task --help`, `--checker --help`, `--package --help`, and `--rule --help` after `--issues`.
+- If no snapshot exists, Limina prints `No check issue snapshot found.` instead of running a check.
+
+Examples:
+
+```sh
+limina check --issues
+limina check --issues --verbose
+limina check --issues --task source:check --rule LIMINA_SOURCE_UNUSED_MODULE
+limina check --issues --format json
+limina check --issues --format ndjson
+limina check --issues --rule --help
+```
 
 ## `limina graph <prepare|check|export>`
 
@@ -93,8 +142,6 @@ Exports Limina's package dependency graph JSON.
 | `--view <view>`   | `all`, `source`, `artifact` | Select dependency edge kinds. Invalid values are rejected.   |
 | `--output <path>` | file path                   | Write JSON to a file. Without it, JSON is printed to stdout. |
 
-There is no `limina graph sync` command in the current CLI.
-
 ## `limina source check`
 
 Action must be `check`.
@@ -108,7 +155,7 @@ Validates package-owner and source usage rules:
 - Dependency authorization accepts `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`.
 - `#imports` specifiers must match the current package's `imports` field, must stay within the owner unless resolving to a declared artifact package, and must not resolve to another workspace owner.
 - Knip-backed unused workspace dependency and unused module checks run unless `source.knip` is `false`.
-- Package-owned source modules must resolve to a unique ordinary `tsconfig.json` owner unless ignored through `source.tsconfigOwnership.ignore`.
+- Package-owned source modules must resolve upward to one ordinary `tsconfig.json` governance unit. Fix the `tsconfig.json` coverage/reference shape when this check fails.
 
 Exit code: 1 on any violation.
 
@@ -118,7 +165,7 @@ Action must be `check`.
 
 Validates source coverage proof:
 
-- Source-level hand-maintained `tsconfig*.dts.json` configs are rejected; Limina generates declaration configs under `.limina`.
+- Declaration configs are generated under `.limina`; source-level `tsconfig*.dts.json` files are invalid.
 - Source typecheck leaf configs must not hand-maintain `references`; use a solution-style `tsconfig.json` or `liminaOptions.implicitRefs`.
 - Pure aggregators contain only `$schema`, `files: []`, `references`, and allowed Limina metadata.
 - A default `tsconfig.json` aggregator references only ordinary typecheck configs, not build or declaration configs.
@@ -144,12 +191,12 @@ With `config`, Limina resolves the argument from cwd:
 | `--preset <p>`  | `tsc`, `tsgo`, `vue-tsc` | Select a build-capable checker preset. Requires a `config` argument. |
 | `-w`, `--watch` | boolean                  | Watch and preserve rebuild output. Requires a `config` argument.     |
 
-Removed or rejected options:
+Option rules:
 
-- `--checker` is rejected; use `--preset`.
-- `--project` is rejected; pass the config as the positional argument.
-- `--preset` without a config is rejected.
-- `--watch` without a config is rejected.
+- Select a checker with `--preset`.
+- Pass the config as the positional argument.
+- Use `--preset` only with a config argument.
+- Use `--watch` only with a config argument.
 
 Exit code: 1 if dependency preflight fails, the selected managed target has no build-capable checker, the selected preset is not available for the source config, or any checker exits non-zero.
 

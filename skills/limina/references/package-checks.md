@@ -263,6 +263,6 @@ release: {
 - `ignore` may be an array of package-relative glob patterns or a function returning an array/`undefined`.
 - Empty tags and empty ignore patterns are rejected.
 
-## Programmatic boundary auditor
+## Boundary auditor access
 
-The runtime boundary auditor is exported as `auditPublishedPackageBoundaries` (not from the top-level `limina` entry — it lives in the package check command module). For most use cases run `limina package check --tool boundary` instead of calling it directly.
+Use `limina package check --tool boundary` for published-output boundary validation. The package root is a CLI/config authoring surface.

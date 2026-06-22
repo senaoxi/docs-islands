@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Limina'
+  short_description: 'Configure and operate the Limina CLI'
+  default_prompt: 'Use $limina to align a Limina config or CLI workflow with the source implementation.'
