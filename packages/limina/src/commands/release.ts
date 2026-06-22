@@ -18,6 +18,12 @@ import {
   type LiminaCheckRunCheckItemSummary,
 } from '../check-reporting/snapshot';
 import { createCheckItemStats } from '../check-reporting/stats';
+import { resolveReleaseEntryConcurrency } from '../execution/config';
+import { runPool } from '../execution/pool';
+import type {
+  TaskProgressItem,
+  TaskProgressReporter,
+} from '../execution/progress';
 import type { LiminaFlowReporter } from '../flow';
 import { clearCliScreen, formatErrorMessage, ReleaseLogger } from '../logger';
 import {
@@ -38,14 +44,25 @@ export interface RunReleaseCheckOptions {
   config: ResolvedLiminaConfig;
   core?: LiminaCore;
   cwd?: string;
+  deferSnapshot?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   issues?: LiminaCheckIssue[];
   onStats?: (stats: LiminaCheckRunTaskStats) => void;
   packageNames?: readonly string[];
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
   report?: CheckIssueReportOptions;
 }
+
+interface ReleaseCheckEntryRunResult {
+  durationMs: number;
+  issues: LiminaCheckIssue[];
+  label: string;
+  passed: boolean;
+}
+
+type ReleasePlanEntry = PackageEntrySelectionPlan['entries'][number];
 
 function logReleaseCheckPlan(options: {
   config: ResolvedLiminaConfig;
@@ -70,6 +87,30 @@ function logReleaseCheckPlan(options: {
       ),
     ].join('\n'),
   );
+}
+
+function createReleaseProgressItems(
+  entries: readonly ReleasePlanEntry[],
+  progress: TaskProgressReporter | undefined,
+): Map<string, TaskProgressItem | undefined> {
+  return new Map(
+    entries.map((entry) => [entry.label, progress?.planItem(entry.label)]),
+  );
+}
+
+function finishReleaseProgressItem(
+  progressItem: TaskProgressItem | undefined,
+  result: ReleaseCheckEntryRunResult,
+): void {
+  if (result.passed) {
+    progressItem?.pass(undefined, {
+      elapsedTimeMs: result.durationMs,
+    });
+  } else {
+    progressItem?.fail(undefined, {
+      elapsedTimeMs: result.durationMs,
+    });
+  }
 }
 
 function collectOutputManifestProblems(options: {
@@ -273,10 +314,13 @@ async function runReleaseCheckEntry(options: {
   issueSink?: LiminaCheckIssue[];
   label: string;
   outDir: string;
+  progressItem?: TaskProgressItem;
 }): Promise<boolean> {
-  const task = options.flow?.start(`release entry: ${options.label}`, {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progressItem
+    ? undefined
+    : options.flow?.start(`release entry: ${options.label}`, {
+        depth: options.flowDepth ?? 0,
+      });
   const outputPackageJsonPath = path.join(options.outDir, 'package.json');
   let packedDist: PackedPackageTarball | undefined;
 
@@ -365,6 +409,70 @@ async function runReleaseCheckEntry(options: {
   }
 }
 
+async function runReleaseCheckEntries(
+  options: RunReleaseCheckOptions,
+  entries: readonly ReleasePlanEntry[],
+): Promise<ReleaseCheckEntryRunResult[]> {
+  if (entries.length === 0) {
+    return [];
+  }
+
+  const progressItems = createReleaseProgressItems(entries, options.progress);
+
+  return await runPool({
+    concurrency: resolveReleaseEntryConcurrency({
+      config: options.config,
+      itemCount: entries.length,
+    }),
+    items: entries,
+    onError: (entry, error): ReleaseCheckEntryRunResult => ({
+      durationMs: 0,
+      issues: [
+        createTaskFailureIssue({
+          code: 'LIMINA_RELEASE_CHECK_FAILED',
+          detailLines: [formatErrorMessage(error)],
+          filePath: options.config.configPath,
+          fix: 'Inspect the release check error above, then rerun `limina release check`.',
+          packageName: entry.label,
+          reason: `Release check failed: ${formatErrorMessage(error)}.`,
+          rootDir: options.config.rootDir,
+          task: 'release:check',
+          title: 'Release check failed',
+          tool: 'release',
+        }),
+      ],
+      label: entry.label,
+      passed: false,
+    }),
+    onResult: (entry, result) => {
+      finishReleaseProgressItem(progressItems.get(entry.label), result);
+    },
+    onStart: (entry) => {
+      progressItems.get(entry.label)?.start();
+    },
+    run: async (entry): Promise<ReleaseCheckEntryRunResult> => {
+      const issues: LiminaCheckIssue[] = [];
+      const startedAt = performance.now();
+      const entryPassed = await runReleaseCheckEntry({
+        config: options.config,
+        flow: options.flow,
+        flowDepth: (options.flowDepth ?? 0) + 1,
+        issueSink: issues,
+        label: entry.label,
+        outDir: entry.outDir,
+        progressItem: progressItems.get(entry.label),
+      });
+
+      return {
+        durationMs: performance.now() - startedAt,
+        issues,
+        label: entry.label,
+        passed: entryPassed,
+      };
+    },
+  });
+}
+
 export async function runReleaseCheck(
   options: RunReleaseCheckOptions,
 ): Promise<boolean> {
@@ -374,9 +482,11 @@ export async function runReleaseCheck(
 
   const elapsed = createElapsedTimer();
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  const task = options.flow?.start('release check', {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start('release check', {
+        depth: options.flowDepth ?? 0,
+      });
 
   try {
     if (!options.report?.defer) {
@@ -396,33 +506,20 @@ export async function runReleaseCheck(
       plan,
     });
 
-    let passed = true;
-    const issues = options.issues ?? [];
-    const checkItems: LiminaCheckRunCheckItemSummary[] = [];
-
-    for (const entry of plan.entries) {
-      const startedAt = performance.now();
-      const issueCountBefore = issues.length;
-      const entryPassed = await runReleaseCheckEntry({
-        config: options.config,
-        flow: options.flow,
-        flowDepth: (options.flowDepth ?? 0) + 1,
-        issueSink: issues,
-        label: entry.label,
-        outDir: entry.outDir,
-      });
-      const issueCount = Math.max(0, issues.length - issueCountBefore);
-
-      checkItems.push(
+    const entryResults = await runReleaseCheckEntries(options, plan.entries);
+    const issues = entryResults.flatMap((result) => result.issues);
+    const checkItems: LiminaCheckRunCheckItemSummary[] = entryResults.map(
+      (result) =>
         createCheckItemStats({
-          durationMs: performance.now() - startedAt,
-          issues: entryPassed ? 0 : Math.max(1, issueCount),
-          name: entry.label,
+          durationMs: result.durationMs,
+          issues: result.passed ? 0 : Math.max(1, result.issues.length),
+          name: result.label,
           total: 1,
         }),
-      );
-      passed = entryPassed && passed;
-    }
+    );
+    const passed = entryResults.every((result) => result.passed);
+
+    options.issues?.push(...issues);
 
     options.onStats?.({
       items: checkItems,
@@ -434,9 +531,11 @@ export async function runReleaseCheck(
     });
 
     if (passed) {
-      await completeCheckIssueSnapshot({
-        rootDir: options.config.rootDir,
-      });
+      if (!options.deferSnapshot) {
+        await completeCheckIssueSnapshot({
+          rootDir: options.config.rootDir,
+        });
+      }
 
       if (!options.report?.defer && !options.flow?.interactive) {
         ReleaseLogger.success('release check finished', elapsed());
@@ -465,10 +564,14 @@ export async function runReleaseCheck(
               }),
             ];
 
-      await appendCheckIssues({
-        issues: reportIssues,
-        rootDir: options.config.rootDir,
-      });
+      if (options.deferSnapshot) {
+        options.issues?.push(...reportIssues);
+      } else {
+        await appendCheckIssues({
+          issues: reportIssues,
+          rootDir: options.config.rootDir,
+        });
+      }
       if (!options.report?.defer) {
         ReleaseLogger.error(
           formatCheckIssueHumanReport({
@@ -501,10 +604,14 @@ export async function runReleaseCheck(
       tool: 'release',
     });
 
-    await appendCheckIssues({
-      issues: [issue],
-      rootDir: options.config.rootDir,
-    });
+    if (options.deferSnapshot) {
+      options.issues?.push(issue);
+    } else {
+      await appendCheckIssues({
+        issues: [issue],
+        rootDir: options.config.rootDir,
+      });
+    }
     if (!options.report?.defer) {
       ReleaseLogger.error(
         formatCheckIssueHumanReport({

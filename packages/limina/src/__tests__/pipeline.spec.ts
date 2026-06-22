@@ -377,6 +377,37 @@ describe('runPipeline', () => {
     }
   });
 
+  it('renders default check task tree before auto checker discovery resolves', async () => {
+    const fixture = await createConfig();
+    const { chunks, flow } = createTtyFlow();
+    let rejectGeneratedGraph: ((error: Error) => void) | undefined;
+    const generatedGraph = new Promise<GeneratedTsconfigGraphResult>(
+      (_resolve, reject) => {
+        rejectGeneratedGraph = reject;
+      },
+    );
+
+    try {
+      const check = runDefaultCheck(fixture.config, {
+        flow,
+        generatedGraphProvider: () => generatedGraph,
+      });
+
+      expect(chunks.join('')).toContain('◇      graph check\n');
+      expect(chunks.join('')).toContain('◇      source check\n');
+      expect(chunks.join('')).toContain('◇      proof check\n');
+      expect(chunks.join('')).toContain('◇      checker build\n');
+      expect(chunks.join('')).toContain('◇      checker typecheck\n');
+
+      rejectGeneratedGraph?.(new Error('delayed generated graph'));
+
+      await expect(check).resolves.toBe(false);
+    } finally {
+      rejectGeneratedGraph?.(new Error('test cleanup'));
+      await fixture.cleanup();
+    }
+  });
+
   it('passes all command steps in order', async () => {
     const fixture = await createConfig();
     const { chunks, flow } = createFlow();
@@ -775,15 +806,16 @@ describe('runPipeline', () => {
         false,
       );
 
-      expect(
-        chunks.some((chunk) => chunk.includes('[fail] command failed:')),
-      ).toBe(true);
+      expect(chunks.some((chunk) => chunk.includes('[fail] command:'))).toBe(
+        true,
+      );
       expect(
         chunks.some((chunk) => chunk.includes('[fail] pipeline blocked: demo')),
       ).toBe(true);
-      expect(chunks.some((chunk) => chunk.includes('[skip] skipped:'))).toBe(
+      expect(chunks.some((chunk) => chunk.includes('[skip] command:'))).toBe(
         true,
       );
+      expect(chunks.some((chunk) => chunk.includes('blocked by'))).toBe(true);
     } finally {
       await fixture.cleanup();
     }

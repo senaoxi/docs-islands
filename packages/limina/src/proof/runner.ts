@@ -48,6 +48,7 @@ import {
   createCheckCounter,
   createCheckItemAccumulator,
 } from '../check-reporting/stats';
+import type { TaskProgressReporter } from '../execution/progress';
 import type { LiminaFlowReporter } from '../flow';
 import { ProofLogger } from '../logger';
 import { type LiminaPreflightManager, resolvePreflight } from '../preflight';
@@ -243,13 +244,23 @@ function formatProofProblemReport(options: {
 export interface RunProofCheckOptions {
   clearScreen?: boolean;
   core?: LiminaCore;
+  deferSnapshot?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  issues?: LiminaCheckIssue[];
   onStats?: (stats: LiminaCheckRunTaskStats) => void;
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
   report?: CheckIssueReportOptions;
 }
+
+const PROOF_CHECK_ITEM_NAMES = [
+  'project routes and configs',
+  'checker coverage targets',
+  'proof allowlist',
+  'source coverage',
+] as const;
 
 interface ConfigFileOwner {
   checkerPreset: ResolvedCheckerConfig['preset'];
@@ -1508,10 +1519,13 @@ export async function runProofCheckImpl(
   config: ResolvedLiminaConfig,
   options: {
     core?: LiminaCore;
+    deferSnapshot?: boolean;
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+    issues?: LiminaCheckIssue[];
     logSuccess?: boolean;
     onStats?: (stats: LiminaCheckRunTaskStats) => void;
     preflight?: LiminaPreflightManager;
+    progress?: TaskProgressReporter;
     report?: CheckIssueReportOptions;
   } = {},
 ): Promise<boolean> {
@@ -1521,6 +1535,10 @@ export async function runProofCheckImpl(
   const checkItems = createCheckItemAccumulator(
     () => problems.length + issues.length,
     () => checks.value,
+    {
+      plannedItems: PROOF_CHECK_ITEM_NAMES,
+      progress: options.progress,
+    },
   );
   const preflight = resolvePreflight(config, options);
   const generatedGraph = await preflight.ensureGeneratedGraph();
@@ -1545,12 +1563,27 @@ export async function runProofCheckImpl(
     (configPath) => path.basename(configPath) === 'tsconfig.json',
   );
   const proofCheckTotal = entryProjectPaths.length + dtsConfigPaths.length;
+  const collectIssues = async (
+    reportIssues: readonly LiminaCheckIssue[],
+  ): Promise<void> => {
+    options.issues?.push(...reportIssues);
+
+    if (options.deferSnapshot) {
+      return;
+    }
+
+    await appendCheckIssues({
+      issues: reportIssues,
+      rootDir: config.rootDir,
+    });
+  };
 
   problems.push(
     ...graphRouteCollection.problems,
     ...entryRouteCollection.problems,
   );
 
+  checkItems.start('project routes and configs');
   addDtsConfigProblems({
     config,
     dtsConfigPaths,
@@ -1599,10 +1632,7 @@ export async function runProofCheckImpl(
       passed: 0,
       total: checks.value,
     });
-    await appendCheckIssues({
-      issues: reportIssues,
-      rootDir: config.rootDir,
-    });
+    await collectIssues(reportIssues);
     if (!options.report?.defer) {
       ProofLogger.error(
         formatProofProblemReport({
@@ -1622,6 +1652,7 @@ export async function runProofCheckImpl(
   );
   const checkerTargets = checkerTargetCollection.targets;
 
+  checkItems.start('checker coverage targets');
   problems.push(...checkerTargetCollection.problems);
   checks.add(checkerTargets.length);
   checkItems.record('checker coverage targets');
@@ -1637,10 +1668,7 @@ export async function runProofCheckImpl(
       passed: 0,
       total: checks.value,
     });
-    await appendCheckIssues({
-      issues: reportIssues,
-      rootDir: config.rootDir,
-    });
+    await collectIssues(reportIssues);
     if (!options.report?.defer) {
       ProofLogger.error(
         formatProofProblemReport({
@@ -1658,10 +1686,12 @@ export async function runProofCheckImpl(
   const allowlistCollection = collectConfiguredAllowlistEntries(config);
   const allowlistEntries = allowlistCollection.entries;
 
+  checkItems.start('proof allowlist');
   problems.push(...allowlistCollection.problems);
   checks.add(allowlistEntries.length);
   checkItems.record('proof allowlist');
 
+  checkItems.start('source coverage');
   const outsideSourceCoverageByFile = new Map<string, CoverageSource[]>();
   const baseCoverageByFile = collectCoverage({
     checkerTargets,
@@ -1722,10 +1752,7 @@ export async function runProofCheckImpl(
       passed: 0,
       total: checks.value,
     });
-    await appendCheckIssues({
-      issues: reportIssues,
-      rootDir: config.rootDir,
-    });
+    await collectIssues(reportIssues);
     if (!options.report?.defer) {
       ProofLogger.error(
         formatProofProblemReport({

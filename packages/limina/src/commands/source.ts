@@ -9,6 +9,7 @@ import {
   appendCheckIssues,
   appendTaskFailureIssueIfMissing,
   completeCheckIssueSnapshot,
+  createSourceCheckIssue,
   createTaskFailureIssue,
   writeNotRunSourceIssueSnapshot,
 } from '../source-check/snapshot';
@@ -19,19 +20,23 @@ export async function runSourceCheck(
   config: ResolvedLiminaConfig,
   options: RunSourceCheckOptions = {},
 ): Promise<boolean> {
-  await writeNotRunSourceIssueSnapshot({
-    command: options.report?.command ?? 'limina source check',
-    rootDir: config.rootDir,
-  });
+  if (!options.deferSnapshot) {
+    await writeNotRunSourceIssueSnapshot({
+      command: options.report?.command ?? 'limina source check',
+      rootDir: config.rootDir,
+    });
+  }
 
   if (options.clearScreen ?? true) {
     clearCliScreen();
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('source check', {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start('source check', {
+        depth: options.flowDepth ?? 0,
+      });
 
   if (!options.flow) {
     SourceLogger.info('source check started');
@@ -39,20 +44,26 @@ export async function runSourceCheck(
 
   try {
     const logSuccess = !options.report?.defer && !options.flow?.interactive;
+    const sourceIssues = options.sourceIssues ?? [];
     const passed = await runSourceCheckImpl(config, {
       core: options.core,
+      deferSnapshot: options.deferSnapshot,
       generatedGraphProvider: options.generatedGraphProvider,
       knipRunner: options.knipRunner,
       logSuccess,
       onStats: options.onStats,
       preflight: options.preflight,
+      progress: options.progress,
       report: options.report,
+      sourceIssues,
     });
 
     if (passed) {
-      await completeCheckIssueSnapshot({
-        rootDir: config.rootDir,
-      });
+      if (!options.deferSnapshot) {
+        await completeCheckIssueSnapshot({
+          rootDir: config.rootDir,
+        });
+      }
 
       if (logSuccess) {
         SourceLogger.success('source check finished', elapsed());
@@ -60,18 +71,43 @@ export async function runSourceCheck(
 
       task?.pass();
     } else {
-      await appendTaskFailureIssueIfMissing({
-        issue: createTaskFailureIssue({
-          code: 'LIMINA_SOURCE_CHECK_FAILED',
-          filePath: config.configPath,
-          fix: 'Inspect the source check report above, then rerun `limina source check` or `limina check`.',
-          reason: 'Source check finished with unfilterable legacy failures.',
+      const issues =
+        sourceIssues.length > 0
+          ? sourceIssues.map((issue) =>
+              createSourceCheckIssue({
+                issue,
+                rootDir: config.rootDir,
+              }),
+            )
+          : [
+              createTaskFailureIssue({
+                code: 'LIMINA_SOURCE_CHECK_FAILED',
+                filePath: config.configPath,
+                fix: 'Inspect the source check report above, then rerun `limina source check` or `limina check`.',
+                reason:
+                  'Source check finished with unfilterable legacy failures.',
+                rootDir: config.rootDir,
+                task: 'source:check',
+                title: 'Source check failed',
+              }),
+            ];
+
+      if (options.deferSnapshot) {
+        options.issues?.push(...issues);
+      } else {
+        await appendTaskFailureIssueIfMissing({
+          issue: createTaskFailureIssue({
+            code: 'LIMINA_SOURCE_CHECK_FAILED',
+            filePath: config.configPath,
+            fix: 'Inspect the source check report above, then rerun `limina source check` or `limina check`.',
+            reason: 'Source check finished with unfilterable legacy failures.',
+            rootDir: config.rootDir,
+            task: 'source:check',
+            title: 'Source check failed',
+          }),
           rootDir: config.rootDir,
-          task: 'source:check',
-          title: 'Source check failed',
-        }),
-        rootDir: config.rootDir,
-      });
+        });
+      }
       if (!options.report?.defer && !options.flow) {
         SourceLogger.error('source check failed', elapsed());
       }
@@ -81,20 +117,26 @@ export async function runSourceCheck(
 
     return passed;
   } catch (error) {
-    await appendCheckIssues({
-      issues: [
-        createTaskFailureIssue({
-          code: 'LIMINA_SOURCE_CHECK_FAILED',
-          filePath: config.configPath,
-          fix: 'Inspect the source check error above, then rerun `limina source check` or `limina check`.',
-          reason: `Source check failed: ${formatErrorMessage(error)}.`,
-          rootDir: config.rootDir,
-          task: 'source:check',
-          title: 'Source check failed',
-        }),
-      ],
-      rootDir: config.rootDir,
-    });
+    const issues = [
+      createTaskFailureIssue({
+        code: 'LIMINA_SOURCE_CHECK_FAILED',
+        filePath: config.configPath,
+        fix: 'Inspect the source check error above, then rerun `limina source check` or `limina check`.',
+        reason: `Source check failed: ${formatErrorMessage(error)}.`,
+        rootDir: config.rootDir,
+        task: 'source:check',
+        title: 'Source check failed',
+      }),
+    ];
+
+    if (options.deferSnapshot) {
+      options.issues?.push(...issues);
+    } else {
+      await appendCheckIssues({
+        issues,
+        rootDir: config.rootDir,
+      });
+    }
     if (!options.report?.defer) {
       SourceLogger.error(
         `source check failed: ${formatErrorMessage(error)}`,

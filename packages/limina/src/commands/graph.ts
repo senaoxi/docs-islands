@@ -50,9 +50,11 @@ export async function runGraphPrepare(
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('graph prepare', {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start('graph prepare', {
+        depth: options.flowDepth ?? 0,
+      });
 
   GraphLogger.info('graph prepare started');
 
@@ -69,9 +71,11 @@ export async function runGraphPrepare(
     }
 
     task?.pass();
-    await completeCheckIssueSnapshot({
-      rootDir: config.rootDir,
-    });
+    if (!options.deferSnapshot) {
+      await completeCheckIssueSnapshot({
+        rootDir: config.rootDir,
+      });
+    }
     return true;
   } catch (error) {
     const issues =
@@ -89,10 +93,14 @@ export async function runGraphPrepare(
             }),
           ];
 
-    await appendCheckIssues({
-      issues,
-      rootDir: config.rootDir,
-    });
+    if (options.deferSnapshot) {
+      options.issues?.push(...issues);
+    } else {
+      await appendCheckIssues({
+        issues,
+        rootDir: config.rootDir,
+      });
+    }
     GraphLogger.error(
       `graph prepare failed: ${formatErrorMessage(error)}`,
       elapsed(),
@@ -111,9 +119,11 @@ export async function runGraphCheck(
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('graph check', {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start('graph check', {
+        depth: options.flowDepth ?? 0,
+      });
 
   if (!options.flow) {
     GraphLogger.info('graph check started');
@@ -129,13 +139,16 @@ export async function runGraphCheck(
       logSuccess,
       onStats: options.onStats,
       preflight: options.preflight,
+      progress: options.progress,
       report: options.report,
     });
 
     if (passed) {
-      await completeCheckIssueSnapshot({
-        rootDir: config.rootDir,
-      });
+      if (!options.deferSnapshot) {
+        await completeCheckIssueSnapshot({
+          rootDir: config.rootDir,
+        });
+      }
 
       if (logSuccess) {
         GraphLogger.success('graph check finished', elapsed());
@@ -143,24 +156,30 @@ export async function runGraphCheck(
 
       task?.pass();
     } else {
-      await appendCheckIssues({
-        issues:
-          issues.length > 0
-            ? issues
-            : [
-                createTaskFailureIssue({
-                  code: 'LIMINA_GRAPH_CHECK_FAILED',
-                  filePath: config.configPath,
-                  fix: 'Inspect the graph check report above, update the source/config/package boundary, then rerun `limina graph check` or `limina check`.',
-                  reason:
-                    'Graph check found architecture, dependency, or resolver violations.',
-                  rootDir: config.rootDir,
-                  task: 'graph:check',
-                  title: 'Graph check failed',
-                }),
-              ],
-        rootDir: config.rootDir,
-      });
+      const reportIssues =
+        issues.length > 0
+          ? issues
+          : [
+              createTaskFailureIssue({
+                code: 'LIMINA_GRAPH_CHECK_FAILED',
+                filePath: config.configPath,
+                fix: 'Inspect the graph check report above, update the source/config/package boundary, then rerun `limina graph check` or `limina check`.',
+                reason:
+                  'Graph check found architecture, dependency, or resolver violations.',
+                rootDir: config.rootDir,
+                task: 'graph:check',
+                title: 'Graph check failed',
+              }),
+            ];
+
+      if (options.deferSnapshot) {
+        options.issues?.push(...reportIssues);
+      } else {
+        await appendCheckIssues({
+          issues: reportIssues,
+          rootDir: config.rootDir,
+        });
+      }
       if (!options.flow) {
         GraphLogger.error('graph check finished with failures', elapsed());
       }
@@ -175,10 +194,14 @@ export async function runGraphCheck(
         ? error.issues
         : [createGraphCheckErrorIssue(config, errorMessage)];
 
-    await appendCheckIssues({
-      issues,
-      rootDir: config.rootDir,
-    });
+    if (options.deferSnapshot) {
+      options.issues?.push(...issues);
+    } else {
+      await appendCheckIssues({
+        issues,
+        rootDir: config.rootDir,
+      });
+    }
 
     if (!options.report?.defer) {
       GraphLogger.error(

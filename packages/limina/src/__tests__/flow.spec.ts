@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'pathe';
+import { describe, expect, it, vi } from 'vitest';
 import { createLiminaCheckFlowReporter, LiminaFlowReporter } from '../flow';
 
 const green = (message: string): string => `\u001B[32m${message}\u001B[0m`;
 const red = (message: string): string => `\u001B[31m${message}\u001B[0m`;
 const yellow = (message: string): string => `\u001B[33m${message}\u001B[0m`;
+const spinner = '⠋';
 
 function createBufferedFlow(options: { forceTty?: boolean } = {}): {
   chunks: string[];
@@ -30,6 +36,73 @@ function createBufferedFlow(options: { forceTty?: boolean } = {}): {
   };
 }
 
+function resolveTsxBinary(): string {
+  const tsxBinName = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
+
+  return (
+    [
+      path.join(process.cwd(), 'node_modules/.bin', tsxBinName),
+      path.join(process.cwd(), '../../node_modules/.bin', tsxBinName),
+    ].find((candidate) => existsSync(candidate)) ?? 'tsx'
+  );
+}
+
+async function runFlowFixture(
+  source: string,
+  options: { env?: NodeJS.ProcessEnv } = {},
+): Promise<{
+  stderr: string;
+  stdout: string;
+}> {
+  const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-flow-'));
+  const fixturePath = path.join(rootDir, 'fixture.ts');
+
+  await writeFile(fixturePath, source);
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const child = spawn(resolveTsxBinary(), [fixturePath], {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          ...options.env,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const stdout: string[] = [];
+      const stderr: string[] = [];
+
+      child.stdout.on('data', (chunk: Uint8Array) => {
+        stdout.push(Buffer.from(chunk).toString());
+      });
+      child.stderr.on('data', (chunk: Uint8Array) => {
+        stderr.push(Buffer.from(chunk).toString());
+      });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({
+            stderr: stderr.join(''),
+            stdout: stdout.join(''),
+          });
+          return;
+        }
+
+        reject(
+          new Error(
+            `Flow fixture exited with code ${code ?? 1}:\n${stderr.join('')}`,
+          ),
+        );
+      });
+    });
+  } finally {
+    await rm(rootDir, {
+      force: true,
+      recursive: true,
+    });
+  }
+}
+
 describe('LiminaFlowReporter', () => {
   it('writes stable plain text outside TTY mode', () => {
     const { chunks, flow } = createBufferedFlow();
@@ -52,6 +125,85 @@ describe('LiminaFlowReporter', () => {
       '  [skip] checker:typecheck\n',
       '[done] limina check failed\n',
     ]);
+  });
+
+  it('uses process renderer only for real TTY output by default', async () => {
+    const inlineFlow = createLiminaCheckFlowReporter({
+      env: {},
+      forceTty: true,
+      output: {
+        write: () => {},
+      },
+    });
+
+    expect(inlineFlow.rendererBackend).toBe('inline');
+
+    const processFlow = createLiminaCheckFlowReporter({
+      env: {},
+      forceTty: true,
+    });
+
+    expect(processFlow.rendererBackend).toBe('process');
+    await processFlow.close();
+  });
+
+  it('keeps spinner frames moving while the main process is busy', async () => {
+    const flowModuleUrl = new URL('../flow.ts', import.meta.url).href;
+    const { stdout } = await runFlowFixture(`
+      import { createLiminaCheckFlowReporter } from ${JSON.stringify(flowModuleUrl)};
+
+      void (async () => {
+        const flow = createLiminaCheckFlowReporter({ forceTty: true });
+        flow.intro('limina check');
+        const task = flow.start('default check', { collapseOnSuccess: false });
+        const startedAt = Date.now();
+
+        while (Date.now() - startedAt < 350) {}
+
+        task.pass('default check', { elapsedTimeMs: 350 });
+        flow.outro('limina check passed');
+        await flow.close();
+        process.stdout.write('\\nsummary after close\\n');
+      })();
+    `);
+    const seenFrames = new Set(
+      ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].filter((frame) =>
+        stdout.includes(`${frame}    default check`),
+      ),
+    );
+
+    expect(seenFrames.size).toBeGreaterThan(1);
+    expect(stdout).toContain(`${green('◆')}    default check (350ms)\n`);
+    expect(stdout.lastIndexOf('summary after close')).toBeGreaterThan(
+      stdout.lastIndexOf('limina check passed'),
+    );
+  });
+
+  it('falls back to inline final output when the process renderer exits', async () => {
+    const flowModuleUrl = new URL('../flow.ts', import.meta.url).href;
+    const { stdout } = await runFlowFixture(
+      `
+        import { createLiminaCheckFlowReporter } from ${JSON.stringify(flowModuleUrl)};
+
+        void (async () => {
+          const flow = createLiminaCheckFlowReporter({ forceTty: true });
+          flow.intro('limina check');
+          const task = flow.start('default check', { collapseOnSuccess: false });
+          task.pass('default check', { elapsedTimeMs: 123 });
+          flow.outro('limina check passed');
+          await flow.close();
+          process.stdout.write('\\nsummary after fallback\\n');
+        })();
+      `,
+      {
+        env: {
+          LIMINA_FLOW_RENDERER_TEST_CRASH: '1',
+        },
+      },
+    );
+
+    expect(stdout).toContain(`${green('◆')}    default check (123ms)\n`);
+    expect(stdout).toContain('summary after fallback');
   });
 
   it('collapses successful task details in TTY mode', () => {
@@ -93,7 +245,7 @@ describe('LiminaFlowReporter', () => {
       'outro:limina checker passed',
     ]);
     expect(chunks).toEqual([
-      '◇    proof check\n',
+      `${spinner}    proof check\n`,
       '│      proof check started\n',
       '\r\u001B[3A\u001B[J',
       '┌  limina checker typecheck\n',
@@ -122,7 +274,7 @@ describe('LiminaFlowReporter', () => {
     task.pass('proof check', { elapsedTimeMs: 1000 });
 
     expect(chunks).toEqual([
-      '◇    proof check\n',
+      `${spinner}    proof check\n`,
       'limina[task.proof]: proof check started\n',
       '\r\u001B[2A\u001B[J',
       `${green('◆')}    proof check (1.00s)\n`,
@@ -155,14 +307,129 @@ describe('LiminaFlowReporter', () => {
     task.pass('tsc check', { elapsedTimeMs: 2000 });
 
     expect(chunks).toEqual([
-      '◇    pipeline: typecheck\n',
-      '◇    tsc check\n',
-      '◇      tsc: tsconfig.lib.json\n',
+      `${spinner}    pipeline: typecheck\n`,
+      `${spinner}    tsc check\n`,
+      `${spinner}      tsc: tsconfig.lib.json\n`,
       `${green('◆')}      tsc: tsconfig.lib.json (1.00s)\n`,
       '\r\u001B[4A\u001B[J',
-      '◇    pipeline: typecheck\n',
+      `${spinner}    pipeline: typecheck\n`,
       `${green('◆')}    tsc check (2.00s)\n`,
     ]);
+  });
+
+  it('redraws persisted start lines before tree nodes exist', () => {
+    vi.useFakeTimers();
+
+    try {
+      const chunks: string[] = [];
+      const flow = new LiminaFlowReporter({
+        env: {},
+        forceTty: true,
+        output: {
+          write: (message) => {
+            chunks.push(message);
+          },
+        },
+        stdout: {
+          columns: 80,
+          isTTY: true,
+        },
+      });
+
+      flow.intro('limina check');
+      const task = flow.start('default check', {
+        collapseOnSuccess: false,
+      });
+
+      vi.advanceTimersByTime(80);
+
+      expect(chunks.join('')).toContain('⠙    default check\n');
+
+      task.pass('default check', { elapsedTimeMs: 1000 });
+
+      expect(chunks.join('')).toContain(
+        `${green('◆')}    default check (1.00s)\n`,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('renders tree nodes with running and completed states', () => {
+    const chunks: string[] = [];
+    const flow = new LiminaFlowReporter({
+      env: {},
+      forceTty: true,
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        columns: 80,
+        isTTY: true,
+      },
+    });
+
+    const parent = flow.tree('default check');
+    const source = parent.child('source check');
+
+    parent.start();
+    source.start();
+    parent.pass(undefined, { elapsedTimeMs: 300 });
+
+    const beforeChildFinishes = chunks.join('');
+
+    expect(beforeChildFinishes).toContain('◇    default check\n');
+    expect(beforeChildFinishes).toContain(`${spinner}      source check\n`);
+    expect(beforeChildFinishes).toContain(`${green('◆')}    default check\n`);
+    expect(beforeChildFinishes).not.toContain('default check (300ms)');
+
+    source.pass(undefined, { elapsedTimeMs: 120 });
+
+    const output = chunks.join('');
+
+    expect(output).toContain(`${green('◆')}      source check (120ms)\n`);
+    expect(output).toContain(`${green('◆')}    default check (300ms)\n`);
+    expect(output).not.toContain('\u001B[H\u001B[2J\u001B[3J');
+  });
+
+  it('finishes parent tree nodes after skipping unstarted planned children', () => {
+    const chunks: string[] = [];
+    const flow = new LiminaFlowReporter({
+      env: {},
+      forceTty: true,
+      output: {
+        write: (message) => {
+          chunks.push(message);
+        },
+      },
+      stdout: {
+        columns: 80,
+        isTTY: true,
+      },
+    });
+
+    const parent = flow.tree('graph check');
+    const [routes] = parent.children([
+      'source graph routes',
+      'project references',
+    ]);
+
+    if (!routes) {
+      throw new Error('Expected planned route check item.');
+    }
+
+    parent.start();
+    routes.start();
+    routes.pass(undefined, { elapsedTimeMs: 50 });
+    parent.fail(undefined, { elapsedTimeMs: 300 });
+
+    const output = chunks.join('');
+
+    expect(output).toContain(`${green('◆')}      source graph routes (50ms)\n`);
+    expect(output).toContain('◇      project references\n');
+    expect(output).toContain(`${red('✕')}    graph check (300ms)\n`);
   });
 
   it('keeps persisted warnings in the final TTY history', () => {
@@ -190,7 +457,7 @@ describe('LiminaFlowReporter', () => {
     task.pass('checker build', { elapsedTimeMs: 1000 });
 
     expect(chunks).toEqual([
-      '◇    checker build\n',
+      `${spinner}    checker build\n`,
       `${yellow('▲')}      cache warning\n`,
       '\r\u001B[3A\u001B[J',
       '┌  limina check\n',
@@ -223,7 +490,7 @@ describe('LiminaFlowReporter', () => {
     });
 
     expect(chunks).toEqual([
-      '◇    proof check\n',
+      `${spinner}    proof check\n`,
       '│      proof check started\n',
       `${red('✕')}    proof check failed: bad proof (1.00s)\n`,
     ]);

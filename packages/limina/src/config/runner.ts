@@ -4,6 +4,7 @@ import { isPathInsideDirectory } from '#utils/path';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'pathe';
+import type { ExecutionConfig } from '../execution/config';
 
 export { validateLiminaConfig } from '#config/schema';
 
@@ -712,6 +713,10 @@ export interface LiminaConfig {
    * Shared project facts, such as checker entries and source boundary.
    */
   config?: SharedLiminaConfig;
+  /**
+   * Bounded execution settings for task, checker, package, and release work.
+   */
+  execution?: ExecutionConfig;
   /**
    * TypeScript project graph and architecture rules.
    */

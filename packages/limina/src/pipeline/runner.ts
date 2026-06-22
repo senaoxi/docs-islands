@@ -24,13 +24,19 @@ import { runProofCheck } from '../commands/proof';
 import { runReleaseCheck } from '../commands/release';
 import { runSourceCheck } from '../commands/source';
 import { runCheckerBuild, runCheckerTypecheck } from '../commands/typecheck';
+import { runExecutionTasks } from '../execution/executor';
+import type { TaskProgressReporter } from '../execution/progress';
+import type { ResourceRequest } from '../execution/resources';
+import type { ExecutionTask, ExecutionTaskResult } from '../execution/tasks';
 import type { LiminaFlowReporter } from '../flow';
 import { LiminaPreflightManager } from '../preflight';
-import type { SourceIssueReportOptions } from '../source-check/report';
+import type {
+  SourceCheckIssue,
+  SourceIssueReportOptions,
+} from '../source-check/report';
 import {
-  appendCheckIssues,
-  completeCheckIssueSnapshot,
   createTaskFailureIssue,
+  type LiminaCheckIssue,
 } from '../source-check/snapshot';
 import type { CheckerFailureTarget } from '../typecheck/runner';
 import {
@@ -47,13 +53,17 @@ export interface RunPipelineOptions {
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   packageNames?: readonly string[];
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
   sourceIssueReport?: SourceIssueReportOptions;
 }
 
 type NormalizedPipelineStep = Exclude<PipelineStep, string>;
 
 interface BuiltinTaskResult {
+  issues: readonly LiminaCheckIssue[];
   passed: boolean;
+  sourceIssues?: readonly SourceCheckIssue[];
+  sourceLegacyProblems?: readonly string[];
   stats?: LiminaCheckRunTaskStats;
 }
 
@@ -138,6 +148,27 @@ function usesAutoCheckers(config: ResolvedLiminaConfig): boolean {
     config.config?.checkers === undefined ||
     isAutoCheckerConfigMode(config.config.checkers)
   );
+}
+
+async function reportAutoCheckerCapabilities(
+  config: ResolvedLiminaConfig,
+  flow: LiminaFlowReporter | undefined,
+  preflight: LiminaPreflightManager,
+): Promise<void> {
+  if (!flow) {
+    return;
+  }
+
+  try {
+    reportCheckerCapabilities(
+      config,
+      flow,
+      (await preflight.ensureGeneratedGraph()).checkers,
+    );
+  } catch {
+    // The summary is informational. If generated graph discovery already failed
+    // inside the execution tasks, do not rethrow and replace the task failure.
+  }
 }
 
 function createSourceIssueReportOptions(
@@ -338,31 +369,6 @@ function createCommandTaskStats(options: {
   };
 }
 
-function renderFlowCheckItems(
-  flow: LiminaFlowReporter | undefined,
-  stats: LiminaCheckRunTaskStats | undefined,
-): void {
-  if (!flow || !stats?.items?.length) {
-    return;
-  }
-
-  for (const item of stats.items) {
-    const options = {
-      depth: 2,
-      ...(item.durationMs === undefined
-        ? {}
-        : { elapsedTimeMs: item.durationMs }),
-    };
-
-    if (item.status === 'passed') {
-      flow.pass(item.name, options);
-      continue;
-    }
-
-    flow.fail(item.name, options);
-  }
-}
-
 function formatCheckerEntryName(
   projectRootDir: string,
   configPath: string,
@@ -382,137 +388,201 @@ async function runBuiltinTask(
   taskName: BuiltinTaskName,
   options: RunPipelineOptions = {},
 ): Promise<BuiltinTaskResult> {
+  const issues: LiminaCheckIssue[] = [];
+  const sourceIssues: SourceCheckIssue[] = [];
+  const sourceLegacyProblems: string[] = [];
   let stats: LiminaCheckRunTaskStats | undefined;
   const onStats = (nextStats: LiminaCheckRunTaskStats): void => {
     stats = nextStats;
   };
 
-  switch (taskName) {
-    case 'graph:check': {
-      const passed = await runGraphCheck(config, {
-        clearScreen: false,
-        core: options.core,
-        flow: options.flow,
-        flowDepth: 1,
-        generatedGraphProvider: options.generatedGraphProvider,
-        onStats,
-        preflight: options.preflight,
-        report: options.checkIssueReport,
-      });
+  try {
+    switch (taskName) {
+      case 'graph:check': {
+        const passed = await runGraphCheck(config, {
+          clearScreen: false,
+          core: options.core,
+          deferSnapshot: true,
+          flow: options.flow,
+          flowDepth: 1,
+          generatedGraphProvider: options.generatedGraphProvider,
+          issues,
+          onStats,
+          preflight: options.preflight,
+          progress: options.progress,
+          report: options.checkIssueReport,
+        });
 
-      return { passed, stats };
-    }
-    case 'graph:prepare': {
-      const passed = await runGraphPrepare(config, {
-        clearScreen: false,
-        core: options.core,
-        flow: options.flow,
-        flowDepth: 1,
-        generatedGraphProvider: options.generatedGraphProvider,
-        preflight: options.preflight,
-      });
+        return { issues, passed, stats };
+      }
+      case 'graph:prepare': {
+        const passed = await runGraphPrepare(config, {
+          clearScreen: false,
+          core: options.core,
+          deferSnapshot: true,
+          flow: options.flow,
+          flowDepth: 1,
+          generatedGraphProvider: options.generatedGraphProvider,
+          issues,
+          preflight: options.preflight,
+          progress: options.progress,
+        });
 
-      return { passed, stats };
-    }
-    case 'proof:check': {
-      const passed = await runProofCheck(config, {
-        clearScreen: false,
-        core: options.core,
-        flow: options.flow,
-        flowDepth: 1,
-        generatedGraphProvider: options.generatedGraphProvider,
-        onStats,
-        preflight: options.preflight,
-        report: options.checkIssueReport,
-      });
+        return { issues, passed, stats };
+      }
+      case 'proof:check': {
+        const passed = await runProofCheck(config, {
+          clearScreen: false,
+          core: options.core,
+          deferSnapshot: true,
+          flow: options.flow,
+          flowDepth: 1,
+          generatedGraphProvider: options.generatedGraphProvider,
+          issues,
+          onStats,
+          preflight: options.preflight,
+          progress: options.progress,
+          report: options.checkIssueReport,
+        });
 
-      return { passed, stats };
-    }
-    case 'source:check': {
-      const passed = await runSourceCheck(config, {
-        clearScreen: false,
-        core: options.core,
-        flow: options.flow,
-        flowDepth: 1,
-        generatedGraphProvider: options.generatedGraphProvider,
-        onStats,
-        preflight: options.preflight,
-        report: createSourceIssueReportOptions(options),
-      });
+        return { issues, passed, stats };
+      }
+      case 'source:check': {
+        const passed = await runSourceCheck(config, {
+          clearScreen: false,
+          core: options.core,
+          deferSnapshot: true,
+          flow: options.flow,
+          flowDepth: 1,
+          generatedGraphProvider: options.generatedGraphProvider,
+          issues,
+          legacyProblems: sourceLegacyProblems,
+          onStats,
+          preflight: options.preflight,
+          progress: options.progress,
+          report: createSourceIssueReportOptions(options),
+          sourceIssues,
+        });
 
-      return { passed, stats };
-    }
-    case 'package:check': {
-      const passed = await runPackageCheck({
-        clearScreen: false,
-        config,
-        core: options.core,
-        cwd: options.cwd,
-        flow: options.flow,
-        flowDepth: 1,
-        onStats,
-        packageNames: options.packageNames,
-        preflight: options.preflight,
-        report: options.checkIssueReport,
-      });
+        return {
+          issues,
+          passed,
+          sourceIssues,
+          sourceLegacyProblems,
+          stats,
+        };
+      }
+      case 'package:check': {
+        const passed = await runPackageCheck({
+          clearScreen: false,
+          config,
+          core: options.core,
+          cwd: options.cwd,
+          deferSnapshot: true,
+          flow: options.flow,
+          flowDepth: 1,
+          issues,
+          onStats,
+          packageNames: options.packageNames,
+          preflight: options.preflight,
+          progress: options.progress,
+          report: options.checkIssueReport,
+        });
 
-      return { passed, stats };
-    }
-    case 'release:check': {
-      const passed = await runReleaseCheck({
-        clearScreen: false,
-        config,
-        core: options.core,
-        cwd: options.cwd,
-        flow: options.flow,
-        flowDepth: 1,
-        onStats,
-        packageNames: options.packageNames,
-        preflight: options.preflight,
-        report: options.checkIssueReport,
-      });
+        return { issues, passed, stats };
+      }
+      case 'release:check': {
+        const passed = await runReleaseCheck({
+          clearScreen: false,
+          config,
+          core: options.core,
+          cwd: options.cwd,
+          deferSnapshot: true,
+          flow: options.flow,
+          flowDepth: 1,
+          issues,
+          onStats,
+          packageNames: options.packageNames,
+          preflight: options.preflight,
+          progress: options.progress,
+          report: options.checkIssueReport,
+        });
 
-      return { passed };
-    }
-    case 'checker:typecheck': {
-      const result = await runCheckerTypecheck({
-        clearScreen: false,
-        config,
-        core: options.core,
-        cwd: config.rootDir,
-        flow: options.flow,
-        flowDepth: 1,
-        generatedGraphProvider: options.generatedGraphProvider,
-        preflight: options.preflight,
-        report: options.checkIssueReport,
-      });
+        return { issues, passed, stats };
+      }
+      case 'checker:typecheck': {
+        const result = await runCheckerTypecheck({
+          clearScreen: false,
+          config,
+          core: options.core,
+          cwd: config.rootDir,
+          deferSnapshot: true,
+          flow: options.flow,
+          flowDepth: 1,
+          generatedGraphProvider: options.generatedGraphProvider,
+          issues,
+          preflight: options.preflight,
+          progress: options.progress,
+          report: options.checkIssueReport,
+        });
 
-      return {
-        passed: result.passed,
-        stats: createCheckerTaskStats(result),
-      };
-    }
-    case 'checker:build': {
-      const result = await runCheckerBuild({
-        clearScreen: false,
-        config,
-        core: options.core,
-        cwd: config.rootDir,
-        flow: options.flow,
-        flowDepth: 1,
-        generatedGraphProvider: options.generatedGraphProvider,
-        preflight: options.preflight,
-        report: options.checkIssueReport,
-      });
+        return {
+          issues,
+          passed: result.passed,
+          stats: createCheckerTaskStats(result),
+        };
+      }
+      case 'checker:build': {
+        const result = await runCheckerBuild({
+          clearScreen: false,
+          config,
+          core: options.core,
+          cwd: config.rootDir,
+          deferSnapshot: true,
+          flow: options.flow,
+          flowDepth: 1,
+          generatedGraphProvider: options.generatedGraphProvider,
+          issues,
+          preflight: options.preflight,
+          progress: options.progress,
+          report: options.checkIssueReport,
+        });
 
-      return {
-        passed: result.passed,
-        stats: createCheckerTaskStats(result),
-      };
+        return {
+          issues,
+          passed: result.passed,
+          stats: createCheckerTaskStats(result),
+        };
+      }
+      default: {
+        return assertNeverTaskName(taskName);
+      }
     }
-    default: {
-      return assertNeverTaskName(taskName);
+  } catch (error) {
+    if (issues.length === 0) {
+      issues.push(
+        createTaskFailureIssue({
+          code: `LIMINA_${taskName.replaceAll(':', '_').toUpperCase()}_FAILED`,
+          detailLines: [error instanceof Error ? error.message : String(error)],
+          filePath: config.configPath,
+          fix: `Inspect the ${taskName} error above, then rerun limina check.`,
+          reason: `${taskName} failed: ${
+            error instanceof Error ? error.message : String(error)
+          }.`,
+          rootDir: config.rootDir,
+          task: taskName,
+          title: `${taskName} failed`,
+        }),
+      );
     }
+
+    return {
+      issues,
+      passed: false,
+      sourceIssues,
+      sourceLegacyProblems,
+      stats,
+    };
   }
 }
 
@@ -562,9 +632,13 @@ async function runCommandStep(
   config: ResolvedLiminaConfig,
   step: Extract<PipelineStep, { type: 'command' }>,
   options: RunPipelineOptions = {},
-): Promise<boolean> {
+): Promise<BuiltinTaskResult> {
   const label = getPipelineStepLabel(step);
-  const task = options.flow?.start(`command: ${label}`, { depth: 1 });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start(`command: ${label}`, { depth: 1 });
+  const commandItem = options.progress?.startItem('command execution');
+  const startedAt = performance.now();
   const cwd = step.cwd
     ? path.resolve(config.rootDir, step.cwd)
     : config.rootDir;
@@ -575,6 +649,43 @@ async function runCommandStep(
   };
 
   await prepareCommandStepCache(step, cwd);
+
+  const createFailureIssue = (exitCode: number): LiminaCheckIssue =>
+    createTaskFailureIssue({
+      code: 'LIMINA_COMMAND_FAILED',
+      evidence: [
+        { label: 'command', value: step.command },
+        { label: 'exit code', value: String(exitCode) },
+      ],
+      fix: 'Inspect the command output above, then rerun the pipeline.',
+      fixSteps: [
+        'Inspect the command output above this issue.',
+        'Fix the failing task or command configuration.',
+        `Rerun the pipeline command that includes "${label}".`,
+      ],
+      reason: `Pipeline command "${label}" exited with code ${exitCode}.`,
+      rootDir: config.rootDir,
+      task: 'command',
+      title: 'Pipeline command failed',
+      tool: step.command,
+      verifyCommands: [step.command],
+    });
+
+  const createResult = (
+    passed: boolean,
+    exitCode: number,
+  ): BuiltinTaskResult => {
+    const durationMs = performance.now() - startedAt;
+
+    return {
+      issues: passed ? [] : [createFailureIssue(exitCode)],
+      passed,
+      stats: createCommandTaskStats({
+        durationMs,
+        passed,
+      }),
+    };
+  };
 
   if (options.flow?.interactive) {
     return new Promise((resolve, reject) => {
@@ -591,48 +702,27 @@ async function runCommandStep(
       });
 
       child.on('error', (error) => {
+        commandItem?.fail(undefined, { error });
         task?.fail(undefined, { error });
         reject(error);
       });
       child.on('close', (code) => {
         const passed = (code ?? 1) === 0;
+        const exitCode = code ?? 1;
 
         if (passed) {
+          commandItem?.pass(undefined, {
+            elapsedTimeMs: performance.now() - startedAt,
+          });
           task?.pass();
         } else {
-          task?.fail(`command failed: ${label} exited with code ${code ?? 1}`);
+          commandItem?.fail(undefined, {
+            elapsedTimeMs: performance.now() - startedAt,
+          });
+          task?.fail(`command failed: ${label} exited with code ${exitCode}`);
         }
 
-        const snapshotWrite = passed
-          ? Promise.resolve()
-          : appendCheckIssues({
-              issues: [
-                createTaskFailureIssue({
-                  code: 'LIMINA_COMMAND_FAILED',
-                  evidence: [
-                    { label: 'command', value: step.command },
-                    { label: 'exit code', value: String(code ?? 1) },
-                  ],
-                  fix: 'Inspect the command output above, then rerun the pipeline.',
-                  fixSteps: [
-                    'Inspect the command output above this issue.',
-                    'Fix the failing task or command configuration.',
-                    `Rerun the pipeline command that includes "${label}".`,
-                  ],
-                  reason: `Pipeline command "${label}" exited with code ${code ?? 1}.`,
-                  rootDir: config.rootDir,
-                  task: 'command',
-                  title: 'Pipeline command failed',
-                  tool: step.command,
-                  verifyCommands: [step.command],
-                }),
-              ],
-              rootDir: config.rootDir,
-            });
-
-        snapshotWrite.then(() => {
-          resolve(passed);
-        }, reject);
+        resolve(createResult(passed, exitCode));
       });
     });
   }
@@ -643,45 +733,211 @@ async function runCommandStep(
   });
 
   if (result.error) {
+    commandItem?.fail(undefined, { error: result.error });
     task?.fail(undefined, { error: result.error });
     throw result.error;
   }
 
-  const passed = (result.status ?? 1) === 0;
+  const exitCode = result.status ?? 1;
+  const passed = exitCode === 0;
 
   if (passed) {
+    commandItem?.pass(undefined, {
+      elapsedTimeMs: performance.now() - startedAt,
+    });
     task?.pass();
   } else {
-    await appendCheckIssues({
-      issues: [
-        createTaskFailureIssue({
-          code: 'LIMINA_COMMAND_FAILED',
-          evidence: [
-            { label: 'command', value: step.command },
-            { label: 'exit code', value: String(result.status ?? 1) },
-          ],
-          fix: 'Inspect the command output above, then rerun the pipeline.',
-          fixSteps: [
-            'Inspect the command output above this issue.',
-            'Fix the failing task or command configuration.',
-            `Rerun the pipeline command that includes "${label}".`,
-          ],
-          reason: `Pipeline command "${label}" exited with code ${result.status ?? 1}.`,
-          rootDir: config.rootDir,
-          task: 'command',
-          title: 'Pipeline command failed',
-          tool: step.command,
-          verifyCommands: [step.command],
-        }),
-      ],
-      rootDir: config.rootDir,
+    commandItem?.fail(undefined, {
+      elapsedTimeMs: performance.now() - startedAt,
     });
-    task?.fail(
-      `command failed: ${label} exited with code ${result.status ?? 1}`,
-    );
+    task?.fail(`command failed: ${label} exited with code ${exitCode}`);
   }
 
-  return passed;
+  return createResult(passed, exitCode);
+}
+
+function getBuiltinTaskResources(taskName: BuiltinTaskName): ResourceRequest {
+  switch (taskName) {
+    case 'graph:check': {
+      return {
+        read: [
+          'preflight:generated-graph',
+          'preflight:workspace-packages',
+          'preflight:importers',
+        ],
+      };
+    }
+    case 'source:check': {
+      return {
+        read: [
+          'preflight:generated-graph',
+          'preflight:workspace-packages',
+          'preflight:package-owners',
+          'preflight:workspace-dependency-declarations',
+        ],
+      };
+    }
+    case 'proof:check': {
+      return {
+        read: [
+          'preflight:generated-graph',
+          'preflight:graph-project-routes',
+          'preflight:checker-entry-project-routes',
+          'preflight:expected-source-files',
+        ],
+      };
+    }
+    case 'checker:build': {
+      return {
+        read: ['preflight:generated-graph'],
+        write: ['checker:build-cache'],
+      };
+    }
+    case 'checker:typecheck': {
+      return {
+        read: ['preflight:generated-graph'],
+        write: ['checker:typecheck-cache'],
+      };
+    }
+    case 'package:check': {
+      return {
+        read: ['package-out'],
+        write: ['package-tarball'],
+      };
+    }
+    case 'release:check': {
+      return {
+        read: ['package-out'],
+        write: ['release-tarball'],
+      };
+    }
+    case 'graph:prepare': {
+      return {
+        exclusive: ['preflight:generated-graph', 'workspace:generated-files'],
+      };
+    }
+    default: {
+      return assertNeverTaskName(taskName);
+    }
+  }
+}
+
+function createExecutionTaskResult(options: {
+  durationMs: number;
+  id: string;
+  name: string;
+  result: BuiltinTaskResult;
+  invalidatesPreflight?: boolean;
+}): ExecutionTaskResult {
+  return {
+    durationMs: options.durationMs,
+    id: options.id,
+    invalidatesPreflight: options.invalidatesPreflight,
+    issues: options.result.issues,
+    name: options.name,
+    passed: options.result.passed,
+    sourceIssues: options.result.sourceIssues,
+    sourceLegacyProblems: options.result.sourceLegacyProblems,
+    stats: options.result.stats,
+    status: options.result.passed ? 'passed' : 'failed',
+  };
+}
+
+function createBuiltinExecutionTask(
+  config: ResolvedLiminaConfig,
+  step: Extract<NormalizedPipelineStep, { type: 'task' }>,
+  order: number,
+  options: RunPipelineOptions,
+  deps: readonly string[] = [],
+): ExecutionTask {
+  const name = getPipelineStepLabel(step);
+  const id = `${order}:${name}`;
+
+  return {
+    deps,
+    failPolicy: 'continue',
+    id,
+    kind: 'task',
+    name,
+    order,
+    resources: getBuiltinTaskResources(step.name),
+    run: async (context) => {
+      const startedAt = performance.now();
+      const result = await runBuiltinTask(config, step.name, {
+        ...options,
+        progress: context?.progress,
+      });
+
+      return createExecutionTaskResult({
+        durationMs: performance.now() - startedAt,
+        id,
+        name,
+        result,
+      });
+    },
+  };
+}
+
+function createCommandExecutionTask(
+  config: ResolvedLiminaConfig,
+  step: Extract<NormalizedPipelineStep, { type: 'command' }>,
+  order: number,
+  options: RunPipelineOptions,
+  deps: readonly string[] = [],
+): ExecutionTask {
+  const name = getPipelineStepLabel(step);
+  const id = `${order}:${name}`;
+
+  return {
+    deps,
+    failPolicy: 'block-remaining',
+    id,
+    kind: 'command',
+    name,
+    order,
+    resources: {
+      exclusive: ['workspace:unknown-command', 'stdout'],
+    },
+    run: async (context) => {
+      const startedAt = performance.now();
+      const result = await runCommandStep(config, step, {
+        ...options,
+        progress: context?.progress,
+      });
+
+      return createExecutionTaskResult({
+        durationMs: performance.now() - startedAt,
+        id,
+        invalidatesPreflight: true,
+        name,
+        result,
+      });
+    },
+  };
+}
+
+function createExecutionTasks(
+  config: ResolvedLiminaConfig,
+  steps: readonly NormalizedPipelineStep[],
+  options: RunPipelineOptions,
+  dependencyMode: 'independent' | 'ordered',
+): ExecutionTask[] {
+  const tasks: ExecutionTask[] = [];
+
+  for (const [order, step] of steps.entries()) {
+    const deps =
+      dependencyMode === 'ordered' && tasks.length > 0
+        ? [tasks.at(-1)!.id]
+        : [];
+    const task =
+      step.type === 'task'
+        ? createBuiltinExecutionTask(config, step, order, options, deps)
+        : createCommandExecutionTask(config, step, order, options, deps);
+
+    tasks.push(task);
+  }
+
+  return tasks;
 }
 
 export async function runPipeline(
@@ -709,97 +965,39 @@ export async function runPipeline(
     generatedGraphProvider: () => preflight.ensureGeneratedGraph(),
     preflight,
   };
-  let hasFailure = false;
 
-  for (const [stepIndex, step] of normalizedSteps.entries()) {
-    const label = getPipelineStepLabel(step);
-
-    await options.checkRunRecorder?.start(label);
-
-    let passed: boolean;
-    let stats: LiminaCheckRunTaskStats | undefined;
-
-    try {
-      if (step.type === 'task') {
-        const result = await runBuiltinTask(config, step.name, taskOptions);
-
-        passed = result.passed;
-        stats = result.stats;
-      } else {
-        const startedAt = performance.now();
-
-        passed = await runCommandStep(config, step, options);
-        stats = createCommandTaskStats({
-          durationMs: performance.now() - startedAt,
-          passed,
-        });
-      }
-    } catch (error) {
-      await options.checkRunRecorder?.block(
-        label,
-        error instanceof Error ? error.message : String(error),
-      );
-      pipelineTask?.fail(`pipeline blocked: ${pipelineName} at ${label}`);
-
-      for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
-        const remainingLabel = getPipelineStepLabel(remainingStep);
-
-        options.flow?.skip(`skipped: ${remainingLabel} (blocked by ${label})`, {
-          depth: 1,
-        });
-        await options.checkRunRecorder?.skip(remainingLabel, label);
-      }
-
-      await options.checkRunRecorder?.finish('blocked');
-      throw error;
-    }
-
-    if (step.type === 'command') {
-      preflight.invalidateAll();
-    }
-
-    renderFlowCheckItems(options.flow, stats);
-
-    if (!passed) {
-      if (step.type === 'command') {
-        await options.checkRunRecorder?.block(label, `${label} failed`, stats);
-        pipelineTask?.fail(`pipeline blocked: ${pipelineName} at ${label}`);
-
-        for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
-          const remainingLabel = getPipelineStepLabel(remainingStep);
-
-          options.flow?.skip(
-            `skipped: ${remainingLabel} (blocked by ${label})`,
-            {
-              depth: 1,
-            },
-          );
-          await options.checkRunRecorder?.skip(remainingLabel, label);
-        }
-
-        await options.checkRunRecorder?.finish('blocked');
-        return false;
-      }
-
-      await options.checkRunRecorder?.fail(label, `${label} failed`, stats);
-      hasFailure = true;
-      continue;
-    }
-
-    await options.checkRunRecorder?.pass(label, stats);
-  }
-
-  if (hasFailure) {
-    pipelineTask?.fail(`pipeline finished with failures: ${pipelineName}`);
-  } else {
-    pipelineTask?.pass();
-  }
-  await completeCheckIssueSnapshot({
+  const execution = await runExecutionTasks({
+    checkRunRecorder: options.checkRunRecorder,
+    command:
+      options.checkIssueReport?.command ?? `limina check ${pipelineName}`,
+    flow: options.flow,
+    preflight,
     rootDir: config.rootDir,
+    tasks: createExecutionTasks(
+      config,
+      normalizedSteps,
+      taskOptions,
+      'ordered',
+    ),
   });
-  await options.checkRunRecorder?.finish(hasFailure ? 'failed' : 'passed');
 
-  return !hasFailure;
+  if (execution.passed) {
+    pipelineTask?.pass();
+  } else if (execution.results.some((result) => result.status === 'blocked')) {
+    const blocker = execution.results.find(
+      (result) => !result.passed && result.status === 'failed',
+    );
+
+    pipelineTask?.fail(
+      `pipeline blocked: ${pipelineName}${
+        blocker ? ` at ${blocker.name}` : ''
+      }`,
+    );
+  } else {
+    pipelineTask?.fail(`pipeline finished with failures: ${pipelineName}`);
+  }
+
+  return execution.passed;
 }
 
 export async function runDefaultCheck(
@@ -824,108 +1022,44 @@ export async function runDefaultCheck(
     generatedGraphProvider: () => preflight.ensureGeneratedGraph(),
     preflight,
   };
-  let hasFailure = false;
 
-  if (!usesAutoCheckers(config)) {
+  const shouldReportAutoCheckerCapabilities = usesAutoCheckers(config);
+
+  if (!shouldReportAutoCheckerCapabilities) {
     reportCheckerCapabilities(config, options.flow);
   }
 
-  for (const [stepIndex, step] of normalizedSteps.entries()) {
-    const label = getPipelineStepLabel(step);
-
-    await options.checkRunRecorder?.start(label);
-
-    let passed: boolean;
-    let stats: LiminaCheckRunTaskStats | undefined;
-
-    try {
-      if (step.type === 'task') {
-        const result = await runBuiltinTask(config, step.name, taskOptions);
-
-        passed = result.passed;
-        stats = result.stats;
-      } else {
-        const startedAt = performance.now();
-
-        passed = await runCommandStep(config, step, options);
-        stats = createCommandTaskStats({
-          durationMs: performance.now() - startedAt,
-          passed,
-        });
-      }
-    } catch (error) {
-      await options.checkRunRecorder?.block(
-        label,
-        error instanceof Error ? error.message : String(error),
-      );
-      pipelineTask?.fail(`default check blocked at ${label}`);
-
-      for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
-        const remainingLabel = getPipelineStepLabel(remainingStep);
-
-        options.flow?.skip(`skipped: ${remainingLabel} (blocked by ${label})`, {
-          depth: 1,
-        });
-        await options.checkRunRecorder?.skip(remainingLabel, label);
-      }
-
-      await options.checkRunRecorder?.finish('blocked');
-      throw error;
-    }
-
-    if (step.type === 'command') {
-      preflight.invalidateAll();
-    }
-
-    renderFlowCheckItems(options.flow, stats);
-
-    if (passed) {
-      await options.checkRunRecorder?.pass(label, stats);
-    } else {
-      if (step.type === 'command') {
-        await options.checkRunRecorder?.block(label, `${label} failed`, stats);
-        pipelineTask?.fail(`default check blocked at ${label}`);
-
-        for (const remainingStep of normalizedSteps.slice(stepIndex + 1)) {
-          const remainingLabel = getPipelineStepLabel(remainingStep);
-
-          options.flow?.skip(
-            `skipped: ${remainingLabel} (blocked by ${label})`,
-            {
-              depth: 1,
-            },
-          );
-          await options.checkRunRecorder?.skip(remainingLabel, label);
-        }
-
-        await options.checkRunRecorder?.finish('blocked');
-        return false;
-      }
-
-      await options.checkRunRecorder?.fail(label, `${label} failed`, stats);
-      hasFailure = true;
-    }
-
-    if (usesAutoCheckers(config) && step.type === 'task') {
-      if (step.name === 'graph:check' || step.name === 'graph:prepare') {
-        reportCheckerCapabilities(
-          config,
-          options.flow,
-          (await preflight.ensureGeneratedGraph()).checkers,
-        );
-      }
-    }
-  }
-
-  if (hasFailure) {
-    pipelineTask?.fail('default check finished with failures');
-  } else {
-    pipelineTask?.pass();
-  }
-  await completeCheckIssueSnapshot({
+  const execution = await runExecutionTasks({
+    checkRunRecorder: options.checkRunRecorder,
+    command: options.checkIssueReport?.command ?? 'limina check',
+    flow: options.flow,
+    preflight,
     rootDir: config.rootDir,
+    tasks: createExecutionTasks(
+      config,
+      normalizedSteps,
+      taskOptions,
+      'independent',
+    ),
   });
-  await options.checkRunRecorder?.finish(hasFailure ? 'failed' : 'passed');
 
-  return !hasFailure;
+  if (shouldReportAutoCheckerCapabilities) {
+    await reportAutoCheckerCapabilities(config, options.flow, preflight);
+  }
+
+  if (execution.passed) {
+    pipelineTask?.pass();
+  } else if (execution.results.some((result) => result.status === 'blocked')) {
+    const blocker = execution.results.find(
+      (result) => !result.passed && result.status === 'failed',
+    );
+
+    pipelineTask?.fail(
+      `default check blocked${blocker ? ` at ${blocker.name}` : ''}`,
+    );
+  } else {
+    pipelineTask?.fail('default check finished with failures');
+  }
+
+  return execution.passed;
 }

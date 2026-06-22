@@ -1,15 +1,12 @@
+import type { ResolvedLiminaConfig } from '#config/runner';
 import type { GeneratedProviderEdge } from '#core/build-graph/runner';
-import { availableParallelism } from 'node:os';
-import { runWithConcurrency } from './concurrency';
+import { resolveCheckerBuildConcurrency } from '../execution/config';
+import { runPool } from '../execution/pool';
 import type {
   TypecheckRunner,
   TypecheckTarget,
   TypecheckTargetResult,
 } from './targets';
-
-function getDefaultBuildConcurrency(targetCount: number): number {
-  return Math.min(targetCount, availableParallelism() ?? 4);
-}
 
 function getBuildTargetDependencyKey(target: TypecheckTarget): string {
   return [
@@ -254,13 +251,14 @@ export async function runBuildTargets(
   providerEdges: GeneratedProviderEdge[],
   runner: TypecheckRunner,
   options: {
+    config: ResolvedLiminaConfig;
     onTargetResult?: (
       target: TypecheckTarget,
       result: TypecheckTargetResult,
     ) => void;
     onTargetStart?: (target: TypecheckTarget) => void;
     watch?: boolean;
-  } = {},
+  },
 ): Promise<TypecheckTargetResult[]> {
   const results: TypecheckTargetResult[] = [];
   const layers = options.watch
@@ -268,13 +266,36 @@ export async function runBuildTargets(
     : createBuildDependencyLayers(targets, providerEdges);
 
   for (const layer of layers) {
+    if (layer.length === 0) {
+      continue;
+    }
+
     results.push(
-      ...(await runWithConcurrency(
-        layer,
-        options.watch ? layer.length : getDefaultBuildConcurrency(layer.length),
-        runner,
-        options,
-      )),
+      ...(await runPool<TypecheckTarget, TypecheckTargetResult>({
+        concurrency: options.watch
+          ? layer.length
+          : resolveCheckerBuildConcurrency({
+              config: options.config,
+              itemCount: layer.length,
+            }),
+        items: layer,
+        onError: (target, error) => ({
+          configPath: target.configPath,
+          durationMs: 0,
+          error: error instanceof Error ? error : new Error(String(error)),
+          status: 1,
+        }),
+        onResult: options.onTargetResult,
+        onStart: options.onTargetStart,
+        run: async (target) => {
+          const startedAt = performance.now();
+
+          return {
+            ...(await runner(target)),
+            durationMs: performance.now() - startedAt,
+          };
+        },
+      })),
     );
   }
 

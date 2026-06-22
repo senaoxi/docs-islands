@@ -22,9 +22,11 @@ export async function runPackageCheck(
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('package check', {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start('package check', {
+        depth: options.flowDepth ?? 0,
+      });
 
   try {
     if (!options.report?.defer) {
@@ -38,9 +40,11 @@ export async function runPackageCheck(
     });
 
     if (passed) {
-      await completeCheckIssueSnapshot({
-        rootDir: options.config.rootDir,
-      });
+      if (!options.deferSnapshot) {
+        await completeCheckIssueSnapshot({
+          rootDir: options.config.rootDir,
+        });
+      }
 
       if (!options.report?.defer && !options.flow?.interactive) {
         PackageLogger.success('package check finished', elapsed());
@@ -69,10 +73,14 @@ export async function runPackageCheck(
               }),
             ];
 
-      await appendCheckIssues({
-        issues: reportIssues,
-        rootDir: options.config.rootDir,
-      });
+      if (options.deferSnapshot) {
+        options.issues?.push(...reportIssues);
+      } else {
+        await appendCheckIssues({
+          issues: reportIssues,
+          rootDir: options.config.rootDir,
+        });
+      }
       if (!options.report?.defer) {
         PackageLogger.error(
           formatCheckIssueHumanReport({
@@ -105,10 +113,14 @@ export async function runPackageCheck(
       tool: options.tool ?? 'all',
     });
 
-    await appendCheckIssues({
-      issues: [issue],
-      rootDir: options.config.rootDir,
-    });
+    if (options.deferSnapshot) {
+      options.issues?.push(issue);
+    } else {
+      await appendCheckIssues({
+        issues: [issue],
+        rootDir: options.config.rootDir,
+      });
+    }
     if (!options.report?.defer) {
       PackageLogger.error(
         formatCheckIssueHumanReport({

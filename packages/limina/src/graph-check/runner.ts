@@ -55,6 +55,7 @@ import {
   type DependencyGraphView,
   stringifyDependencyGraph,
 } from '../dependency-graph/runner';
+import type { TaskProgressReporter } from '../execution/progress';
 import type { LiminaFlowReporter } from '../flow';
 import { GraphLogger } from '../logger';
 import { type LiminaPreflightManager, resolvePreflight } from '../preflight';
@@ -81,21 +82,27 @@ import {
 export interface RunGraphCheckOptions {
   clearScreen?: boolean;
   core?: LiminaCore;
+  deferSnapshot?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  issues?: LiminaCheckIssue[];
   onStats?: (stats: LiminaCheckRunTaskStats) => void;
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
   report?: CheckIssueReportOptions;
 }
 
 export interface RunGraphPrepareOptions {
   clearScreen?: boolean;
   core?: LiminaCore;
+  deferSnapshot?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  issues?: LiminaCheckIssue[];
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
 }
 
 export interface RunGraphExportOptions {
@@ -103,6 +110,13 @@ export interface RunGraphExportOptions {
   outputPath?: string;
   view?: DependencyGraphView;
 }
+
+const GRAPH_CHECK_ITEM_NAMES = [
+  'source graph routes',
+  'project references',
+  'condition domains',
+  'reference completeness',
+] as const;
 
 function getGeneratedCheckerNamespace(configPath: string): string | null {
   const marker = '/.limina/tsconfig/checkers/';
@@ -1461,9 +1475,20 @@ export async function runGraphCheckImpl(
     logSuccess?: boolean;
     onStats?: (stats: LiminaCheckRunTaskStats) => void;
     preflight?: LiminaPreflightManager;
+    progress?: TaskProgressReporter;
     report?: CheckIssueReportOptions;
   } = {},
 ): Promise<boolean> {
+  const problems: string[] = [];
+  const checks = createCheckCounter();
+  const checkItems = createCheckItemAccumulator(
+    () => problems.length,
+    () => checks.value,
+    {
+      plannedItems: GRAPH_CHECK_ITEM_NAMES,
+      progress: options.progress,
+    },
+  );
   const preflight = resolvePreflight(config, options);
   const core = preflight.core;
   const generatedGraph = await preflight.ensureGeneratedGraph();
@@ -1483,13 +1508,8 @@ export async function runGraphCheckImpl(
   const fileOwnerLookup = createFileOwnerLookup(projects);
   const packages = await preflight.ensureWorkspacePackages();
   const importers = await preflight.ensureImporters();
-  const problems: string[] = [];
-  const checks = createCheckCounter();
-  const checkItems = createCheckItemAccumulator(
-    () => problems.length,
-    () => checks.value,
-  );
 
+  checkItems.start('source graph routes');
   problems.push(...graphRoute.problems);
   const customConditionConsistencyContext =
     createCustomConditionConsistencyContext(projectsByPath);
@@ -1503,6 +1523,7 @@ export async function runGraphCheckImpl(
   checks.add(projectPaths.length);
   checkItems.record('source graph routes');
 
+  checkItems.start('project references');
   const graphRules = normalizeGraphRules({
     config,
     include: {
@@ -1542,6 +1563,7 @@ export async function runGraphCheckImpl(
   }
   checkItems.record('project references');
 
+  checkItems.start('condition domains');
   addDefaultCustomConditionProblems({
     checks,
     config,
@@ -1559,6 +1581,7 @@ export async function runGraphCheckImpl(
   });
   checkItems.record('condition domains');
 
+  checkItems.start('reference completeness');
   const expectedReferencesByProjectPath = collectExpectedReferences({
     config,
     fileOwnerLookup,

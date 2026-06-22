@@ -30,12 +30,17 @@ import {
 import { existsSync, statSync } from 'node:fs';
 import path from 'pathe';
 import type { CheckIssueReportOptions } from '../check-reporting/human';
+import { resolveCheckerTypecheckConcurrency } from '../execution/config';
+import { runPool } from '../execution/pool';
+import type {
+  TaskProgressItem,
+  TaskProgressReporter,
+} from '../execution/progress';
 import type { LiminaFlowReporter, LiminaFlowTask } from '../flow';
 import { formatErrorMessage, TypecheckLogger } from '../logger';
 import { type LiminaPreflightManager, resolvePreflight } from '../preflight';
 import { formatCheckIssueSummaryReport } from '../reporting';
 import { runBuildTargets } from './build-plan';
-import { runWithConcurrency } from './concurrency';
 import {
   collectCheckerPeerDependencyProblems,
   createCheckerTarget,
@@ -55,6 +60,7 @@ export interface RunCheckerBuildOptions {
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
   report?: CheckIssueReportOptions;
   checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
@@ -119,6 +125,7 @@ export interface RunCheckerTypecheckOptions {
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
   report?: CheckIssueReportOptions;
   checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
@@ -133,6 +140,43 @@ export interface RunCheckerTypecheckResult {
   projectRootDir: string;
   rootConfigPaths: string[];
   targetResults?: TypecheckTargetResult[];
+}
+
+type CheckerFlowTask = LiminaFlowTask | TaskProgressItem;
+
+function getCheckerTargetFlowLabel(
+  target: TypecheckTarget,
+  prefix: string,
+  projectRootDir: string,
+): string {
+  return (
+    target.label ??
+    `${prefix}: ${toRelativePath(projectRootDir, target.configPath)}`
+  );
+}
+
+function createPlannedCheckerTargetTasks(
+  targets: readonly TypecheckTarget[],
+  progress: TaskProgressReporter | undefined,
+  prefix: string,
+  projectRootDir: string,
+): Map<string, TaskProgressItem> {
+  const tasks = new Map<string, TaskProgressItem>();
+
+  if (!progress) {
+    return tasks;
+  }
+
+  for (const target of targets) {
+    tasks.set(
+      target.configPath,
+      progress.planItem(
+        getCheckerTargetFlowLabel(target, prefix, projectRootDir),
+      ),
+    );
+  }
+
+  return tasks;
 }
 
 function formatTypecheckProblemSummaryReport(options: {
@@ -240,9 +284,16 @@ export async function runCheckerBuildImpl(
   });
 
   if (problems.length > 0) {
-    options.flow?.fail('checker dependency preflight failed', {
-      depth: flowDepth + 1,
-    });
+    const preflightItem = options.progress?.startItem(
+      'checker dependency preflight',
+    );
+
+    preflightItem?.fail();
+    if (!options.progress) {
+      options.flow?.fail('checker dependency preflight failed', {
+        depth: flowDepth + 1,
+      });
+    }
     if (shouldLogCheckReport(options.report)) {
       TypecheckLogger.error(
         formatTypecheckProblemSummaryReport({
@@ -301,12 +352,20 @@ export async function runCheckerBuildImpl(
     );
   }
 
-  const targetTasks = new Map<string, LiminaFlowTask>();
+  const targetTasks: Map<string, CheckerFlowTask> = new Map(
+    createPlannedCheckerTargetTasks(
+      targets,
+      options.progress,
+      'checker build',
+      projectRootDir,
+    ),
+  );
   const results = await runBuildTargets(
     targets,
     generatedGraph.providerEdges,
     resolveTypecheckRunner(options),
     {
+      config: options.config,
       onTargetResult: (target, result) => {
         const task = targetTasks.get(target.configPath);
 
@@ -325,6 +384,13 @@ export async function runCheckerBuildImpl(
         }
       },
       onTargetStart: (target) => {
+        if (options.progress) {
+          (
+            targetTasks.get(target.configPath) as TaskProgressItem | undefined
+          )?.start();
+          return;
+        }
+
         if (!options.flow) {
           return;
         }
@@ -332,8 +398,7 @@ export async function runCheckerBuildImpl(
         targetTasks.set(
           target.configPath,
           options.flow.start(
-            target.label ??
-              `checker build: ${toRelativePath(projectRootDir, target.configPath)}`,
+            getCheckerTargetFlowLabel(target, 'checker build', projectRootDir),
             {
               collapseOnSuccess: false,
               depth: flowDepth + 1,
@@ -1116,6 +1181,7 @@ export async function runBuildImpl(
       [],
       resolveTypecheckRunner(options),
       {
+        config: options.config,
         onTargetResult: (target, result) => {
           const task = targetTasks.get(target.configPath);
 
@@ -1300,6 +1366,7 @@ export async function runBuildImpl(
     resolvedTarget.generatedGraph.providerEdges,
     resolveTypecheckRunner(options),
     {
+      config: options.config,
       onTargetResult: (target, result) => {
         const task = targetTasks.get(target.configPath);
 
@@ -1402,9 +1469,13 @@ export async function runCheckerTypecheckImpl(
   const rootConfigPaths: string[] = [];
 
   if (checkers.length === 0) {
-    options.flow?.info('no second-class checker entries configured', {
-      depth: flowDepth + 1,
-    });
+    if (options.progress) {
+      options.progress.startItem('second-class checker entries').pass();
+    } else {
+      options.flow?.info('no second-class checker entries configured', {
+        depth: flowDepth + 1,
+      });
+    }
 
     if (shouldLogCheckReport(options.report) && !options.flow?.interactive) {
       TypecheckLogger.success('No second-class checker entries configured.');
@@ -1427,9 +1498,16 @@ export async function runCheckerTypecheckImpl(
   });
 
   if (problems.length > 0) {
-    options.flow?.fail('checker dependency preflight failed', {
-      depth: flowDepth + 1,
-    });
+    const preflightItem = options.progress?.startItem(
+      'checker dependency preflight',
+    );
+
+    preflightItem?.fail();
+    if (!options.progress) {
+      options.flow?.fail('checker dependency preflight failed', {
+        depth: flowDepth + 1,
+      });
+    }
     if (shouldLogCheckReport(options.report)) {
       TypecheckLogger.error(
         formatTypecheckProblemSummaryReport({
@@ -1490,48 +1568,80 @@ export async function runCheckerTypecheckImpl(
     );
   }
 
-  const targetTasks = new Map<string, LiminaFlowTask>();
-  const results = await runWithConcurrency(
-    targets,
-    1,
-    resolveTypecheckRunner(options),
-    {
-      onTargetResult: (target, result) => {
-        const task = targetTasks.get(target.configPath);
-
-        if (!task) {
-          return;
-        }
-
-        if (result.status === 0) {
-          task.pass();
-        } else {
-          const suffix = result.error
-            ? formatErrorMessage(result.error)
-            : `exited with code ${result.status}`;
-
-          task.fail(undefined, { error: suffix });
-        }
-      },
-      onTargetStart: (target) => {
-        if (!options.flow) {
-          return;
-        }
-
-        targetTasks.set(
-          target.configPath,
-          options.flow.start(
-            target.label ??
-              `checker typecheck: ${toRelativePath(projectRootDir, target.configPath)}`,
-            {
-              collapseOnSuccess: false,
-              depth: flowDepth + 1,
-            },
-          ),
-        );
-      },
-    },
+  const targetTasks: Map<string, CheckerFlowTask> = new Map(
+    createPlannedCheckerTargetTasks(
+      targets,
+      options.progress,
+      'checker typecheck',
+      projectRootDir,
+    ),
   );
+  const runner = resolveTypecheckRunner(options);
+  const results = await runPool<TypecheckTarget, TypecheckTargetResult>({
+    concurrency: resolveCheckerTypecheckConcurrency({
+      config: options.config,
+      itemCount: targets.length,
+    }),
+    items: targets,
+    onError: (target, error) => ({
+      configPath: target.configPath,
+      durationMs: 0,
+      error: error instanceof Error ? error : new Error(String(error)),
+      status: 1,
+    }),
+    onResult: (target, result) => {
+      const task = targetTasks.get(target.configPath);
+
+      if (!task) {
+        return;
+      }
+
+      if (result.status === 0) {
+        task.pass();
+      } else {
+        const suffix = result.error
+          ? formatErrorMessage(result.error)
+          : `exited with code ${result.status}`;
+
+        task.fail(undefined, { error: suffix });
+      }
+    },
+    onStart: (target) => {
+      if (options.progress) {
+        (
+          targetTasks.get(target.configPath) as TaskProgressItem | undefined
+        )?.start();
+        return;
+      }
+
+      if (!options.flow) {
+        return;
+      }
+
+      targetTasks.set(
+        target.configPath,
+        options.flow.start(
+          getCheckerTargetFlowLabel(
+            target,
+            'checker typecheck',
+            projectRootDir,
+          ),
+          {
+            collapseOnSuccess: false,
+            depth: flowDepth + 1,
+          },
+        ),
+      );
+    },
+    run: async (target) => {
+      const startedAt = performance.now();
+
+      return {
+        ...(await runner(target)),
+        durationMs: performance.now() - startedAt,
+      };
+    },
+  });
   const failedResults = results.filter((result) => result.status !== 0);
   const failedTargets = collectFailedCheckerTargets(targets, failedResults);
   const passed = failedResults.length === 0;

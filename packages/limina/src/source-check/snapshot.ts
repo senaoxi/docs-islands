@@ -745,6 +745,7 @@ export async function writeNotRunSourceIssueSnapshot(options: {
 }
 
 export async function writeCompletedSourceIssueSnapshot(options: {
+  appendCheckIssues?: boolean;
   command: string;
   issues: readonly SourceCheckIssue[];
   legacyProblems: readonly string[];
@@ -762,16 +763,18 @@ export async function writeCompletedSourceIssueSnapshot(options: {
     }),
   );
 
-  await appendCheckIssues({
-    command: options.command,
-    issues: options.issues.map((issue) =>
-      createSourceCheckIssue({
-        issue,
-        rootDir: options.rootDir,
-      }),
-    ),
-    rootDir: options.rootDir,
-  });
+  if (options.appendCheckIssues ?? true) {
+    await appendCheckIssues({
+      command: options.command,
+      issues: options.issues.map((issue) =>
+        createSourceCheckIssue({
+          issue,
+          rootDir: options.rootDir,
+        }),
+      ),
+      rootDir: options.rootDir,
+    });
+  }
 }
 
 export async function readSourceIssueSnapshot(

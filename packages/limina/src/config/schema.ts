@@ -309,6 +309,67 @@ const releaseConfigShapeSchema = z.looseObject({
   contentHash: releaseContentHashShapeSchema.optional(),
 });
 
+const executionConcurrencyFields = [
+  'tasks',
+  'checkerBuild',
+  'checkerTypecheck',
+  'packageEntries',
+  'releaseEntries',
+] as const;
+
+function isValidExecutionConcurrencyValue(value: unknown): boolean {
+  return (
+    value === 'auto' ||
+    (typeof value === 'number' && Number.isInteger(value) && value > 0)
+  );
+}
+
+const executionConfigShapeSchema = z
+  .looseObject({})
+  .superRefine((execution, ctx) => {
+    for (const key of Object.keys(execution)) {
+      if (
+        key === 'failFast' ||
+        executionConcurrencyFields.includes(
+          key as (typeof executionConcurrencyFields)[number],
+        )
+      ) {
+        continue;
+      }
+
+      ctx.addIssue({
+        code: 'custom',
+        message: 'unknown execution config field.',
+        path: [key],
+      });
+    }
+
+    for (const key of executionConcurrencyFields) {
+      const value = execution[key];
+
+      if (value === undefined || isValidExecutionConcurrencyValue(value)) {
+        continue;
+      }
+
+      ctx.addIssue({
+        code: 'custom',
+        message: 'execution concurrency must be a positive integer or "auto".',
+        path: [key],
+      });
+    }
+
+    if (
+      execution.failFast !== undefined &&
+      typeof execution.failFast !== 'boolean'
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'execution failFast must be a boolean.',
+        path: ['failFast'],
+      });
+    }
+  });
+
 interface ConfigValidationContext {
   addIssue(issue: {
     code: 'custom';
@@ -458,6 +519,7 @@ function validateSourceImportAuthorityConfig(
 const liminaConfigShapeSchema = z
   .looseObject({
     config: sharedLiminaConfigShapeSchema.optional(),
+    execution: executionConfigShapeSchema.optional(),
     release: releaseConfigShapeSchema.optional(),
   })
   .superRefine((config, ctx) => {
@@ -550,6 +612,33 @@ function formatLiminaConfigShapeIssue(
     return [
       'Invalid Limina paths config:',
       '  field: paths',
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      `  reason: ${issue.message}`,
+    ].join('\n');
+  }
+
+  if (field === 'execution') {
+    return [
+      'Invalid Limina execution config:',
+      '  field: execution',
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      '  reason: execution must be an object.',
+    ].join('\n');
+  }
+
+  if (field === 'execution.failFast') {
+    return [
+      'Invalid Limina execution config:',
+      '  field: execution.failFast',
+      `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
+      '  reason: execution failFast must be a boolean.',
+    ].join('\n');
+  }
+
+  if (field.startsWith('execution.')) {
+    return [
+      'Invalid Limina execution config:',
+      `  field: ${field}`,
       `  value: ${formatUnknownValue(getValueAtPath(value, pathSegments))}`,
       `  reason: ${issue.message}`,
     ].join('\n');

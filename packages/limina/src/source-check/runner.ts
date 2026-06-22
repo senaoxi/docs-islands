@@ -65,6 +65,7 @@ import {
   type NearestPackageInfo,
   type ResolvedPackageTarget,
 } from '../core/packages/owners';
+import type { TaskProgressReporter } from '../execution/progress';
 import type { LiminaFlowReporter } from '../flow';
 import { isNodeBuiltinSpecifier } from '../graph-check/rules';
 import { SourceLogger } from '../logger';
@@ -95,7 +96,10 @@ import {
   type SourceIssueReportOptions,
   type SourceStructuredIssue,
 } from './report';
-import { writeCompletedSourceIssueSnapshot } from './snapshot';
+import {
+  type LiminaCheckIssue,
+  writeCompletedSourceIssueSnapshot,
+} from './snapshot';
 import {
   isInvalidWorkspacePattern,
   normalizeWorkspacePattern,
@@ -104,14 +108,27 @@ import {
 export interface RunSourceCheckOptions {
   clearScreen?: boolean;
   core?: LiminaCore;
+  deferSnapshot?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
+  issues?: LiminaCheckIssue[];
   knipRunner?: KnipCliRunner;
+  legacyProblems?: string[];
   onStats?: (stats: LiminaCheckRunTaskStats) => void;
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
   report?: SourceIssueReportOptions;
+  sourceIssues?: SourceCheckIssue[];
 }
+
+const SOURCE_CHECK_ITEM_NAMES = [
+  'source graph routes',
+  'tsconfig governance',
+  'knip source usage',
+  'source project ownership',
+  'source import authority',
+] as const;
 
 interface SourceProjectEntry {
   fileNames: string[];
@@ -2060,12 +2077,27 @@ export async function runSourceCheckImpl(
     core?: LiminaCore;
     generatedGraphProvider?: () => Promise<GeneratedTsconfigGraphResult>;
     knipRunner?: KnipCliRunner;
+    deferSnapshot?: boolean;
+    legacyProblems?: string[];
     logSuccess?: boolean;
     onStats?: (stats: LiminaCheckRunTaskStats) => void;
     preflight?: LiminaPreflightManager;
+    progress?: TaskProgressReporter;
     report?: SourceIssueReportOptions;
+    sourceIssues?: SourceCheckIssue[];
   } = {},
 ): Promise<boolean> {
+  const problems: string[] = [];
+  const sourceIssues: SourceCheckIssue[] = [];
+  const checks = createCheckCounter();
+  const checkItems = createCheckItemAccumulator(
+    () => problems.length + sourceIssues.length,
+    () => checks.value,
+    {
+      plannedItems: SOURCE_CHECK_ITEM_NAMES,
+      progress: options.progress,
+    },
+  );
   const preflight = resolvePreflight(config, options);
   const core = preflight.core;
   const generatedGraph = await preflight.ensureGeneratedGraph();
@@ -2093,18 +2125,13 @@ export async function runSourceCheckImpl(
     sourceProjectEntries,
   });
   const importAnalysis = preflight.importAnalysis;
-  const problems: string[] = [];
-  const sourceIssues: SourceCheckIssue[] = [];
-  const checks = createCheckCounter();
-  const checkItems = createCheckItemAccumulator(
-    () => problems.length + sourceIssues.length,
-    () => checks.value,
-  );
 
+  checkItems.start('source graph routes');
   problems.push(...graphRoute.problems);
   checks.add(projectPaths.length);
   checkItems.record('source graph routes');
 
+  checkItems.start('tsconfig governance');
   await addTsconfigGovernanceProblems({
     checks,
     config,
@@ -2115,6 +2142,7 @@ export async function runSourceCheckImpl(
   });
   checkItems.record('tsconfig governance');
 
+  checkItems.start('knip source usage');
   await addKnipBackedSourceProblems({
     checks,
     config,
@@ -2128,6 +2156,7 @@ export async function runSourceCheckImpl(
   });
   checkItems.record('knip source usage');
 
+  checkItems.start('source project ownership');
   await addSourceProjectOwnerProblems({
     checks,
     config,
@@ -2138,6 +2167,7 @@ export async function runSourceCheckImpl(
   });
   checkItems.record('source project ownership');
 
+  checkItems.start('source import authority');
   const importAuthorityAllowRules = collectImportAuthorityAllowRules({
     checks,
     config,
@@ -2175,12 +2205,16 @@ export async function runSourceCheckImpl(
     ),
   ];
 
-  await writeCompletedSourceIssueSnapshot({
-    command: options.report?.command ?? 'limina source check',
-    issues: structuredSourceIssues,
-    legacyProblems: [],
-    rootDir: config.rootDir,
-  });
+  options.sourceIssues?.push(...structuredSourceIssues);
+
+  if (!options.deferSnapshot) {
+    await writeCompletedSourceIssueSnapshot({
+      command: options.report?.command ?? 'limina source check',
+      issues: structuredSourceIssues,
+      legacyProblems: [],
+      rootDir: config.rootDir,
+    });
+  }
 
   if (structuredSourceIssues.length > 0) {
     options.onStats?.({

@@ -37,6 +37,40 @@ export type {
   TypecheckTargetResult,
 } from '../typecheck/targets';
 
+interface DeferredCheckIssueOptions {
+  deferSnapshot?: boolean;
+  issues?: LiminaCheckIssue[];
+}
+
+async function collectCheckIssues(options: {
+  deferSnapshot?: boolean;
+  issueSink?: LiminaCheckIssue[];
+  issues: readonly LiminaCheckIssue[];
+  rootDir: string;
+}): Promise<void> {
+  if (options.deferSnapshot) {
+    options.issueSink?.push(...options.issues);
+    return;
+  }
+
+  await appendCheckIssues({
+    issues: options.issues,
+    rootDir: options.rootDir,
+  });
+}
+
+async function completeCheckSnapshotIfNeeded(
+  options: DeferredCheckIssueOptions & { rootDir: string },
+): Promise<void> {
+  if (options.deferSnapshot) {
+    return;
+  }
+
+  await completeCheckIssueSnapshot({
+    rootDir: options.rootDir,
+  });
+}
+
 function createCheckerFailureIssues(options: {
   failedTargets: readonly CheckerFailureTarget[];
   fallbackReason: string;
@@ -145,16 +179,18 @@ function formatCheckerIssueReport(options: {
 }
 
 export async function runCheckerBuild(
-  options: RunCheckerBuildOptions,
+  options: RunCheckerBuildOptions & DeferredCheckIssueOptions,
 ): Promise<RunCheckerBuildResult> {
   if (options.clearScreen ?? true) {
     clearCliScreen();
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('checker build', {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start('checker build', {
+        depth: options.flowDepth ?? 0,
+      });
 
   if (!options.report?.defer && !options.flow) {
     TypecheckLogger.info('checker build started');
@@ -164,7 +200,9 @@ export async function runCheckerBuild(
     const result = await runCheckerBuildImpl(options);
 
     if (result.passed) {
-      await completeCheckIssueSnapshot({
+      await completeCheckSnapshotIfNeeded({
+        deferSnapshot: options.deferSnapshot,
+        issues: options.issues,
         rootDir: options.config.rootDir,
       });
 
@@ -186,7 +224,9 @@ export async function runCheckerBuild(
         title: 'Checker build failed',
       });
 
-      await appendCheckIssues({
+      await collectCheckIssues({
+        deferSnapshot: options.deferSnapshot,
+        issueSink: options.issues,
         issues,
         rootDir: options.config.rootDir,
       });
@@ -219,7 +259,9 @@ export async function runCheckerBuild(
       title: 'Checker build failed',
     });
 
-    await appendCheckIssues({
+    await collectCheckIssues({
+      deferSnapshot: options.deferSnapshot,
+      issueSink: options.issues,
       issues: [issue],
       rootDir: options.config.rootDir,
     });
@@ -240,7 +282,7 @@ export async function runCheckerBuild(
 }
 
 export async function runBuild(
-  options: RunBuildOptions,
+  options: RunBuildOptions & DeferredCheckIssueOptions,
 ): Promise<RunBuildResult> {
   if (options.clearScreen ?? true) {
     clearCliScreen();
@@ -259,7 +301,9 @@ export async function runBuild(
     const result = await runBuildImpl(options);
 
     if (result.passed) {
-      await completeCheckIssueSnapshot({
+      await completeCheckSnapshotIfNeeded({
+        deferSnapshot: options.deferSnapshot,
+        issues: options.issues,
         rootDir: options.config.rootDir,
       });
 
@@ -280,7 +324,9 @@ export async function runBuild(
         title: 'Checker build failed',
       });
 
-      await appendCheckIssues({
+      await collectCheckIssues({
+        deferSnapshot: options.deferSnapshot,
+        issueSink: options.issues,
         issues,
         rootDir: options.config.rootDir,
       });
@@ -310,7 +356,9 @@ export async function runBuild(
       title: 'Checker build failed',
     });
 
-    await appendCheckIssues({
+    await collectCheckIssues({
+      deferSnapshot: options.deferSnapshot,
+      issueSink: options.issues,
       issues: [issue],
       rootDir: options.config.rootDir,
     });
@@ -331,16 +379,18 @@ export async function runBuild(
 }
 
 export async function runCheckerTypecheck(
-  options: RunCheckerTypecheckOptions,
+  options: RunCheckerTypecheckOptions & DeferredCheckIssueOptions,
 ): Promise<RunCheckerTypecheckResult> {
   if (options.clearScreen ?? true) {
     clearCliScreen();
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('checker typecheck', {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start('checker typecheck', {
+        depth: options.flowDepth ?? 0,
+      });
 
   if (!options.report?.defer && !options.flow) {
     TypecheckLogger.info('checker typecheck started');
@@ -350,7 +400,9 @@ export async function runCheckerTypecheck(
     const result = await runCheckerTypecheckImpl(options);
 
     if (result.passed) {
-      await completeCheckIssueSnapshot({
+      await completeCheckSnapshotIfNeeded({
+        deferSnapshot: options.deferSnapshot,
+        issues: options.issues,
         rootDir: options.config.rootDir,
       });
 
@@ -371,7 +423,9 @@ export async function runCheckerTypecheck(
         title: 'Checker typecheck failed',
       });
 
-      await appendCheckIssues({
+      await collectCheckIssues({
+        deferSnapshot: options.deferSnapshot,
+        issueSink: options.issues,
         issues,
         rootDir: options.config.rootDir,
       });
@@ -401,7 +455,9 @@ export async function runCheckerTypecheck(
       title: 'Checker typecheck failed',
     });
 
-    await appendCheckIssues({
+    await collectCheckIssues({
+      deferSnapshot: options.deferSnapshot,
+      issueSink: options.issues,
       issues: [issue],
       rootDir: options.config.rootDir,
     });

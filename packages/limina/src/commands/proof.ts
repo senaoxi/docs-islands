@@ -21,9 +21,11 @@ export async function runProofCheck(
   }
 
   const elapsed = createElapsedTimer();
-  const task = options.flow?.start('proof check', {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progress
+    ? undefined
+    : options.flow?.start('proof check', {
+        depth: options.flowDepth ?? 0,
+      });
 
   if (!options.flow) {
     ProofLogger.info('proof check started');
@@ -31,19 +33,25 @@ export async function runProofCheck(
 
   try {
     const logSuccess = !options.report?.defer && !options.flow?.interactive;
+    const issues = options.issues ?? [];
     const passed = await runProofCheckImpl(config, {
       core: options.core,
+      deferSnapshot: options.deferSnapshot,
       generatedGraphProvider: options.generatedGraphProvider,
+      issues,
       logSuccess,
       onStats: options.onStats,
       preflight: options.preflight,
+      progress: options.progress,
       report: options.report,
     });
 
     if (passed) {
-      await completeCheckIssueSnapshot({
-        rootDir: config.rootDir,
-      });
+      if (!options.deferSnapshot) {
+        await completeCheckIssueSnapshot({
+          rootDir: config.rootDir,
+        });
+      }
 
       if (logSuccess) {
         ProofLogger.success('proof check finished', elapsed());
@@ -51,19 +59,36 @@ export async function runProofCheck(
 
       task?.pass();
     } else {
-      await appendTaskFailureIssueIfMissing({
-        issue: createTaskFailureIssue({
-          code: 'LIMINA_PROOF_CHECK_FAILED',
-          filePath: config.configPath,
-          fix: 'Inspect the proof check report above, then adjust checker coverage, config.source, or proof.allowlist.',
-          reason:
-            'Proof check found source coverage or checker graph proof violations.',
+      if (options.deferSnapshot) {
+        if (issues.length === 0) {
+          options.issues?.push(
+            createTaskFailureIssue({
+              code: 'LIMINA_PROOF_CHECK_FAILED',
+              filePath: config.configPath,
+              fix: 'Inspect the proof check report above, then adjust checker coverage, config.source, or proof.allowlist.',
+              reason:
+                'Proof check found source coverage or checker graph proof violations.',
+              rootDir: config.rootDir,
+              task: 'proof:check',
+              title: 'Proof check failed',
+            }),
+          );
+        }
+      } else {
+        await appendTaskFailureIssueIfMissing({
+          issue: createTaskFailureIssue({
+            code: 'LIMINA_PROOF_CHECK_FAILED',
+            filePath: config.configPath,
+            fix: 'Inspect the proof check report above, then adjust checker coverage, config.source, or proof.allowlist.',
+            reason:
+              'Proof check found source coverage or checker graph proof violations.',
+            rootDir: config.rootDir,
+            task: 'proof:check',
+            title: 'Proof check failed',
+          }),
           rootDir: config.rootDir,
-          task: 'proof:check',
-          title: 'Proof check failed',
-        }),
-        rootDir: config.rootDir,
-      });
+        });
+      }
       if (!options.report?.defer && !options.flow) {
         ProofLogger.error('proof check finished with failures', elapsed());
       }
@@ -83,10 +108,14 @@ export async function runProofCheck(
       title: 'Proof check failed',
     });
 
-    await appendCheckIssues({
-      issues: [issue],
-      rootDir: config.rootDir,
-    });
+    if (options.deferSnapshot) {
+      options.issues?.push(issue);
+    } else {
+      await appendCheckIssues({
+        issues: [issue],
+        rootDir: config.rootDir,
+      });
+    }
     if (!options.report?.defer) {
       ProofLogger.error(
         formatCheckIssueHumanReport({

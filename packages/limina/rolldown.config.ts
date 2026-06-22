@@ -34,6 +34,7 @@ const cleanDistPlugin = (): NonNullable<RolldownOptions['plugins']> => ({
 const moduleConfig: RolldownOptions = defineConfig({
   input: {
     cli: 'src/cli.ts',
+    'flow-renderer-process': 'src/flow/renderer-process.ts',
     index: 'src/index.ts',
     'bin/limina': 'bin/limina.js',
   },

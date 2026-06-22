@@ -107,6 +107,14 @@ describe('defineConfig', () => {
           ignore: ['client/**'],
         },
       },
+      execution: {
+        checkerBuild: 'auto',
+        checkerTypecheck: 2,
+        failFast: false,
+        packageEntries: 'auto',
+        releaseEntries: 2,
+        tasks: 'auto',
+      },
     });
 
     expect(
@@ -163,6 +171,8 @@ describe('defineConfig', () => {
     expect(config.release?.contentHash?.baselineTag).toBe('next');
     expect(config.release?.contentHash?.builtinIgnore).toBe(false);
     expect(config.release?.contentHash?.ignore).toEqual(['client/**']);
+    expect(config.execution?.checkerTypecheck).toBe(2);
+    expect(config.execution?.tasks).toBe('auto');
   });
 
   it('resolves built-in checker defaults', () => {
@@ -1037,6 +1047,108 @@ export default {
 
       await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
         /ignore patterns must be non-empty strings/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('accepts canonical execution config', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `
+export default {
+  execution: {
+    tasks: 'auto',
+    checkerBuild: 'auto',
+    checkerTypecheck: 2,
+    packageEntries: 3,
+    releaseEntries: 2,
+    failFast: false,
+  },
+};
+`,
+      );
+
+      const config = await loadConfig({ cwd: rootDir });
+
+      expect(config.execution).toEqual({
+        checkerBuild: 'auto',
+        checkerTypecheck: 2,
+        failFast: false,
+        packageEntries: 3,
+        releaseEntries: 2,
+        tasks: 'auto',
+      });
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects invalid execution concurrency config', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `
+export default {
+  execution: {
+    checkerTypecheck: 0,
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /execution concurrency must be a positive integer or "auto"/u,
+      );
+    } finally {
+      await rm(rootDir, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('rejects unknown execution config fields', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-config-'));
+
+    try {
+      await writeText(
+        path.join(rootDir, 'pnpm-workspace.yaml'),
+        'packages: []\n',
+      );
+      await writeText(
+        path.join(rootDir, 'limina.config.mjs'),
+        `
+export default {
+  execution: {
+    legacy: true,
+  },
+};
+`,
+      );
+
+      await expect(loadConfig({ cwd: rootDir })).rejects.toThrow(
+        /unknown execution config field/u,
       );
     } finally {
       await rm(rootDir, {

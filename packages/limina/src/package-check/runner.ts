@@ -41,6 +41,12 @@ import {
   type LiminaCheckIssue,
 } from '../check-reporting/snapshot';
 import { createCheckItemStats } from '../check-reporting/stats';
+import { resolvePackageEntryConcurrency } from '../execution/config';
+import { runPool } from '../execution/pool';
+import type {
+  TaskProgressItem,
+  TaskProgressReporter,
+} from '../execution/progress';
 import type { LiminaFlowReporter } from '../flow';
 import { formatErrorMessage, PackageLogger } from '../logger';
 import { type LiminaPreflightManager, resolvePreflight } from '../preflight';
@@ -86,14 +92,24 @@ export interface RunPackageCheckOptions {
   config: ResolvedLiminaConfig;
   core?: LiminaCore;
   cwd?: string;
+  deferSnapshot?: boolean;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
   issues?: LiminaCheckIssue[];
   onStats?: (stats: LiminaCheckRunTaskStats) => void;
   packageNames?: readonly string[];
   preflight?: LiminaPreflightManager;
+  progress?: TaskProgressReporter;
   report?: CheckIssueReportOptions;
   tool?: PackageCheckToolSelection;
+}
+
+interface PackageCheckEntryRunResult {
+  durationMs: number;
+  issues: LiminaCheckIssue[];
+  label: string;
+  passed: boolean;
+  toolCount: number;
 }
 const ATTW_PROFILE_IGNORED_RESOLUTIONS: Record<PackageAttwProfile, string[]> = {
   strict: [],
@@ -786,6 +802,7 @@ async function runPackageCheckEntry(options: {
   issueSink?: LiminaCheckIssue[];
   label: string;
   outDir: string;
+  progressItem?: TaskProgressItem;
   rawEntry: PackageEntry;
 }): Promise<boolean> {
   const entry = {
@@ -794,9 +811,11 @@ async function runPackageCheckEntry(options: {
   };
   const label = options.label;
   const outputPackageJsonPath = path.join(entry.outDir, 'package.json');
-  const task = options.flow?.start(`package entry: ${label}`, {
-    depth: options.flowDepth ?? 0,
-  });
+  const task = options.progressItem
+    ? undefined
+    : options.flow?.start(`package entry: ${label}`, {
+        depth: options.flowDepth ?? 0,
+      });
 
   let packedDist: PackedPackageTarball | undefined;
 
@@ -1042,38 +1061,88 @@ export async function runPackageCheckImpl(
     );
   }
 
-  let passed = true;
-  const checkItems: LiminaCheckRunCheckItemSummary[] = [];
+  const progressItems = new Map(
+    runnableEntries.map((entry) => [
+      entry.label,
+      options.progress?.planItem(`${entry.label} (${entry.checks.join(', ')})`),
+    ]),
+  );
 
-  for (const entry of runnableEntries) {
-    const startedAt = performance.now();
-    const issueCountBefore = options.issues?.length ?? 0;
-    const entryPassed = await runPackageCheckEntry({
-      attwProfile: options.attwProfile,
-      checks: entry.checks,
+  const entryResults = await runPool({
+    concurrency: resolvePackageEntryConcurrency({
       config: options.config,
-      flow: options.flow,
-      flowDepth: (options.flowDepth ?? 0) + 1,
-      issueSink: options.issues,
+      itemCount: runnableEntries.length,
+    }),
+    items: runnableEntries,
+    onError: (entry, error): PackageCheckEntryRunResult => ({
+      durationMs: 0,
+      issues: [
+        createTaskFailureIssue({
+          code: 'LIMINA_PACKAGE_CHECK_FAILED',
+          detailLines: [formatErrorMessage(error)],
+          filePath: options.config.configPath,
+          fix: 'Inspect the package check error above, then rerun `limina package check`.',
+          packageName: entry.label,
+          reason: `Package check failed: ${formatErrorMessage(error)}.`,
+          rootDir: options.config.rootDir,
+          task: 'package:check',
+          title: 'Package check failed',
+          tool: 'package',
+        }),
+      ],
       label: entry.label,
-      outDir: entry.outDir,
-      rawEntry: entry.rawEntry,
-    });
-    const issueCount = Math.max(
-      0,
-      (options.issues?.length ?? issueCountBefore) - issueCountBefore,
-    );
+      passed: false,
+      toolCount: entry.checks.length,
+    }),
+    onResult: (entry, result) => {
+      const progressItem = progressItems.get(entry.label);
 
-    checkItems.push(
-      createCheckItemStats({
+      if (result.passed) {
+        progressItem?.pass(undefined, { elapsedTimeMs: result.durationMs });
+      } else {
+        progressItem?.fail(undefined, { elapsedTimeMs: result.durationMs });
+      }
+    },
+    onStart: (entry) => {
+      progressItems.get(entry.label)?.start();
+    },
+    run: async (entry): Promise<PackageCheckEntryRunResult> => {
+      const issues: LiminaCheckIssue[] = [];
+      const startedAt = performance.now();
+      const entryPassed = await runPackageCheckEntry({
+        attwProfile: options.attwProfile,
+        checks: entry.checks,
+        config: options.config,
+        flow: options.flow,
+        flowDepth: (options.flowDepth ?? 0) + 1,
+        issueSink: issues,
+        label: entry.label,
+        outDir: entry.outDir,
+        progressItem: progressItems.get(entry.label),
+        rawEntry: entry.rawEntry,
+      });
+
+      return {
         durationMs: performance.now() - startedAt,
-        issues: entryPassed ? 0 : Math.max(1, issueCount),
-        name: `${entry.label} (${entry.checks.join(', ')})`,
-        total: entry.checks.length,
+        issues,
+        label: `${entry.label} (${entry.checks.join(', ')})`,
+        passed: entryPassed,
+        toolCount: entry.checks.length,
+      };
+    },
+  });
+  const checkItems: LiminaCheckRunCheckItemSummary[] = entryResults.map(
+    (result) =>
+      createCheckItemStats({
+        durationMs: result.durationMs,
+        issues: result.passed ? 0 : Math.max(1, result.issues.length),
+        name: result.label,
+        total: result.toolCount,
       }),
-    );
-    passed = entryPassed && passed;
-  }
+  );
+  const passed = entryResults.every((result) => result.passed);
+
+  options.issues?.push(...entryResults.flatMap((result) => result.issues));
 
   options.onStats?.({
     items: checkItems,

@@ -715,9 +715,7 @@ describe('runPackageCheck and runReleaseCheck', () => {
             },
           ]),
         }),
-      ).rejects.toThrow(
-        /outDir package\.json not found for @example\/pkg at package\.json/u,
-      );
+      ).resolves.toBe(false);
 
       expect(packageCheckMocks.packCalls).toEqual([]);
       expect(packageCheckMocks.publintCalls).toHaveLength(0);
@@ -2736,7 +2734,10 @@ describe('runPackageCheck and runReleaseCheck', () => {
         }),
       ).resolves.toBe(true);
 
-      expect(packageCheckMocks.packCalls).toEqual([outDirA, outDirB]);
+      expect(packageCheckMocks.packCalls).toHaveLength(2);
+      expect([...packageCheckMocks.packCalls].sort()).toEqual(
+        [outDirA, outDirB].sort(),
+      );
     } finally {
       await rm(rootDir, {
         force: true,
@@ -3354,9 +3355,7 @@ describe('runPackageCheck and runReleaseCheck', () => {
           ]),
           tool: 'publint',
         }),
-      ).rejects.toThrow(
-        'Missing peer dependency "publint" required by limina package check.',
-      );
+      ).resolves.toBe(false);
     } finally {
       vi.doUnmock('publint');
       vi.resetModules();
@@ -3401,9 +3400,7 @@ describe('runPackageCheck and runReleaseCheck', () => {
           ]),
           tool: 'attw',
         }),
-      ).rejects.toThrow(
-        'Missing peer dependency "@arethetypeswrong/core" required by limina package check.',
-      );
+      ).resolves.toBe(false);
     } finally {
       vi.doUnmock('@arethetypeswrong/core');
       vi.resetModules();

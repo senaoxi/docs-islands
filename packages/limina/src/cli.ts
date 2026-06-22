@@ -347,6 +347,14 @@ function createCliFlow(
     : createLiminaFlowReporter();
 }
 
+async function closeCliFlow(
+  flow: ReturnType<typeof createCliFlow>,
+  message: string,
+): Promise<void> {
+  flow.outro(message);
+  await flow.close();
+}
+
 function readGlobalFlagsFromArgv(argv: readonly string[]): GlobalFlags {
   const flags: GlobalFlags = {};
 
@@ -593,7 +601,7 @@ async function main(): Promise<void> {
         flow,
         yes: flags.yes,
       });
-      flow.outro('limina init finished');
+      await closeCliFlow(flow, 'limina init finished');
     });
 
   cli
@@ -704,7 +712,10 @@ async function main(): Promise<void> {
         process.exitCode = 1;
       }
 
-      flow.outro(passed ? 'limina check passed' : 'limina check failed');
+      await closeCliFlow(
+        flow,
+        passed ? 'limina check passed' : 'limina check failed',
+      );
 
       const snapshot = await readCheckIssueSnapshot(config.rootDir);
       if (snapshot) {
@@ -772,7 +783,10 @@ async function main(): Promise<void> {
           process.exitCode = 1;
         }
 
-        flow.outro(passed ? 'limina graph passed' : 'limina graph failed');
+        await closeCliFlow(
+          flow,
+          passed ? 'limina graph passed' : 'limina graph failed',
+        );
         return;
       }
 
@@ -790,7 +804,10 @@ async function main(): Promise<void> {
         process.exitCode = 1;
       }
 
-      flow.outro(passed ? 'limina graph passed' : 'limina graph failed');
+      await closeCliFlow(
+        flow,
+        passed ? 'limina graph passed' : 'limina graph failed',
+      );
     });
 
   cli
@@ -820,7 +837,10 @@ async function main(): Promise<void> {
         process.exitCode = 1;
       }
 
-      flow.outro(passed ? 'limina proof passed' : 'limina proof failed');
+      await closeCliFlow(
+        flow,
+        passed ? 'limina proof passed' : 'limina proof failed',
+      );
     });
 
   cli
@@ -855,7 +875,10 @@ async function main(): Promise<void> {
         process.exitCode = 1;
       }
 
-      flow.outro(passed ? 'limina source passed' : 'limina source failed');
+      await closeCliFlow(
+        flow,
+        passed ? 'limina source passed' : 'limina source failed',
+      );
     });
 
   cli
@@ -933,7 +956,8 @@ async function main(): Promise<void> {
             process.exitCode = 1;
           }
 
-          flow.outro(
+          await closeCliFlow(
+            flow,
             result.passed ? 'limina checker passed' : 'limina checker failed',
           );
 
@@ -974,7 +998,8 @@ async function main(): Promise<void> {
           process.exitCode = 1;
         }
 
-        flow.outro(
+        await closeCliFlow(
+          flow,
           result.passed ? 'limina checker passed' : 'limina checker failed',
         );
       },
@@ -1015,7 +1040,10 @@ async function main(): Promise<void> {
         process.exitCode = 1;
       }
 
-      flow.outro(passed ? 'limina package passed' : 'limina package failed');
+      await closeCliFlow(
+        flow,
+        passed ? 'limina package passed' : 'limina package failed',
+      );
     });
 
   cli
@@ -1049,7 +1077,10 @@ async function main(): Promise<void> {
         process.exitCode = 1;
       }
 
-      flow.outro(passed ? 'limina release passed' : 'limina release failed');
+      await closeCliFlow(
+        flow,
+        passed ? 'limina release passed' : 'limina release failed',
+      );
     });
 
   try {
