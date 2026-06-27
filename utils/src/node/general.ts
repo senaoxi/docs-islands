@@ -19,8 +19,8 @@ export async function importWithError<T>(
   } catch (error) {
     const final = new Error(
       `Failed to import module "${moduleName}". Please ensure it is installed.`,
-      { cause: error },
     );
+    (final as Error & { cause?: unknown }).cause = error;
     throw final;
   }
 }

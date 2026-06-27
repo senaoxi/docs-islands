@@ -13,7 +13,7 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsgo',
-        include: ['utils/tsconfig.json', 'packages/**/tsconfig.json'],
+        include: ['utils/**/tsconfig.json', 'packages/**/tsconfig.json'],
         exclude: ['**/docs/**', ...overlapConfig],
       },
       vue: {
@@ -139,6 +139,10 @@ export default defineConfig({
               path: 'packages/vitepress/src/node/tsconfig.json',
               reason: 'client runtime must not depend on node runtime',
             },
+            {
+              path: 'utils/src/node/tsconfig.json',
+              reason: 'client runtime must not depend on node runtime',
+            },
           ],
         },
       },
@@ -158,6 +162,14 @@ export default defineConfig({
             },
             {
               path: 'packages/vitepress/src/client/tsconfig.json',
+              reason: 'shared runtime must stay independent of client runtime',
+            },
+            {
+              path: 'utils/src/node/tsconfig.json',
+              reason: 'shared runtime must stay independent of node runtime',
+            },
+            {
+              path: 'utils/src/client/tsconfig.json',
               reason: 'shared runtime must stay independent of client runtime',
             },
           ],

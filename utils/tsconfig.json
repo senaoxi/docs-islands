@@ -1,11 +1,11 @@
 {
-  "files": [],
-  "references": [
-    {
-      "path": "./tsconfig.lib.json",
-    },
-    {
-      "path": "./tsconfig.tools.json",
-    },
-  ],
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "isolatedDeclarations": false,
+    "allowJs": true,
+    "declaration": true,
+    "lib": ["ESNext"],
+    "types": ["node"],
+  },
+  "include": ["./bin/link-guard.js", "eslint.config.mjs", "package.json"],
 }

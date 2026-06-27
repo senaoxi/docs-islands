@@ -285,12 +285,16 @@ async function collectPackageFiles(
     onlyFiles: true,
   });
 
-  return [...new Set(fileNames.map((fileName) => toPosixPath(fileName)))]
-    .toSorted()
-    .map((fileName) => ({
-      fileName,
-      sourcePath: path.join(packageRootDir, fileName),
-    }));
+  const normalizedFileNames = [
+    ...new Set(fileNames.map((fileName) => toPosixPath(fileName))),
+  ];
+
+  normalizedFileNames.sort();
+
+  return normalizedFileNames.map((fileName) => ({
+    fileName,
+    sourcePath: path.join(packageRootDir, fileName),
+  }));
 }
 
 function createDependencyResolutionKey(
