@@ -11,21 +11,13 @@ export default defineConfig([
     },
   },
   {
-    files: ['./bin/*.js', './bin/*.ts', './bin/*.mjs'],
+    files: ['./bin/*.js'],
     rules: {
       'n/hashbang': 'off',
     },
   },
   {
-    files: ['./src/__tests__/**/*.ts'],
-    languageOptions: {
-      parserOptions: {
-        projectService: false,
-      },
-    },
-  },
-  {
-    files: ['./src/dom-iterable.ts'],
+    files: ['./src/client/dom-iterable.ts'],
     rules: {
       'unicorn/prefer-spread': 'off',
     },

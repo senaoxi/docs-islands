@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../node_modules/limina/schemas/tsconfig-schema.json",
+  "liminaOptions": {
+    "graphRules": ["runtime-shared"],
+    "outputs": {
+      "target": "es2020",
+      "rootDir": ".",
+      "outDir": "../../dist/shared",
+      "tsBuildInfoFile": "../../dist/shared/.tsbuildinfo",
+    },
+  },
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "isolatedDeclarations": true,
+    "declaration": true,
+    "stripInternal": true,
+    "lib": ["ESNext"],
+    "types": [],
+  },
+  "include": ["./"],
+}

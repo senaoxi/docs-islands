@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../node_modules/limina/schemas/tsconfig-schema.json",
+  "extends": "../../../tsconfig.base.json",
+  "liminaOptions": {
+    "graphRules": ["runtime-client"],
+    "outputs": {
+      "target": "es2020",
+      "rootDir": ".",
+      "outDir": "../../dist/client",
+      "tsBuildInfoFile": "../../dist/client/.tsbuildinfo",
+    },
+  },
+  "compilerOptions": {
+    "isolatedDeclarations": true,
+    "declaration": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+  },
+  "include": ["./"],
+}

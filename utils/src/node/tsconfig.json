@@ -1,0 +1,22 @@
+{
+  "$schema": "../../../node_modules/limina/schemas/tsconfig-schema.json",
+  "extends": "../../../tsconfig.base.json",
+  "liminaOptions": {
+    "outputs": {
+      "target": "es2020",
+      "rootDir": ".",
+      "outDir": "../../dist/node",
+      "tsBuildInfoFile": "../../dist/node/.tsbuildinfo",
+    },
+  },
+  "compilerOptions": {
+    "isolatedDeclarations": true,
+    "declaration": true,
+    "stripInternal": true,
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "module": "nodenext",
+    "moduleResolution": "node16",
+  },
+  "include": ["./"],
+}
