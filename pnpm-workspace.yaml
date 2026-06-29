@@ -63,7 +63,7 @@ catalogs:
     is-in-ci: ^2.0.0
     lint-staged: ^16.1.5
     magic-string: ^0.30.17
-    markdown-it: ^14.1.1
+    markdown-it: ^14.2.0
     nx: 22.7.5
     pathe: ^2.0.3
     picocolors: 1.1.1
