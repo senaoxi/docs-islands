@@ -21,6 +21,8 @@ auditConfig:
     - GHSA-67mh-4wv8-2f99
     - GHSA-4w7w-66w2-5vf9
     - GHSA-fx2h-pf6j-xcff
+    - GHSA-v6wh-96g9-6wx3
+    - GHSA-h67p-54hq-rp68
 
 autoInstallPeers: false
 
@@ -53,17 +55,18 @@ catalogs:
     '@vitejs/plugin-react-swc': ^4.3.1
     '@vitejs/plugin-vue': ^6.0.5
     '@vue/compiler-sfc': ^3.5.28
+    boxen: ^8.0.1
     cac: ^6.7.14
     concurrently: ^10.0.3
     del-cli: ^7.0.0
     es-module-lexer: ^2.0.0
-    esbuild: ^0.27.3
+    esbuild: ^0.28.1
     htmlparser2: ^10.0.0
     husky: ^9.1.7
     is-in-ci: ^2.0.0
     lint-staged: ^16.1.5
     magic-string: ^0.30.17
-    markdown-it: ^14.1.1
+    markdown-it: ^14.2.0
     nx: 22.7.5
     pathe: ^2.0.3
     picocolors: 1.1.1
@@ -76,14 +79,13 @@ catalogs:
     rollup-plugin-license: ^3.6.0
     semver: ^7.8.1
     shiki: ^2.5.0
-    tsx: ^4.21.0
-    boxen: ^8.0.1
+    tsx: ^4.22.4
     typescript: ~5.9.3
     vue-json-pretty: ^2.6.0
     vue-router: 4.6.4
     vue-tsc: ~3.2.4
     vue-tsgo: 0.2.2
-    wait-on: ^9.0.3
+    wait-on: ^9.0.10
     webpack: ^5.102.1
     yaml: ^2.8.3
     zod: ^4.3.6
@@ -167,11 +169,11 @@ managePackageManagerVersions: true
 nodeVersion: 22.13.0
 
 overrides:
-  '@eslint/eslintrc>js-yaml': 4.1.1
+  '@eslint/eslintrc>js-yaml': 4.2.0
+  'gray-matter>js-yaml': 3.14.2
   '@swc/core': 1.13.5
   '@types/node': 20.19.0
   form-data: 4.0.6
-  gray-matter>js-yaml: 3.14.2
   lodash: 4.18.0
   minimatch@^10.0.0: ^10.2.3
   minimatch@^10.0.0>brace-expansion: 5.0.6
@@ -184,6 +186,7 @@ overrides:
   tmp: 0.2.7
   undici: 7.28.0
   undici-types: ^6.24.0
+  markdown-it: ^14.2.0
 
 packageExtensions:
   '@pnpm/manifest-utils@*':
