@@ -13,7 +13,7 @@
     "package.json",
     "packagePlugin.ts",
     "rolldown.config.ts",
-    "rolldown.theme.config.ts",
+    "tsdown.theme.config.ts",
     "scripts/**/*.ts"
   ]
 }
