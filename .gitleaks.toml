@@ -4,12 +4,12 @@ title = "docs-islands gitleaks config"
 useDefault = true
 
 [allowlist]
-description = "Ignore non-secret cacheKey fields in generated debug reports"
+description = "Ignore non-secret cacheKey fields in generated debug/devtools reports"
+condition = "AND"
+regexTarget = "line"
 regexes = [
   '''"cacheKey"\s*:\s*"[\w.=-]{10,150}"'''
 ]
 paths = [
-  '''(?:^|/)packages/vitepress/docs/\.vitepress/site-devtools-reports(?:/.*)?$''',
+  '''(?:^|/)packages/vitepress/docs/\.vitepress/site-(?:debug|devtools)-reports(?:/.*)?$''',
 ]
-
-
