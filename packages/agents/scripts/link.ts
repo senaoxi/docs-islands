@@ -142,7 +142,6 @@ function main(): void {
     { dir: '.claude', name: 'Claude Code' },
     { dir: '.cursor', name: 'Cursor' },
     { dir: '.agent', name: 'Codex' },
-    { dir: '.github', name: 'GitHub Copilot' },
   ].forEach(({ dir, name }) => {
     ensureDir(join(projectRoot, dir));
     linkSkillsForTool(projectRoot, skillsBase, dir, name);

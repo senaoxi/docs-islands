@@ -118,11 +118,8 @@ export class VitePressDevBridge<
 
     const timestamp = Date.now();
     const loadStartedAt = timestamp;
-    const scriptPath = /* @vite-ignore */ this.options.createDevRuntimeUrl(
-      pathname,
-      timestamp,
-    );
-    const loadPromise = import(scriptPath).then(() => {
+    const scriptPath = this.options.createDevRuntimeUrl(pathname, timestamp);
+    const loadPromise = import(/* @vite-ignore */ scriptPath).then(() => {
       const loadCompletedAt = Date.now();
       loggerInstance
         .getLoggerByGroup(VITEPRESS_RUNTIME_LOG_GROUPS.reactDevRuntimeLoader)

@@ -9,7 +9,7 @@ Use this skill to help a VitePress site consume `@docs-islands/vitepress` safely
 
 ## Production Workflow
 
-1. Verify the target site uses Node.js `^20.19.0` or `>=22.12.0`, VitePress `^1.6.3`, React/ReactDOM `^18.2.0`, and `@vitejs/plugin-react-swc` `^3.9.0`.
+1. Verify the target site uses Node.js `^22.18.0` or `>=24.0.0`, VitePress `^1.6.3`, React/ReactDOM `^18.2.0`, and `@vitejs/plugin-react-swc` `^3.9.0`.
 2. Install the package and React peer dependencies.
 3. Apply `createDocsIslands({ adapters: [react()] })` exactly once to the VitePress config.
 4. Register `reactClient()` in `.vitepress/theme/index.ts`.

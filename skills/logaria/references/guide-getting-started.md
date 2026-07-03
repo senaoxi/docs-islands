@@ -4,12 +4,15 @@ Use this reference for first-time production integration of `logaria`.
 
 ## Contents
 
-- [Install](#install)
-- [Direct App Or Script](#direct-app-or-script)
-- [Reusable Library](#reusable-library)
-- [Error And Context Messages](#error-and-context-messages)
-- [Elapsed Time](#elapsed-time)
-- [Tests](#tests)
+- [Getting Started](#getting-started)
+  - [Contents](#contents)
+  - [Install](#install)
+  - [Direct App Or Script](#direct-app-or-script)
+  - [Reusable Library](#reusable-library)
+  - [Error And Context Messages](#error-and-context-messages)
+  - [Elapsed Time](#elapsed-time)
+  - [Tests](#tests)
+  - [Next References](#next-references)
 
 ## Install
 
@@ -17,7 +20,7 @@ Use this reference for first-time production integration of `logaria`.
 pnpm add logaria
 ```
 
-Other package managers are fine. The package expects Node.js `^20.19.0 || >=22.12.0` and an ESM-compatible runtime or bundler.
+Other package managers are fine. The package expects Node.js `^22.18.0 || >=24.0.0` and an ESM-compatible runtime or bundler.
 
 ## Direct App Or Script
 

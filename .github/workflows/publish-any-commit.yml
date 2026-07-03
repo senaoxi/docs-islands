@@ -2,7 +2,7 @@ name: Publish Any Commit
 
 env:
   NODE_OPTIONS: --max-old-space-size=4096
-  NODE_VERSION: "20.19.0"
+  NODE_VERSION: "22.18.0"
 
 on: [push, pull_request]
 
@@ -17,11 +17,11 @@ jobs:
         # actions/checkout@v5.0.0.
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
-      - name: Set node version to 20
+      - name: Set node version to 22.18.0
         # actions/setup-node@v5.0.0.
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
-          node-version: 20
+          node-version: 22.18.0
           registry-url: https://registry.npmjs.org/
           # Security: Disable cache to avoid cache poisoning attacks
           # Reference: https://docs.zizmor.sh/audits/#cache-poisoning

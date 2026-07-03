@@ -127,7 +127,7 @@ Rules:
 
 ## Development Setup
 
-You will need [Node.js](https://nodejs.org) v20.19.0+ or v22.12.0+ and [pnpm](https://pnpm.io) 10.17.0+.
+You will need [Node.js](https://nodejs.org) `^22.18.0 || >=24.0.0` and [pnpm](https://pnpm.io) 10.17.0+.
 
 Clone the repository:
 
