@@ -140,6 +140,7 @@ failIfNoMatch: true
 hoist: false
 loglevel: info
 managePackageManagerVersions: true
+minimumReleaseAge: 1440
 nodeVersion: 22.13.0
 overrides:
   '@eslint/eslintrc>js-yaml': 4.2.0

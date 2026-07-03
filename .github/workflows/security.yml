@@ -204,122 +204,6 @@ jobs:
               });
             }
 
-  # Dependency update detection
-  dependency-updates:
-    name: Check for Updates
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-    outputs:
-      updates_available: ${{ steps.outdated.outputs.updates_available }}
-    steps:
-      # action/checkout@v5.0.0.
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup-env
-        with:
-          node-version: 22
-          frozen-lockfile: true
-
-      - name: Check Outdated Packages
-        id: outdated
-        run: |
-          set -euo pipefail
-
-          echo "## 📦 Dependency Update Report" > update-report.md
-          echo "Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> update-report.md
-          echo "" >> update-report.md
-
-          # Check outdated packages
-          echo "### Outdated Dependencies:" >> update-report.md
-
-          if pnpm outdated --format json > outdated.json 2>&1; then
-            echo "All dependencies are up to date! ✅" >> update-report.md
-            echo "updates_available=0" >> $GITHUB_OUTPUT
-          else
-            # Validate JSON format
-            if ! jq empty outdated.json 2>/dev/null; then
-              echo "⚠️ Failed to parse outdated packages" >> update-report.md
-              echo "updates_available=0" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-
-            echo '```json' >> update-report.md
-            jq '.' outdated.json >> update-report.md
-            echo '```' >> update-report.md
-            echo "" >> update-report.md
-
-            # Count packages needing updates
-            TOTAL_UPDATES=$(jq 'to_entries | length' outdated.json 2>/dev/null || echo "0")
-            MAJOR_UPDATES=$(jq '[to_entries[] | select(.value.current != .value.latest and (.value.latest | split(".")[0]) != (.value.current | split(".")[0]))] | length' outdated.json 2>/dev/null || echo "0")
-
-            echo "updates_available=$TOTAL_UPDATES" >> $GITHUB_OUTPUT
-            echo "**Total packages needing updates: $TOTAL_UPDATES**" >> update-report.md
-            echo "**Major version updates: $MAJOR_UPDATES**" >> update-report.md
-
-            # Categorized display of updates
-            echo "" >> update-report.md
-            echo "#### 🔴 Major Updates (Breaking Changes Expected):" >> update-report.md
-            jq -r 'to_entries[] | select(.value.current != .value.latest and (.value.latest | split(".")[0]) != (.value.current | split(".")[0])) | "- **\(.key)**: \(.value.current) → \(.value.latest)"' outdated.json >> update-report.md || echo "None" >> update-report.md
-
-            echo "" >> update-report.md
-            echo "#### 🟡 Minor/Patch Updates:" >> update-report.md
-            jq -r 'to_entries[] | select(.value.current != .value.latest and (.value.latest | split(".")[0]) == (.value.current | split(".")[0])) | "- **\(.key)**: \(.value.current) → \(.value.latest)"' outdated.json >> update-report.md || echo "None" >> update-report.md
-          fi
-
-      - name: Upload Update Report
-        if: always()
-        # actions/upload-artifact@v4.6.2.
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa024
-        with:
-          name: dependency-update-report
-          path: update-report.md
-          retention-days: 30
-
-      - name: Create Update Issue
-        # Fixed condition judgment - Use string comparison
-        if: steps.outdated.outputs.updates_available != '' && steps.outdated.outputs.updates_available != '0'
-        # actions/github-script@v8.0.0.
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('update-report.md', 'utf8');
-            const updateCount = '${{ steps.outdated.outputs.updates_available }}';
-
-            const title = `🤖 Dependency Updates Available (${updateCount} packages) - ${new Date().toISOString().split('T')[0]}`;
-            const body = report + '\n\n---\n\n**To update dependencies, run:**\n```bash\npnpm update --interactive\n```\n\n**For major updates, review breaking changes first:**\n```bash\npnpm outdated\n```';
-
-            // Check for existing same issue
-            const { data: issues } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'dependencies'
-            });
-
-            const existingIssue = issues.find(issue =>
-              issue.title.includes('Dependency Updates Available')
-            );
-
-            if (existingIssue) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existingIssue.number,
-                body: `## 📅 Updated Dependency Report\n\n${report}`
-              });
-            } else {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: title,
-                body: body,
-                labels: ['dependencies', 'automated']
-              });
-            }
 
   # License compliance check
   license-check:
@@ -482,14 +366,7 @@ jobs:
   summary:
     name: Security Summary
     runs-on: ubuntu-latest
-    needs:
-      [
-        secret-scan,
-        security-audit,
-        dependency-updates,
-        license-check,
-        generate-sbom,
-      ]
+    needs: [secret-scan, security-audit, license-check, generate-sbom]
     permissions:
       contents: read
     if: always()
@@ -519,7 +396,6 @@ jobs:
             const jobs = {
               'Secret Scan': '${{ needs.secret-scan.result }}',
               'Security Audit': '${{ needs.security-audit.result }}',
-              'Dependency Updates': '${{ needs.dependency-updates.result }}',
               'License Check': '${{ needs.license-check.result }}',
               'SBOM Generation': '${{ needs.generate-sbom.result }}'
             };
@@ -543,14 +419,9 @@ jobs:
               summary.push('✅ No critical vulnerabilities detected\n');
             }
 
-            // Dependency updates
+            // Dependency updates are handled by Renovate PRs.
             summary.push('\n## 📦 Dependency Updates\n');
-            const updatesAvailable = '${{ needs.dependency-updates.outputs.updates_available }}' || '0';
-            if (updatesAvailable !== '0') {
-              summary.push(`📊 ${updatesAvailable} packages have updates available\n`);
-            } else {
-              summary.push('✅ All dependencies are up to date\n');
-            }
+            summary.push('ℹ️ Dependency version updates are handled by Renovate PRs, not by this security workflow.\n');
 
             // License compliance
             summary.push('\n## 📜 License Compliance\n');
