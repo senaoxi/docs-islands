@@ -19,7 +19,6 @@ cache
 .claude/
 .cursor/
 .agent/
-.github/
 
 # Local environment overrides
 *.local

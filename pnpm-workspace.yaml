@@ -166,6 +166,8 @@ loglevel: info
 
 managePackageManagerVersions: true
 
+minimumReleaseAge: 1440
+
 nodeVersion: 22.13.0
 
 overrides:

@@ -1,0 +1,72 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended", "schedule:weekly", "group:allNonMajor"],
+  labels: ["dependencies", "automated"],
+  ignorePaths: ["**/__tests__/**", "**/dist/**"],
+  rangeStrategy: "bump",
+  postUpdateOptions: ["pnpmDedupe"],
+  packageRules: [
+    {
+      matchDepTypes: ["peerDependencies"],
+      enabled: false
+    },
+    {
+      matchDepTypes: ["action"],
+      pinDigests: true
+    },
+    {
+      matchDepTypes: ["npm"],
+      minimumReleaseAge: "1440 minutes"
+    },
+    {
+      groupName: "typescript-checker toolchain",
+      matchDepNames: [
+        "typescript",
+        "vue-tsc",
+        "vue-tsgo",
+        "@typescript/native-preview",
+        "@types/node",
+        "rolldown-plugin-dts",
+        "oxc-resolver",
+        "oxc-*",
+        "@oxc-project/*"
+      ],
+      dependencyDashboardApproval: true
+    },
+    {
+      groupName: "vitepress documentation stack",
+      matchDepNames: [
+        "vite",
+        "vitepress",
+        "@vitejs/*",
+        "@vue/*",
+        "vue",
+        "vue-router",
+        "vitepress-plugin-*",
+        "@nolebase/*"
+      ]
+    },
+    {
+      groupName: "development tooling",
+      matchDepNames: [
+        "prettier",
+        "prettier-plugin-*",
+        "eslint",
+        "@eslint/*",
+        "typescript-eslint",
+        "@typescript-eslint/*",
+        "eslint-*",
+        "lint-staged",
+        "@playwright/test"
+      ],
+      matchUpdateTypes: ["minor", "patch"]
+    }
+  ],
+  ignoreDeps: ["node"],
+  "github-actions": {
+    managerFilePatterns: [
+      "/(^|/)(workflow-templates|\\.(?:github|gitea|forgejo)/(?:workflows|actions))/.+\\.ya?ml$/",
+      "/(^|/)action\\.ya?ml$/"
+    ]
+  }
+}
