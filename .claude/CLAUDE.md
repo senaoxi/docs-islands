@@ -29,7 +29,7 @@ pnpm docs:dev [pkg]     # Dev server for docs (default: monorepo)
 ## Conventions
 
 - Commit messages: conventional commits (`feat`, `fix`, `refactor`, etc.) with scope.
-- Package manager: pnpm (enforced). Node.js ^20.19.0 || >=22.12.0.
+- Package manager: pnpm (enforced). Node.js ^22.18.0 || >=24.0.0.
 - Module format: ESM (`"type": "module"`).
 
 ## Skills

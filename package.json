@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "^20.19.0 || >=22.13.0",
-    "pnpm": ">=10.33.4"
+    "node": "^22.18.0 || >=24.0.0",
+    "pnpm": ">=11.9.0"
   },
   "workspaces": [
     "packages/*",
@@ -53,7 +53,7 @@
     "release": "tsx scripts/release.ts",
     "changelog": "tsx scripts/changelog.ts",
     "changelog:preview": "tsx scripts/changelog.ts --dry-run",
-    "clean": "pnpm run _run clean && del-cli .tsbuild .smoke .eslintcache coverage node_modules .nx",
+    "clean": "pnpm run _run clean && del-cli .tsbuild .limina .smoke .eslintcache coverage node_modules .nx",
     "_run": "tsx scripts/run-workspace-script.ts",
     "preinstall": "npx only-allow pnpm",
     "postinstall": "node --import tsx scripts/postinstall.ts",
@@ -100,5 +100,5 @@
       "prettier --write --cache --ignore-unknown"
     ]
   },
-  "packageManager": "pnpm@10.33.4"
+  "packageManager": "pnpm@11.9.0"
 }

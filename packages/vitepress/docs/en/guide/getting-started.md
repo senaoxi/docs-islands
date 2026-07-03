@@ -2,12 +2,12 @@
 
 ## Prerequisites
 
-| Dependency                 | Required version          |
-| -------------------------- | ------------------------- |
-| Node.js                    | `^20.19.0` or `>=22.12.0` |
-| VitePress                  | `^1.6.3`                  |
-| React / ReactDOM           | `^18.2.0`                 |
-| `@vitejs/plugin-react-swc` | `^3.9.0`                  |
+| Dependency                 | Required version       |
+| -------------------------- | ---------------------- |
+| Node.js                    | `^22.18.0 or >=24.0.0` |
+| VitePress                  | `^1.6.3`               |
+| React / ReactDOM           | `^18.2.0`              |
+| `@vitejs/plugin-react-swc` | `^3.9.0`               |
 
 ## 1. Install Dependencies
 

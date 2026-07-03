@@ -127,7 +127,7 @@
 
 ## 开发环境配置
 
-你需要 [Node.js](https://nodejs.org) v20.19.0+ 或 v22.12.0+ 以及 [pnpm](https://pnpm.io) 10.17.0+。
+你需要 [Node.js](https://nodejs.org) `^22.18.0 || >=24.0.0` 以及 [pnpm](https://pnpm.io) 10.17.0+。
 
 克隆仓库：
 

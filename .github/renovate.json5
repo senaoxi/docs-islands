@@ -19,6 +19,12 @@
       minimumReleaseAge: "1440 minutes"
     },
     {
+      groupName: "vite 5 maintenance",
+      matchPackageNames: ["vite"],
+      matchFileNames: ["pnpm-workspace.yaml"],
+      allowedVersions: "<6.0.0"
+    },
+    {
       groupName: "typescript-checker toolchain",
       matchDepNames: [
         "typescript",

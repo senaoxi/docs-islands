@@ -252,7 +252,7 @@ The `limina` root entry is CLI-first and config-only. It exposes `defineConfig` 
 
 ## Requirements
 
-- Node `^20.19.0 || >=22.12.0`
+- Node `^22.18.0 || >=24.0.0`
 - pnpm workspace with `pnpm-workspace.yaml` at the workspace root
 - `typescript` installed locally (declared as an optional peerDep; `getActiveCheckers` needs it)
 - `vue-tsc` / `vue-tsgo` / `svelte-check` only required if the corresponding preset is configured

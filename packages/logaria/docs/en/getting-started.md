@@ -6,7 +6,7 @@ This page installs Logaria and walks you through your first logger. For what Log
 
 Logaria targets ESM-compatible runtimes:
 
-- **Node.js**: `^20.19.0 || >=22.12.0`
+- **Node.js**: `^22.18.0 || >=24.0.0`
 - **Browsers**: any modern browser served through an ESM-aware bundler
 - **Module format**: ESM only (`"type": "module"`)
 

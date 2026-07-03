@@ -1,7 +1,7 @@
 name: Security & Dependencies
 
 env:
-  NODE_VERSION: "20.19.0"
+  NODE_VERSION: "22.18.0"
 
 on:
   schedule:
@@ -204,7 +204,6 @@ jobs:
               });
             }
 
-
   # License compliance check
   license-check:
     name: License Compliance
@@ -220,7 +219,7 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup-env
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           frozen-lockfile: true
 
       - name: Check Licenses
@@ -297,7 +296,7 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup-env
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           frozen-lockfile: true
 
       # Build project first to ensure all local dependencies are available

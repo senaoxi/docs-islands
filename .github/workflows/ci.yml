@@ -3,7 +3,7 @@ name: CI
 env:
   # Reduce memory usage - 4GB is typically sufficient
   NODE_OPTIONS: --max-old-space-size=4096
-  NODE_VERSION: "20.19.0"
+  NODE_VERSION: "22.18.0"
   # Install playwright binary manually (because pnpm only runs install script once)
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
   # Vitest auto retry on flaky segfault
@@ -170,30 +170,29 @@ jobs:
       matrix:
         include:
           # Primary test environment (reuse build)
-          - name: "Linux / Node 22"
+          - name: "Linux / Node 22.18"
             os: ubuntu-latest
-            node: 22
+            node: 22.18.0
             coverage: true
             use-artifacts: true
-          # LTS version (reuse build)
-          - name: "Linux / Node 20"
+          # Supported Node 24 lower bound (reuse build)
+          - name: "Linux / Node 24.0"
             os: ubuntu-latest
-            node: 20
+            node: 24.0.0
             use-artifacts: true
           # Cross-platform tests (standalone build, main branch only)
-          - name: "macOS / Node 22"
+          - name: "macOS / Node 22.18"
             os: macos-latest
-            node: 22
+            node: 22.18.0
             skip-pr: true
-          - name: "Windows / Node 22"
+          - name: "Windows / Node 22.18"
             os: windows-latest
-            node: 22
+            node: 22.18.0
             skip-pr: true
-          # Latest Node (allow failure)
-          - name: "Linux / Node Latest"
+          # Latest Node 24 patch release
+          - name: "Linux / Node 24 Latest"
             os: ubuntu-latest
             node: 24
-            continue-on-error: true
             use-artifacts: true
 
     continue-on-error: ${{ matrix.continue-on-error || false }}

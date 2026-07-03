@@ -18,7 +18,7 @@
     "parsing"
   ],
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": "^22.18.0 || >=24.0.0"
   },
   "repository": {
     "type": "git",
@@ -101,5 +101,5 @@
   },
   "types": "./src/index.ts",
   "sideEffects": false,
-  "packageManager": "pnpm@10.33.4"
+  "packageManager": "pnpm@11.9.0"
 }
