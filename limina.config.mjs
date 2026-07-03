@@ -75,7 +75,7 @@ export default defineConfig({
                 'Components will temporarily follow the build process and expose build artifacts.',
             },
             {
-              files: ['packages/vitepress/rolldown.theme.config.ts'],
+              files: ['packages/vitepress/tsdown.theme.config.ts'],
               reason: 'Build configuration items need to be entry modules.',
             },
           ],
