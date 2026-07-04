@@ -6,7 +6,7 @@
       "target": "es2020",
       "rootDir": ".",
       "outDir": "../../dist/node",
-      "tsBuildInfoFile": "../../dist/node/.tsbuildinfo",
+      "declarationMap": true,
     },
   },
   "compilerOptions": {

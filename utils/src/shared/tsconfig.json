@@ -6,7 +6,7 @@
       "target": "es2020",
       "rootDir": ".",
       "outDir": "../../dist/shared",
-      "tsBuildInfoFile": "../../dist/shared/.tsbuildinfo",
+      "declarationMap": true,
     },
   },
   "extends": "../../../tsconfig.base.json",
