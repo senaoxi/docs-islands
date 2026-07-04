@@ -173,6 +173,9 @@ const nodePlugins: RolldownOptions['plugins'] = [
           await scanFiles(
             resolve(__dirname, copyDir),
             async (_, absolutePath) => {
+              if (!absolutePath.endsWith('.d.ts')) {
+                return;
+              }
               const relativePath = path.relative(__dirname, absolutePath);
               const content = await readFile(absolutePath, 'utf8');
               const copiedContent = isDeclarationFile(relativePath)
