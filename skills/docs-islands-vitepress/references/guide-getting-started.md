@@ -4,12 +4,12 @@ Use this when adding `@docs-islands/vitepress` to a VitePress consumer site.
 
 ## Prerequisites
 
-| Dependency                 | Required version         |
-| -------------------------- | ------------------------ |
-| Node.js                    | `^22.18.0` or `>=24.0.0` |
-| VitePress                  | `^1.6.3`                 |
-| React / ReactDOM           | `^18.2.0`                |
-| `@vitejs/plugin-react-swc` | `^3.9.0`                 |
+| Dependency                 | Required version          |
+| -------------------------- | ------------------------- |
+| Node.js                    | `^22.18.0` or `>=24.11.0` |
+| VitePress                  | `^1.6.3`                  |
+| React / ReactDOM           | `^18.2.0`                 |
+| `@vitejs/plugin-react-swc` | `^3.9.0`                  |
 
 ## Install
 
