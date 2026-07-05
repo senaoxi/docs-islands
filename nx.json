@@ -13,7 +13,10 @@
       "!{projectRoot}/coverage/**"
     ],
     "sharedGlobals": [
+      "{workspaceRoot}/limina.config.mts",
       "{workspaceRoot}/limina.config.mjs",
+      "{workspaceRoot}/limina.config.ts",
+      "{workspaceRoot}/limina.config.js",
       "{workspaceRoot}/nx.json",
       "{workspaceRoot}/package.json",
       "{workspaceRoot}/pnpm-lock.yaml",

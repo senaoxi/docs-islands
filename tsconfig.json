@@ -8,7 +8,7 @@
     "types": ["node"],
   },
   "include": [
-    "limina.config.ts",
+    "limina.config.mts",
     "package.json",
     "eslint.config.mjs",
     "scripts/**/*.ts",

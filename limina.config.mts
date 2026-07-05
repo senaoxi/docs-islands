@@ -4,7 +4,11 @@ const overlapConfig = [
   'tsconfig.json',
   'packages/vitepress/**/tsconfig.json',
   'packages/logaria/tsconfig.json',
+  'packages/logaria/src/plugin/__tests__/tsconfig.json',
   'packages/core/tsconfig.json',
+  'packages/agents/tsconfig.json',
+  'packages/plugins/license/tsconfig.json',
+  '**/docs/**/tsconfig.json',
 ];
 
 export default defineConfig({
@@ -13,17 +17,18 @@ export default defineConfig({
     checkers: {
       typescript: {
         preset: 'tsgo',
-        include: ['utils/**/tsconfig.json', 'packages/**/tsconfig.json'],
-        exclude: ['**/docs/**', ...overlapConfig],
+        include: ['packages/**/tsconfig.json'],
+        exclude: overlapConfig,
       },
       vue: {
         preset: 'vue-tsc',
-        include: ['**/docs/**/tsconfig.json', ...overlapConfig],
+        include: ['utils/**/tsconfig.json', ...overlapConfig],
       },
     },
     source: {
       include: [
         '**/*.ts',
+        '**/*.mts',
         '**/*.d.ts',
         '**/*.tsx',
         '**/*.js',
