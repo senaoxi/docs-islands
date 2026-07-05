@@ -4,11 +4,11 @@ Source-backed reference for the `LiminaConfig` surface.
 
 ## File Format
 
-- Filename: `limina.config.mjs`
+- Filename: `limina.config.mts` for new projects. `limina.config.mjs`, `limina.config.ts`, and `limina.config.js` are also supported when loading existing configs.
 - Module format: ESM
 - Default export: `LiminaConfig`, `Promise<LiminaConfig>`, `(env) => LiminaConfig`, or `(env) => Promise<LiminaConfig>`
 
-```js
+```ts
 import { defineConfig } from 'limina';
 
 export default defineConfig({

@@ -4,9 +4,9 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 ## Config Loading
 
-### `Unable to find limina config. Searched for limina.config.mjs from <cwd> up to the pnpm workspace root at <root>.`
+### `Unable to find limina config. Searched for "limina.config.mts", "limina.config.mjs", "limina.config.ts", "limina.config.js" from <cwd> up to the pnpm workspace root at <root>.`
 
-- **Cause**: No `limina.config.mjs` exists from cwd upward through the workspace root.
+- **Cause**: No supported Limina config file exists from cwd upward through the workspace root.
 - **Fix**: Run `limina init`, create the file manually, or pass `--config <path>`.
 
 ### `Unable to find limina config at <path>`

@@ -16,7 +16,7 @@ limina [--config <path>] [--mode <mode>] <command> [...]
 | `--mode <mode>`   | Set the `mode` passed to function-style configs. Default = `process.env.NODE_ENV ?? 'default'`.                        |
 | `--help` / `-h`   | Print help.                                                                                                            |
 
-When `--config` is omitted, Limina walks upward from cwd looking for `limina.config.mjs`, bounded by the `pnpm-workspace.yaml` root.
+When `--config` is omitted, Limina walks upward from cwd looking for `limina.config.mts`, `limina.config.mjs`, `limina.config.ts`, or `limina.config.js`, bounded by the `pnpm-workspace.yaml` root.
 
 ## `limina init [--yes]`
 
@@ -30,7 +30,7 @@ What it does:
 
 1. Locates the pnpm workspace root (`pnpm-workspace.yaml`).
 2. Confirms the workspace root.
-3. Writes an auto-first `limina.config.mjs` with `config.checkers: { mode: 'auto', exclude: [] }`.
+3. Writes an auto-first `limina.config.mts` with `config.checkers: { mode: 'auto', exclude: [] }`.
 4. Ensures `.limina/` is ignored in the root `.gitignore`.
 5. Creates or updates the root `package.json` with `"limina:build": "limina checker build"` and missing `limina` / `typescript` devDependencies.
 6. Normalizes the root script surface around `"limina:build": "limina checker build"`.

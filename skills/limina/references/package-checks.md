@@ -180,7 +180,7 @@ The selection reason is logged at the top of the run:
 
 ```
 Package check plan:
-  config: limina.config.mjs
+  config: limina.config.mts
   cwd: packages/limina
   selection: nearest package.json name "limina" matched configured entry name.
   entries:

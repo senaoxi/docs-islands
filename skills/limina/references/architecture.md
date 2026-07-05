@@ -20,7 +20,7 @@ Users maintain ordinary source configs and package manifests:
 ```text
 .
 ├─ pnpm-workspace.yaml
-├─ limina.config.mjs
+├─ limina.config.mts
 ├─ tsconfig.json
 └─ packages/<pkg>/
    ├─ package.json
@@ -140,8 +140,8 @@ Implications:
 
 ## Architecture Rules Via Labels
 
-```js
-// limina.config.mjs
+```ts
+// limina.config.mts
 graph: {
   rules: {
     'runtime-client': {
