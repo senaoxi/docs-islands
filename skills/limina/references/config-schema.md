@@ -162,14 +162,12 @@ interface SourceKnipIgnoredFileConfig {
 }
 
 interface SourceImportAuthorityConfig {
-  allow?: SourceImportAuthorityAllowRule[];
+  allow?: Record<string, SourceImportAuthorityWorkspaceRootGrant[]>;
 }
 
-interface SourceImportAuthorityAllowRule {
-  files: string[];
-  packages?: string[];
-  specifiers?: string[];
-  owner?: string;
+interface SourceImportAuthorityWorkspaceRootGrant {
+  include?: string[];
+  workspaceRootDependencies: string[];
   reason: string;
 }
 ```
@@ -188,11 +186,11 @@ interface SourceImportAuthorityAllowRule {
 `source.importAuthority` behavior:
 
 - Source imports must normally be authorized by the nearest pnpm workspace package manifest.
-- `allow[].packages` lets matching files also use the workspace root `package.json` as an authority manifest for listed package names or package-name globs. The root manifest must exist and must declare the package.
-- `allow[].specifiers` explicitly authorizes full import specifiers or specifier globs for matching files.
-- `allow[].files` is required and matches workspace-root-relative source file globs.
-- Each allow entry must include `packages` or `specifiers`, plus a non-empty `reason`.
-- `owner` optionally scopes the rule to a source owner identity: package name for named owners, or workspace-root-relative package directory for nameless owners.
+- `allow` is an object keyed by source owner identity: package name for named owners, or workspace-root-relative package directory for nameless owners.
+- Each owner key maps to workspace root dependency grants with non-empty `workspaceRootDependencies` and `reason`.
+- `include` is optional and matches owner-root-relative source file globs. When omitted, the grant applies to all governed source modules for that owner.
+- `workspaceRootDependencies` lets matching owner sources use the workspace root `package.json` as a dependency authority manifest for listed package names or package-name globs. The root manifest must exist and must declare the package.
+- Workspace root authority must not bypass intermediate workspace package manifests between the source owner and the workspace root.
 - Tsconfig-governance failures are fixed by changing `tsconfig.json` ownership/coverage.
 
 ## `graph`
