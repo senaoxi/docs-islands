@@ -36,8 +36,6 @@ catalogs:
     '@babel/types': ^7.29.0
     '@clack/prompts': ^1.4.0
     '@farmfe/core': 2.0.0-beta.10
-    '@pnpm/catalogs.types': 1000.0.0
-    '@pnpm/pnpmfile': 1002.1.13
     '@rollup/plugin-replace': ^6.0.3
     '@rspack/core': ^1.6.0
     '@tsdown/css': ^0.22.3
@@ -89,6 +87,10 @@ catalogs:
     vue-tsgo: 0.2.2
     wait-on: ^9.0.10
     webpack: ^5.102.1
+    '@pnpm/catalogs.types': 1100.0.0
+    '@pnpm/pnpmfile': 1002.1.13
+    '@pnpm/workspace.read-manifest': 1000.3.1
+    '@pnpm/exportable-manifest': 1000.4.2
     yaml: ^2.9.0
     zod: ^4.3.6
   docs-dev:
@@ -131,8 +133,6 @@ catalogs:
     vue-eslint-parser: ^10.2.0
     yaml-eslint-parser: ^2.0.0
   prod:
-    '@pnpm/exportable-manifest': 1000.4.2
-    '@pnpm/workspace.read-manifest': 1000.3.1
     cheerio: ^1.2.0
     ignore: ^7.0.5
     logaria: 0.0.3
