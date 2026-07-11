@@ -26,6 +26,31 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 ## Config Shape
 
+### `regions.exclude[...].kind is required.` / `regions.exclude[...].kind must be one of:`
+
+- **Cause**: A region exclusion omitted `kind` or used a value outside `workspace-package`, `package-scope`, and `pnpm-workspace`.
+- **Fix**: Declare the candidate kind explicitly. Do not infer it from `include`.
+
+### `regions.exclude rule does not match a recognized governance root.`
+
+- **Cause**: The path is not a candidate root, the rule uses the wrong `kind`, it points at `package.json` or `pnpm-workspace.yaml`, or it falls under a fixed discovery ignore/output directory.
+- **Fix**: Match the workspace-root-relative candidate directory with the correct `kind`.
+
+### `Multiple regions.exclude rules match the same governance root.`
+
+- **Cause**: Two same-kind rules overlap on one candidate.
+- **Fix**: Make the patterns non-overlapping; order does not select a reason.
+
+### `regions.exclude cannot exclude the root pnpm workspace.`
+
+- **Cause**: A `pnpm-workspace` rule matches `.`.
+- **Fix**: Keep the governance origin active. To remove only the activated root package, use `kind: 'workspace-package'` with `include: ['.']`.
+
+### `Failed to inspect nested pnpm workspace region.`
+
+- **Cause**: An unexcluded nested workspace failed during the reported `manifest-validation` or `package-discovery` phase.
+- **Fix**: Repair the nested workspace, or exclude its root explicitly with `kind: 'pnpm-workspace'` when it is intentionally outside the run. Exclusion is applied before the manifest is read.
+
 ### `config.checkers must be an object auto config or an object keyed by checker name.`
 
 - **Cause**: `config.checkers` is neither omitted nor an object.

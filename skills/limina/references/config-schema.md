@@ -40,12 +40,42 @@ interface LiminaConfig {
   package?: PackageConfig;
   pipelines?: Record<string, PipelineStep[]>;
   proof?: ProofConfig;
+  regions?: RegionsConfig;
   release?: ReleaseConfig;
   source?: SourceCheckConfig;
 }
 ```
 
 Top-level `paths` is not part of `LiminaConfig`.
+
+## `regions`
+
+```ts
+type RegionExcludeKind = 'workspace-package' | 'package-scope' | 'pnpm-workspace';
+
+interface RegionsConfig {
+  extendNestedPackageScopes?: boolean;
+  exclude?: RegionExcludeConfig[];
+}
+
+interface RegionExcludeConfig {
+  kind: RegionExcludeKind;
+  include: string[];
+  reason: string;
+}
+```
+
+Rules:
+
+- `extendNestedPackageScopes` defaults to `false`; `exclude` defaults to `[]` and may be explicitly empty.
+- `kind` is required. Do not accept, infer, or document a kind-less compatibility form.
+- `include` is a non-empty array of workspace-root-relative globs matched only against candidate root directories. Package names and descriptor paths are not selectors.
+- `workspace-package` candidates are packages activated by the root pnpm workspace. `include: ['.']` may exclude the root package without excluding the root workspace.
+- `package-scope` candidates are recognized nested `package.json` roots, whether extended or already stopped.
+- `pnpm-workspace` candidates are nested workspace roots. Matching happens before manifest validation or package discovery; the root workspace is not a candidate.
+- Every rule must match at least one candidate of the same kind. Multiple rules may not match the same candidate.
+- Fixed discovery ignores and configured output directories do not create candidates.
+- Unexcluded nested workspace manifest-validation and package-discovery failures are fatal.
 
 ## `config.checkers`
 

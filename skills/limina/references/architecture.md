@@ -41,6 +41,22 @@ Limina generates checker build/declaration configs under:
 
 Generated `.limina` files are internal artifacts. Do not ask users to handwrite generated declaration leaves or generated build aggregators.
 
+## Governed Regions
+
+The root `pnpm-workspace.yaml` defines the governance origin. Its activated workspace packages form the initial package set. Nested `package.json` files stop governance by default; eligible nameless scopes can be extended with `regions.extendNestedPackageScopes`. Nested pnpm workspaces are always hard boundaries.
+
+`regions.exclude` uses three explicit candidate identities:
+
+- `workspace-package:<absolute-root>`
+- `package-scope:<absolute-root>`
+- `pnpm-workspace:<absolute-root>`
+
+Rules match only workspace-root-relative candidate root directories of the same kind. Never match descriptor paths or package names, and never use array order to resolve overlapping rules.
+
+Nested pnpm workspace candidates are resolved before inspection. An excluded workspace is represented by `inspection: { status: 'excluded', reason }` and is not parsed or passed to package discovery. An inspected workspace uses `inspection: { status: 'completed', workspacePackages }`, including a genuinely empty package list. Unexcluded manifest or package-discovery failures stop topology construction.
+
+Package-scope and workspace-package exclusions are applied after package and scope discovery. Excluded roots remain boundaries, and all current-region consumers use the resulting topology for ownership, checker discovery, source checks, generated graphs, solution references, and implicit references.
+
 ## Source Config Roles
 
 ### Source Entry: `tsconfig.json`
