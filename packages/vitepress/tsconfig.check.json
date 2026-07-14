@@ -1,5 +1,13 @@
 {
   // Post-build dist artifact check used after rolldown output exists; not part of pnpm typecheck.
   "extends": "../../tsconfig.check.json",
+  "compilerOptions": {
+    // The published declarations contain both .d.ts and .d.mts entry points.
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    // @types/node@22 models optional socket ports with both Partial<T> and
+    // explicit `| undefined`; TypeScript 6 otherwise rejects that upstream merge.
+    "exactOptionalPropertyTypes": false
+  },
   "include": ["dist/**/*"]
 }
