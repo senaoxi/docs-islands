@@ -65,7 +65,7 @@ catalogs:
     lint-staged: ^16.1.5
     magic-string: ^0.30.17
     markdown-it: ^14.2.0
-    nx: ^23.0.1
+    nx: ^23.1.0
     pathe: ^2.0.3
     picocolors: 1.1.1
     prompts: ^2.4.2

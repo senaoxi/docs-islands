@@ -41,10 +41,18 @@ export default defineConfig({
         'nx.json',
         'vercel.json',
         'project.json',
+        'settings.json',
+        '.markdownlint.json',
+        '.prettierrc.json',
+        'packages/vitepress/docs/.vitepress/site-devtools-reports/**/*.json',
         'tsconfig.json',
         '**/tsconfig.*.json',
       ],
     },
+  },
+
+  regions: {
+    extendNestedPackageScopes: true,
   },
 
   // Workspace dependency usages that static source and package script analysis
