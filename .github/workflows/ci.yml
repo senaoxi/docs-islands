@@ -252,7 +252,7 @@ jobs:
           retention-days: 7
 
   limina-atomic-writer-windows:
-    name: Limina file replacement (Windows / Node ${{ matrix.node }})
+    name: Limina filesystem behavior (Windows / Node ${{ matrix.node }})
     runs-on: windows-latest
     needs: changes
     if: needs.changes.outputs.src == 'true' || needs.changes.outputs.ci == 'true'
@@ -269,8 +269,8 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      - name: Atomic writer and migration transaction unit tests
-        run: pnpm nx run limina:test:unit -- src/__tests__/atomic-writer.spec.ts src/__tests__/migration-transaction.spec.ts
+      - name: Atomic writer, path, shell, and migration transaction unit tests
+        run: pnpm nx run limina:test:unit -- src/__tests__/atomic-writer.spec.ts src/__tests__/path-filters.spec.ts src/__tests__/shell-command.spec.ts src/__tests__/migration-transaction.spec.ts
 
   smoke:
     name: Smoke Tests
