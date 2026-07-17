@@ -23,6 +23,7 @@ const ALLOWED_LICENSES = new Set([
   'BSD-3-Clause',
   'BlueOak-1.0.0',
   'ISC',
+  'MPL-2.0',
 ]);
 
 const findMonorepoRoot = (): string | null => {
