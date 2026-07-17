@@ -5,6 +5,7 @@ coverage
 .nx/
 .smoke
 .limina/
+.vercel/
 node_modules
 .eslintcache
 cache

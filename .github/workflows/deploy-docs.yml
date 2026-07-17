@@ -1,0 +1,93 @@
+name: Deploy Docs to Vercel
+
+on:
+  push:
+    tags:
+      - "logaria/v*"
+      - "limina/v*"
+      - "vitepress/v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-docs-production
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    if: github.repository == 'senaoxi/docs-islands'
+    runs-on: ubuntu-latest
+    environment: Production
+    env:
+      DOCS_ISLANDS_MODE: production
+      DOCS_ISLANDS_RELEASE: "1"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+    steps:
+      - name: Checkout tagged commit
+        # actions/checkout@v5.0.0.
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^(logaria|limina|vitepress)/v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Unsupported release tag: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+      - name: Verify tagged commit is on main
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+
+      - name: Setup Node.js
+        # actions/setup-node@v5.0.0.
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22.18.0"
+          package-manager-cache: false
+
+      - name: Setup pnpm via Corepack
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare "$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).packageManager")" --activate
+          pnpm --version
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@56.3.1
+
+      - name: Pull Vercel production configuration
+        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build docs
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy docs
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          deployment_url="$(vercel deploy --prebuilt --prod --yes --token="${{ secrets.VERCEL_TOKEN }}")"
+          echo "url=${deployment_url}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Docs deployment"
+            echo "- Tag: \`${GITHUB_REF_NAME}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- URL: ${deployment_url}"
+          } >> "$GITHUB_STEP_SUMMARY"
