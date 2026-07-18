@@ -225,6 +225,10 @@ jobs:
         if: ${{ !(matrix.skip-pr == true && github.event_name == 'pull_request') }}
         run: pnpm test:unit --coverage=${{ matrix.coverage || false }}
 
+      - name: Limina Integration Tests
+        if: ${{ !(matrix.skip-pr == true && github.event_name == 'pull_request') }}
+        run: pnpm nx run limina:test:integration
+
       - name: E2E Tests
         if: ${{ !(matrix.skip-pr == true && github.event_name == 'pull_request') }}
         run: pnpm test:e2e
