@@ -50,6 +50,7 @@ catalogs:
     '@types/react': ^18.2.0
     '@types/react-dom': ^18.2.0
     '@types/semver': ^7.7.1
+    '@types/ssri': ^7.1.5
     '@typescript/native-preview': 7.0.0-dev.20260704.1
     '@vitejs/plugin-react-swc': ^4.3.1
     '@vue/compiler-sfc': ^3.5.28
