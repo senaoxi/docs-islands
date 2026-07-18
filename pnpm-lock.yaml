@@ -156,6 +156,9 @@ catalogs:
     shiki:
       specifier: ^2.5.0
       version: 2.5.0
+    ssri:
+      specifier: ^13.0.1
+      version: 13.0.1
     string-width:
       specifier: ^8.2.2
       version: 8.2.2
@@ -850,6 +853,9 @@ importers:
       shescape:
         specifier: catalog:dev
         version: 2.1.13
+      ssri:
+        specifier: catalog:dev
+        version: 13.0.1
       string-width:
         specifier: catalog:dev
         version: 8.2.2
@@ -11300,6 +11306,13 @@ packages:
       }
     engines: { node: ^14.17.0 || ^16.13.0 || >=18.0.0 }
 
+  ssri@13.0.1:
+    resolution:
+      {
+        integrity: sha512-QUiRf1+u9wPTL/76GTYlKttDEBWV1ga9ZXW8BG6kfdeyyM8LGPix9gROyg9V2+P0xNyF3X2Go526xKFdMZrHSQ==,
+      }
+    engines: { node: ^20.17.0 || >=22.9.0 }
+
   stackback@0.0.2:
     resolution:
       {
@@ -18904,6 +18917,10 @@ snapshots:
   sprintf-js@1.0.3: {}
 
   ssri@10.0.5:
+    dependencies:
+      minipass: 7.1.3
+
+  ssri@13.0.1:
     dependencies:
       minipass: 7.1.3
 
