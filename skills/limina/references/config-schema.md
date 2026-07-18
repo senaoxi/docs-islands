@@ -5,7 +5,7 @@ Source-backed reference for the `LiminaConfig` surface.
 ## File Format
 
 - Filename: `limina.config.mts` for new projects. `limina.config.mjs`, `limina.config.ts`, and `limina.config.js` are also supported when loading existing configs.
-- Module format: ESM
+- Module format: follows the selected loader and Node module rules. `.mts`/`.mjs` are ESM; `limina.config.js` may be CommonJS when Node treats it as CommonJS. Use `--config-loader tsx` for TypeScript syntax the native runtime cannot load.
 - Default export: `LiminaConfig`, `Promise<LiminaConfig>`, `(env) => LiminaConfig`, or `(env) => Promise<LiminaConfig>`
 
 ```ts
@@ -25,7 +25,7 @@ Function form receives:
 
 ```ts
 interface LiminaConfigEnv {
-  command: 'check' | 'graph' | 'package' | 'proof' | 'release' | 'source' | string;
+  command: 'check' | 'graph' | 'package' | 'proof' | 'release' | 'source' | (string & {});
   mode: string; // --mode flag, process.env.NODE_ENV, or 'default'
 }
 ```
@@ -51,7 +51,7 @@ Top-level `paths` is not part of `LiminaConfig`.
 ## `regions`
 
 ```ts
-type RegionExcludeKind = 'workspace-package' | 'package-scope' | 'pnpm-workspace';
+type RegionExcludeKind = 'workspace-package' | 'package-scope';
 
 interface RegionsConfig {
   extendNestedPackageScopes?: boolean;
@@ -72,10 +72,9 @@ Rules:
 - `include` is a non-empty array of workspace-root-relative globs matched only against candidate root directories. Package names and descriptor paths are not selectors.
 - `workspace-package` candidates are packages activated by the root pnpm workspace. `include: ['.']` may exclude the root package without excluding the root workspace.
 - `package-scope` candidates are recognized nested `package.json` roots, whether extended or already stopped.
-- `pnpm-workspace` candidates are nested workspace roots. Matching happens before manifest validation or package discovery; the root workspace is not a candidate.
 - Every rule must match at least one candidate of the same kind. Multiple rules may not match the same candidate.
 - Fixed discovery ignores and configured output directories do not create candidates.
-- Unexcluded nested workspace manifest-validation and package-discovery failures are fatal.
+- Nested `pnpm-workspace.yaml` roots are automatic owner-local boundaries, not configurable exclusion candidates.
 
 ## `config.checkers`
 
@@ -111,11 +110,13 @@ Rules:
 | -------------- | ------------ | --------- | ---------------------------------------- |
 | `tsc`          | yes          | build     | `typescript`                             |
 | `tsgo`         | yes          | build     | `@typescript/native-preview`             |
-| `vue-tsc`      | yes          | build     | `vue-tsc`, `@vue/compiler-sfc`           |
+| `vue-tsc`      | yes          | build     | `vue-tsc`                                |
 | `vue-tsgo`     | yes          | typecheck | `vue-tsgo`, `@typescript/native-preview` |
 | `svelte-check` | no           | typecheck | `svelte-check`                           |
 
 `getActiveCheckers(config)` returns manually configured checkers sorted by name. In omitted/auto mode it returns an empty array at plain config-validation time; generated graph preparation resolves real auto checkers by scanning ordinary `**/tsconfig.json` scopes.
+
+`@vue/compiler-sfc` is required only when `config.imports.vue: 'compiler-sfc'` enables compiler-backed Vue import parsing. Configuring `vue-tsc` alone does not require it.
 
 ## Auto Checker Mode
 
@@ -151,8 +152,8 @@ interface SourceBoundaryConfig {
 }
 ```
 
-- If `include` is omitted, Limina starts with TypeScript/JavaScript/JSON defaults and adds framework extensions from configured checker capabilities, such as `.vue` or `.svelte`.
-- If `include` is provided, it is the complete global source boundary.
+- If `include` is omitted, Limina uses its TypeScript-neutral defaults for `.ts`, `.tsx`, declaration, `.cts`, and `.mts` families. Checker capabilities do not add `.vue`, `.svelte`, or other framework extensions automatically.
+- If `include` is provided, it replaces the defaults. Use the exact `"..."` entry to expand the default patterns at that position before adding framework globs.
 - `exclude` always filters the effective boundary.
 - If `exclude` is omitted, Limina reads the root `.gitignore` and applies the built-in excludes: `nx.json`, `project.json`, root `tsconfig.json`, `**/tsconfig.*.json`, `dist`, `.nx`, `.git`, `.tsbuild`, `coverage`, and `node_modules`. `.limina` is excluded when it is ignored by the root `.gitignore`.
 
@@ -162,8 +163,20 @@ Source-owned dependency usage checks.
 
 ```ts
 interface SourceCheckConfig {
+  declarations?: SourceDeclarationsConfig;
   knip?: boolean | SourceKnipCheckConfig;
   importAuthority?: SourceImportAuthorityConfig;
+}
+
+interface SourceDeclarationsConfig {
+  ambient?: SourceAmbientDeclarationConfig[];
+}
+
+interface SourceAmbientDeclarationConfig {
+  include: string[];
+  allowSharedAcrossOwners?: boolean;
+  allowTripleSlashReferences?: boolean;
+  reason: string;
 }
 
 interface SourceKnipCheckConfig {
@@ -211,7 +224,15 @@ interface SourceImportAuthorityWorkspaceRootGrant {
 - `entry` adds package-owned source modules that should be treated as reachable roots.
 - `ignoreDependencies` suppresses declared workspace dependency findings by `dep` and `reason`.
 - `ignoreFiles` suppresses unused source module findings by `file` and `reason`.
-- Limina uses Knip defaults unless a package has a static script such as `limina checker build tsconfig.json`; `source.knip.workspaces` accepts `entry`, `ignoreDependencies`, and `ignoreFiles`.
+- Limina uses Knip defaults unless a package has a supported static script such as `limina build tsconfig.json`; `source.knip.workspaces` accepts `entry`, `ignoreDependencies`, and `ignoreFiles`.
+- If `knip` is unavailable, the Knip-backed work is marked skipped and other source checks continue; missing `knip` alone may still exit 0.
+
+`source.declarations.ambient` behavior:
+
+- Each rule matches config-root-relative declaration-file globs already visible in the governed region and requires a non-empty reason.
+- The declaration must have an ambient role; package public declaration entries, managed outputs, and external modules with imports/exports cannot be reclassified.
+- `allowSharedAcrossOwners` and `allowTripleSlashReferences` default to `false`.
+- Triple-slash permission applies only to `/// <reference path>` and does not authorize ordinary imports or `/// <reference types>`.
 
 `source.importAuthority` behavior:
 
@@ -285,6 +306,25 @@ Rules enforced during generated graph preparation:
 - Self references are rejected.
 - Source typecheck leaf configs must not hand-maintain `references`; use a solution-style `tsconfig.json` or `implicitRefs`.
 
+## `liminaOptions.outputs`
+
+`liminaOptions.outputs` lives on an ordinary source leaf and declares a user-facing artifact build:
+
+```ts
+interface LiminaOutputOptions {
+  target?: string;
+  rootDir?: string;
+  outDir?: string;
+  declarationMap?: boolean;
+}
+```
+
+- Path fields resolve relative to the declaring source config.
+- `outDir` defaults to `dist` under that config directory.
+- `target` inherits `compilerOptions.target` when present and otherwise defaults to `ESNext`.
+- `declarationMap` defaults to `false`.
+- Managed `limina build <config>` requires an output-enabled source leaf, or an aggregator reaching at least one such leaf. Use `--raw --preset <checker>` for a user-maintained build config that should bypass this model.
+
 ## `proof.allowlist`
 
 ```ts
@@ -345,9 +385,14 @@ CLI overrides for `limina package check`:
 
 ## `release`
 
-Release-only dependency artifact hash settings:
+Release check settings:
 
 ```ts
+type ReleaseNpmPackageJsonLintSeverity = 'error' | 'off' | 'warning';
+type ReleaseNpmPackageJsonLintRuleConfig =
+  | ReleaseNpmPackageJsonLintSeverity
+  | readonly [ReleaseNpmPackageJsonLintSeverity, readonly unknown[] | Record<string, unknown>];
+
 interface ReleaseConfig {
   contentHash?: {
     baselineTag?: string | ((args: { importerName: string; dependencyName: string }) => string);
@@ -356,6 +401,11 @@ interface ReleaseConfig {
       | string[]
       | ((args: { importerName: string; dependencyName: string }) => string[] | undefined);
   };
+  npmPackageJsonLint?:
+    | boolean
+    | {
+        rules?: Record<string, ReleaseNpmPackageJsonLintRuleConfig>;
+      };
 }
 ```
 
@@ -364,6 +414,8 @@ Rules:
 - `baselineTag` defaults to `latest` and must resolve to a non-empty string.
 - `builtinIgnore: true` enables Limina's built-in dependency artifact ignore set only when `ignore` is omitted or a function returns `undefined`.
 - `ignore` patterns are package-relative glob patterns and must be non-empty strings.
+- `npmPackageJsonLint` defaults to `false`. `true` enables Limina's packed-manifest rules; object form merges rule overrides using `off`, `warning`, `error`, or supported severity/options tuples.
+- When `npmPackageJsonLint` is enabled, missing `npm-package-json-lint` is a command failure with an installation hint. Limina does not search for a separate npm-package-json-lint config file.
 
 `limina release check` also uses `package.entries` selection, rejects `private: true`, packs `outDir`, checks tarball hygiene, and validates source/output manifest consistency plus workspace publish dependency consistency.
 
@@ -377,7 +429,6 @@ type ExecutionConcurrency = number | 'auto';
 interface ExecutionConfig {
   checkerBuild?: ExecutionConcurrency;
   checkerTypecheck?: ExecutionConcurrency;
-  failFast?: boolean;
   packageEntries?: ExecutionConcurrency;
   releaseEntries?: ExecutionConcurrency;
   tasks?: ExecutionConcurrency;
@@ -387,9 +438,8 @@ interface ExecutionConfig {
 Rules:
 
 - Concurrency values must be positive integers or `'auto'`.
-- `failFast` must be boolean when configured.
 - Unknown `execution` fields are rejected.
-- Defaults are `tasks: 'auto'`, `checkerBuild: 'auto'`, `checkerTypecheck: 2`, `packageEntries: 'auto'`, `releaseEntries: 2`, and `failFast: false`.
+- Defaults are `tasks: 'auto'`, `checkerBuild: 'auto'`, `checkerTypecheck: 2`, `packageEntries: 'auto'`, and `releaseEntries: 2`.
 
 ## `pipelines`
 
@@ -420,20 +470,27 @@ Command step details:
 - After any command step, the cached generated graph provider is reset.
 - `vue-tsgo --build/-b` and `vue-tsgo --project/-p` command steps trigger cache preparation for the referenced config.
 
-`limina check` with no pipeline name runs the built-in default pipeline:
-
-`graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck`
+`limina check` with no pipeline name plans `graph:check`, `source:check`, `proof:check`, `checker:build`, and `checker:typecheck` as independent bounded tasks. They may run concurrently when dependencies and resource locks allow. Named pipelines preserve configured step order.
 
 `limina check <name>` only runs `pipelines[name]`; missing names are errors and do not fall back to the default.
 
 ## Root Entry Helpers
 
 ```ts
-import { defineConfig, type LiminaConfig } from 'limina';
+import {
+  CancelledFailure,
+  ConfigurationError,
+  defineConfig,
+  ExecutionFailure,
+  type GovernanceIssue,
+  type IssueSeverity,
+  type LiminaConfig,
+} from 'limina';
 ```
 
 - `defineConfig(value)` is an identity helper with typed overloads.
-- The package root is config-only: `defineConfig` plus config authoring types are public.
+- Runtime values at the package root are `defineConfig`, `CancelledFailure`, `ConfigurationError`, and `ExecutionFailure`.
+- Public types include config authoring types, the `GovernanceIssue` type family, and `IssueSeverity`.
 - Runtime helpers such as `loadConfig`, checker resolution helpers, command runners, generated graph helpers, and resolved runtime types are internal.
 
 Deeper runtime validation for graph rules, package entries, proof allowlist, Knip workspace config, import authority rules, tsconfig governance, and `implicitRefs` happens inside the relevant commands.

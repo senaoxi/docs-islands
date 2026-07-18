@@ -33,6 +33,8 @@ For every entry selected by the CLI plan:
 
 The temporary tarball directory is removed after the entry completes (success or failure).
 
+`publint` and `@arethetypeswrong/core` are optional analyzers. If an enabled analyzer is not installed, Limina marks only that subcheck as skipped and continues; a missing optional analyzer alone may therefore leave `package check` successful, including when selected with `--tool`. CI that requires these analyzers must install and verify both packages explicitly. This fail-open behavior does not apply to checker peers or to `npm-package-json-lint` after `release.npmPackageJsonLint` is enabled; those missing dependencies fail their command with an installation hint.
+
 `package:check` does not enforce publish-only hygiene such as README/license files, `private: true`, source maps, registry metadata, dependency artifact hashes, or workspace publish order. Those belong to `release:check`.
 
 ## What release check owns

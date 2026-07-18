@@ -84,7 +84,7 @@ Pure aggregators may only declare `$schema`, `files`, `references`, and allowed 
 
 ## Generated Checker Graph
 
-`limina graph prepare` and graph-consuming commands prepare the generated checker graph to:
+Limina first calculates the generated checker graph in memory. `limina graph prepare`, managed build/checker execution, and check pipelines containing filesystem-dependent graph tasks materialize its files under `.limina`. Validation-only graph, source, and proof checks use the in-memory result without materializing it. The calculation:
 
 - Resolve checkers from manual `config.checkers` or auto mode.
 - Expand each selected `tsconfig.json` entry through ordinary source references.
@@ -131,28 +131,28 @@ Use this for dynamic or virtual source edges that static import analysis cannot 
 
 ## Dependency Semantics
 
-Limina derives source-vs-artifact semantics from the importing package manifest dependency specifier.
+Manifest authorization and graph classification are separate:
 
-### `workspace:*` Source Dependency
+- An entry in `dependencies`, `devDependencies`, `peerDependencies`, or `optionalDependencies` authorizes the package import. `workspace:`, `link:`, `file:`, `catalog:`, and semver are all valid source-manifest protocols for this decision.
+- The actual TypeScript/import resolution target classifies the relationship.
 
-Implications:
+### Source Resolution
 
-- Source imports should resolve to files governed by Limina's source graph.
-- The generated checker graph should contain the needed project reference edge.
-- If the source manifest exports resolve to `dist`, `graph:check` fails because a source dependency resolved to an artifact.
+When an import resolves to a file owned by a governed source config:
 
-Fix options:
+- the generated checker graph needs the corresponding project-reference edge;
+- the target must be reachable from an active checker entry or an intentional `liminaOptions.implicitRefs` edge;
+- the importing package still needs manifest authorization when the target has another package owner.
 
-1. Source dependency: make the source manifest expose source entries.
-2. Artifact dependency: use `link:`, `file:`, `catalog:`, or semver and remove the source project-reference relationship.
+### Declaration Or Artifact Resolution
 
-### `link:`, `file:`, `catalog:`, Semver Artifact Dependency
+When an import resolves to a `.d.ts`-family file or built output:
 
-Implications:
+- it does not need a source project-reference edge;
+- a stale cross-package source reference should be removed;
+- artifact build dependency relationships are available through `limina graph export` for external task tooling.
 
-- The dependency is consumed as already-built or already-published output.
-- The generated source graph must not keep a source project reference for that relationship.
-- Artifact build dependency relationships are available through `limina graph export` for external task tooling.
+Local protocols are rejected only after they leak into a publish-ready built or release manifest. Do not change a valid source manifest protocol merely to force a source/artifact classification.
 
 ## Architecture Rules Via Labels
 

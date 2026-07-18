@@ -28,7 +28,7 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 ### `regions.exclude[...].kind is required.` / `regions.exclude[...].kind must be one of:`
 
-- **Cause**: A region exclusion omitted `kind` or used a value outside `workspace-package`, `package-scope`, and `pnpm-workspace`.
+- **Cause**: A region exclusion omitted `kind` or used a value outside `workspace-package` and `package-scope`.
 - **Fix**: Declare the candidate kind explicitly. Do not infer it from `include`.
 
 ### `regions.exclude rule does not match a recognized governance root.`
@@ -41,15 +41,7 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 - **Cause**: Two same-kind rules overlap on one candidate.
 - **Fix**: Make the patterns non-overlapping; order does not select a reason.
 
-### `regions.exclude cannot exclude the root pnpm workspace.`
-
-- **Cause**: A `pnpm-workspace` rule matches `.`.
-- **Fix**: Keep the governance origin active. To remove only the activated root package, use `kind: 'workspace-package'` with `include: ['.']`.
-
-### `Failed to inspect nested pnpm workspace region.`
-
-- **Cause**: An unexcluded nested workspace failed during the reported `manifest-validation` or `package-discovery` phase.
-- **Fix**: Repair the nested workspace, or exclude its root explicitly with `kind: 'pnpm-workspace'` when it is intentionally outside the run. Exclusion is applied before the manifest is read.
+Nested `pnpm-workspace.yaml` roots are automatic owner-local boundaries, not `regions.exclude` candidates. To remove only an activated root package, use `kind: 'workspace-package'` with `include: ['.']`; this does not exclude the workspace itself.
 
 ### `config.checkers must be an object auto config or an object keyed by checker name.`
 
@@ -93,7 +85,7 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 ### `unknown source config field.`
 
-- **Cause**: The top-level `source` object contains a field other than `knip` or `importAuthority`.
+- **Cause**: The top-level `source` object contains a field other than `declarations`, `knip`, or `importAuthority`.
 - **Fix**: Remove unsupported fields. Tsconfig governance failures must be fixed by changing the relevant `tsconfig.json` coverage/reference shape.
 
 ### `Invalid Limina release config: ... release.contentHash`
@@ -162,8 +154,8 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 ### `Workspace source dependency resolved outside the source graph:` / `Referenced workspace dependency resolves through package exports to a build artifact:`
 
-- **Cause**: A `workspace:*` source dependency resolves to a file Limina does not govern, commonly `dist`.
-- **Fix**: Point source manifest exports at source files, or change the dependency to `link:`, `file:`, `catalog:`, or semver and remove the source graph edge.
+- **Cause**: A project-reference relationship was expected to be source-owned, but the actual import resolves outside governed source, commonly to declarations or `dist`. The dependency protocol does not decide this classification.
+- **Fix**: If source consumption is intended, make resolution reach governed source. If built/declaration consumption is intended, remove the stale source reference while keeping a valid manifest dependency declaration. Ensure local protocols are rewritten only in publish-ready output manifests.
 
 ### `Missing project reference for workspace import:`
 
@@ -215,7 +207,7 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 ### `Invalid source Knip workspace config: ... tsConfig`
 
 - **Cause**: `source.knip.workspaces` accepts `entry`, `ignoreDependencies`, and `ignoreFiles`.
-- **Fix**: Keep package-specific Knip config to those fields, or add a static package script such as `"build": "limina checker build tsconfig.json"` when the package needs a specific Knip tsconfig source.
+- **Fix**: Keep package-specific Knip config to those fields, or add a supported static package script such as `"build": "limina build tsconfig.json"` when the package needs a specific Knip tsconfig source.
 
 ### `Invalid source Knip entry config:` / `Invalid source Knip dependency ignore config:` / `Invalid source Knip file ignore config:`
 
@@ -226,8 +218,8 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 ### `Source-level DTS config is invalid:`
 
-- **Cause**: Declaration configs are generated under `.limina`.
-- **Fix**: Delete it from source. Limina generates declaration configs under `.limina` from checker `include` source tsconfigs.
+- **Cause**: The reported source config has declaration-build characteristics that conflict with Limina's generated declaration graph. It may still contain user-owned intent that must be understood before migration.
+- **Fix**: Do not delete it automatically. Inspect its references, scripts, includes, compiler options, and consumers; identify the ordinary source config or aggregator that will preserve each responsibility; then present a migration diff and obtain explicit user approval before moving or removing the file. Regenerate `.limina` only after the source-side replacement is confirmed.
 
 ### `Default tsconfig.json references a non-typecheck config:`
 
@@ -328,7 +320,7 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 - **Cause**: `--issues` reads the last-run issue snapshot instead of running a pipeline.
 - **Fix**: Drop the pipeline name, for example `limina check --issues --verbose`.
 
-### `limina check --task, --checker, and --format require --issues`
+### `limina check --task, --checker, --format, --invocation, and --limit require --issues`
 
 - **Cause**: Last-run issue inventory filters were used while running the check pipeline.
 - **Fix**: Add `--issues`, or remove those filters from the pipeline run.
@@ -337,6 +329,16 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 - **Cause**: Unsupported issue inventory output format.
 - **Fix**: Use `--format human`, `--format json`, or `--format ndjson`.
+
+### `Invalid check --issues --invocation "...".` / `No standalone invocation snapshot found for "...".`
+
+- **Cause**: `--invocation` is not a UUID or the immutable standalone invocation record does not exist.
+- **Fix**: Copy the UUID printed by the failed standalone command and rerun `limina check --issues --invocation <uuid>`. This query locates the workspace without loading the Limina config.
+
+### `Invalid check --issues --limit ...` / `` `limina check --issues --limit` is only available with --format human. ``
+
+- **Cause**: The human card limit is invalid or was combined with JSON/NDJSON.
+- **Fix**: Use a positive decimal integer or `all` with human output, or omit `--limit` for complete machine output.
 
 ### `Unknown check --rule code "...".`
 
@@ -359,6 +361,11 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 - **Cause**: Individual package tools found issues.
 - **Fix**: Read each issue line and fix exports, types, runtime imports, output dependencies, or boundary config.
+
+### `<tool> is not installed; skipping check`
+
+- **Cause**: Enabled optional analyzer `knip`, `publint`, or `@arethetypeswrong/core` is not installed.
+- **Fix**: Install and verify the analyzer when CI requires that coverage. The skipped analyzer alone may leave the command successful; do not interpret exit code 0 as proof that an absent analyzer ran.
 
 ### `No package entries are configured.` / `No package entry named "..." is configured.`
 
@@ -411,5 +418,5 @@ Failure-by-failure cause and fix for Limina error classes. Search for the leadin
 
 ### `default check blocked at <step>` / `pipeline blocked: <name> at <step>`
 
-- **Cause**: A step failed; remaining steps were skipped.
+- **Cause**: An external command step failed and blocked the ordered remainder, or a required preparation failed and blocked its dependents. Independent default built-in tasks are otherwise allowed to continue.
 - **Fix**: Read the failing step's logs above the summary and address that root cause.

@@ -5,16 +5,17 @@ Every public command, action, flag, and exit-code rule emitted by `limina`.
 Invocation form:
 
 ```sh
-limina [--config <path>] [--mode <mode>] <command> [...]
+limina [--config <path>] [--config-loader <loader>] [--mode <mode>] <command> [...]
 ```
 
 ## Global Flags
 
-| Flag              | Effect                                                                                                                 |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `--config <path>` | Resolve config from this file instead of searching upward. Path is resolved relative to the current working directory. |
-| `--mode <mode>`   | Set the `mode` passed to function-style configs. Default = `process.env.NODE_ENV ?? 'default'`.                        |
-| `--help` / `-h`   | Print help.                                                                                                            |
+| Flag                       | Effect                                                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `--config <path>`          | Resolve config from this file instead of searching upward. Path is resolved relative to the current working directory. |
+| `--config-loader <loader>` | Use `native` (default) or `tsx`; the latter requires workspace-local `tsx`.                                            |
+| `--mode <mode>`            | Set the `mode` passed to function-style configs. Default = `process.env.NODE_ENV ?? 'default'`.                        |
+| `--help` / `-h`            | Print help.                                                                                                            |
 
 When `--config` is omitted, Limina walks upward from cwd looking for `limina.config.mts`, `limina.config.mjs`, `limina.config.ts`, or `limina.config.js`, bounded by the `pnpm-workspace.yaml` root.
 
@@ -34,7 +35,7 @@ What it does:
 4. Ensures `.limina/` is ignored in the root `.gitignore`.
 5. Creates or updates the root `package.json` with `"limina:build": "limina checker build"` and missing `limina` / `typescript` devDependencies.
 6. Normalizes the root script surface around `"limina:build": "limina checker build"`.
-7. Clears an existing root `.limina` path and leaves graph generation to `limina graph prepare`, graph-consuming commands, or `limina check`.
+7. Clears an existing root `.limina` path and leaves materialization to `limina graph prepare`, managed build/checker execution, or check pipelines that require generated files.
 8. In interactive mode, asks whether to install the Limina skill for the current project. `--yes` skips skill installation and prints the manual command.
 
 The generated config uses this explicit auto form:
@@ -48,18 +49,21 @@ config: {
 },
 ```
 
-Refusal conditions:
-
-- No `pnpm-workspace.yaml` exists in the current directory or its parents.
-- Workspace packages are missing required `name` fields.
+Refusal conditions include a missing `pnpm-workspace.yaml`, declined required confirmation, and unsafe or failed writes. Nameless workspace packages do not make initialization fail merely because they lack `name`.
 
 Exit code: non-zero on any refusal or write error.
+
+## `limina migration`
+
+Migrates governed source configs into the current `liminaOptions.outputs` model. It validates the activated workspace, plans all edits before writing, requires every affected Git worktree to be clean, and applies one bounded transaction across the authenticated worktree roots.
+
+Exit code: 1 on validation, planning, safety, or transactional write failure.
 
 ## `limina check [-p name]`
 
 Run the built-in default pipeline.
 
-Order: `graph:check` → `source:check` → `proof:check` → `checker:build` → `checker:typecheck`. The default check schedules these built-in tasks as independent bounded work and reports every completed task; task failures do not hide later built-in task results.
+The plan contains `graph:check`, `source:check`, `proof:check`, `checker:build`, and `checker:typecheck`. The default check schedules these built-in tasks as independent bounded work; they may run concurrently when dependencies and resource locks permit, and reporting remains deterministic. Task failures do not hide unrelated later results.
 
 `-p, --package <name>` passes one or more package entry names to package-aware tasks when they appear in a pipeline. The built-in default pipeline does not include `package:check` or `release:check`.
 
@@ -67,17 +71,19 @@ Exit code: 1 if any step fails, 0 otherwise.
 
 Flags accepted while running a check:
 
-| Flag                | Effect                                                                            |
-| ------------------- | --------------------------------------------------------------------------------- |
-| `--verbose`         | Show full issue details in deferred reports and the final check issue guidance.   |
-| `--rule <code>`     | Filter source issue details by stable rule code while source issues are printed.  |
-| `--file <path>`     | Filter source issue details by exact workspace-root-relative file path.           |
-| `--scope <glob>`    | Filter source issue details by path scope.                                        |
-| `--package <name>`  | Filter package-aware pipeline tasks and source/check issue reports by package.    |
-| `--task <name>`     | Requires `--issues`; not valid while running the check pipeline.                  |
-| `--checker <name>`  | Requires `--issues`; not valid while running the check pipeline.                  |
-| `--format <format>` | Requires `--issues`; use `human`, `json`, or `ndjson` for issue inventory output. |
-| `--issues`          | Read the last-run issue inventory instead of running the pipeline.                |
+| Flag                  | Effect                                                                 |
+| --------------------- | ---------------------------------------------------------------------- |
+| `--verbose`           | Expand live summaries, or human issue cards with `--issues`.           |
+| `--rule <code>`       | Filter issue details by stable rule code.                              |
+| `--file <path>`       | Filter issue details by exact file path.                               |
+| `--scope <glob>`      | Filter issue details by path scope.                                    |
+| `--package <name>`    | Filter package-aware pipeline tasks or issue inventory; repeatable.    |
+| `--task <name>`       | Requires `--issues`; filter by stable task name.                       |
+| `--checker <name>`    | Requires `--issues`; filter by checker.                                |
+| `--format <format>`   | Requires `--issues`; use `human`, `json`, or `ndjson`.                 |
+| `--limit <N\|all>`    | Requires `--issues` and human format; bound visible issue cards.       |
+| `--invocation <uuid>` | Requires `--issues`; read one immutable standalone failure invocation. |
+| `--issues`            | Read issue inventory without importing config or running a pipeline.   |
 
 ## `limina check <pipeline> [-p name]`
 
@@ -87,12 +93,13 @@ Exit code: 1 if the name is missing or any step fails.
 
 ## `limina check --issues [filters]`
 
-Read `.limina/check/last-run.json` and print a filtered issue inventory from the last recorded check-like command. This is a standalone reporting mode:
+Read issue inventory without importing or validating the Limina config. By default it reads the last completed v7 check snapshot at `.limina/check/last-run.json`; `--invocation <uuid>` reads one v1 standalone invocation under `.limina/check/invocations/`. Source snapshot v1 is a separate contract and is never promoted into a completed check snapshot. This standalone reporting mode:
 
 - It does not accept a pipeline name.
-- `--task`, `--checker`, and `--format` require `--issues`.
+- `--task`, `--checker`, `--format`, `--invocation`, and `--limit` require `--issues`.
 - `--format` accepts `human`, `json`, or `ndjson`; omitted means human output.
 - `--verbose` is the only detail-expansion knob.
+- `--limit` accepts a positive decimal integer or `all`, applies only to human cards, and never truncates JSON or NDJSON.
 - Filters may be repeated: `--task`, `--checker`, `--package`/`-p`, `--rule`, `--file`, and `--scope`.
 - `--rule` rejects unknown stable rule codes and suggests `limina check --issues --rule --help`.
 - Filter help is available through `--task --help`, `--checker --help`, `--package --help`, and `--rule --help` after `--issues`.
@@ -106,6 +113,8 @@ limina check --issues --verbose
 limina check --issues --task source:check --rule LIMINA_SOURCE_UNUSED_MODULE
 limina check --issues --format json
 limina check --issues --format ndjson
+limina check --issues --limit 20
+limina check --issues --invocation 00000000-0000-4000-8000-000000000000
 limina check --issues --rule --help
 ```
 
@@ -115,7 +124,7 @@ Action must be `prepare`, `check`, or `export`.
 
 ### `limina graph prepare`
 
-Generates or refreshes `.limina/tsconfig/checkers/<checker>/**` from selected ordinary source `tsconfig.json` entries. It uses the same generated graph preparation used by graph-consuming commands and pipelines.
+Calculates the generated graph and explicitly materializes `.limina/manifest.json` plus `.limina/tsconfig/checkers/<checker>/**` from selected ordinary source `tsconfig.json` entries.
 
 Exit code: 1 when graph generation fails.
 
@@ -123,11 +132,15 @@ Exit code: 1 when graph generation fails.
 
 Validates the generated checker graph and source-derived architecture:
 
+`graph check` calculates the graph in memory and does not materialize checker files merely to perform validation.
+
+`--verbose` shows full graph issue details.
+
 - Generated declaration configs have build-safe compiler options.
 - Generated declaration configs and source configs keep type-affecting compiler option parity.
 - Project references match real source imports and `liminaOptions.implicitRefs`.
 - Cross-package generated references imply declared workspace dependencies.
-- `workspace:*` source dependencies resolve to files owned by the source graph, not artifacts under `dist`.
+- Imports that require source project references resolve to governed source; imports resolving to declarations or built output are classified as declaration/artifact consumption regardless of manifest version protocol.
 - Labels declared through source `liminaOptions.graphRules` match configured `graph.rules`; denied refs and denied deps are flagged.
 - Configured condition domains keep expected `customConditions` through their reference trees.
 
@@ -157,7 +170,11 @@ Validates package-owner and source usage rules:
 - Knip-backed unused workspace dependency and unused module checks run unless `source.knip` is `false`.
 - Package-owned source modules must resolve upward to one ordinary `tsconfig.json` governance unit. Fix the `tsconfig.json` coverage/reference shape when this check fails.
 
-Exit code: 1 on any violation.
+`--package`, `--rule`, `--file`, and `--scope` filter source issue details and may be repeated. `--verbose` expands them.
+
+If `knip` is unavailable, the Knip-backed portion is reported as skipped and the remaining source checks continue. Missing `knip` alone does not make the command fail.
+
+Exit code: 1 on any runnable violation.
 
 ## `limina proof check`
 
@@ -173,7 +190,20 @@ Validates source coverage proof:
 - Every file in `config.source` is covered by generated graph coverage, checker entry coverage, or `proof.allowlist`.
 - Allowlist files are inside the source boundary and not already covered.
 
+`--verbose` shows full proof issue details.
+
 Exit code: 1 on any violation.
+
+## `limina build <config> [--preset P] [--raw] [-w|--watch]`
+
+Builds user-consumable artifacts.
+
+- Managed mode accepts a governed source leaf or aggregator whose selected leaves declare `liminaOptions.outputs`, materializes the generated output-build configs, and runs a compatible build checker.
+- Raw mode requires `--raw --preset <tsc|tsgo|vue-tsc>`, invokes that checker directly on the user-maintained config, and does not read or materialize the generated graph.
+- `--preset` selects a build-capable checker; managed mode requires it when more than one compatible preset reaches the target.
+- `--watch` uses the selected adapter's watch support.
+
+Exit code: 1 on target, output, preset, peer-dependency, safety, or checker execution failure.
 
 ## `limina checker build [config] [--preset P] [-w|--watch]`
 
@@ -184,12 +214,13 @@ Without `config`, Limina prepares the generated graph and runs every build-capab
 With `config`, Limina resolves the argument from cwd:
 
 - If it is an ordinary source tsconfig governed by Limina, it builds the generated module for that source config and recursively includes build-capable provider edges.
-- If it is not governed by Limina, it falls back to raw checker build mode and runs the selected build checker against that config.
+- If it is not governed by Limina, the command fails and directs the user to `limina build <config> --raw --preset <checker>` for an explicit raw build.
 
 | Flag            | Values                   | Effect                                                               |
 | --------------- | ------------------------ | -------------------------------------------------------------------- |
 | `--preset <p>`  | `tsc`, `tsgo`, `vue-tsc` | Select a build-capable checker preset. Requires a `config` argument. |
 | `-w`, `--watch` | boolean                  | Watch and preserve rebuild output. Requires a `config` argument.     |
+| `--verbose`     | boolean                  | Show full checker issue details.                                     |
 
 Option rules:
 
@@ -207,7 +238,7 @@ Runs direct typecheck execution for typecheck-only checkers:
 - `vue-tsgo --project <generated checker entry>`
 - `svelte-check --tsconfig <generated checker entry>`
 
-It does not accept a config argument, `--preset`, or `--watch`.
+It accepts `--verbose`, but not a config argument, `--preset`, or `--watch`.
 
 Exit code: 1 if dependency preflight fails or any target exits non-zero. If no typecheck-only entries are configured, the command succeeds after reporting no targets.
 
@@ -220,6 +251,7 @@ Action must be `check`.
 | `--package <name>` / `-p` | Configured entry `name`                 | Limit to one or more entries. If omitted, Limina compares the nearest `package.json#name` from cwd to configured entry names; runs only that match, or all entries if no match. |
 | `--tool <name>`           | `publint`, `attw`, `boundary`, or `all` | Limit to one tool. `all` is identical to omitting the flag.                                                                                                                     |
 | `--attw-profile <name>`   | `strict`, `node16`, `esm-only`          | Override the configured ATTW profile for this invocation only.                                                                                                                  |
+| `--verbose`               | boolean                                 | Show full package check issue details.                                                                                                                                          |
 
 For every selected entry:
 
@@ -228,7 +260,9 @@ For every selected entry:
 3. If `publint` or `attw` is enabled, pack `outDir` with `@publint/pack` and feed the tarball to the selected tools.
 4. Run boundary check if enabled: parse emitted `.js`/`.mjs`/`.cjs`, extract bare-package imports, and validate them against the output manifest and runtime environment.
 
-Exit code: 1 if any selected check fails, or if no runnable entry exists for the selected tool.
+If `publint` or `@arethetypeswrong/core` is unavailable, Limina marks that optional analyzer as skipped and continues. A skipped analyzer alone, including one selected through `--tool`, does not make the command fail.
+
+Exit code: 1 if any runnable selected check fails, or if tool selection resolves to no enabled check. Missing optional analyzer packages alone may still exit 0.
 
 ## `limina release check [--package N]`
 
@@ -237,6 +271,7 @@ Action must be `check`.
 | Flag                      | Values                  | Effect                                                                                         |
 | ------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------- |
 | `--package <name>` / `-p` | Configured entry `name` | Limit to one or more entries and skip cwd matching. Repeat the flag to check multiple entries. |
+| `--verbose`               | boolean                 | Show full release check issue details.                                                         |
 
 Without `--package`, Limina walks from cwd to the workspace root, reads the nearest `package.json#name`, and requires it to match exactly one configured `package.entries[].name`.
 
@@ -246,9 +281,9 @@ Exit code: 1 if cwd matching fails, a requested entry is missing, or any release
 
 ## Help And Errors
 
-`limina --help` and any unknown command or action prints CAC help and exits non-zero.
+`limina --help` and command help surfaces print help and exit 0. An unknown command or unsupported action prints help or an error and exits 1.
 
-Known command families: `init`, `check`, `graph`, `proof`, `source`, `checker`, `package`, `release`.
+Known command families: `init`, `migration`, `check`, `graph`, `proof`, `source`, `build`, `checker`, `package`, `release`.
 
 All command failures print the structured field/value/reason error format. Boundary, graph, proof, and source failures group multiple issues into one error block separated by `\n\n`.
 
