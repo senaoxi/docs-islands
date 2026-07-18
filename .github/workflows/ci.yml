@@ -352,6 +352,7 @@ jobs:
                 "${{ needs.quality.result }}" == "failure" || \
                 "${{ needs.test.result }}" == "failure" || \
                 "${{ needs.limina-atomic-writer-windows.result }}" == "failure" || \
+                "${{ needs.limina-platform-build-smoke.result }}" == "failure" || \
                 "${{ needs.smoke.result }}" == "failure" || \
                 "${{ needs.build.result }}" == "failure" ]]; then
             echo "❌ CI Failed"
