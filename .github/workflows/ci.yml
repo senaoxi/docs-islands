@@ -282,6 +282,43 @@ jobs:
       - name: Standalone generated-command tarball round-trip
         run: pnpm nx run @docs-islands/limina-smoke:smoke -- generated-command.spec.ts
 
+  limina-platform-build-smoke:
+    name: Limina build and smoke (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.src == 'true' || needs.changes.outputs.deps == 'true' || needs.changes.outputs.ci == 'true'
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux / Node 22.18
+            os: ubuntu-latest
+            node: 22.18.0
+          - name: Linux / Node 24.11
+            os: ubuntu-latest
+            node: 24.11.0
+          - name: macOS / Node 24.11
+            os: macos-latest
+            node: 24.11.0
+          - name: Windows / Node 24.11
+            os: windows-latest
+            node: 24.11.0
+    steps:
+      # actions/checkout@v5.0.0
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Build Limina
+        run: pnpm nx run limina:build
+
+      - name: Smoke Test Limina
+        run: pnpm nx run limina:smoke
+
   smoke:
     name: Smoke Tests
     runs-on: ubuntu-latest
@@ -373,6 +410,7 @@ jobs:
         quality,
         test,
         limina-atomic-writer-windows,
+        limina-platform-build-smoke,
         smoke,
         build,
       ]
@@ -384,6 +422,7 @@ jobs:
                 "${{ needs.quality.result }}" == "failure" || \
                 "${{ needs.test.result }}" == "failure" || \
                 "${{ needs.limina-atomic-writer-windows.result }}" == "failure" || \
+                "${{ needs.limina-platform-build-smoke.result }}" == "failure" || \
                 "${{ needs.smoke.result }}" == "failure" || \
                 "${{ needs.build.result }}" == "failure" ]]; then
             echo "❌ CI Failed"
