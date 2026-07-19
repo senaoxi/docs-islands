@@ -4,7 +4,10 @@ import { normalizeSlashes, toRelativePath } from '#utils/path';
 import { colorText, plural } from '#utils/reporting';
 import boxen from 'boxen';
 import path from 'pathe';
-import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
+import {
+  LIMINA_CHECK_ISSUE_CODES,
+  type LiminaWritableCheckIssueCode,
+} from '../check-reporting/codes';
 import {
   pathCandidatesMatchFileFilters,
   pathCandidatesMatchScopeFilters,
@@ -26,7 +29,10 @@ export const SOURCE_ISSUE_CODES: {
     LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency,
 };
 
-export type SourceIssueCode = string;
+export type SourceIssueCode = Extract<
+  LiminaWritableCheckIssueCode,
+  `LIMINA_SOURCE_${string}`
+>;
 
 export interface SourceIssueReportOptions {
   command?: string;

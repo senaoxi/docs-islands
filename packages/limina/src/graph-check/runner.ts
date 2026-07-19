@@ -25,7 +25,10 @@ import { toRelativePath } from '#utils/path';
 import { collectStronglyConnectedComponents } from '#utils/strongly-connected-components';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'pathe';
-import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
+import {
+  LIMINA_CHECK_ISSUE_CODES,
+  type LiminaWritableCheckIssueCode,
+} from '../check-reporting/codes';
 import {
   type CheckIssueReportOptions,
   formatCheckIssueHumanReport,
@@ -220,7 +223,7 @@ interface GraphImportResolution {
 }
 
 interface GraphProblemIssueHint {
-  code: string;
+  code: LiminaWritableCheckIssueCode;
   filePath?: string;
   fix?: string;
   packageManifestPath?: string;
@@ -253,7 +256,7 @@ function getGraphProblemTitle(problem: string): string {
   return firstLine.replace(/:+$/u, '');
 }
 
-function getGraphProblemCode(title: string): string {
+function getGraphProblemCode(title: string): LiminaWritableCheckIssueCode {
   if (title.startsWith('Missing project reference')) {
     return 'LIMINA_GRAPH_REFERENCE_MISSING';
   }

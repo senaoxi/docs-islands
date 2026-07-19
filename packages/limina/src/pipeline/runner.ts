@@ -613,7 +613,6 @@ async function runBuiltinTask(
       } else {
         issues.push(
           createTaskFailureIssue({
-            code: `LIMINA_${taskName.replaceAll(':', '_').toUpperCase()}_FAILED`,
             detailLines: [
               error instanceof Error ? error.message : String(error),
             ],

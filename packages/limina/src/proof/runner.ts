@@ -34,7 +34,10 @@ import {
 import { existsSync } from 'node:fs';
 import path from 'pathe';
 import type ts from 'typescript';
-import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
+import {
+  LIMINA_CHECK_ISSUE_CODES,
+  type LiminaWritableCheckIssueCode,
+} from '../check-reporting/codes';
 import {
   type CheckIssueReportOptions,
   formatCheckIssueHumanReport,
@@ -79,7 +82,7 @@ interface CheckerCoverageTargetCollection {
 }
 
 interface ProofProblemIssueHint {
-  code: string;
+  code: LiminaWritableCheckIssueCode;
   filePath?: string;
   fix?: string;
   reason?: string;
@@ -105,7 +108,7 @@ function getProofProblemTitle(problem: string): string {
   return firstLine.replace(/:+$/u, '');
 }
 
-function getProofProblemCode(title: string): string {
+function getProofProblemCode(title: string): LiminaWritableCheckIssueCode {
   if (title.startsWith('Source files are not covered')) {
     return LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile;
   }

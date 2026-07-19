@@ -7,7 +7,10 @@ import {
 import { toRelativePath } from '#utils/path';
 import { createElapsedTimer } from 'logaria/helper';
 import path from 'pathe';
-import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
+import {
+  LIMINA_CHECK_ISSUE_CODES,
+  type LiminaWritableCheckIssueCode,
+} from '../check-reporting/codes';
 import { LiminaStructuredError } from '../check-reporting/errors';
 import {
   type CheckIssueReportOptions,
@@ -161,7 +164,7 @@ function collectOutputManifestProblems(options: {
 function getReleaseConsistencySectionCode(
   section: string,
   body: string,
-): string {
+): LiminaWritableCheckIssueCode {
   if (section.includes('tarball')) {
     return LIMINA_CHECK_ISSUE_CODES.releaseTarballHygiene;
   }

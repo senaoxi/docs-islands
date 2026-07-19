@@ -105,6 +105,7 @@ import {
   formatSourceCheckHumanReport,
   SOURCE_ISSUE_CODES,
   type SourceCheckIssue,
+  type SourceIssueCode,
   type SourceIssueReportOptions,
   type SourceStructuredIssue,
 } from './report';
@@ -2593,7 +2594,7 @@ function stripProblemLocationSuffix(filePath: string): string {
   return filePath.replace(/:\d+(?::\d+)?(?:\s+\(.+\))?$/u, '');
 }
 
-function getSourceProblemCode(title: string): string {
+function getSourceProblemCode(title: string): SourceIssueCode {
   if (title.startsWith('Ambient declaration configuration')) {
     return LIMINA_CHECK_ISSUE_CODES.sourceAmbientDeclarationConfigInvalid;
   }
@@ -2616,13 +2617,6 @@ function getSourceProblemCode(title: string): string {
     )
   ) {
     return LIMINA_CHECK_ISSUE_CODES.sourceOwnerInvalid;
-  }
-
-  if (
-    title.startsWith('Nested pnpm workspace root') ||
-    title.includes('workspace region')
-  ) {
-    return LIMINA_CHECK_ISSUE_CODES.workspaceRegionOverlap;
   }
 
   if (title.includes('Knip') || title.includes('knip')) {

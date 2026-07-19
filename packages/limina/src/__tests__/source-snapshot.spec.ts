@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'pathe';
 import { describe, expect, it } from 'vitest';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import {
   type CheckIssueInventoryView,
   DEFAULT_PRIMARY_BLOCKER_LIMIT,
@@ -315,6 +316,100 @@ describe('source issue snapshots', () => {
 });
 
 describe('check issue snapshots', () => {
+  it('writes and reads canonical codes while preserving external rule codes', async () => {
+    const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-snapshot-'));
+    const issue = createLiminaCheckIssue({
+      code: LIMINA_CHECK_ISSUE_CODES.packagePublint,
+      external: {
+        code: 'EXPORT_MISSING',
+        message: 'Package export is missing.',
+        tool: 'publint',
+      },
+      reason: 'Publint reported a package export problem.',
+      rootDir,
+      task: 'package:check',
+      title: 'Publint package issue',
+    });
+
+    try {
+      await writeCheckIssueSnapshotOnly(
+        artifactNamespace(rootDir),
+        createCheckSnapshot([issue]),
+      );
+
+      await expect(readCheckIssueSnapshot(rootDir)).resolves.toMatchObject({
+        issues: [
+          {
+            code: 'LIMINA_PACKAGE_PUBLINT',
+            external: { code: 'EXPORT_MISSING', tool: 'publint' },
+            task: 'package:check',
+          },
+        ],
+      });
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    ['unknown', 'LIMINA_HISTORICAL_EXTENSION_CODE', 'source:check'],
+    ['retired', LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed, 'command'],
+  ] as const)(
+    'keeps %s historical wire codes readable',
+    async (_name, code, task) => {
+      const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-snapshot-'));
+      const issue = createLiminaCheckIssue({
+        code: LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed,
+        rootDir,
+        task: 'source:check',
+      });
+
+      try {
+        await writeRawCheckSnapshot(rootDir, {
+          ...createCheckSnapshot([{ ...issue, code, task }]),
+        });
+
+        await expect(readCheckIssueSnapshot(rootDir)).resolves.toMatchObject({
+          issues: [{ code, task }],
+        });
+      } finally {
+        await rm(rootDir, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it.each([
+    ['unknown', 'LIMINA_NOT_REGISTERED', 'source:check'],
+    ['retired', LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed, 'command'],
+    [
+      'task-mismatched',
+      LIMINA_CHECK_ISSUE_CODES.workspaceRegionOverlap,
+      'source:check',
+    ],
+  ] as const)(
+    'rejects %s codes from the current writer',
+    async (_name, code, task) => {
+      const rootDir = await mkdtemp(path.join(tmpdir(), 'limina-snapshot-'));
+      const canonicalIssue = createLiminaCheckIssue({
+        code: LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed,
+        rootDir,
+        task: 'source:check',
+      });
+
+      try {
+        await expect(
+          writeCheckIssueSnapshotOnly(
+            artifactNamespace(rootDir),
+            createCheckSnapshot([{ ...canonicalIssue, code, task }]),
+          ),
+        ).rejects.toThrow();
+        await expect(readCheckIssueSnapshot(rootDir)).resolves.toBeNull();
+      } finally {
+        await rm(rootDir, { force: true, recursive: true });
+      }
+    },
+  );
+
   it.each([1, 2, 3, 4, 5, 6])(
     'returns null for check snapshot version %i',
     async (version) => {
@@ -1323,7 +1418,7 @@ describe('check issue snapshots', () => {
   it('does not mutate snapshots or issue ids across human inventory views', () => {
     const snapshot = createCheckSnapshot([
       createLiminaCheckIssue({
-        code: 'ROOT_A',
+        code: LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed,
         evidence: [{ label: 'details', lines: ['one', 'two'] }],
         filePath: '/repo/packages/app/src/index.ts',
         packageName: '@example/app',
@@ -1333,7 +1428,7 @@ describe('check issue snapshots', () => {
         title: 'Root A',
       }),
       createLiminaCheckIssue({
-        code: 'ROOT_B',
+        code: LIMINA_CHECK_ISSUE_CODES.proofCheckFailed,
         filePath: '/repo/packages/lib/src/index.ts',
         packageName: '@example/lib',
         reason: 'Root B failed.',
@@ -1357,7 +1452,7 @@ describe('check issue snapshots', () => {
   it('keeps invocation identity in every generated query command', () => {
     const invocationId = '00000000-0000-4000-8000-000000000000';
     const issue = createLiminaCheckIssue({
-      code: 'ROOT_A',
+      code: LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed,
       filePath: '/repo/packages/app/src/index.ts',
       reason: 'Root A failed.',
       rootDir: '/repo',

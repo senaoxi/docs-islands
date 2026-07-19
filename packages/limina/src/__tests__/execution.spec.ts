@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import { createCheckRunRecorder } from '../check-reporting/run-recorder';
 import {
   getSourceIssueSnapshotPath,
@@ -1197,13 +1198,21 @@ describe('runExecutionTasks', () => {
         tasks: [
           createTask({
             id: 'a',
-            issues: [createIssue({ code: 'B' })],
+            issues: [
+              createIssue({
+                code: LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportUnresolved,
+              }),
+            ],
             order: 0,
             passed: false,
           }),
           createTask({
             id: 'b',
-            issues: [createIssue({ code: 'A' })],
+            issues: [
+              createIssue({
+                code: LIMINA_CHECK_ISSUE_CODES.graphConditionDomainMismatch,
+              }),
+            ],
             order: 1,
             passed: false,
           }),
@@ -1211,7 +1220,10 @@ describe('runExecutionTasks', () => {
       });
       const snapshot = await readCheckIssueSnapshot(rootDir);
 
-      expect(snapshot?.issues.map((issue) => issue.code)).toEqual(['B', 'A']);
+      expect(snapshot?.issues.map((issue) => issue.code)).toEqual([
+        LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportUnresolved,
+        LIMINA_CHECK_ISSUE_CODES.graphConditionDomainMismatch,
+      ]);
     });
   });
 

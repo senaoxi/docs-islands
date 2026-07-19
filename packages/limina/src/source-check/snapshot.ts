@@ -4,7 +4,12 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'pathe';
 import { writeJsonAtomically } from '../check-reporting/atomic-writer';
-import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
+import {
+  assertIssueTaskMatchesCode,
+  assertWritableLiminaCheckIssueCode,
+  LIMINA_CHECK_ISSUE_CODES,
+  type LiminaWritableCheckIssueCode,
+} from '../check-reporting/codes';
 import { formatCheckIssueInventoryCard } from '../check-reporting/human';
 import {
   type CheckIssueInventoryPresentationOptions,
@@ -160,6 +165,7 @@ export interface LiminaCheckIssueExternal {
 
 export interface LiminaCheckIssue {
   checkerName?: string;
+  /** Historical snapshot readers preserve unknown wire codes as strings. */
   code: string;
   detector?: string;
   detailLines?: string[];
@@ -182,6 +188,10 @@ export interface LiminaCheckIssue {
   title: string;
   tool?: string;
   verifyCommands?: string[];
+}
+
+export interface CanonicalLiminaCheckIssue extends LiminaCheckIssue {
+  code: LiminaWritableCheckIssueCode;
 }
 
 export interface CheckIssueSnapshot {
@@ -625,6 +635,13 @@ export function isLiminaCheckIssue(value: unknown): value is LiminaCheckIssue {
     hasLiminaCheckIssueStructuredFields(value) &&
     hasLiminaCheckIssuePresentationFields(value)
   );
+}
+
+function assertWritableLiminaCheckIssue(
+  issue: LiminaCheckIssue,
+): asserts issue is CanonicalLiminaCheckIssue {
+  assertWritableLiminaCheckIssueCode(issue.code);
+  assertIssueTaskMatchesCode(issue.code, issue.task);
 }
 
 function isCurrentV7CheckIssueSnapshotStructure(
@@ -1071,6 +1088,9 @@ export async function writeCheckIssueSnapshotOnly(
   if (!isCurrentV7CheckIssueSnapshotStructure(snapshot)) {
     throw new Error('Invalid v7 check snapshot wire model.');
   }
+  for (const issue of snapshot.issues) {
+    assertWritableLiminaCheckIssue(issue);
+  }
   if (snapshot.status === 'completed' && snapshot.run) {
     assertCompletedRunSummary(snapshot.run);
   }
@@ -1272,7 +1292,7 @@ export async function readCheckIssueSnapshot(
 
 export function createTaskFailureIssue(options: {
   checkerName?: string;
-  code?: string;
+  code?: LiminaWritableCheckIssueCode;
   detector?: string;
   detailLines?: readonly string[];
   domain?: string;
@@ -1294,14 +1314,14 @@ export function createTaskFailureIssue(options: {
   title?: string;
   tool?: string;
   verifyCommands?: readonly string[];
-}): LiminaCheckIssue {
+}): CanonicalLiminaCheckIssue {
   return createLiminaCheckIssue(options);
 }
 
 export function createSourceCheckIssue(options: {
   issue: SourceCheckIssue;
   rootDir: string;
-}): LiminaCheckIssue {
+}): CanonicalLiminaCheckIssue {
   if (isSourceUnusedModuleIssue(options.issue)) {
     return createLiminaCheckIssue({
       code: options.issue.code,

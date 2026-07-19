@@ -4392,6 +4392,51 @@ describe('runPackageCheck and runReleaseCheck', () => {
     }
   });
 
+  it('keeps publint rule codes in external.code', async () => {
+    const pkg = await createOutputPackage({
+      'index.js': 'export const value = 1;\n',
+    });
+    const issues: LiminaCheckIssue[] = [];
+
+    try {
+      packageCheckMocks.publintMessages = [
+        {
+          code: 'EXPORTS_MODULE_SHOULD_PRECEDE_TYPES',
+          type: 'error',
+        },
+      ];
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(pkg.rootDir, [
+            {
+              name: '@example/pkg',
+              outDir: pkg.outDir,
+            },
+          ]),
+          deferSnapshot: true,
+          issues,
+          report: { defer: true },
+          tool: 'publint',
+        }),
+      ).resolves.toBe(false);
+
+      expect(issues).toEqual([
+        expect.objectContaining({
+          code: 'LIMINA_PACKAGE_PUBLINT',
+          external: {
+            code: 'EXPORTS_MODULE_SHOULD_PRECEDE_TYPES',
+            message: 'mock publint message',
+            tool: 'publint',
+          },
+          task: 'package:check',
+        }),
+      ]);
+    } finally {
+      await pkg.cleanup();
+    }
+  });
+
   it('passes attw object config to checkPackage and ignores configured rules', async () => {
     const pkg = await createOutputPackage({
       'index.js': 'export const value = 1;\n',
