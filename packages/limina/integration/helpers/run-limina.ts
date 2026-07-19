@@ -1,7 +1,11 @@
-import { type ChildProcess, spawn } from 'node:child_process';
+import {
+  type ChildProcess,
+  spawn,
+  type SpawnOptions,
+} from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const liminaBinPath = fileURLToPath(
+export const liminaBinPath = fileURLToPath(
   new URL('../../bin/limina.js', import.meta.url),
 );
 const defaultTimeout = 60_000;
@@ -9,20 +13,30 @@ const forceTerminationDelay = 2000;
 const finalWatchdogDelay = 5000;
 
 export interface RunLiminaOptions {
-  args: string[];
+  args: readonly string[];
   cwd: string;
   env?: NodeJS.ProcessEnv;
   fixtureName: string;
+  inheritParentEnv?: boolean;
   timeout?: number;
 }
 
 export interface RunLiminaResult {
+  args: readonly string[];
   code: number | null;
+  cwd: string;
+  executable: string;
   fixtureName: string;
   signal: NodeJS.Signals | null;
   stderr: string;
   stdout: string;
   timedOut: boolean;
+}
+
+export interface LiminaSpawnSpec {
+  readonly args: readonly string[];
+  readonly executable: string;
+  readonly options: SpawnOptions;
 }
 
 interface TerminationStatus {
@@ -85,20 +99,31 @@ async function terminateProcessTree(
   }
 }
 
-function spawnLiminaChild(options: RunLiminaOptions): ChildProcess {
-  return spawn(process.execPath, [liminaBinPath, ...options.args], {
-    cwd: options.cwd,
-    detached: process.platform !== 'win32',
-    env: {
-      ...process.env,
-      CI: 'true',
-      FORCE_COLOR: '0',
-      ...options.env,
+export function createLiminaSpawnSpec(
+  options: RunLiminaOptions,
+): LiminaSpawnSpec {
+  return {
+    args: [liminaBinPath, ...options.args],
+    executable: process.execPath,
+    options: {
+      cwd: options.cwd,
+      detached: process.platform !== 'win32',
+      env: {
+        ...(options.inheritParentEnv === false ? {} : process.env),
+        CI: 'true',
+        FORCE_COLOR: '0',
+        ...options.env,
+      },
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     },
-    shell: false,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
+  };
+}
+
+function spawnLiminaChild(options: RunLiminaOptions): ChildProcess {
+  const spec = createLiminaSpawnSpec(options);
+  return spawn(spec.executable, [...spec.args], spec.options);
 }
 
 function formatUnknownError(error: unknown): string {
@@ -120,7 +145,7 @@ function formatTerminationStatus(
 }
 
 function formatFinalWatchdogError(options: {
-  args: string[];
+  args: readonly string[];
   cwd: string;
   fixtureName: string;
   force: TerminationStatus;
@@ -300,7 +325,10 @@ function runLiminaWithDependencies(
     child.on('close', (code, signal) => {
       settle(() => {
         resolve({
+          args: [liminaBinPath, ...options.args],
           code,
+          cwd: options.cwd,
+          executable: process.execPath,
           fixtureName: options.fixtureName,
           signal,
           stderr,
