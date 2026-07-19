@@ -4,21 +4,22 @@ import { normalizeSlashes, toRelativePath } from '#utils/path';
 import { colorText, plural } from '#utils/reporting';
 import boxen from 'boxen';
 import path from 'pathe';
-import {
-  LIMINA_CHECK_ISSUE_CODES,
-  type LiminaWritableCheckIssueCode,
-} from '../check-reporting/codes';
+import { LIMINA_CHECK_ISSUE_CODES } from '../check-reporting/codes';
 import {
   pathCandidatesMatchFileFilters,
   pathCandidatesMatchScopeFilters,
   type PathFilterCandidate,
 } from '../check-reporting/path-filters';
 import { formatShellCommand } from '../check-reporting/shell-command';
-import type {
-  LiminaCheckIssueEvidence,
-  LiminaCheckIssueLocation,
-} from '../check-reporting/snapshot';
+import type { LiminaCheckIssueEvidence } from '../check-reporting/snapshot';
 import { formatCheckSummaryBlock } from '../reporting';
+import type {
+  SourceFinding,
+  SourceSemanticIssueCode,
+  SourceStructuredFinding,
+  SourceUnusedModuleFinding,
+  SourceUnusedWorkspaceDependencyFinding,
+} from './findings';
 
 export const SOURCE_ISSUE_CODES: {
   readonly unusedModule: typeof LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule;
@@ -29,10 +30,7 @@ export const SOURCE_ISSUE_CODES: {
     LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency,
 };
 
-export type SourceIssueCode = Extract<
-  LiminaWritableCheckIssueCode,
-  `LIMINA_SOURCE_${string}`
->;
+export type SourceIssueCode = SourceSemanticIssueCode;
 
 export interface SourceIssueReportOptions {
   command?: string;
@@ -44,46 +42,11 @@ export interface SourceIssueReportOptions {
   verbose?: boolean;
 }
 
-export interface SourceUnusedModuleIssue {
-  code: typeof SOURCE_ISSUE_CODES.unusedModule;
-  filePath: string;
-  ownerDirectory: string;
-  ownerName: string;
-  packageJsonPath: string;
-}
-
-export interface SourceUnusedWorkspaceDependencyIssue {
-  code: typeof SOURCE_ISSUE_CODES.unusedWorkspaceDependency;
-  dependencyName: string;
-  ownerName: string;
-  packageJsonPath: string;
-  sectionName: string;
-  specifier: string;
-}
-
-export interface SourceStructuredIssue {
-  code: SourceIssueCode;
-  detailLines?: string[];
-  detector?: string;
-  evidence?: LiminaCheckIssueEvidence[];
-  filePath?: string;
-  fix?: string;
-  fixSteps?: string[];
-  locations?: LiminaCheckIssueLocation[];
-  ownerName: string;
-  packageJsonPath?: string;
-  reason: string;
-  scope?: string;
-  summary?: string;
-  title: string;
-  tool?: string;
-  verifyCommands?: string[];
-}
-
-export type SourceCheckIssue =
-  | SourceUnusedModuleIssue
-  | SourceUnusedWorkspaceDependencyIssue
-  | SourceStructuredIssue;
+export type SourceUnusedModuleIssue = SourceUnusedModuleFinding;
+export type SourceUnusedWorkspaceDependencyIssue =
+  SourceUnusedWorkspaceDependencyFinding;
+export type SourceStructuredIssue = SourceStructuredFinding;
+export type SourceCheckIssue = SourceFinding;
 
 const DEFAULT_DETAIL_LIMIT = 5;
 const DEFAULT_COMMAND = 'limina check';
@@ -506,6 +469,38 @@ function getGenericSourceIssueLocation(issue: SourceStructuredIssue): string {
   );
 }
 
+function getGenericSourceIssueDisplayLocation(
+  rootDir: string,
+  issue: SourceStructuredIssue,
+): string {
+  const structuredLocation = issue.locations?.find(
+    (location) =>
+      location.filePath || location.packageManifestPath || location.scope,
+  );
+
+  if (structuredLocation) {
+    const filePath =
+      structuredLocation.filePath ?? structuredLocation.packageManifestPath;
+    const value = filePath
+      ? formatSourceIssuePath(rootDir, filePath)
+      : structuredLocation.scope;
+
+    return [structuredLocation.label, value].filter(Boolean).join(': ');
+  }
+
+  const filePath = issue.filePath ?? issue.packageJsonPath;
+
+  return filePath
+    ? formatSourceIssuePath(rootDir, filePath)
+    : (issue.scope ?? issue.title);
+}
+
+function formatSourceIssuePath(rootDir: string, filePath: string): string {
+  return path.isAbsolute(filePath)
+    ? toRelativePath(rootDir, filePath)
+    : normalizeSlashes(filePath);
+}
+
 function formatSourceEvidence(
   evidence: readonly LiminaCheckIssueEvidence[] | undefined,
 ): string[] {
@@ -525,6 +520,7 @@ function formatSourceEvidence(
 }
 
 function formatGenericSourceIssueGroup(
+  config: ResolvedLiminaConfig,
   group: GenericSourceIssueGroup,
   options: SourceIssueReportOptions,
 ): string[] {
@@ -535,7 +531,9 @@ function formatGenericSourceIssueGroup(
   }
 
   const locations = uniqueSortedStrings(
-    group.issues.map(getGenericSourceIssueLocation),
+    group.issues.map((issue) =>
+      getGenericSourceIssueDisplayLocation(config.rootDir, issue),
+    ),
   );
   const visibleLocations = options.verbose
     ? locations
@@ -556,7 +554,12 @@ function formatGenericSourceIssueGroup(
     `package: ${firstIssue.ownerName}`,
     `rule: ${firstIssue.code}`,
     ...(firstIssue.packageJsonPath
-      ? [`package manifest: ${firstIssue.packageJsonPath}`]
+      ? [
+          `package manifest: ${formatSourceIssuePath(
+            config.rootDir,
+            firstIssue.packageJsonPath,
+          )}`,
+        ]
       : []),
     ...(firstIssue.detector ? [`detector: ${firstIssue.detector}`] : []),
     ...(firstIssue.tool ? [`tool: ${firstIssue.tool}`] : []),
@@ -1117,7 +1120,9 @@ export function formatSourceCheckHumanReport(options: {
     }
 
     lines.push(
-      ...formatIssueBlock(formatGenericSourceIssueGroup(group, report)),
+      ...formatIssueBlock(
+        formatGenericSourceIssueGroup(options.config, group, report),
+      ),
     );
   }
 

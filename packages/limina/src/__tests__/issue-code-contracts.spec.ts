@@ -80,9 +80,9 @@ describe('Limina issue code contracts', () => {
     expect(Object.fromEntries([...kindCounts].sort())).toEqual({
       'external-tool': 1,
       'fault-injection': 11,
-      planned: 19,
+      planned: 12,
       retired: 1,
-      unit: 28,
+      unit: 35,
     });
   });
 

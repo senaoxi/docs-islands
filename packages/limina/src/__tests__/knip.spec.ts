@@ -38,6 +38,7 @@ describe('collectUnusedSourceFileIssues', () => {
       }),
     ).toEqual([
       {
+        externalCode: 'files',
         filePath: '/repo/packages/app/src/dead.ts',
       },
     ]);
@@ -58,6 +59,7 @@ describe('collectUnusedSourceFileIssues', () => {
       }),
     ).toEqual([
       {
+        externalCode: 'files',
         filePath: '/repo/packages/app/src/dead.ts',
       },
     ]);

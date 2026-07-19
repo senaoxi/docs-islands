@@ -39,6 +39,7 @@ import type { ExecutionTask, ExecutionTaskOutcome } from '../execution/tasks';
 import { taskId } from '../execution/tasks';
 import { LiminaFlowReporter } from '../flow';
 import { LiminaPreflightManager } from '../preflight';
+import { createSourceUnusedModuleFinding } from '../source-check/findings';
 import {
   SOURCE_ISSUE_CODES,
   type SourceCheckIssue,
@@ -1231,11 +1232,13 @@ describe('runExecutionTasks', () => {
     { issues: [] as SourceCheckIssue[], label: 'empty' },
     {
       issues: [
-        {
-          code: SOURCE_ISSUE_CODES.unusedModule,
+        createSourceUnusedModuleFinding({
+          externalCode: 'files',
           filePath: '/workspace/src/unused.ts',
+          ownerDirectory: '/workspace',
           ownerName: '@fixture/pkg',
-        } as SourceCheckIssue,
+          packageJsonPath: '/workspace/package.json',
+        }),
       ],
       label: 'non-empty',
     },
@@ -1276,13 +1279,13 @@ describe('runExecutionTasks', () => {
     'invalidates source inventory after a $label terminal command while preserving issues',
     async ({ commandPassed }) => {
       await withTempRoot(async (rootDir) => {
-        const sourceIssue: SourceCheckIssue = {
-          code: SOURCE_ISSUE_CODES.unusedModule,
+        const sourceIssue: SourceCheckIssue = createSourceUnusedModuleFinding({
+          externalCode: 'files',
           filePath: path.join(rootDir, 'src/old-generation.ts'),
           ownerDirectory: rootDir,
           ownerName: '@fixture/pkg',
           packageJsonPath: path.join(rootDir, 'package.json'),
-        };
+        });
         const source = createTask({ id: 'source', order: 0 });
         source.issueTask = 'source:check';
         source.label = 'source:check';
@@ -1325,13 +1328,13 @@ describe('runExecutionTasks', () => {
 
   it('commits only the last source occurrence when it matches final generation', async () => {
     await withTempRoot(async (rootDir) => {
-      const oldIssue: SourceCheckIssue = {
-        code: SOURCE_ISSUE_CODES.unusedModule,
+      const oldIssue: SourceCheckIssue = createSourceUnusedModuleFinding({
+        externalCode: 'files',
         filePath: path.join(rootDir, 'src/old-generation.ts'),
         ownerDirectory: rootDir,
         ownerName: '@fixture/pkg',
         packageJsonPath: path.join(rootDir, 'package.json'),
-      };
+      });
       const firstSource = createTask({ id: 'source-0', order: 0 });
       firstSource.issueTask = 'source:check';
       firstSource.label = 'source:check';
@@ -1520,13 +1523,13 @@ describe('runExecutionTasks', () => {
 
   it('keeps the source snapshot when the following check write fails', async () => {
     await withTempRoot(async (rootDir) => {
-      const sourceIssue: SourceCheckIssue = {
-        code: SOURCE_ISSUE_CODES.unusedModule,
+      const sourceIssue: SourceCheckIssue = createSourceUnusedModuleFinding({
+        externalCode: 'files',
         filePath: path.join(rootDir, 'src/unused.ts'),
         ownerDirectory: rootDir,
         ownerName: '@fixture/pkg',
         packageJsonPath: path.join(rootDir, 'package.json'),
-      };
+      });
       const source = createTask({ id: 'source', order: 0 });
       source.issueTask = 'source:check';
       source.label = 'source:check';

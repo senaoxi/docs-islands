@@ -400,106 +400,139 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
   [LIMINA_CHECK_ISSUE_CODES.sourceAmbientDeclarationSharedUnauthorized]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addTsconfigGovernanceProblems',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/source.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceAmbientDeclarationReferenceUnauthorized]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addRelativeImportProblems',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/source.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceCrossGovernanceBoundary]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addSourceCrossGovernanceBoundaryProblem',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'source:check',
+    tests: ['packages/limina/src/__tests__/source-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceImportAuthorityInvalid]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addImportAuthorityConfigFinding',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'source:check',
+    tests: ['packages/limina/src/__tests__/source-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceKnipBuildScriptUnsupported]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addKnipBackedSourceProblems',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'source:check',
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceKnipConfigInvalid]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/findings.ts#createSourceKnipConfigFinding',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'source:check',
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceOwnerInvalid]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addProjectOwnerProblems',
+      'packages/limina/src/source-check/runner.ts#addSourceImportOutsideActivatedRegionProblem',
+      'packages/limina/src/source-check/runner.ts#addTsconfigGovernanceProblems',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'source:check',
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourcePackageImportInvalid]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addPackageImportProblem',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'source:check',
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourcePackageImportUnauthorized]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addPackageImportAuthorizationProblem',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/source.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceRelativeImportEscapesScope]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addRelativeImportOwnerProblem',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/source.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceTsconfigGovernance]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/runner.ts#createStructuredSourceIssueFromProblem',
+      'packages/limina/src/source-check/runner.ts#addTsconfigGovernanceProblems',
+      'packages/limina/src/source-check/runner.ts#runSourceCheckImpl',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/cli.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/snapshot.ts#createSourceCheckIssue',
+      'packages/limina/src/source-check/runner.ts#addUnusedModuleProblems',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/cli.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+      'packages/limina/src/__tests__/source.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/source-check/snapshot.ts#createSourceCheckIssue',
+      'packages/limina/src/source-check/runner.ts#addUnusedDependencyProblems',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'source:check',
+    tests: ['packages/limina/src/__tests__/source-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.workspaceRegionOverlap]: {
     kind: 'unit',
