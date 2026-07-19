@@ -25,6 +25,7 @@ import {
 import { createLiminaArtifactNamespace } from '../domain/artifacts/namespace';
 import { createArtifactPlan } from '../domain/artifacts/plan';
 import { addTypecheckParityProblems } from '../graph-check/dts-options';
+import type { GraphFinding } from '../graph-check/findings';
 import { GraphLogger } from '../logger';
 import { prepareAndMaterializeGeneratedTsconfigGraph as prepareGeneratedTsconfigGraph } from './helpers/generated-graph';
 
@@ -812,7 +813,7 @@ describe('runGraphCheck checker entry', () => {
     });
 
     try {
-      const problems: string[] = [];
+      const findings: GraphFinding[] = [];
 
       addTypecheckParityProblems(
         fixture.config,
@@ -820,11 +821,11 @@ describe('runGraphCheck checker entry', () => {
           fixture.config,
           path.join(fixture.rootDir, 'app/tsconfig.lib.dts.json'),
         ),
-        problems,
+        findings,
         createCheckCounter(),
       );
 
-      expect(problems).toEqual([]);
+      expect(findings).toEqual([]);
     } finally {
       await fixture.cleanup();
     }
@@ -861,7 +862,7 @@ describe('runGraphCheck checker entry', () => {
     });
 
     try {
-      const problems: string[] = [];
+      const findings: GraphFinding[] = [];
 
       addTypecheckParityProblems(
         fixture.config,
@@ -869,11 +870,15 @@ describe('runGraphCheck checker entry', () => {
           fixture.config,
           path.join(fixture.rootDir, 'app/tsconfig.lib.dts.json'),
         ),
-        problems,
+        findings,
         createCheckCounter(),
       );
 
-      expect(problems.join('\n')).toContain('option: compilerOptions.paths');
+      expect(
+        findings
+          .flatMap((finding) => finding.presentation.detailLines)
+          .join('\n'),
+      ).toContain('option: compilerOptions.paths');
     } finally {
       await fixture.cleanup();
     }

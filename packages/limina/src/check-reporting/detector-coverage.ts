@@ -83,10 +83,15 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
   [LIMINA_CHECK_ISSUE_CODES.graphAccessDenied]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addDeniedReferenceProblems',
+      'packages/limina/src/graph-check/runner.ts#addDeniedDepImportProblem',
+      'packages/limina/src/graph-check/runner.ts#addDeniedRefImportProblem',
     ],
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphCheckFailed]: {
     kind: 'fault-injection',
@@ -98,28 +103,42 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: [FALLBACK_CONTRACT_TEST],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphConditionDomainMismatch]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/conditions.ts#collectCustomConditionSubtreeSummary',
+      'packages/limina/src/graph-check/conditions.ts#addConditionDomainProblems',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'graph:check',
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphConfigInvalid]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/dts-options.ts#addDtsOptionProblems',
+      'packages/limina/src/graph-check/dts-options.ts#addTypecheckParityProblems',
+      'packages/limina/src/graph-check/conditions.ts#addConditionDomainShapeProblem',
+      'packages/limina/src/graph-check/conditions.ts#addConditionDomainEntryProblem',
+      'packages/limina/src/graph-check/rules.ts#getRulesRecord',
+      'packages/limina/src/graph-check/rules.ts#addRuleEntryConfigFinding',
+      'packages/limina/src/graph-check/runner.ts#createGraphCheckManagedOutputProjectContexts',
+      'packages/limina/src/graph-check/runner.ts#runGraphCheckImpl',
     ],
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphImportTargetUnmapped]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addUnmappedWorkspaceImportProblem',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'graph:check',
+    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphMaterializeFailed]: {
     kind: 'fault-injection',
@@ -148,66 +167,75 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
   [LIMINA_CHECK_ISSUE_CODES.graphReferenceCycle]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addGeneratedReferenceCycleProblems',
     ],
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphReferenceExtra]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addReferenceCompletenessProblems',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'graph:check',
+    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphReferenceMissing]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addReferenceCompletenessProblems',
     ],
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphTargetUnreachable]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addExpectedReferenceForTarget',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'graph:check',
+    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceDependencyUndeclared]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addWorkspaceReferenceDependencyProblems',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'graph:check',
+    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportOutsideGraph]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addBuildArtifactImportProblem',
+      'packages/limina/src/graph-check/runner.ts#addOutsideWorkspaceGraphProblem',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'graph:check',
+    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportUnresolved]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addWorkspacePackageExportWithoutTypeEntryProblem',
+      'packages/limina/src/graph-check/runner.ts#addUnresolvedWorkspaceImportProblem',
+      'packages/limina/src/graph-check/runner.ts#addOxcOnlyDeclarationProviderProblem',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'graph:check',
+    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspacePackageNameMissing]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/graph-check/runner.ts#createGraphCheckIssue',
+      'packages/limina/src/graph-check/runner.ts#addNamelessWorkspaceReferenceProblem',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'graph:check',
+    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.packageAttw]: {
     kind: 'planned',
