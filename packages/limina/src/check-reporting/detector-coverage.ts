@@ -81,7 +81,7 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphAccessDenied]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/graph-check/runner.ts#addDeniedReferenceProblems',
       'packages/limina/src/graph-check/runner.ts#addDeniedDepImportProblem',
@@ -89,6 +89,9 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
     task: 'graph:check',
     tests: [
+      'packages/limina/fixtures/detectors/graph/access-denied-import-dependency/case.mts',
+      'packages/limina/fixtures/detectors/graph/access-denied-reference/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/graph-findings.spec.ts',
       'packages/limina/src/__tests__/graph.spec.ts',
     ],
@@ -103,19 +106,22 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: [FALLBACK_CONTRACT_TEST],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphConditionDomainMismatch]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/graph-check/conditions.ts#collectCustomConditionSubtreeSummary',
       'packages/limina/src/graph-check/conditions.ts#addConditionDomainProblems',
     ],
     task: 'graph:check',
     tests: [
+      'packages/limina/fixtures/detectors/graph/condition-domain-mismatch/case.mts',
+      'packages/limina/fixtures/detectors/graph/condition-domain-reference-mismatch/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/graph-findings.spec.ts',
       'packages/limina/src/__tests__/graph.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphConfigInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/graph-check/dts-options.ts#addDtsOptionProblems',
       'packages/limina/src/graph-check/dts-options.ts#addTypecheckParityProblems',
@@ -128,17 +134,26 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
     task: 'graph:check',
     tests: [
+      'packages/limina/fixtures/detectors/graph/config-invalid-condition-domain/case.mts',
+      'packages/limina/fixtures/detectors/graph/config-invalid-condition-domain-entry/case.mts',
+      'packages/limina/fixtures/detectors/graph/config-invalid-rule/case.mts',
+      'packages/limina/fixtures/detectors/graph/config-invalid-workspace-export/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/graph-findings.spec.ts',
       'packages/limina/src/__tests__/graph.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphImportTargetUnmapped]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/graph-check/runner.ts#addUnmappedWorkspaceImportProblem',
     ],
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/graph/import-target-unmapped/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphMaterializeFailed]: {
     kind: 'fault-injection',
@@ -165,12 +180,14 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphReferenceCycle]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/graph-check/runner.ts#addGeneratedReferenceCycleProblems',
     ],
     task: 'graph:check',
     tests: [
+      'packages/limina/fixtures/detectors/graph/reference-cycle-mutual/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/graph-findings.spec.ts',
       'packages/limina/src/__tests__/graph.spec.ts',
     ],
@@ -211,23 +228,32 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportOutsideGraph]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/graph-check/runner.ts#addBuildArtifactImportProblem',
       'packages/limina/src/graph-check/runner.ts#addOutsideWorkspaceGraphProblem',
     ],
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/graph/workspace-import-outside-graph/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportUnresolved]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/graph-check/runner.ts#addWorkspacePackageExportWithoutTypeEntryProblem',
       'packages/limina/src/graph-check/runner.ts#addUnresolvedWorkspaceImportProblem',
       'packages/limina/src/graph-check/runner.ts#addOxcOnlyDeclarationProviderProblem',
     ],
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/graph/workspace-import-missing-type-entry/case.mts',
+      'packages/limina/fixtures/detectors/graph/workspace-import-unresolved/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspacePackageNameMissing]: {
     kind: 'unit',
@@ -598,12 +624,14 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: ['packages/limina/src/__tests__/source-findings.spec.ts'],
   },
   [LIMINA_CHECK_ISSUE_CODES.workspaceRegionOverlap]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/core/workspace/validated-context.ts#createWorkspaceIssue',
     ],
     task: 'workspace:validate',
     tests: [
+      'packages/limina/fixtures/detectors/workspace/region-overlap/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
       'packages/limina/src/__tests__/workspace.spec.ts',
     ],
@@ -618,27 +646,41 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: [FALLBACK_CONTRACT_TEST],
   },
   [LIMINA_CHECK_ISSUE_CODES.workspaceOutputCycle]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/core/workspace/validated-context.ts#createWorkspaceIssue',
     ],
     task: 'workspace:validate',
-    tests: ['packages/limina/src/__tests__/workspace-validation.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/workspace/output-cycle-mutual/case.mts',
+      'packages/limina/fixtures/detectors/workspace/output-cycle-self/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/workspace-validation.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.workspaceOutputRootInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/core/workspace/validated-context.ts#createWorkspaceIssue',
     ],
     task: 'workspace:validate',
-    tests: ['packages/limina/src/__tests__/workspace-validation.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/workspace/output-root-canonical-alias/case.mts',
+      'packages/limina/fixtures/detectors/workspace/output-root-repository/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/workspace-validation.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.workspacePackageIdentityConflict]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/core/workspace/validated-context.ts#createWorkspaceIssue',
     ],
     task: 'workspace:validate',
-    tests: ['packages/limina/src/__tests__/workspace-validation.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/workspace/package-identity-conflict/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/workspace-validation.spec.ts',
+    ],
   },
 } satisfies DetectorCoverageRegistry;

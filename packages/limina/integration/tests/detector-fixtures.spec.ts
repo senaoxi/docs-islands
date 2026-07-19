@@ -27,8 +27,27 @@ const detectorFixtures = await discoverDetectorFixtures({
 describe('declarative detector fixtures', () => {
   it('discovers the checked-in fixtures in portable order', () => {
     expect(detectorFixtures.map((fixture) => fixture.id)).toEqual([
+      'graph/access-denied-import-dependency',
+      'graph/access-denied-reference',
+      'graph/condition-domain-mismatch',
+      'graph/condition-domain-reference-mismatch',
+      'graph/config-invalid-condition-domain',
+      'graph/config-invalid-condition-domain-entry',
+      'graph/config-invalid-rule',
+      'graph/config-invalid-workspace-export',
+      'graph/import-target-unmapped',
+      'graph/reference-cycle-mutual',
+      'graph/workspace-import-missing-type-entry',
+      'graph/workspace-import-outside-graph',
+      'graph/workspace-import-unresolved',
       'proof/coverage-missing',
       'proof/coverage-valid',
+      'workspace/output-cycle-mutual',
+      'workspace/output-cycle-self',
+      'workspace/output-root-canonical-alias',
+      'workspace/output-root-repository',
+      'workspace/package-identity-conflict',
+      'workspace/region-overlap',
     ]);
   });
 
