@@ -98,6 +98,7 @@ export interface PublishedPackageBoundaryViolation {
 export interface PackedPackageTarball {
   cleanup: () => Promise<void>;
   tarball: Buffer;
+  tarballPath: string;
 }
 
 export interface RunPackageCheckOptions {
@@ -551,6 +552,7 @@ export async function packOutputTarball(
       }).catch(() => null);
     },
     tarball,
+    tarballPath,
   };
 }
 

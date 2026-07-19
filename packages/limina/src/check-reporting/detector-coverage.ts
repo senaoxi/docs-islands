@@ -382,42 +382,66 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
   [LIMINA_CHECK_ISSUE_CODES.releaseConsistency]: {
     kind: 'planned',
     producers: [
-      'packages/limina/src/commands/release.ts#createReleaseConsistencyIssues',
+      'packages/limina/src/check-reporting/codes.ts#releaseConsistency',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
+    reason:
+      'Registered planned compatibility code; current typed Release producers intentionally do not emit it.',
     task: 'release:check',
   },
   [LIMINA_CHECK_ISSUE_CODES.releaseContentHash]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/commands/release.ts#createReleaseConsistencyIssues',
+      'packages/limina/src/package-check/release-consistency.ts#addContentHashFinding',
+      'packages/limina/src/package-check/release-consistency.ts#verifyWorkspacePackagePublished',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'release:check',
+    tests: [
+      'packages/limina/src/__tests__/release-findings.spec.ts',
+      'packages/limina/src/__tests__/package.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.releasePackedManifest]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/commands/release.ts#createReleaseConsistencyIssues',
+      'packages/limina/src/commands/release.ts#collectOutputManifestFindings',
+      'packages/limina/src/package-check/release-consistency.ts#addPackedManifestFinding',
+      'packages/limina/src/package-check/release-consistency.ts#visitWorkspacePackageDependencies',
+      'packages/limina/src/package-check/release-consistency.ts#validatePackedManifestLint',
+      'packages/limina/src/package-check/release-consistency.ts#validatePackedManifest',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'release:check',
+    tests: [
+      'packages/limina/src/__tests__/release-findings.spec.ts',
+      'packages/limina/src/__tests__/package.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.releaseRegistry]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/commands/release.ts#createReleaseConsistencyIssues',
+      'packages/limina/src/package-check/release-consistency.ts#addRegistryFinding',
+      'packages/limina/src/package-check/release-consistency.ts#fetchRegistryPackageMetadata',
+      'packages/limina/src/package-check/release-consistency.ts#fetchRegistryTarball',
+      'packages/limina/src/package-check/release-consistency.ts#verifyWorkspacePackagePublished',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'release:check',
+    tests: [
+      'packages/limina/src/__tests__/release-findings.spec.ts',
+      'packages/limina/src/__tests__/package.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.releaseTarballHygiene]: {
-    kind: 'planned',
+    kind: 'unit',
     producers: [
-      'packages/limina/src/commands/release.ts#createReleaseConsistencyIssues',
+      'packages/limina/src/commands/release.ts#runReleaseCheckEntry',
+      'packages/limina/src/package-check/release-consistency.ts#addTarballHygieneFinding',
+      'packages/limina/src/package-check/release-consistency.ts#readPackedPackageJson',
+      'packages/limina/src/package-check/release-consistency.ts#validateReleaseTarballHygiene',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'release:check',
+    tests: [
+      'packages/limina/src/__tests__/release-findings.spec.ts',
+      'packages/limina/src/__tests__/package.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed]: {
     kind: 'fault-injection',
