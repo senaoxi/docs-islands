@@ -634,8 +634,10 @@ function formatIssueDetailLines(
   const includeDetailLines = options.includeDetailLines ?? true;
   const includeSummary = options.includeSummary ?? true;
   const visibleEvidence =
-    issue.task === 'graph:check' &&
-    issue.code !== LIMINA_CHECK_ISSUE_CODES.graphCheckFailed
+    (issue.task === 'graph:check' &&
+      issue.code !== LIMINA_CHECK_ISSUE_CODES.graphCheckFailed) ||
+    (issue.task === 'proof:check' &&
+      issue.code !== LIMINA_CHECK_ISSUE_CODES.proofCheckFailed)
       ? undefined
       : issue.evidence;
   const detailLines =

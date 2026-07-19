@@ -279,57 +279,96 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     task: 'command',
   },
   [LIMINA_CHECK_ISSUE_CODES.proofAllowlistInvalid]: {
-    kind: 'planned',
-    producers: ['packages/limina/src/proof/runner.ts#createProofCheckIssue'],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
+    kind: 'unit',
+    producers: [
+      'packages/limina/src/proof/allowlist.ts#collectConfiguredAllowlistEntries',
+      'packages/limina/src/proof/allowlist.ts#addAllowlistFindings',
+    ],
     task: 'proof:check',
+    tests: [
+      'packages/limina/src/__tests__/proof-findings.spec.ts',
+      'packages/limina/src/__tests__/proof.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofCheckerCoverageInvalid]: {
-    kind: 'planned',
-    producers: ['packages/limina/src/proof/runner.ts#createProofCheckIssue'],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
+    kind: 'unit',
+    producers: [
+      'packages/limina/src/proof/runner.ts#createProofCheckerRouteFinding',
+      'packages/limina/src/proof/runner.ts#collectCheckerCoverageTargets',
+      'packages/limina/src/proof/runner.ts#addDtsConfigFindings',
+      'packages/limina/src/proof/runner.ts#addBuildGraphConfigFindings',
+      'packages/limina/src/proof/runner.ts#addSourceReferenceRoleFindings',
+    ],
     task: 'proof:check',
+    tests: [
+      'packages/limina/src/__tests__/proof-findings.spec.ts',
+      'packages/limina/src/__tests__/proof.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofCheckFailed]: {
     kind: 'fault-injection',
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
-      'packages/limina/src/proof/runner.ts#createProofCheckIssue',
+      'packages/limina/src/commands/proof.ts#runProofCheck',
     ],
     task: 'proof:check',
     tests: [FALLBACK_CONTRACT_TEST],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofDefaultTsconfigInvalid]: {
     kind: 'unit',
-    producers: ['packages/limina/src/proof/runner.ts#createProofCheckIssue'],
+    producers: [
+      'packages/limina/src/proof/runner.ts#addDefaultTsconfigShapeFindings',
+      'packages/limina/src/proof/runner.ts#addDefaultTsconfigEnvironmentFindings',
+    ],
     task: 'proof:check',
-    tests: ['packages/limina/src/__tests__/cli.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/proof-findings.spec.ts',
+      'packages/limina/src/__tests__/proof.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofDuplicateGraphCoverage]: {
     kind: 'unit',
-    producers: ['packages/limina/src/proof/runner.ts#createProofCheckIssue'],
+    producers: [
+      'packages/limina/src/proof/runner.ts#addDuplicateGraphCoverageFindings',
+    ],
     task: 'proof:check',
-    tests: ['packages/limina/src/__tests__/proof.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/proof-findings.spec.ts',
+      'packages/limina/src/__tests__/proof.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofDuplicateSourceOwner]: {
     kind: 'unit',
-    producers: ['packages/limina/src/proof/runner.ts#createProofCheckIssue'],
+    producers: [
+      'packages/limina/src/proof/runner.ts#addDuplicateTypecheckOwnershipFindings',
+    ],
     task: 'proof:check',
-    tests: ['packages/limina/src/__tests__/proof.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/proof-findings.spec.ts',
+      'packages/limina/src/__tests__/proof.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofSourceBoundaryMismatch]: {
-    kind: 'planned',
-    producers: ['packages/limina/src/proof/runner.ts#createProofCheckIssue'],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
+    kind: 'unit',
+    producers: [
+      'packages/limina/src/proof/runner.ts#addSourceBoundaryMismatchFindings',
+    ],
     task: 'proof:check',
+    tests: [
+      'packages/limina/src/__tests__/proof-findings.spec.ts',
+      'packages/limina/src/__tests__/proof.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile]: {
     kind: 'unit',
     producers: [
-      'packages/limina/src/proof/runner.ts#addUncoveredSourceProblems',
+      'packages/limina/src/proof/runner.ts#addUncoveredSourceFindings',
     ],
     task: 'proof:check',
-    tests: ['packages/limina/src/__tests__/proof.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/proof-findings.spec.ts',
+      'packages/limina/src/__tests__/proof.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.releaseCheckFailed]: {
     kind: 'fault-injection',
