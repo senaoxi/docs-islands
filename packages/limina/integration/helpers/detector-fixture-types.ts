@@ -65,14 +65,25 @@ export interface ExpectedEvidence {
   readonly value?: string;
 }
 
+export interface ExpectedLocation {
+  readonly column?: number;
+  readonly filePath?: string;
+  readonly label?: string;
+  readonly line?: number;
+  readonly packageManifestPath?: string;
+  readonly scope?: string;
+}
+
 export interface ExpectedIssue {
   readonly checkerName?: string;
   readonly code: LiminaCheckIssueCode;
   readonly evidence?: readonly ExpectedEvidence[];
   readonly externalCode?: string;
   readonly filePath?: string;
+  readonly locations?: readonly ExpectedLocation[];
   readonly packageManifestPath?: string;
   readonly packageName?: string;
+  readonly scope?: string;
   readonly task: LiminaCheckTaskName;
 }
 

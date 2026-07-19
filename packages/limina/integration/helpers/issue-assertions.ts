@@ -4,6 +4,7 @@ import type {
   DetectorFixtureExpectation,
   ExpectedEvidence,
   ExpectedIssue,
+  ExpectedLocation,
 } from './detector-fixture-types';
 
 interface IssueAssertionOptions {
@@ -54,6 +55,60 @@ function expectedEvidenceMatches(
   );
 }
 
+function locationMatches(
+  expected: ExpectedLocation,
+  actual: NonNullable<LiminaCheckIssue['locations']>[number],
+  repoRoot: string,
+): boolean {
+  return (
+    (expected.column === undefined || actual.column === expected.column) &&
+    (expected.filePath === undefined ||
+      normalizeIssuePath(repoRoot, actual.filePath) === expected.filePath) &&
+    (expected.label === undefined || actual.label === expected.label) &&
+    (expected.line === undefined || actual.line === expected.line) &&
+    (expected.packageManifestPath === undefined ||
+      normalizeIssuePath(repoRoot, actual.packageManifestPath) ===
+        expected.packageManifestPath) &&
+    (expected.scope === undefined || actual.scope === expected.scope)
+  );
+}
+
+function locationConstraintCount(location: ExpectedLocation): number {
+  return Object.values(location).filter((entry) => entry !== undefined).length;
+}
+
+function expectedLocationsMatch(
+  expected: readonly ExpectedLocation[] | undefined,
+  actual:
+    | readonly NonNullable<LiminaCheckIssue['locations']>[number][]
+    | undefined,
+  repoRoot: string,
+): boolean {
+  if (expected === undefined) {
+    return true;
+  }
+
+  const available = new Map(
+    actual?.map((location, index) => [index, location]),
+  );
+  const expectedInMatchOrder = [...expected].sort(
+    (left, right) =>
+      locationConstraintCount(right) - locationConstraintCount(left),
+  );
+
+  for (const expectedLocation of expectedInMatchOrder) {
+    const match = [...available].find(([, actualLocation]) =>
+      locationMatches(expectedLocation, actualLocation, repoRoot),
+    );
+    if (match === undefined) {
+      return false;
+    }
+    available.delete(match[0]);
+  }
+
+  return true;
+}
+
 function issueMatches(
   expected: ExpectedIssue,
   actual: LiminaCheckIssue,
@@ -64,11 +119,13 @@ function issueMatches(
     actual.task === expected.task &&
     (expected.filePath === undefined ||
       normalizeIssuePath(repoRoot, actual.filePath) === expected.filePath) &&
+    expectedLocationsMatch(expected.locations, actual.locations, repoRoot) &&
     (expected.packageManifestPath === undefined ||
       normalizeIssuePath(repoRoot, actual.packageManifestPath) ===
         expected.packageManifestPath) &&
     (expected.packageName === undefined ||
       actual.packageName === expected.packageName) &&
+    (expected.scope === undefined || actual.scope === expected.scope) &&
     (expected.checkerName === undefined ||
       actual.checkerName === expected.checkerName) &&
     (expected.externalCode === undefined ||
@@ -81,8 +138,13 @@ function expectedConstraintCount(expected: ExpectedIssue): number {
   return (
     2 +
     Number(expected.filePath !== undefined) +
+    (expected.locations?.reduce(
+      (count, location) => count + locationConstraintCount(location),
+      0,
+    ) ?? 0) +
     Number(expected.packageManifestPath !== undefined) +
     Number(expected.packageName !== undefined) +
+    Number(expected.scope !== undefined) +
     Number(expected.checkerName !== undefined) +
     Number(expected.externalCode !== undefined) +
     (expected.evidence?.reduce(
@@ -103,8 +165,10 @@ export function formatExpectedIssueSummary(issue: ExpectedIssue): string {
     evidence: issue.evidence,
     externalCode: issue.externalCode,
     filePath: issue.filePath,
+    locations: issue.locations,
     packageManifestPath: issue.packageManifestPath,
     packageName: issue.packageName,
+    scope: issue.scope,
     task: issue.task,
   });
 }
@@ -118,11 +182,20 @@ export function formatActualIssueSummary(
     code: issue.code,
     externalCode: issue.external?.code,
     filePath: normalizeIssuePath(repoRoot, issue.filePath),
+    locations: issue.locations?.map((location) => ({
+      ...location,
+      filePath: normalizeIssuePath(repoRoot, location.filePath),
+      packageManifestPath: normalizeIssuePath(
+        repoRoot,
+        location.packageManifestPath,
+      ),
+    })),
     packageManifestPath: normalizeIssuePath(
       repoRoot,
       issue.packageManifestPath,
     ),
     packageName: issue.packageName,
+    scope: issue.scope,
     task: issue.task,
   });
 }

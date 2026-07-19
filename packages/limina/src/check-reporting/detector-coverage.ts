@@ -305,19 +305,21 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     task: 'command',
   },
   [LIMINA_CHECK_ISSUE_CODES.proofAllowlistInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/proof/allowlist.ts#collectConfiguredAllowlistEntries',
       'packages/limina/src/proof/allowlist.ts#addAllowlistFindings',
     ],
     task: 'proof:check',
     tests: [
+      'packages/limina/fixtures/detectors/proof/allowlist-file-empty/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/proof-findings.spec.ts',
       'packages/limina/src/__tests__/proof.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofCheckerCoverageInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/proof/runner.ts#createProofCheckerRouteFinding',
       'packages/limina/src/proof/runner.ts#collectCheckerCoverageTargets',
@@ -327,6 +329,8 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
     task: 'proof:check',
     tests: [
+      'packages/limina/fixtures/detectors/proof/checker-source-references/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/proof-findings.spec.ts',
       'packages/limina/src/__tests__/proof.spec.ts',
     ],
@@ -341,57 +345,67 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: [FALLBACK_CONTRACT_TEST],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofDefaultTsconfigInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/proof/runner.ts#addDefaultTsconfigShapeFindings',
       'packages/limina/src/proof/runner.ts#addDefaultTsconfigEnvironmentFindings',
     ],
     task: 'proof:check',
     tests: [
+      'packages/limina/fixtures/detectors/proof/default-tsconfig-missing/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/proof-findings.spec.ts',
       'packages/limina/src/__tests__/proof.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofDuplicateGraphCoverage]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/proof/runner.ts#addDuplicateGraphCoverageFindings',
     ],
     task: 'proof:check',
     tests: [
+      'packages/limina/fixtures/detectors/proof/duplicate-graph-json/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/proof-findings.spec.ts',
       'packages/limina/src/__tests__/proof.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofDuplicateSourceOwner]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/proof/runner.ts#addDuplicateTypecheckOwnershipFindings',
     ],
     task: 'proof:check',
     tests: [
+      'packages/limina/fixtures/detectors/proof/duplicate-source-owner/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/proof-findings.spec.ts',
       'packages/limina/src/__tests__/proof.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofSourceBoundaryMismatch]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/proof/runner.ts#addSourceBoundaryMismatchFindings',
     ],
     task: 'proof:check',
     tests: [
+      'packages/limina/fixtures/detectors/proof/source-boundary-mismatch/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/proof-findings.spec.ts',
       'packages/limina/src/__tests__/proof.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/proof/runner.ts#addUncoveredSourceFindings',
     ],
     task: 'proof:check',
     tests: [
+      'packages/limina/fixtures/detectors/proof/coverage-missing/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/proof-findings.spec.ts',
       'packages/limina/src/__tests__/proof.spec.ts',
     ],
@@ -479,75 +493,95 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: [FALLBACK_CONTRACT_TEST],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceAmbientDeclarationConfigInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/ambient-declarations.ts#createConfigIssue',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/ambient-declarations.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/source/ambient-config-no-matches/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/ambient-declarations.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceAmbientDeclarationSharedUnauthorized]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addTsconfigGovernanceProblems',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/ambient-shared-unauthorized/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceAmbientDeclarationReferenceUnauthorized]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addRelativeImportProblems',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/ambient-reference-unauthorized/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceCrossGovernanceBoundary]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addSourceCrossGovernanceBoundaryProblem',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/source-findings.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/source/cross-governance-require-resolve/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceImportAuthorityInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addImportAuthorityConfigFinding',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/source-findings.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/source/import-authority-unknown-owner/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceKnipBuildScriptUnsupported]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addKnipBackedSourceProblems',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/knip-build-script-unsupported/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceKnipConfigInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/findings.ts#createSourceKnipConfigFinding',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/knip-config-workspaces-invalid/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceOwnerInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addProjectOwnerProblems',
       'packages/limina/src/source-check/runner.ts#addSourceImportOutsideActivatedRegionProblem',
@@ -555,73 +589,92 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/owner-conflict/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourcePackageImportInvalid]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addPackageImportProblem',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/package-import-invalid/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourcePackageImportUnauthorized]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addPackageImportAuthorizationProblem',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/package-import-unauthorized/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceRelativeImportEscapesScope]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addRelativeImportOwnerProblem',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/relative-import-escapes-scope/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceTsconfigGovernance]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/source-check/runner.ts#addTsconfigGovernanceProblems',
       'packages/limina/src/source-check/runner.ts#runSourceCheckImpl',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/owner-conflict/case.mts',
+      'packages/limina/fixtures/detectors/source/tsconfig-module-owner-unresolved/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceUnusedModule]: {
-    kind: 'unit',
+    kind: 'external-tool',
     producers: [
       'packages/limina/src/source-check/runner.ts#addUnusedModuleProblems',
     ],
     task: 'source:check',
     tests: [
+      'packages/limina/fixtures/detectors/source/knip-usage-valid/case.mts',
+      'packages/limina/fixtures/detectors/source/unused-module/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceUnusedWorkspaceDependency]: {
-    kind: 'unit',
+    kind: 'external-tool',
     producers: [
       'packages/limina/src/source-check/runner.ts#addUnusedDependencyProblems',
     ],
     task: 'source:check',
-    tests: ['packages/limina/src/__tests__/source-findings.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/source/knip-usage-valid/case.mts',
+      'packages/limina/fixtures/detectors/source/unused-workspace-dependency/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/source-findings.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.workspaceRegionOverlap]: {
     kind: 'fixture',

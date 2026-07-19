@@ -16,6 +16,7 @@ import {
   type DetectorFixtureExpectation,
   type ExpectedEvidence,
   type ExpectedIssue,
+  type ExpectedLocation,
   FIXTURE_TOOL_NAMES,
   type FixtureCopyPolicy,
   type FixtureMutation,
@@ -49,11 +50,21 @@ const EXPECTED_ISSUE_KEYS = new Set([
   'evidence',
   'externalCode',
   'filePath',
+  'locations',
   'packageManifestPath',
   'packageName',
+  'scope',
   'task',
 ]);
 const EXPECTED_EVIDENCE_KEYS = new Set(['label', 'lines', 'value']);
+const EXPECTED_LOCATION_KEYS = new Set([
+  'column',
+  'filePath',
+  'label',
+  'line',
+  'packageManifestPath',
+  'scope',
+]);
 const COPY_POLICY_KEYS = new Set([
   'excludedNames',
   'includeBuildInfoFiles',
@@ -208,6 +219,52 @@ function validateEvidence(value: unknown, label: string): ExpectedEvidence {
   return evidence;
 }
 
+function optionalPositiveInteger(
+  value: unknown,
+  label: string,
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(value) || (value as number) < 1) {
+    throw new Error(`${label} must be a positive integer.`);
+  }
+
+  return value as number;
+}
+
+function validateLocation(value: unknown, label: string): ExpectedLocation {
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  assertOnlyKeys(value, EXPECTED_LOCATION_KEYS, label);
+
+  const location: ExpectedLocation = {
+    column: optionalPositiveInteger(value.column, `${label}.column`),
+    filePath:
+      value.filePath === undefined
+        ? undefined
+        : validatePortableRelativePath(value.filePath, {
+            label: `${label}.filePath`,
+          }),
+    label: optionalNonEmptyString(value.label, `${label}.label`),
+    line: optionalPositiveInteger(value.line, `${label}.line`),
+    packageManifestPath:
+      value.packageManifestPath === undefined
+        ? undefined
+        : validatePortableRelativePath(value.packageManifestPath, {
+            label: `${label}.packageManifestPath`,
+          }),
+    scope: optionalNonEmptyString(value.scope, `${label}.scope`),
+  };
+
+  if (Object.values(location).every((entry) => entry === undefined)) {
+    throw new Error(`${label} must constrain at least one location field.`);
+  }
+
+  return location;
+}
+
 function validateExpectedIssue(value: unknown, label: string): ExpectedIssue {
   if (!isPlainRecord(value)) {
     throw new Error(`${label} must be an object.`);
@@ -251,11 +308,22 @@ function validateExpectedIssue(value: unknown, label: string): ExpectedIssue {
       `${label}.externalCode`,
     ),
     filePath,
+    locations:
+      value.locations === undefined
+        ? undefined
+        : Array.isArray(value.locations) && value.locations.length > 0
+          ? value.locations.map((entry, index) =>
+              validateLocation(entry, `${label}.locations[${index}]`),
+            )
+          : (() => {
+              throw new Error(`${label}.locations must be a non-empty array.`);
+            })(),
     packageManifestPath,
     packageName: optionalNonEmptyString(
       value.packageName,
       `${label}.packageName`,
     ),
+    scope: optionalNonEmptyString(value.scope, `${label}.scope`),
     task,
   };
 }
@@ -267,8 +335,10 @@ function expectedIssueIdentity(issue: ExpectedIssue): string {
     evidence: issue.evidence,
     externalCode: issue.externalCode,
     filePath: issue.filePath,
+    locations: issue.locations,
     packageManifestPath: issue.packageManifestPath,
     packageName: issue.packageName,
+    scope: issue.scope,
     task: issue.task,
   });
 }

@@ -1074,6 +1074,64 @@ describe('strict structured issue assertion', () => {
     ).not.toThrow();
   });
 
+  it('matches a structured scope without parsing presentation text', () => {
+    expect(() =>
+      assertDetectorIssues({
+        actualIssues: [
+          actualIssue({
+            filePath: undefined,
+            scope: 'source.importAuthority.allow["@fixture/missing"]',
+          }),
+        ],
+        expected: expectedFailure([
+          {
+            code: LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile,
+            scope: 'source.importAuthority.allow["@fixture/missing"]',
+            task: 'proof:check',
+          },
+        ]),
+        fixtureId: 'source/scope',
+        repoRoot: '/repo',
+      }),
+    ).not.toThrow();
+  });
+
+  it('matches structured location subsets with portable paths', () => {
+    expect(() =>
+      assertDetectorIssues({
+        actualIssues: [
+          actualIssue({
+            filePath: undefined,
+            locations: [
+              {
+                filePath: '/repo/packages/pkg/fixtures/covered.ts',
+                label: 'source or covering project',
+              },
+              {
+                filePath: '/repo/packages/pkg/tsconfig.json',
+                label: 'source or covering project',
+              },
+            ],
+          }),
+        ],
+        expected: expectedFailure([
+          {
+            code: LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile,
+            locations: [
+              {
+                filePath: 'packages/pkg/fixtures/covered.ts',
+                label: 'source or covering project',
+              },
+            ],
+            task: 'proof:check',
+          },
+        ]),
+        fixtureId: 'proof/locations',
+        repoRoot: '/repo',
+      }),
+    ).not.toThrow();
+  });
+
   it('allows only declared additional codes and reports truncated leftovers', () => {
     const cascade = actualIssue({
       code: LIMINA_CHECK_ISSUE_CODES.graphReferenceMissing,
