@@ -681,7 +681,14 @@ export async function createDetectorSandbox(options: {
   );
   const tempRoot = await realpath(requestedTempRoot);
   await assertRealDirectory(tempRoot, 'Detector integration temp root');
-  const stableName = options.fixtureId.replaceAll('/', '-');
+  const readableName = options.fixtureId.replaceAll('/', '-');
+  const stableName =
+    readableName.length <= 24
+      ? readableName
+      : `${readableName.slice(0, 15)}-${createHash('sha256')
+          .update(options.fixtureId)
+          .digest('hex')
+          .slice(0, 8)}`;
   const sandboxRoot = await realpath(
     await mkdtemp(path.join(tempRoot, `detector-${stableName}-`)),
   );

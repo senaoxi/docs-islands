@@ -83,8 +83,78 @@ export interface ExpectedIssue {
   readonly locations?: readonly ExpectedLocation[];
   readonly packageManifestPath?: string;
   readonly packageName?: string;
+  readonly reason?: string;
   readonly scope?: string;
   readonly task: LiminaCheckTaskName;
+}
+
+export interface LocalRegistryPackageFile {
+  readonly content: string;
+  readonly path: string;
+}
+
+export type LocalRegistryDigestDeclaration =
+  | { readonly kind: 'actual' }
+  | { readonly kind: 'mismatch' }
+  | { readonly kind: 'omit' }
+  | { readonly kind: 'value'; readonly value: unknown };
+
+export type LocalRegistryResponseBody =
+  | {
+      readonly kind: 'bytes';
+      readonly valueBase64: string;
+    }
+  | {
+      readonly kind: 'close-connection';
+    }
+  | {
+      readonly kind: 'delay';
+      readonly milliseconds: number;
+      readonly next: LocalRegistryResponseBody;
+    }
+  | {
+      readonly kind: 'incomplete-body';
+      readonly value: string;
+    }
+  | {
+      readonly kind: 'json';
+      readonly value: unknown;
+    }
+  | {
+      readonly files: readonly LocalRegistryPackageFile[];
+      readonly kind: 'package-tarball';
+    }
+  | {
+      readonly distTag?: string;
+      readonly integrity: LocalRegistryDigestDeclaration;
+      readonly kind: 'package-metadata';
+      readonly shasum?: LocalRegistryDigestDeclaration;
+      readonly tarballPath?: string;
+      readonly version: string;
+    }
+  | {
+      readonly kind: 'text';
+      readonly value: string;
+    };
+
+export interface LocalRegistryResponse {
+  readonly body: LocalRegistryResponseBody;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly status?: number;
+}
+
+export interface ExpectedRegistryRequest {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly method?: 'GET';
+  readonly pathname: string;
+}
+
+export interface LocalRegistryScenario {
+  readonly expectedRequests: readonly ExpectedRegistryRequest[];
+  readonly metadata: LocalRegistryResponse;
+  readonly packageName: string;
+  readonly requestTimeoutMs?: number;
+  readonly tarballs?: Readonly<Record<string, LocalRegistryResponse>>;
 }
 
 export interface DetectorFixtureExpectation {
@@ -104,6 +174,7 @@ export interface DetectorFixtureDefinition {
   readonly id: string;
   readonly kind: 'external-tool' | 'fault-injection' | 'filesystem';
   readonly mutations?: readonly FixtureMutation[];
+  readonly registry?: LocalRegistryScenario;
   readonly setup?: readonly FixtureSetupOperation[];
   readonly tools?: readonly FixtureToolName[];
 }

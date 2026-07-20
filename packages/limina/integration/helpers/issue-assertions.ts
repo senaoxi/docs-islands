@@ -125,6 +125,7 @@ function issueMatches(
         expected.packageManifestPath) &&
     (expected.packageName === undefined ||
       actual.packageName === expected.packageName) &&
+    (expected.reason === undefined || actual.reason === expected.reason) &&
     (expected.scope === undefined || actual.scope === expected.scope) &&
     (expected.checkerName === undefined ||
       actual.checkerName === expected.checkerName) &&
@@ -144,6 +145,7 @@ function expectedConstraintCount(expected: ExpectedIssue): number {
     ) ?? 0) +
     Number(expected.packageManifestPath !== undefined) +
     Number(expected.packageName !== undefined) +
+    Number(expected.reason !== undefined) +
     Number(expected.scope !== undefined) +
     Number(expected.checkerName !== undefined) +
     Number(expected.externalCode !== undefined) +
@@ -168,6 +170,7 @@ export function formatExpectedIssueSummary(issue: ExpectedIssue): string {
     locations: issue.locations,
     packageManifestPath: issue.packageManifestPath,
     packageName: issue.packageName,
+    reason: issue.reason,
     scope: issue.scope,
     task: issue.task,
   });
@@ -195,6 +198,7 @@ export function formatActualIssueSummary(
       issue.packageManifestPath,
     ),
     packageName: issue.packageName,
+    reason: issue.reason,
     scope: issue.scope,
     task: issue.task,
   });

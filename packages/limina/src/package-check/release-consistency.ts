@@ -40,6 +40,11 @@ import {
   type ReleaseRegistryFacts,
   type ReleaseTarballHygieneFacts,
 } from './release-findings';
+import {
+  assertReleaseRegistryTarballUrlAllowed,
+  resolveReleaseRegistryMetadataUrl,
+  resolveReleaseRegistryTimeoutMs,
+} from './release-registry-test-seam';
 import { type PackedPackageTarball, packOutputTarball } from './runner';
 
 interface PublishDependencyEntry {
@@ -149,6 +154,7 @@ type RegistryMetadataResult =
         | 'timeout';
       statusCode?: number;
       statusText?: string;
+      timeoutMs?: number;
       url: string;
     };
 
@@ -262,11 +268,6 @@ const picomatch = rawPicomatch as unknown as (
 const DEFAULT_CONTENT_HASH_BASELINE_TAG = 'latest';
 const REGISTRY_METADATA_TIMEOUT_MS = 30_000;
 const REGISTRY_TARBALL_TIMEOUT_MS = 120_000;
-const REGISTRY_METADATA_FAILURE_TIMEOUT_MS: Partial<
-  Record<Extract<RegistryMetadataResult, { kind: 'failure' }>['reason'], number>
-> = {
-  timeout: REGISTRY_METADATA_TIMEOUT_MS,
-};
 const CONTENT_HASH_DIFF_KINDS = [
   'local-only',
   'remote-only',
@@ -529,7 +530,7 @@ function getPackedDependencySpecifier(
 }
 
 function getNpmPackageMetadataUrl(packageName: string): string {
-  return `https://registry.npmjs.org/${encodeURIComponent(packageName)}`;
+  return resolveReleaseRegistryMetadataUrl(packageName);
 }
 
 async function fetchRegistryPackageMetadata(
@@ -543,7 +544,10 @@ async function fetchRegistryPackageMetadata(
   }
 
   const url = getNpmPackageMetadataUrl(packageName);
-  const signal = AbortSignal.timeout(REGISTRY_METADATA_TIMEOUT_MS);
+  const timeoutMs = resolveReleaseRegistryTimeoutMs(
+    REGISTRY_METADATA_TIMEOUT_MS,
+  );
+  const signal = AbortSignal.timeout(timeoutMs);
   let response: Response;
 
   try {
@@ -558,6 +562,7 @@ async function fetchRegistryPackageMetadata(
       cause: error,
       kind: 'failure',
       reason: signal.aborted ? 'timeout' : 'request',
+      timeoutMs: signal.aborted ? timeoutMs : undefined,
       url,
     };
 
@@ -639,7 +644,12 @@ function formatRegistryMetadataFailure(
   failure: Extract<RegistryMetadataResult, { kind: 'failure' }>,
 ): string {
   if (failure.reason === 'timeout') {
-    return `npm registry metadata request for ${packageName} from ${failure.url} timed out after 30 seconds`;
+    const timeoutMs = failure.timeoutMs ?? REGISTRY_METADATA_TIMEOUT_MS;
+    const duration =
+      timeoutMs === REGISTRY_METADATA_TIMEOUT_MS
+        ? '30 seconds'
+        : `${String(timeoutMs)} milliseconds`;
+    return `npm registry metadata request for ${packageName} from ${failure.url} timed out after ${duration}`;
   }
 
   const status =
@@ -819,7 +829,11 @@ function verifyRegistryTarballIntegrity(options: {
 }
 
 async function fetchRegistryTarball(tarballUrl: string): Promise<Buffer> {
-  const signal = AbortSignal.timeout(REGISTRY_TARBALL_TIMEOUT_MS);
+  assertReleaseRegistryTarballUrlAllowed(tarballUrl);
+  const timeoutMs = resolveReleaseRegistryTimeoutMs(
+    REGISTRY_TARBALL_TIMEOUT_MS,
+  );
+  const signal = AbortSignal.timeout(timeoutMs);
   let response: Response;
 
   try {
@@ -831,14 +845,18 @@ async function fetchRegistryTarball(tarballUrl: string): Promise<Buffer> {
     });
   } catch (error) {
     if (signal.aborted) {
+      const duration =
+        timeoutMs === REGISTRY_TARBALL_TIMEOUT_MS
+          ? '120 seconds'
+          : `${String(timeoutMs)} milliseconds`;
       throw new RegistryTarballError(
         {
           errorMessage: formatErrorMessage(error),
           kind: 'tarball-timeout',
           tarballUrl,
-          timeoutMs: REGISTRY_TARBALL_TIMEOUT_MS,
+          timeoutMs,
         },
-        `npm tarball request for ${tarballUrl} timed out after 120 seconds`,
+        `npm tarball request for ${tarballUrl} timed out after ${duration}`,
       );
     }
 
@@ -872,14 +890,18 @@ async function fetchRegistryTarball(tarballUrl: string): Promise<Buffer> {
     return Buffer.from(await response.arrayBuffer());
   } catch (error) {
     if (signal.aborted) {
+      const duration =
+        timeoutMs === REGISTRY_TARBALL_TIMEOUT_MS
+          ? '120 seconds'
+          : `${String(timeoutMs)} milliseconds`;
       throw new RegistryTarballError(
         {
           errorMessage: formatErrorMessage(error),
           kind: 'tarball-timeout',
           tarballUrl,
-          timeoutMs: REGISTRY_TARBALL_TIMEOUT_MS,
+          timeoutMs,
         },
-        `npm tarball request for ${tarballUrl} timed out after 120 seconds`,
+        `npm tarball request for ${tarballUrl} timed out after ${duration}`,
       );
     }
 
@@ -1470,7 +1492,7 @@ async function verifyWorkspacePackagePublished(options: {
         registryUrl: metadataResult.url,
         statusCode: metadataResult.statusCode,
         statusText: metadataResult.statusText,
-        timeoutMs: REGISTRY_METADATA_FAILURE_TIMEOUT_MS[metadataResult.reason],
+        timeoutMs: metadataResult.timeoutMs,
       },
       filePath: sourceManifestPath,
       message: `${formatDependencyLocation({ dependencyName, importerName })}: ${formatRegistryMetadataFailure(dependencyName, metadataResult)}`,

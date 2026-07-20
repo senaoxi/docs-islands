@@ -5,6 +5,10 @@ import {
   type CheckIssueSnapshot,
   getCheckIssueSnapshotPath,
 } from '../../src/check-reporting/snapshot';
+import {
+  INTERNAL_RELEASE_REGISTRY_TIMEOUT_ENV,
+  INTERNAL_RELEASE_REGISTRY_URL_ENV,
+} from '../../src/package-check/release-registry-test-seam';
 import { createDetectorInvocationEnvironment } from './detector-environment';
 import type { DetectorFixtureCase } from './detector-fixture-discovery';
 import {
@@ -24,6 +28,12 @@ import {
   PRESERVE_INTEGRATION_ARTIFACTS_ENV,
 } from './fixture-sandbox';
 import { assertDetectorIssues } from './issue-assertions';
+import {
+  assertLocalRegistryRequests,
+  type LocalRegistryFixture,
+  type RecordedRegistryRequest,
+  startLocalRegistryFixture,
+} from './local-registry';
 import { liminaBinPath, runLimina, type RunLiminaResult } from './run-limina';
 import { createFixtureToolBridges } from './tool-bridge';
 
@@ -34,6 +44,10 @@ export interface DetectorFixtureRunResult {
   readonly cli: RunLiminaResult;
   readonly fixtureId: string;
   readonly preserved: boolean;
+  readonly registry?: {
+    readonly baseUrl: string;
+    readonly requests: readonly RecordedRegistryRequest[];
+  };
   readonly sandboxRoot: string;
   readonly snapshot: CheckIssueSnapshot;
   readonly snapshotPath: string;
@@ -47,6 +61,10 @@ export function assertExecutableDetectorFixtureKind(
       `Detector fixture ${fixture.id} uses fault-injection; harness v2 executes filesystem and external-tool fixtures only.`,
     );
   }
+}
+
+function isFormalSnapshotCommand(command: readonly string[]): boolean {
+  return command[0] === 'check';
 }
 
 function formatUnknownError(error: unknown): string {
@@ -149,7 +167,7 @@ export async function runDetectorFixture(
   fixture: DetectorFixtureCase,
 ): Promise<DetectorFixtureRunResult> {
   assertExecutableDetectorFixtureKind(fixture);
-  if (fixture.definition.command[0] !== 'check') {
+  if (!isFormalSnapshotCommand(fixture.definition.command)) {
     throw new Error(
       `Detector fixture ${fixture.id} must use a formal snapshot-producing Limina check command.`,
     );
@@ -172,6 +190,13 @@ export async function runDetectorFixture(
   ];
   const snapshotPath = getCheckIssueSnapshotPath(sandbox.repoRoot);
   let cli: RunLiminaResult | undefined;
+  let registry: LocalRegistryFixture | undefined;
+  let registryResult:
+    | {
+        readonly baseUrl: string;
+        readonly requests: readonly RecordedRegistryRequest[];
+      }
+    | undefined;
   let snapshot: CheckIssueSnapshot | undefined;
   let sandboxBefore:
     | Awaited<ReturnType<typeof captureTreeSnapshot>>
@@ -195,11 +220,28 @@ export async function runDetectorFixture(
       repoRoot: sandbox.repoRoot,
       tools: fixture.definition.tools ?? [],
     });
-    const environment = await createDetectorInvocationEnvironment({
+    let environment = await createDetectorInvocationEnvironment({
       fixtureEnvironment: fixture.definition.environment,
       sandboxRoot: sandbox.sandboxRoot,
       toolBinDirectory: toolBridges.binDirectory,
     });
+    if (fixture.definition.registry) {
+      registry = await startLocalRegistryFixture({
+        scenario: fixture.definition.registry,
+        tempRoot: path.join(sandbox.sandboxRoot, 'tmp'),
+      });
+      environment = {
+        ...environment,
+        [INTERNAL_RELEASE_REGISTRY_URL_ENV]: registry.baseUrl.toString(),
+        ...(fixture.definition.registry.requestTimeoutMs === undefined
+          ? {}
+          : {
+              [INTERNAL_RELEASE_REGISTRY_TIMEOUT_ENV]: String(
+                fixture.definition.registry.requestTimeoutMs,
+              ),
+            }),
+      };
+    }
     sandboxBefore = await captureTreeSnapshot({
       ignoredPathPrefixes: DEFAULT_SANDBOX_IGNORED_PATH_PREFIXES,
       rootDir: sandbox.sandboxRoot,
@@ -240,6 +282,24 @@ export async function runDetectorFixture(
       });
     } catch (error) {
       primaryError = error;
+    }
+
+    try {
+      if (registry && fixture.definition.registry) {
+        const requests = registry.requests;
+        assertLocalRegistryRequests({
+          actual: requests,
+          expected: fixture.definition.registry.expectedRequests,
+          fixtureId: fixture.id,
+        });
+        registryResult = {
+          baseUrl: registry.baseUrl.toString(),
+          requests,
+        };
+      }
+    } catch (error) {
+      primaryError =
+        primaryError === undefined ? error : combineErrors(primaryError, error);
     }
 
     try {
@@ -293,11 +353,27 @@ export async function runDetectorFixture(
   let cleaned = false;
   await finishFixtureCleanup({
     cleanup: async () => {
-      cleaned = await cleanupDetectorSandbox({
-        preserve: preserved,
-        sandboxRoot: sandbox.sandboxRoot,
-        tempRoot: sandbox.tempRoot,
-      });
+      let cleanupError: unknown;
+      try {
+        await registry?.close();
+      } catch (error) {
+        cleanupError = error;
+      }
+      try {
+        cleaned = await cleanupDetectorSandbox({
+          preserve: preserved,
+          sandboxRoot: sandbox.sandboxRoot,
+          tempRoot: sandbox.tempRoot,
+        });
+      } catch (error) {
+        cleanupError =
+          cleanupError === undefined
+            ? error
+            : combineErrors(cleanupError, error);
+      }
+      if (cleanupError !== undefined) {
+        throw cleanupError;
+      }
       if (preserved) {
         console.info(
           `Detector fixture ${fixture.id} artifact preserved at ${sandbox.sandboxRoot}`,
@@ -312,6 +388,7 @@ export async function runDetectorFixture(
     cli: cli!,
     fixtureId: fixture.id,
     preserved,
+    registry: registryResult,
     sandboxRoot: sandbox.sandboxRoot,
     snapshot: snapshot!,
     snapshotPath,

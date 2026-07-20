@@ -12,16 +12,25 @@ import {
   type LiminaCheckTaskName,
 } from '../../src/check-reporting/snapshot';
 import {
+  INTERNAL_RELEASE_REGISTRY_TIMEOUT_ENV,
+  INTERNAL_RELEASE_REGISTRY_URL_ENV,
+} from '../../src/package-check/release-registry-test-seam';
+import {
   type DetectorFixtureDefinition,
   type DetectorFixtureExpectation,
   type ExpectedEvidence,
   type ExpectedIssue,
   type ExpectedLocation,
+  type ExpectedRegistryRequest,
   FIXTURE_TOOL_NAMES,
   type FixtureCopyPolicy,
   type FixtureMutation,
   type FixtureSetupOperation,
   type FixtureToolName,
+  type LocalRegistryDigestDeclaration,
+  type LocalRegistryResponse,
+  type LocalRegistryResponseBody,
+  type LocalRegistryScenario,
 } from './detector-fixture-types';
 import { validatePortableRelativePath } from './fixture-paths';
 
@@ -34,6 +43,7 @@ const DEFINITION_KEYS = new Set([
   'id',
   'kind',
   'mutations',
+  'registry',
   'setup',
   'tools',
 ]);
@@ -53,6 +63,7 @@ const EXPECTED_ISSUE_KEYS = new Set([
   'locations',
   'packageManifestPath',
   'packageName',
+  'reason',
   'scope',
   'task',
 ]);
@@ -72,6 +83,8 @@ const COPY_POLICY_KEYS = new Set([
 ]);
 const RESERVED_ENVIRONMENT_KEYS = new Set([
   'HOME',
+  INTERNAL_RELEASE_REGISTRY_TIMEOUT_ENV,
+  INTERNAL_RELEASE_REGISTRY_URL_ENV,
   'LIMINA_PRESERVE_INTEGRATION_ARTIFACTS',
   'NODE_PATH',
   'NPM_CONFIG_CACHE',
@@ -82,6 +95,14 @@ const RESERVED_ENVIRONMENT_KEYS = new Set([
   'USERPROFILE',
   'XDG_CACHE_HOME',
 ]);
+const LOCAL_REGISTRY_SCENARIO_KEYS = new Set([
+  'expectedRequests',
+  'metadata',
+  'packageName',
+  'requestTimeoutMs',
+  'tarballs',
+]);
+const LOCAL_REGISTRY_RESPONSE_KEYS = new Set(['body', 'headers', 'status']);
 const FIXTURE_ID_SEGMENT_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const TASK_NAME_SET = new Set<string>(LIMINA_CHECK_TASK_NAMES);
 const TOOL_NAME_SET = new Set<string>(FIXTURE_TOOL_NAMES);
@@ -323,6 +344,7 @@ function validateExpectedIssue(value: unknown, label: string): ExpectedIssue {
       value.packageName,
       `${label}.packageName`,
     ),
+    reason: optionalNonEmptyString(value.reason, `${label}.reason`),
     scope: optionalNonEmptyString(value.scope, `${label}.scope`),
     task,
   };
@@ -338,6 +360,7 @@ function expectedIssueIdentity(issue: ExpectedIssue): string {
     locations: issue.locations,
     packageManifestPath: issue.packageManifestPath,
     packageName: issue.packageName,
+    reason: issue.reason,
     scope: issue.scope,
     task: issue.task,
   });
@@ -600,6 +623,334 @@ function validateEnvironment(
   return environment;
 }
 
+function validateRegistryPathname(value: unknown, label: string): string {
+  const pathname = requireNonEmptyString(value, label);
+  if (
+    !pathname.startsWith('/') ||
+    pathname.startsWith('//') ||
+    pathname.includes('\\') ||
+    pathname.includes('?') ||
+    pathname.includes('#')
+  ) {
+    throw new Error(
+      `${label} must be an absolute URL pathname without query, fragment, or backslashes.`,
+    );
+  }
+
+  const parsed = new URL(pathname, 'http://127.0.0.1');
+  if (parsed.pathname !== pathname) {
+    throw new Error(`${label} must already be URL-encoded: ${pathname}`);
+  }
+
+  return pathname;
+}
+
+function validateStringRecord(
+  value: unknown,
+  label: string,
+): Readonly<Record<string, string>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be a string record.`);
+  }
+
+  const output: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!key || typeof entry !== 'string') {
+      throw new Error(`${label} must contain only string keys and values.`);
+    }
+    output[key.toLowerCase()] = entry;
+  }
+
+  return output;
+}
+
+function validateJsonValue(value: unknown, label: string): unknown {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry, index) =>
+      validateJsonValue(entry, `${label}[${index}]`),
+    );
+  }
+  if (isPlainRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        validateJsonValue(entry, `${label}.${key}`),
+      ]),
+    );
+  }
+
+  throw new Error(`${label} must contain only JSON-safe values.`);
+}
+
+function validateRegistryDigest(
+  value: unknown,
+  label: string,
+): LocalRegistryDigestDeclaration {
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  const kind = requireNonEmptyString(value.kind, `${label}.kind`);
+
+  if (kind === 'value') {
+    assertOnlyKeys(value, new Set(['kind', 'value']), label);
+    return {
+      kind,
+      value: validateJsonValue(value.value, `${label}.value`),
+    };
+  }
+  if (kind === 'actual' || kind === 'mismatch' || kind === 'omit') {
+    assertOnlyKeys(value, new Set(['kind']), label);
+    return { kind };
+  }
+
+  throw new Error(`${label}.kind is unsupported: ${kind}`);
+}
+
+function validateRegistryBody(
+  value: unknown,
+  label: string,
+): LocalRegistryResponseBody {
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  const kind = requireNonEmptyString(value.kind, `${label}.kind`);
+
+  if (kind === 'close-connection') {
+    assertOnlyKeys(value, new Set(['kind']), label);
+    return { kind };
+  }
+  if (kind === 'text' || kind === 'incomplete-body') {
+    assertOnlyKeys(value, new Set(['kind', 'value']), label);
+    if (typeof value.value !== 'string') {
+      throw new TypeError(`${label}.value must be a string.`);
+    }
+    return { kind, value: value.value };
+  }
+  if (kind === 'bytes') {
+    assertOnlyKeys(value, new Set(['kind', 'valueBase64']), label);
+    const valueBase64 = requireNonEmptyString(
+      value.valueBase64,
+      `${label}.valueBase64`,
+    );
+    const decoded = Buffer.from(valueBase64, 'base64');
+    if (decoded.toString('base64') !== valueBase64) {
+      throw new Error(`${label}.valueBase64 must be canonical Base64.`);
+    }
+    return { kind, valueBase64 };
+  }
+  if (kind === 'json') {
+    assertOnlyKeys(value, new Set(['kind', 'value']), label);
+    return {
+      kind,
+      value: validateJsonValue(value.value, `${label}.value`),
+    };
+  }
+  if (kind === 'delay') {
+    assertOnlyKeys(value, new Set(['kind', 'milliseconds', 'next']), label);
+    if (
+      !Number.isSafeInteger(value.milliseconds) ||
+      (value.milliseconds as number) < 1 ||
+      (value.milliseconds as number) > 10_000
+    ) {
+      throw new Error(
+        `${label}.milliseconds must be an integer from 1 through 10000.`,
+      );
+    }
+    return {
+      kind,
+      milliseconds: value.milliseconds as number,
+      next: validateRegistryBody(value.next, `${label}.next`),
+    };
+  }
+  if (kind === 'package-tarball') {
+    assertOnlyKeys(value, new Set(['files', 'kind']), label);
+    if (!Array.isArray(value.files) || value.files.length === 0) {
+      throw new Error(`${label}.files must be a non-empty array.`);
+    }
+    const files = value.files.map((file, index) => {
+      const fileLabel = `${label}.files[${index}]`;
+      if (!isPlainRecord(file)) {
+        throw new Error(`${fileLabel} must be an object.`);
+      }
+      assertOnlyKeys(file, new Set(['content', 'path']), fileLabel);
+      if (typeof file.content !== 'string') {
+        throw new TypeError(`${fileLabel}.content must be a string.`);
+      }
+      return {
+        content: file.content,
+        path: validatePortableRelativePath(file.path, {
+          label: `${fileLabel}.path`,
+        }),
+      };
+    });
+    if (new Set(files.map((file) => file.path)).size !== files.length) {
+      throw new Error(`${label}.files must not contain duplicate paths.`);
+    }
+    return { files, kind };
+  }
+  if (kind === 'package-metadata') {
+    assertOnlyKeys(
+      value,
+      new Set([
+        'distTag',
+        'integrity',
+        'kind',
+        'shasum',
+        'tarballPath',
+        'version',
+      ]),
+      label,
+    );
+    return {
+      distTag: optionalNonEmptyString(value.distTag, `${label}.distTag`),
+      integrity: validateRegistryDigest(value.integrity, `${label}.integrity`),
+      kind,
+      shasum:
+        value.shasum === undefined
+          ? undefined
+          : validateRegistryDigest(value.shasum, `${label}.shasum`),
+      tarballPath:
+        value.tarballPath === undefined
+          ? undefined
+          : validateRegistryPathname(value.tarballPath, `${label}.tarballPath`),
+      version: requireNonEmptyString(value.version, `${label}.version`),
+    };
+  }
+
+  throw new Error(`${label}.kind is unsupported: ${kind}`);
+}
+
+function validateRegistryResponse(
+  value: unknown,
+  label: string,
+): LocalRegistryResponse {
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  assertOnlyKeys(value, LOCAL_REGISTRY_RESPONSE_KEYS, label);
+  if (
+    value.status !== undefined &&
+    (!Number.isSafeInteger(value.status) ||
+      (value.status as number) < 100 ||
+      (value.status as number) > 599)
+  ) {
+    throw new Error(`${label}.status must be an HTTP status from 100 to 599.`);
+  }
+
+  return {
+    body: validateRegistryBody(value.body, `${label}.body`),
+    headers: validateStringRecord(value.headers, `${label}.headers`),
+    status: value.status as number | undefined,
+  };
+}
+
+function validateExpectedRegistryRequest(
+  value: unknown,
+  label: string,
+): ExpectedRegistryRequest {
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  assertOnlyKeys(value, new Set(['headers', 'method', 'pathname']), label);
+  if (value.method !== undefined && value.method !== 'GET') {
+    throw new Error(`${label}.method currently supports only GET.`);
+  }
+
+  return {
+    headers: validateStringRecord(value.headers, `${label}.headers`),
+    method: value.method as 'GET' | undefined,
+    pathname: validateRegistryPathname(value.pathname, `${label}.pathname`),
+  };
+}
+
+function validateRegistryScenario(
+  value: unknown,
+  label: string,
+): LocalRegistryScenario | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  assertOnlyKeys(value, LOCAL_REGISTRY_SCENARIO_KEYS, label);
+  if (!Array.isArray(value.expectedRequests)) {
+    throw new TypeError(`${label}.expectedRequests must be an array.`);
+  }
+
+  const requestTimeoutMs = value.requestTimeoutMs;
+  if (
+    requestTimeoutMs !== undefined &&
+    (!Number.isSafeInteger(requestTimeoutMs) ||
+      (requestTimeoutMs as number) < 10 ||
+      (requestTimeoutMs as number) > 10_000)
+  ) {
+    throw new Error(
+      `${label}.requestTimeoutMs must be an integer from 10 through 10000.`,
+    );
+  }
+
+  const tarballs: Record<string, LocalRegistryResponse> = {};
+  if (value.tarballs !== undefined) {
+    if (!isPlainRecord(value.tarballs)) {
+      throw new Error(`${label}.tarballs must be a response record.`);
+    }
+    for (const [pathnameValue, response] of Object.entries(value.tarballs)) {
+      const pathname = validateRegistryPathname(
+        pathnameValue,
+        `${label}.tarballs key`,
+      );
+      tarballs[pathname] = validateRegistryResponse(
+        response,
+        `${label}.tarballs[${JSON.stringify(pathname)}]`,
+      );
+    }
+  }
+
+  const metadata = validateRegistryResponse(
+    value.metadata,
+    `${label}.metadata`,
+  );
+  if (
+    metadata.body.kind === 'package-metadata' &&
+    metadata.body.tarballPath !== undefined &&
+    tarballs[metadata.body.tarballPath] === undefined
+  ) {
+    throw new Error(
+      `${label}.metadata references an undeclared tarball path: ${metadata.body.tarballPath}`,
+    );
+  }
+
+  return {
+    expectedRequests: value.expectedRequests.map((request, index) =>
+      validateExpectedRegistryRequest(
+        request,
+        `${label}.expectedRequests[${index}]`,
+      ),
+    ),
+    metadata,
+    packageName: requireNonEmptyString(
+      value.packageName,
+      `${label}.packageName`,
+    ),
+    requestTimeoutMs: requestTimeoutMs as number | undefined,
+    tarballs,
+  };
+}
+
 function validateAllowedGeneratedPaths(
   value: unknown,
   label: string,
@@ -701,6 +1052,15 @@ export function validateDetectorFixtureDefinition(
   if (new Set(tools).size !== tools.length) {
     throw new Error(`${label}.tools must not contain duplicates.`);
   }
+  const registry = validateRegistryScenario(
+    value.registry,
+    `${label}.registry`,
+  );
+  if (registry !== undefined && value.kind !== 'external-tool') {
+    throw new Error(
+      `${label}.kind must be external-tool when a local registry scenario is declared.`,
+    );
+  }
 
   return {
     allowedGeneratedPaths: validateAllowedGeneratedPaths(
@@ -714,6 +1074,7 @@ export function validateDetectorFixtureDefinition(
     id,
     kind: value.kind,
     mutations,
+    registry,
     setup,
     tools,
   };

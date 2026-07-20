@@ -1,3 +1,5 @@
+import { unpack } from '@publint/pack';
+import { createHash } from 'node:crypto';
 import {
   lstat,
   mkdir,
@@ -40,6 +42,7 @@ import {
   assertNoPreexistingCheckSnapshot,
   readDetectorCheckSnapshot,
 } from '../helpers/detector-snapshot';
+import { createDeterministicPackageTarball } from '../helpers/deterministic-tarball';
 import { validatePortableRelativePath } from '../helpers/fixture-paths';
 import {
   applyFixtureMutations,
@@ -56,6 +59,10 @@ import {
   SANDBOX_CLEANUP_RETRY_DELAY_MS,
 } from '../helpers/fixture-sandbox';
 import { assertDetectorIssues } from '../helpers/issue-assertions';
+import {
+  assertLocalRegistryRequests,
+  startLocalRegistryFixture,
+} from '../helpers/local-registry';
 import { createLiminaSpawnSpec, liminaBinPath } from '../helpers/run-limina';
 import { createFixtureToolBridges } from '../helpers/tool-bridge';
 
@@ -360,6 +367,75 @@ describe('detector fixture declaration and discovery', () => {
         { casePath: '/fixtures/case.mts' },
       ),
     ).toThrow('over-broad pattern');
+  });
+
+  it('accepts only controlled external-tool registry declarations', () => {
+    const definition = validateDetectorFixtureDefinition(
+      {
+        ...validFailingDefinition('release/registry-json'),
+        kind: 'external-tool',
+        registry: {
+          expectedRequests: [
+            {
+              headers: { Accept: 'application/json' },
+              pathname: '/%40fixture%2Fdependency',
+            },
+          ],
+          metadata: {
+            body: { kind: 'json', value: { versions: {} } },
+          },
+          packageName: '@fixture/dependency',
+          requestTimeoutMs: 100,
+        },
+      },
+      { casePath: '/fixtures/release/registry-json/case.mts' },
+    );
+
+    expect(definition.registry).toMatchObject({
+      expectedRequests: [
+        {
+          headers: { accept: 'application/json' },
+          pathname: '/%40fixture%2Fdependency',
+        },
+      ],
+      packageName: '@fixture/dependency',
+      requestTimeoutMs: 100,
+    });
+
+    expect(() =>
+      validateDetectorFixtureDefinition(
+        {
+          ...validFailingDefinition('release/registry-invalid'),
+          registry: {
+            expectedRequests: [],
+            metadata: {
+              body: { kind: 'json', value: { callback: () => {} } },
+            },
+            packageName: '@fixture/dependency',
+          },
+        },
+        { casePath: '/fixtures/release/registry-invalid/case.mts' },
+      ),
+    ).toThrow(/JSON-safe values|external-tool/u);
+    expect(() =>
+      validateDetectorFixtureDefinition(
+        {
+          ...validFailingDefinition('release/registry-path'),
+          kind: 'external-tool',
+          registry: {
+            expectedRequests: [],
+            metadata: { body: { kind: 'json', value: {} } },
+            packageName: '@fixture/dependency',
+            tarballs: {
+              'https://registry.npmjs.org/pkg.tgz': {
+                body: { kind: 'text', value: 'forbidden' },
+              },
+            },
+          },
+        },
+        { casePath: '/fixtures/release/registry-path/case.mts' },
+      ),
+    ).toThrow(/absolute URL pathname/u);
   });
 
   it('discovers fixtures in portable sorted order', async () => {
@@ -792,6 +868,27 @@ describe('minimal tool bridge and invocation boundary', () => {
     );
   });
 
+  it('bridges the declared npm package manifest linter without a shell', async () => {
+    const rootDir = await createTemporaryRoot('lint-tool-bridge');
+    const repoRoot = path.join(rootDir, 'repo');
+    await writeText(path.join(repoRoot, 'package.json'), '{"private":true}\n');
+    const bridge = await createFixtureToolBridges({
+      fixtureId: 'release/manifest-lint',
+      repoRoot,
+      tools: ['npm-package-json-lint'],
+    });
+    const fixtureRequire = createRequire(path.join(repoRoot, 'package.json'));
+    const lintModule = fixtureRequire('npm-package-json-lint') as {
+      NpmPackageJsonLint?: unknown;
+    };
+
+    expect(typeof lintModule.NpmPackageJsonLint).toBe('function');
+    expect(bridge.bridgedTools).toEqual(['npm-package-json-lint']);
+    expect(await readdir(path.join(repoRoot, 'node_modules'))).toEqual([
+      'npm-package-json-lint',
+    ]);
+  });
+
   it('reports missing and unsupported tools with fixture context', async () => {
     const rootDir = await createTemporaryRoot('tool-errors');
     const repoRoot = path.join(rootDir, 'repo');
@@ -814,7 +911,9 @@ describe('minimal tool bridge and invocation boundary', () => {
         repoRoot,
         tools: ['vue-tsc'],
       }),
-    ).rejects.toThrow('Only typescript is implemented');
+    ).rejects.toThrow(
+      'Only typescript and npm-package-json-lint are implemented',
+    );
   });
 
   it('does not expose an undeclared tool or create a bridge implicitly', async () => {
@@ -1098,6 +1197,37 @@ describe('strict structured issue assertion', () => {
     ).not.toThrow();
   });
 
+  it('distinguishes same-code findings by their structured reason', () => {
+    expect(() =>
+      assertDetectorIssues({
+        actualIssues: [actualIssue({ reason: 'content-diff' })],
+        expected: expectedFailure([
+          {
+            code: LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile,
+            reason: 'config-invalid',
+            task: 'proof:check',
+          },
+        ]),
+        fixtureId: 'release/reason-mismatch',
+        repoRoot: '/repo',
+      }),
+    ).toThrow('missing an expected issue');
+    expect(() =>
+      assertDetectorIssues({
+        actualIssues: [actualIssue({ reason: 'config-invalid' })],
+        expected: expectedFailure([
+          {
+            code: LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile,
+            reason: 'config-invalid',
+            task: 'proof:check',
+          },
+        ]),
+        fixtureId: 'release/reason-match',
+        repoRoot: '/repo',
+      }),
+    ).not.toThrow();
+  });
+
   it('matches a structured scope without parsing presentation text', () => {
     expect(() =>
       assertDetectorIssues({
@@ -1193,6 +1323,156 @@ describe('strict structured issue assertion', () => {
         repoRoot: '/repo',
       }),
     ).toThrow('2 more issues omitted');
+  });
+});
+
+describe('deterministic Release tarballs and local registry', () => {
+  const packageFiles = [
+    { content: 'MIT\n', path: 'LICENSE.md' },
+    { content: '# Fixture\n', path: 'README.md' },
+    { content: 'export const value = 1;\n', path: 'index.js' },
+    {
+      content: `${JSON.stringify({
+        license: 'MIT',
+        name: '@fixture/dependency',
+        version: '1.0.0',
+      })}\n`,
+      path: 'package.json',
+    },
+  ] as const;
+
+  it('packs fixed file bytes reproducibly through the production pack helper', async () => {
+    const tempRoot = await createTemporaryRoot('deterministic-tarball');
+    const first = await createDeterministicPackageTarball({
+      files: packageFiles,
+      tempRoot,
+    });
+    const second = await createDeterministicPackageTarball({
+      files: packageFiles.toReversed(),
+      tempRoot,
+    });
+
+    expect(first.bytes.equals(second.bytes)).toBe(true);
+    expect(first.integrity).toBe(second.integrity);
+    expect(first.shasum).toBe(second.shasum);
+    expect(first.integrity).toBe(
+      `sha512-${createHash('sha512').update(first.bytes).digest('base64')}`,
+    );
+    expect(first.shasum).toBe(
+      createHash('sha1').update(first.bytes).digest('hex'),
+    );
+    const unpacked = (await unpack(first.bytes)) as {
+      readonly files: readonly { readonly name: string }[];
+    };
+    expect(unpacked.files.map((file) => file.name)).toEqual(
+      expect.arrayContaining(['package/index.js', 'package/package.json']),
+    );
+  });
+
+  it('serves generated metadata and tarballs on isolated random loopback ports', async () => {
+    const tempRoot = await createTemporaryRoot('registry-serve');
+    const tarballPath = '/tarballs/dependency-1.0.0.tgz';
+    const scenario = {
+      expectedRequests: [
+        {
+          headers: { accept: 'application/json' },
+          pathname: '/%40fixture%2Fdependency',
+        },
+        {
+          headers: { accept: 'application/octet-stream' },
+          pathname: tarballPath,
+        },
+      ],
+      metadata: {
+        body: {
+          integrity: { kind: 'actual' },
+          kind: 'package-metadata',
+          tarballPath,
+          version: '1.0.0',
+        },
+      },
+      packageName: '@fixture/dependency',
+      tarballs: {
+        [tarballPath]: {
+          body: { files: packageFiles, kind: 'package-tarball' },
+        },
+      },
+    } as const;
+    const first = await startLocalRegistryFixture({ scenario, tempRoot });
+    const second = await startLocalRegistryFixture({ scenario, tempRoot });
+
+    try {
+      expect(first.baseUrl.hostname).toBe('127.0.0.1');
+      expect(first.baseUrl.port).not.toBe(second.baseUrl.port);
+      const metadataResponse = await fetch(
+        new URL('/%40fixture%2Fdependency', first.baseUrl),
+        { headers: { accept: 'application/json' } },
+      );
+      const metadata = (await metadataResponse.json()) as {
+        versions: Record<
+          string,
+          { dist: { integrity: string; tarball: string } }
+        >;
+      };
+      const dist = metadata.versions['1.0.0']!.dist;
+      const tarballResponse = await fetch(dist.tarball, {
+        headers: { accept: 'application/octet-stream' },
+      });
+      const tarball = Buffer.from(await tarballResponse.arrayBuffer());
+
+      expect(dist.tarball).toBe(new URL(tarballPath, first.baseUrl).toString());
+      expect(dist.integrity).toBe(
+        `sha512-${createHash('sha512').update(tarball).digest('base64')}`,
+      );
+      expect(() =>
+        assertLocalRegistryRequests({
+          actual: first.requests,
+          expected: scenario.expectedRequests,
+          fixtureId: 'release/registry-helper',
+        }),
+      ).not.toThrow();
+      expect(second.requests).toEqual([]);
+    } finally {
+      await first.close();
+      await second.close();
+    }
+  });
+
+  it('provides deterministic connection-close and incomplete-body failures', async () => {
+    const tempRoot = await createTemporaryRoot('registry-failures');
+    const closeFixture = await startLocalRegistryFixture({
+      scenario: {
+        expectedRequests: [],
+        metadata: { body: { kind: 'close-connection' } },
+        packageName: '@fixture/close',
+      },
+      tempRoot,
+    });
+    const incompleteFixture = await startLocalRegistryFixture({
+      scenario: {
+        expectedRequests: [],
+        metadata: {
+          body: { kind: 'incomplete-body', value: '{"partial":' },
+        },
+        packageName: '@fixture/incomplete',
+      },
+      tempRoot,
+    });
+
+    try {
+      await expect(
+        fetch(new URL('/%40fixture%2Fclose', closeFixture.baseUrl)),
+      ).rejects.toThrow();
+      const response = await fetch(
+        new URL('/%40fixture%2Fincomplete', incompleteFixture.baseUrl),
+      );
+      await expect(response.text()).rejects.toThrow();
+      expect(closeFixture.requests).toHaveLength(1);
+      expect(incompleteFixture.requests).toHaveLength(1);
+    } finally {
+      await closeFixture.close();
+      await incompleteFixture.close();
+    }
   });
 });
 
@@ -1326,6 +1606,18 @@ describe('source invariant and cleanup', () => {
         tempRoot,
       }),
     ).rejects.toThrow('outside the integration temp root');
+  });
+
+  it('bounds long sandbox names for cross-platform child IPC paths', async () => {
+    const tempRoot = await createTemporaryRoot('cleanup-long-name');
+    const sandbox = await createDetectorSandbox({
+      fixtureId:
+        'release/packed-source-workspace-dependency-missing-with-extra-context',
+      tempRoot,
+    });
+
+    expect(path.basename(sandbox.sandboxRoot).length).toBeLessThanOrEqual(40);
+    await cleanupDetectorSandbox(sandbox);
   });
 
   it('preserves on request and passes bounded Windows retry options', async () => {

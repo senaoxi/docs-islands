@@ -2,6 +2,10 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  INTERNAL_RELEASE_REGISTRY_TIMEOUT_ENV,
+  INTERNAL_RELEASE_REGISTRY_URL_ENV,
+} from '../../src/package-check/release-registry-test-seam';
 import { isPathInsideDirectory } from '../../src/utils/path';
 
 const repositoryRoot = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -17,6 +21,8 @@ const COPIED_HOST_ENVIRONMENT_KEYS = [
 ] as const;
 const RESERVED_KEYS = new Set([
   'HOME',
+  INTERNAL_RELEASE_REGISTRY_TIMEOUT_ENV,
+  INTERNAL_RELEASE_REGISTRY_URL_ENV,
   'NODE_PATH',
   'NPM_CONFIG_CACHE',
   'PATH',
