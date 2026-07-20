@@ -1,11 +1,18 @@
 /// <reference types="vite/client" />
 
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import type { LiminaCheckIssueCode } from '../../src/check-reporting/codes';
+import {
+  LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE,
+  LIMINA_DETECTOR_SCENARIO_COVERAGE,
+} from '../../src/check-reporting/detector-coverage';
 import { discoverDetectorFixtures } from '../helpers/detector-fixture-discovery';
 import { runDetectorFixture } from '../helpers/detector-fixture-runner';
 
+const workspaceRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const detectorRoot = fileURLToPath(
   new URL('../../fixtures/detectors/', import.meta.url),
 );
@@ -23,6 +30,10 @@ const detectorFixtures = await discoverDetectorFixtures({
   caseModules,
   detectorRoot,
 });
+
+function toWorkspaceRelativePath(filePath: string): string {
+  return path.relative(workspaceRoot, filePath).split(path.sep).join('/');
+}
 
 describe('declarative detector fixtures', () => {
   it('discovers the checked-in fixtures in portable order', () => {
@@ -182,6 +193,90 @@ describe('declarative detector fixtures', () => {
       'workspace/package-identity-conflict',
       'workspace/region-overlap',
     ]);
+  });
+
+  it('keeps canonical coverage and scenario ownership bidirectionally exact', () => {
+    const fixtureByPath = new Map(
+      detectorFixtures.map((fixture) => [
+        toWorkspaceRelativePath(fixture.casePath),
+        fixture,
+      ]),
+    );
+    const canonicalOwnersByPath = new Map<string, Set<LiminaCheckIssueCode>>();
+
+    for (const [code, coverage] of Object.entries(
+      LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE,
+    ) as [
+      LiminaCheckIssueCode,
+      (typeof LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE)[LiminaCheckIssueCode],
+    ][]) {
+      if (!('tests' in coverage)) {
+        continue;
+      }
+
+      for (const testPath of coverage.tests.filter((candidate) =>
+        candidate.startsWith('packages/limina/fixtures/detectors/'),
+      )) {
+        const fixture = fixtureByPath.get(testPath);
+
+        expect(fixture, `${code} references ${testPath}`).toBeDefined();
+        expect(
+          fixture?.definition.expected.issues.some(
+            (issue) => issue.code === code,
+          ),
+          `${code} is not asserted by ${testPath}`,
+        ).toBe(true);
+
+        const owners = canonicalOwnersByPath.get(testPath) ?? new Set();
+        owners.add(code);
+        canonicalOwnersByPath.set(testPath, owners);
+
+        if (coverage.kind === 'fault-injection') {
+          expect(fixture?.definition.kind).toBe('fault-injection');
+        }
+      }
+    }
+
+    const scenarioIds = detectorFixtures
+      .filter(
+        (fixture) => fixture.definition.expected.primaryCode === undefined,
+      )
+      .map((fixture) => fixture.id)
+      .sort();
+
+    expect(Object.keys(LIMINA_DETECTOR_SCENARIO_COVERAGE).sort()).toEqual(
+      scenarioIds,
+    );
+
+    for (const fixture of detectorFixtures) {
+      const casePath = toWorkspaceRelativePath(fixture.casePath);
+      const expectedCodes = new Set(
+        fixture.definition.expected.issues.map((issue) => issue.code),
+      );
+      const canonicalOwners = canonicalOwnersByPath.get(casePath) ?? new Set();
+      const primaryCode = fixture.definition.expected.primaryCode;
+      const scenario = LIMINA_DETECTOR_SCENARIO_COVERAGE[fixture.id];
+
+      if (primaryCode) {
+        expect(canonicalOwners.has(primaryCode), fixture.id).toBe(true);
+        expect([...canonicalOwners].sort(), fixture.id).toEqual(
+          [...expectedCodes].sort(),
+        );
+        expect(scenario, fixture.id).toBeUndefined();
+        continue;
+      }
+
+      expect(fixture.definition.expected.issues, fixture.id).toEqual([]);
+      expect([...canonicalOwners], fixture.id).toEqual([]);
+      expect(scenario, fixture.id).toEqual({
+        fixturePath: casePath,
+        kind:
+          fixture.definition.kind === 'fault-injection'
+            ? 'fault-boundary'
+            : 'passing-control',
+        reason: expect.stringMatching(/\S/u),
+      });
+    }
   });
 
   for (const fixture of detectorFixtures) {

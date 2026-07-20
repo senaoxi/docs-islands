@@ -1349,6 +1349,19 @@ function resolveImportForReferenceExpectation(options: {
       ? declarationProvider.typeScriptResolution.resolvedFileName
       : workspaceTypeScriptResolvedFilePath;
 
+  if (
+    workspaceExportResolution &&
+    !workspaceExportResolution.hasTypeScriptStableEntry
+  ) {
+    addWorkspacePackageExportWithoutTypeEntryProblem({
+      context: options.context,
+      importRecord: options.importRecord,
+      project: options.project,
+      resolution: workspaceExportResolution,
+    });
+    return null;
+  }
+
   if (!graphResolvedFilePath && declarationProvider.kind === 'oxc-only') {
     addOxcOnlyDeclarationProviderProblem({
       context: options.context,
@@ -1365,19 +1378,6 @@ function resolveImportForReferenceExpectation(options: {
       importRecord: options.importRecord,
       project: options.project,
       targetPackage,
-    });
-    return null;
-  }
-
-  if (
-    workspaceExportResolution &&
-    !workspaceExportResolution.hasTypeScriptStableEntry
-  ) {
-    addWorkspacePackageExportWithoutTypeEntryProblem({
-      context: options.context,
-      importRecord: options.importRecord,
-      project: options.project,
-      resolution: workspaceExportResolution,
     });
     return null;
   }

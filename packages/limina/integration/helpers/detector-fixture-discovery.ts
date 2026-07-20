@@ -5,6 +5,7 @@ import {
   assertIssueTaskMatchesCode,
   DEFAULT_ISSUE_CODE_BY_TASK,
   isLiminaCheckIssueCode,
+  isWritableLiminaCheckIssueCode,
   type LiminaCheckIssueCode,
 } from '../../src/check-reporting/codes';
 import {
@@ -255,6 +256,19 @@ function validateCanonicalCode(
   return code;
 }
 
+function validateActiveCanonicalCode(
+  value: unknown,
+  label: string,
+): LiminaCheckIssueCode {
+  const code = validateCanonicalCode(value, label);
+
+  if (!isWritableLiminaCheckIssueCode(code)) {
+    throw new Error(`${label} is not an active Limina issue code: ${code}`);
+  }
+
+  return code;
+}
+
 function validateTaskName(value: unknown, label: string): LiminaCheckTaskName {
   const task = requireNonEmptyString(value, label);
 
@@ -351,7 +365,7 @@ function validateExpectedIssue(value: unknown, label: string): ExpectedIssue {
     throw new Error(`${label} must be an object.`);
   }
   assertOnlyKeys(value, EXPECTED_ISSUE_KEYS, label);
-  const code = validateCanonicalCode(value.code, `${label}.code`);
+  const code = validateActiveCanonicalCode(value.code, `${label}.code`);
   const task = validateTaskName(value.task, `${label}.task`);
   assertIssueTaskMatchesCode(code, task);
 
@@ -583,7 +597,7 @@ function validateExpectation(
   const primaryCode =
     value.primaryCode === undefined
       ? undefined
-      : validateCanonicalCode(value.primaryCode, `${label}.primaryCode`);
+      : validateActiveCanonicalCode(value.primaryCode, `${label}.primaryCode`);
   const exitCode = value.exitCode as number;
 
   if (exitCode === 0 && primaryCode !== undefined) {
@@ -614,7 +628,10 @@ function validateExpectation(
       ? []
       : Array.isArray(value.additionalCodes)
         ? value.additionalCodes.map((code, index) =>
-            validateCanonicalCode(code, `${label}.additionalCodes[${index}]`),
+            validateActiveCanonicalCode(
+              code,
+              `${label}.additionalCodes[${index}]`,
+            ),
           )
         : (() => {
             throw new Error(`${label}.additionalCodes must be an array.`);

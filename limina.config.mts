@@ -44,6 +44,7 @@ export default defineConfig({
         'settings.json',
         '.markdownlint.json',
         '.prettierrc.json',
+        'packages/limina/fixtures/detectors/**/repo/**',
         'packages/vitepress/docs/.vitepress/site-devtools-reports/**/*.json',
         'tsconfig.json',
         '**/tsconfig.*.json',

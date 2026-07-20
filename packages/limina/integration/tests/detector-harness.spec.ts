@@ -319,7 +319,7 @@ describe('detector fixture declaration and discovery', () => {
     ).toThrow('exitCode must be an integer');
   });
 
-  it('rejects unknown codes, fallback primary codes, and missing primary issues', () => {
+  it('rejects unknown, non-active, fallback-primary, and missing-primary codes', () => {
     const base = validFailingDefinition();
     expect(() =>
       validateDetectorFixtureDefinition(
@@ -339,6 +339,24 @@ describe('detector fixture declaration and discovery', () => {
         { casePath: '/fixtures/case.mts' },
       ),
     ).toThrow('not a canonical Limina issue code');
+    for (const [code, task] of [
+      [LIMINA_CHECK_ISSUE_CODES.releaseConsistency, 'release:check'],
+      [LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed, 'command'],
+    ] as const) {
+      expect(() =>
+        validateDetectorFixtureDefinition(
+          {
+            ...base,
+            expected: {
+              ...base.expected,
+              issues: [{ code, task }],
+              primaryCode: code,
+            },
+          },
+          { casePath: '/fixtures/case.mts' },
+        ),
+      ).toThrow('not an active Limina issue code');
+    }
     expect(() =>
       validateDetectorFixtureDefinition(
         {

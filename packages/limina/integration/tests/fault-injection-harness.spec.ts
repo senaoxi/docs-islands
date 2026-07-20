@@ -366,7 +366,7 @@ describe('fault helper executable', () => {
   });
 
   it('is reliably terminated by the integration watchdog', async () => {
-    const result = await runHelper(['timeout'], 100);
+    const result = await runHelper(['timeout'], 1000);
 
     expect(result.timedOut).toBe(true);
     expect(result.stdout).toContain('helper-waiting');

@@ -3,8 +3,14 @@ import type { LiminaCheckTaskName } from './snapshot';
 
 export type DetectorCoverageEntry = { readonly task: LiminaCheckTaskName } & (
   | {
-      readonly kind: 'external-tool' | 'fixture' | 'integration' | 'unit';
+      readonly kind: 'external-tool' | 'fixture' | 'integration';
       readonly producers: readonly string[];
+      readonly tests: readonly string[];
+    }
+  | {
+      readonly kind: 'unit';
+      readonly producers: readonly string[];
+      readonly reason: string;
       readonly tests: readonly string[];
     }
   | {
@@ -25,6 +31,16 @@ export type DetectorCoverageEntry = { readonly task: LiminaCheckTaskName } & (
 
 export type DetectorCoverageRegistry = Readonly<
   Record<LiminaCheckIssueCode, DetectorCoverageEntry>
+>;
+
+export interface DetectorScenarioCoverageEntry {
+  readonly fixturePath: string;
+  readonly kind: 'fault-boundary' | 'passing-control';
+  readonly reason: string;
+}
+
+export type DetectorScenarioCoverageRegistry = Readonly<
+  Record<string, DetectorScenarioCoverageEntry>
 >;
 
 const FALLBACK_CONTRACT_TEST =
@@ -102,6 +118,7 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
       'packages/limina/fixtures/detectors/fault-injection/process-timeout/case.mts',
       'packages/limina/fixtures/detectors/fault-injection/process-stdout-error/case.mts',
       'packages/limina/fixtures/detectors/fault-injection/process-stderr-error/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/timeout-cleanup-secondary/case.mts',
       FAULT_FIXTURE_TEST,
       'packages/limina/src/__tests__/pipeline.spec.ts',
     ],
@@ -132,7 +149,9 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     task: 'graph:check',
     tests: [
       FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/cleanup-secondary-after-task-failure/case.mts',
       'packages/limina/fixtures/detectors/fault-injection/graph-check-throw/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/snapshot-secondary-after-task-failure/case.mts',
       FAULT_FIXTURE_TEST,
     ],
   },
@@ -233,14 +252,21 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/graph-check/runner.ts#addReferenceCompletenessProblems',
     ],
+    reason:
+      'Generated same-checker references are normalized before the public CLI check; the graph runner test injects the validated graph boundary and executes the real producer.',
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphReferenceMissing]: {
     kind: 'unit',
     producers: [
       'packages/limina/src/graph-check/runner.ts#addReferenceCompletenessProblems',
     ],
+    reason:
+      'Normal preparation records a provider edge that satisfies this check; the graph runner test removes that edge at the trusted generated-graph seam and executes the real producer.',
     task: 'graph:check',
     tests: [
       'packages/limina/src/__tests__/graph-findings.spec.ts',
@@ -252,16 +278,26 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/graph-check/runner.ts#addExpectedReferenceForTarget',
     ],
+    reason:
+      'The state requires a generated target absent from checker reachability, so a graph runner test supplies that inconsistent generated-graph boundary directly.',
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceDependencyUndeclared]: {
     kind: 'unit',
     producers: [
       'packages/limina/src/graph-check/runner.ts#addWorkspaceReferenceDependencyProblems',
     ],
+    reason:
+      'Public preparation derives cross-package references from imports; the graph runner test supplies an isolated validated reference edge and executes the real dependency producer.',
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphWorkspaceImportOutsideGraph]: {
     kind: 'fixture',
@@ -296,8 +332,13 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/graph-check/runner.ts#addNamelessWorkspaceReferenceProblem',
     ],
+    reason:
+      'Public preparation cannot stably retain a cross-package reference whose package identity is missing; the graph runner test injects that validated boundary and executes the real producer.',
     task: 'graph:check',
-    tests: ['packages/limina/src/__tests__/graph-findings.spec.ts'],
+    tests: [
+      'packages/limina/src/__tests__/graph-findings.spec.ts',
+      'packages/limina/src/__tests__/graph.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.packageAttw]: {
     kind: 'external-tool',
@@ -306,7 +347,6 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: [
       'packages/limina/fixtures/detectors/package/attw-cjs-only-exports-default/case.mts',
       'packages/limina/fixtures/detectors/package/attw-cjs-resolves-to-esm/case.mts',
-      'packages/limina/fixtures/detectors/package/attw-dual-package-valid/case.mts',
       'packages/limina/fixtures/detectors/package/attw-fallback-condition/case.mts',
       'packages/limina/fixtures/detectors/package/attw-false-cjs/case.mts',
       'packages/limina/fixtures/detectors/package/attw-false-esm/case.mts',
@@ -529,13 +569,11 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
     task: 'release:check',
     tests: [
-      'packages/limina/fixtures/detectors/release/content-hash-builtin-ignore/case.mts',
       'packages/limina/fixtures/detectors/release/content-hash-changed/case.mts',
       'packages/limina/fixtures/detectors/release/content-hash-config-invalid-baseline-tag/case.mts',
       'packages/limina/fixtures/detectors/release/content-hash-config-invalid-ignore/case.mts',
       'packages/limina/fixtures/detectors/release/content-hash-local-only/case.mts',
       'packages/limina/fixtures/detectors/release/content-hash-remote-only/case.mts',
-      'packages/limina/fixtures/detectors/release/content-hash-user-ignore/case.mts',
       'packages/limina/fixtures/detectors/release/content-hash-user-ignore-non-match/case.mts',
       'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/release-findings.spec.ts',
@@ -619,7 +657,6 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
       'packages/limina/fixtures/detectors/release/tarball-readme-missing/case.mts',
       'packages/limina/fixtures/detectors/release/tarball-source-map/case.mts',
       'packages/limina/fixtures/detectors/release/tarball-source-mapping-url/case.mts',
-      'packages/limina/fixtures/detectors/release/tarball-valid/case.mts',
       'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/release-findings.spec.ts',
       'packages/limina/src/__tests__/package.spec.ts',
@@ -803,7 +840,6 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
     task: 'source:check',
     tests: [
-      'packages/limina/fixtures/detectors/source/knip-usage-valid/case.mts',
       'packages/limina/fixtures/detectors/source/unused-module/case.mts',
       'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
@@ -817,7 +853,6 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
     task: 'source:check',
     tests: [
-      'packages/limina/fixtures/detectors/source/knip-usage-valid/case.mts',
       'packages/limina/fixtures/detectors/source/unused-workspace-dependency/case.mts',
       'packages/limina/integration/tests/detector-fixtures.spec.ts',
       'packages/limina/src/__tests__/source-findings.spec.ts',
@@ -846,6 +881,7 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     task: 'workspace:validate',
     tests: [
       FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/filesystem-read-eio/case.mts',
       'packages/limina/fixtures/detectors/fault-injection/workspace-validation-throw/case.mts',
       FAULT_FIXTURE_TEST,
     ],
@@ -889,3 +925,128 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     ],
   },
 } satisfies DetectorCoverageRegistry;
+
+export const LIMINA_DETECTOR_SCENARIO_COVERAGE: DetectorScenarioCoverageRegistry =
+  {
+    'checker/build-valid': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/checker/build-valid/case.mts',
+      kind: 'passing-control',
+      reason: 'Confirms a real TypeScript checker build produces no issue.',
+    },
+    'fault-injection/cleanup-descriptor-execution': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/cleanup-descriptor-execution/case.mts',
+      kind: 'fault-boundary',
+      reason: 'Constrains cleanup descriptor accounting after finalization.',
+    },
+    'fault-injection/cleanup-success': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/cleanup-success/case.mts',
+      kind: 'fault-boundary',
+      reason:
+        'Constrains a cleanup failure that does not emit a canonical issue.',
+    },
+    'fault-injection/filesystem-close-eio': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/filesystem-close-eio/case.mts',
+      kind: 'fault-boundary',
+      reason: 'Constrains close failure propagation and cleanup state.',
+    },
+    'fault-injection/filesystem-fsync-eio': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/filesystem-fsync-eio/case.mts',
+      kind: 'fault-boundary',
+      reason:
+        'Constrains fsync failure propagation without fabricated issue output.',
+    },
+    'fault-injection/filesystem-rename-eio': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/filesystem-rename-eio/case.mts',
+      kind: 'fault-boundary',
+      reason: 'Constrains atomic rename failure and temporary-file cleanup.',
+    },
+    'fault-injection/filesystem-write-eio': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/filesystem-write-eio/case.mts',
+      kind: 'fault-boundary',
+      reason: 'Constrains snapshot write failure and temporary-file cleanup.',
+    },
+    'fault-injection/finalization-secondary-after-task-failure': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/finalization-secondary-after-task-failure/case.mts',
+      kind: 'fault-boundary',
+      reason: 'Preserves a primary task failure when finalization also fails.',
+    },
+    'fault-injection/finalization-success': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/finalization-success/case.mts',
+      kind: 'fault-boundary',
+      reason:
+        'Constrains finalization failure after otherwise successful work.',
+    },
+    'fault-injection/process-invalid-protocol': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/process-invalid-protocol/case.mts',
+      kind: 'fault-boundary',
+      reason:
+        'Constrains invalid child protocol handling without issue synthesis.',
+    },
+    'fault-injection/snapshot-install-success': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/snapshot-install-success/case.mts',
+      kind: 'fault-boundary',
+      reason: 'Constrains snapshot installation failure and cleanup state.',
+    },
+    'fault-injection/snapshot-serialize-success': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/snapshot-serialize-success/case.mts',
+      kind: 'fault-boundary',
+      reason:
+        'Constrains snapshot serialization failure without issue synthesis.',
+    },
+    'fault-injection/snapshot-write-success': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/fault-injection/snapshot-write-success/case.mts',
+      kind: 'fault-boundary',
+      reason:
+        'Constrains snapshot write failure after successful task execution.',
+    },
+    'package/attw-dual-package-valid': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/package/attw-dual-package-valid/case.mts',
+      kind: 'passing-control',
+      reason: 'Confirms ATTW emits no issue for a valid dual package.',
+    },
+    'proof/coverage-valid': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/proof/coverage-valid/case.mts',
+      kind: 'passing-control',
+      reason: 'Confirms valid proof coverage emits no issue.',
+    },
+    'release/content-hash-builtin-ignore': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/release/content-hash-builtin-ignore/case.mts',
+      kind: 'passing-control',
+      reason: 'Confirms built-in ignored content differences emit no issue.',
+    },
+    'release/content-hash-user-ignore': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/release/content-hash-user-ignore/case.mts',
+      kind: 'passing-control',
+      reason: 'Confirms configured ignored content differences emit no issue.',
+    },
+    'release/tarball-valid': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/release/tarball-valid/case.mts',
+      kind: 'passing-control',
+      reason: 'Confirms a valid release tarball emits no issue.',
+    },
+    'source/knip-usage-valid': {
+      fixturePath:
+        'packages/limina/fixtures/detectors/source/knip-usage-valid/case.mts',
+      kind: 'passing-control',
+      reason:
+        'Confirms used modules and workspace dependencies emit no Knip issue.',
+    },
+  };

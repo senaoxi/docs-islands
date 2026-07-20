@@ -9,7 +9,10 @@ import {
   listLiminaCheckIssueCodes,
   listLiminaCheckIssueRuleMetadata,
 } from '../check-reporting/codes';
-import { LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE } from '../check-reporting/detector-coverage';
+import {
+  LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE,
+  LIMINA_DETECTOR_SCENARIO_COVERAGE,
+} from '../check-reporting/detector-coverage';
 import { createLiminaCheckIssue } from '../check-reporting/structured';
 import {
   LIMINA_CHECK_TASK_NAMES,
@@ -36,6 +39,16 @@ describe('Limina issue code contracts', () => {
     expect(new Set(metadata.map((entry) => entry.task))).toEqual(
       new Set(LIMINA_CHECK_TASK_NAMES),
     );
+    expect(
+      Object.fromEntries(
+        [...new Set(metadata.map((entry) => entry.status))]
+          .sort()
+          .map((status) => [
+            status,
+            metadata.filter((entry) => entry.status === status).length,
+          ]),
+      ),
+    ).toEqual({ active: 58, planned: 1, retired: 1 });
     expect(LIMINA_CHECK_TASK_NAMES).toHaveLength(11);
   });
 
@@ -46,10 +59,16 @@ describe('Limina issue code contracts', () => {
       LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE,
     )) {
       kindCounts.set(entry.kind, (kindCounts.get(entry.kind) ?? 0) + 1);
-      expect(entry.task).toBe(
-        getLiminaCheckIssueRuleMetadata(
-          code as keyof typeof LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE,
-        ).task,
+      const metadata = getLiminaCheckIssueRuleMetadata(
+        code as keyof typeof LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE,
+      );
+      expect(entry.task).toBe(metadata.task);
+      expect(metadata.status).toBe(
+        entry.kind === 'planned'
+          ? 'planned'
+          : entry.kind === 'retired'
+            ? 'retired'
+            : 'active',
       );
 
       if (entry.kind === 'retired') {
@@ -71,6 +90,10 @@ describe('Limina issue code contracts', () => {
         continue;
       }
 
+      if (entry.kind === 'unit') {
+        expect(entry.reason.trim()).not.toBe('');
+      }
+
       expect(entry.tests.length).toBeGreaterThan(0);
       for (const testPath of entry.tests) {
         expect(existsSync(path.join(WORKSPACE_ROOT, testPath))).toBe(true);
@@ -85,6 +108,19 @@ describe('Limina issue code contracts', () => {
       retired: 1,
       unit: 5,
     });
+
+    expect(Object.keys(LIMINA_DETECTOR_SCENARIO_COVERAGE)).toHaveLength(19);
+    for (const [id, scenario] of Object.entries(
+      LIMINA_DETECTOR_SCENARIO_COVERAGE,
+    )) {
+      expect(scenario.fixturePath).toBe(
+        `packages/limina/fixtures/detectors/${id}/case.mts`,
+      );
+      expect(existsSync(path.join(WORKSPACE_ROOT, scenario.fixturePath))).toBe(
+        true,
+      );
+      expect(scenario.reason.trim()).not.toBe('');
+    }
   });
 
   it('maps every task fallback explicitly to its canonical failure code', () => {
@@ -112,7 +148,7 @@ describe('Limina issue code contracts', () => {
     }
   });
 
-  it('rejects unknown, retired, and code/task-mismatched internal issues', () => {
+  it('rejects unknown, planned, retired, and code/task-mismatched internal issues', () => {
     expect(() =>
       createLiminaCheckIssue({
         // @ts-expect-error Unknown wire codes are reader-only, not creator input.
@@ -121,6 +157,15 @@ describe('Limina issue code contracts', () => {
         task: 'source:check',
       }),
     ).toThrow('Unknown canonical Limina issue code');
+
+    expect(() =>
+      createLiminaCheckIssue({
+        // @ts-expect-error Planned codes are not current writer input.
+        code: LIMINA_CHECK_ISSUE_CODES.releaseConsistency,
+        rootDir: '/repo',
+        task: 'release:check',
+      }),
+    ).toThrow('Planned Limina issue code is not writable');
 
     expect(() =>
       createLiminaCheckIssue({
@@ -165,7 +210,10 @@ describe('Limina issue code contracts', () => {
     ).not.toContain('workspaceRegionOverlap');
   });
 
-  it('keeps the released pipeline alias producer-free', () => {
+  it.each([
+    ['planned release code', LIMINA_CHECK_ISSUE_CODES.releaseConsistency],
+    ['retired pipeline alias', LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed],
+  ] as const)('keeps the %s producer-free', (_name, nonActiveCode) => {
     const sourceRoot = path.join(WORKSPACE_ROOT, 'packages/limina/src');
     const references = readdirSync(sourceRoot, { recursive: true })
       .map(String)
@@ -180,7 +228,7 @@ describe('Limina issue code contracts', () => {
       )
       .filter((filePath) =>
         readFileSync(path.join(sourceRoot, filePath), 'utf8').includes(
-          LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed,
+          nonActiveCode,
         ),
       );
 

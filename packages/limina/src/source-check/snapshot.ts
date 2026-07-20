@@ -10,6 +10,8 @@ import {
 import {
   assertIssueTaskMatchesCode,
   assertWritableLiminaCheckIssueCode,
+  getLiminaCheckIssueRuleMetadata,
+  isReadableLiminaCheckIssueCode,
   type LiminaWritableCheckIssueCode,
 } from '../check-reporting/codes';
 import { formatCheckIssueInventoryCard } from '../check-reporting/human';
@@ -163,7 +165,7 @@ export interface LiminaCheckIssueExternal {
 
 export interface LiminaCheckIssue {
   checkerName?: string;
-  /** Historical snapshot readers preserve unknown wire codes as strings. */
+  /** Wire shape remains string-valued; current readers validate canonical lifecycle. */
   code: string;
   detector?: string;
   detailLines?: string[];
@@ -566,6 +568,8 @@ function hasLiminaCheckIssueBaseFields(
     typeof value.task === 'string' &&
     isKnownIssueTask(value.task) &&
     typeof value.code === 'string' &&
+    isReadableLiminaCheckIssueCode(value.code) &&
+    getLiminaCheckIssueRuleMetadata(value.code).task === value.task &&
     typeof value.title === 'string' &&
     typeof value.reason === 'string'
   );
