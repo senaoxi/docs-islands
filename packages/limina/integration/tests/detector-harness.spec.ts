@@ -30,6 +30,7 @@ import {
   discoverDetectorFixtures,
   validateDetectorFixtureDefinition,
 } from '../helpers/detector-fixture-discovery';
+import { assertExecutableDetectorFixtureKind } from '../helpers/detector-fixture-runner';
 import type {
   DetectorFixtureDefinition,
   DetectorFixtureExpectation,
@@ -192,6 +193,29 @@ afterEach(async () => {
 });
 
 describe('detector fixture declaration and discovery', () => {
+  it('executes filesystem and external-tool fixtures but rejects fault injection', () => {
+    const definition = validFailingDefinition();
+
+    expect(() =>
+      assertExecutableDetectorFixtureKind({
+        definition,
+        id: definition.id,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertExecutableDetectorFixtureKind({
+        definition: { ...definition, kind: 'external-tool' },
+        id: definition.id,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertExecutableDetectorFixtureKind({
+        definition: { ...definition, kind: 'fault-injection' },
+        id: definition.id,
+      }),
+    ).toThrow('harness v2 executes filesystem and external-tool fixtures only');
+  });
+
   it('applies strict expectation defaults to a valid declaration', () => {
     const definition = validateDetectorFixtureDefinition(
       validFailingDefinition(),

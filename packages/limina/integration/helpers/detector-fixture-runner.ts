@@ -39,6 +39,16 @@ export interface DetectorFixtureRunResult {
   readonly snapshotPath: string;
 }
 
+export function assertExecutableDetectorFixtureKind(
+  fixture: Pick<DetectorFixtureCase, 'definition' | 'id'>,
+): void {
+  if (fixture.definition.kind === 'fault-injection') {
+    throw new Error(
+      `Detector fixture ${fixture.id} uses fault-injection; harness v2 executes filesystem and external-tool fixtures only.`,
+    );
+  }
+}
+
 function formatUnknownError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -138,11 +148,7 @@ function assertSnapshotOutcome(options: {
 export async function runDetectorFixture(
   fixture: DetectorFixtureCase,
 ): Promise<DetectorFixtureRunResult> {
-  if (fixture.definition.kind !== 'filesystem') {
-    throw new Error(
-      `Detector fixture ${fixture.id} uses ${fixture.definition.kind}; harness v2 currently executes only filesystem fixtures.`,
-    );
-  }
+  assertExecutableDetectorFixtureKind(fixture);
   if (fixture.definition.command[0] !== 'check') {
     throw new Error(
       `Detector fixture ${fixture.id} must use a formal snapshot-producing Limina check command.`,

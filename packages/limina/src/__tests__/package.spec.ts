@@ -40,6 +40,7 @@ const packageCheckMocks = vi.hoisted(() => ({
   packCalls: [] as string[],
   publintCalls: [] as unknown[],
   publintMessages: [] as unknown[],
+  publintRenderedMessages: new Map<string, string>(),
   registryPackages: new Map<string, Record<string, unknown>>(),
   registryResponses: new Map<
     string,
@@ -175,7 +176,11 @@ vi.mock('publint', () => ({
 }));
 
 vi.mock('publint/utils', () => ({
-  formatMessage: vi.fn(() => 'mock publint message'),
+  formatMessage: vi.fn(
+    (message: { code: string }) =>
+      packageCheckMocks.publintRenderedMessages.get(message.code) ??
+      'mock publint message',
+  ),
 }));
 
 vi.mock('@arethetypeswrong/core', () => ({
@@ -598,6 +603,7 @@ beforeEach(() => {
   packageCheckMocks.packCalls = [];
   packageCheckMocks.publintCalls = [];
   packageCheckMocks.publintMessages = [];
+  packageCheckMocks.publintRenderedMessages.clear();
   packageCheckMocks.registryPackages.clear();
   packageCheckMocks.registryResponses.clear();
   packageCheckMocks.registryTarballs.clear();
@@ -5151,16 +5157,28 @@ describe('runPackageCheck and runReleaseCheck', () => {
     }
   });
 
-  it('keeps publint rule codes in external.code', async () => {
+  it('keeps arbitrary publint rule codes and messages external to the Limina code', async () => {
     const pkg = await createOutputPackage({
       'index.js': 'export const value = 1;\n',
     });
     const issues: LiminaCheckIssue[] = [];
 
     try {
+      packageCheckMocks.publintRenderedMessages.set(
+        'EXPORTS_MODULE_SHOULD_PRECEDE_TYPES',
+        'first rendered wording',
+      );
+      packageCheckMocks.publintRenderedMessages.set(
+        'FUTURE_PUBLINT_RULE',
+        'changed future wording',
+      );
       packageCheckMocks.publintMessages = [
         {
           code: 'EXPORTS_MODULE_SHOULD_PRECEDE_TYPES',
+          type: 'error',
+        },
+        {
+          code: 'FUTURE_PUBLINT_RULE',
           type: 'error',
         },
       ];
@@ -5180,16 +5198,101 @@ describe('runPackageCheck and runReleaseCheck', () => {
         }),
       ).resolves.toBe(false);
 
-      expect(issues).toEqual([
-        expect.objectContaining({
+      expect(issues).toHaveLength(2);
+      expect(
+        issues.map((issue) => ({
+          code: issue.code,
+          external: issue.external,
+          packageManifestPath: issue.packageManifestPath,
+          packageName: issue.packageName,
+          task: issue.task,
+        })),
+      ).toEqual([
+        {
           code: 'LIMINA_PACKAGE_PUBLINT',
           external: {
             code: 'EXPORTS_MODULE_SHOULD_PRECEDE_TYPES',
-            message: 'mock publint message',
+            message: 'first rendered wording',
             tool: 'publint',
           },
+          packageManifestPath: 'output/package/package.json',
+          packageName: '@example/pkg',
           task: 'package:check',
+        },
+        {
+          code: 'LIMINA_PACKAGE_PUBLINT',
+          external: {
+            code: 'FUTURE_PUBLINT_RULE',
+            message: 'changed future wording',
+            tool: 'publint',
+          },
+          packageManifestPath: 'output/package/package.json',
+          packageName: '@example/pkg',
+          task: 'package:check',
+        },
+      ]);
+    } finally {
+      await pkg.cleanup();
+    }
+  });
+
+  it('keeps current and future ATTW rule codes in external.code', async () => {
+    const pkg = await createOutputPackage({
+      'index.js': 'export const value = 1;\n',
+    });
+    const issues: LiminaCheckIssue[] = [];
+
+    try {
+      packageCheckMocks.attwProblems = [
+        {
+          implementationFileName: 'index.js',
+          kind: 'FalseCJS',
+          typesFileName: 'index.d.ts',
+        },
+        {
+          kind: 'FutureAttwRule',
+        },
+      ];
+
+      await expect(
+        runPackageCheck({
+          config: createConfig(pkg.rootDir, [
+            {
+              name: '@example/pkg',
+              outDir: pkg.outDir,
+            },
+          ]),
+          deferSnapshot: true,
+          issues,
+          report: { defer: true },
+          tool: 'attw',
         }),
+      ).resolves.toBe(false);
+
+      expect(issues).toHaveLength(2);
+      expect(
+        issues.map((issue) => ({
+          code: issue.code,
+          externalCode: issue.external?.code,
+          packageManifestPath: issue.packageManifestPath,
+          packageName: issue.packageName,
+          task: issue.task,
+        })),
+      ).toEqual([
+        {
+          code: 'LIMINA_PACKAGE_ATTW',
+          externalCode: 'false-cjs',
+          packageManifestPath: 'output/package/package.json',
+          packageName: '@example/pkg',
+          task: 'package:check',
+        },
+        {
+          code: 'LIMINA_PACKAGE_ATTW',
+          externalCode: 'FutureAttwRule',
+          packageManifestPath: 'output/package/package.json',
+          packageName: '@example/pkg',
+          task: 'package:check',
+        },
       ]);
     } finally {
       await pkg.cleanup();
