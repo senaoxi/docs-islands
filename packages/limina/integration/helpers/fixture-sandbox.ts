@@ -43,6 +43,7 @@ export const PERMANENT_COPY_EXCLUDED_NAMES = [
 ] as const;
 export const DEFAULT_SANDBOX_IGNORED_PATH_PREFIXES = [
   'cache',
+  'harness',
   'home',
   'repo/.limina',
   'repo/node_modules',

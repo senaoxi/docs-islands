@@ -29,6 +29,8 @@ export type DetectorCoverageRegistry = Readonly<
 
 const FALLBACK_CONTRACT_TEST =
   'packages/limina/src/__tests__/issue-code-contracts.spec.ts';
+const FAULT_FIXTURE_TEST =
+  'packages/limina/integration/tests/detector-fixtures.spec.ts';
 
 export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
   [LIMINA_CHECK_ISSUE_CODES.checkerBuildFailed]: {
@@ -36,9 +38,14 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
       'packages/limina/src/commands/typecheck.ts#createCheckerFailureIssues',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
     ],
     task: 'checker:build',
-    tests: [FALLBACK_CONTRACT_TEST],
+    tests: [
+      FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/checker-build-throw/case.mts',
+      FAULT_FIXTURE_TEST,
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.checkerPeerDependencyMissing]: {
     kind: 'fixture',
@@ -68,19 +75,34 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
       'packages/limina/src/commands/typecheck.ts#createCheckerFailureIssues',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
     ],
     task: 'checker:typecheck',
-    tests: [FALLBACK_CONTRACT_TEST],
+    tests: [
+      FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/checker-typecheck-throw/case.mts',
+      FAULT_FIXTURE_TEST,
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.commandFailed]: {
     kind: 'fault-injection',
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
       'packages/limina/src/pipeline/runner.ts#runCommandStep',
     ],
     task: 'command',
     tests: [
       FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/command-throw/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/cleanup-descriptor-failure/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/process-spawn-enoent/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/process-nonzero-exit/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/process-signal-termination/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/process-timeout/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/process-stdout-error/case.mts',
+      'packages/limina/fixtures/detectors/fault-injection/process-stderr-error/case.mts',
+      FAULT_FIXTURE_TEST,
       'packages/limina/src/__tests__/pipeline.spec.ts',
     ],
   },
@@ -105,9 +127,14 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
       'packages/limina/src/commands/graph.ts#createGraphCheckErrorIssue',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
     ],
     task: 'graph:check',
-    tests: [FALLBACK_CONTRACT_TEST],
+    tests: [
+      FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/graph-check-throw/case.mts',
+      FAULT_FIXTURE_TEST,
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.graphConditionDomainMismatch]: {
     kind: 'fixture',
@@ -168,6 +195,8 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     task: 'graph:materialize',
     tests: [
       FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/graph-materialize-throw/case.mts',
+      FAULT_FIXTURE_TEST,
       'packages/limina/src/__tests__/execution.spec.ts',
     ],
   },
@@ -176,10 +205,13 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
       'packages/limina/src/core/build-graph/runner.ts#createGraphPrepareIssue',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
     ],
     task: 'graph:prepare',
     tests: [
       FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/graph-prepare-throw/case.mts',
+      FAULT_FIXTURE_TEST,
       'packages/limina/src/__tests__/source.spec.ts',
     ],
   },
@@ -312,9 +344,14 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
       'packages/limina/src/commands/package.ts#createPackageCheckErrorIssues',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
     ],
     task: 'package:check',
-    tests: [FALLBACK_CONTRACT_TEST],
+    tests: [
+      FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/package-check-throw/case.mts',
+      FAULT_FIXTURE_TEST,
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.packageManifestInvalid]: {
     kind: 'fixture',
@@ -386,9 +423,14 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
       'packages/limina/src/commands/proof.ts#runProofCheck',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
     ],
     task: 'proof:check',
-    tests: [FALLBACK_CONTRACT_TEST],
+    tests: [
+      FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/proof-check-throw/case.mts',
+      FAULT_FIXTURE_TEST,
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.proofDefaultTsconfigInvalid]: {
     kind: 'fixture',
@@ -461,9 +503,14 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
       'packages/limina/src/commands/release.ts#createReleaseCheckErrorIssues',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
     ],
     task: 'release:check',
-    tests: [FALLBACK_CONTRACT_TEST],
+    tests: [
+      FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/release-check-throw/case.mts',
+      FAULT_FIXTURE_TEST,
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.releaseConsistency]: {
     kind: 'planned',
@@ -583,9 +630,14 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
       'packages/limina/src/commands/source.ts#runSourceCheck',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
     ],
     task: 'source:check',
-    tests: [FALLBACK_CONTRACT_TEST],
+    tests: [
+      FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/source-check-throw/case.mts',
+      FAULT_FIXTURE_TEST,
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.sourceAmbientDeclarationConfigInvalid]: {
     kind: 'fixture',
@@ -788,10 +840,15 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     kind: 'fault-injection',
     producers: [
       'packages/limina/src/check-reporting/codes.ts#DEFAULT_ISSUE_CODE_BY_TASK',
+      'packages/limina/src/execution/executor.ts#createInfrastructureIssue',
       'packages/limina/src/pipeline/runner.ts#createWorkspaceValidationTask',
     ],
     task: 'workspace:validate',
-    tests: [FALLBACK_CONTRACT_TEST],
+    tests: [
+      FALLBACK_CONTRACT_TEST,
+      'packages/limina/fixtures/detectors/fault-injection/workspace-validation-throw/case.mts',
+      FAULT_FIXTURE_TEST,
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.workspaceOutputCycle]: {
     kind: 'fixture',

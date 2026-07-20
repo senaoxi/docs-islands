@@ -1,5 +1,9 @@
 import type { LiminaCheckIssueCode } from '../../src/check-reporting/codes';
-import type { LiminaCheckTaskName } from '../../src/check-reporting/snapshot';
+import type {
+  LiminaCheckRunResult,
+  LiminaCheckRunTaskStatus,
+  LiminaCheckTaskName,
+} from '../../src/check-reporting/snapshot';
 
 export const FIXTURE_TOOL_NAMES = [
   'typescript',
@@ -14,6 +18,62 @@ export const FIXTURE_TOOL_NAMES = [
 ] as const;
 
 export type FixtureToolName = (typeof FIXTURE_TOOL_NAMES)[number];
+
+export const FAULT_INJECTION_POINTS = [
+  'cleanup.execute',
+  'execution.finalize',
+  'filesystem.close',
+  'filesystem.fsync',
+  'filesystem.read',
+  'filesystem.rename',
+  'filesystem.write',
+  'process.protocol',
+  'process.spawn',
+  'process.stderr',
+  'process.stdout',
+  'process.wait',
+  'snapshot.install',
+  'snapshot.serialize',
+  'snapshot.write',
+  'task.execute',
+] as const;
+
+export type FaultInjectionPoint = (typeof FAULT_INJECTION_POINTS)[number];
+
+export type FaultInjection =
+  | {
+      readonly code?: string;
+      readonly kind: 'stream-error';
+      readonly stream: 'stderr' | 'stdout';
+    }
+  | {
+      readonly exitCode: number;
+      readonly kind: 'process-exit';
+    }
+  | {
+      readonly kind: 'process-signal';
+      readonly signal: NodeJS.Signals;
+    }
+  | {
+      readonly kind: 'timeout';
+    }
+  | {
+      readonly kind: 'invalid-protocol';
+      readonly payload: string;
+    }
+  | {
+      readonly code?: string;
+      readonly kind: 'throw';
+      readonly message: string;
+      readonly name: string;
+    };
+
+export interface FaultInjectionDefinition {
+  readonly fault: FaultInjection;
+  readonly occurrence?: number;
+  readonly point: FaultInjectionPoint;
+  readonly task: LiminaCheckTaskName;
+}
 
 export interface FixtureCopyPolicy {
   readonly excludedNames?: readonly string[];
@@ -88,6 +148,35 @@ export interface ExpectedIssue {
   readonly task: LiminaCheckTaskName;
 }
 
+export interface ExpectedStreamOutput {
+  readonly linesInOrder?: readonly string[];
+}
+
+export interface ExpectedSnapshot {
+  readonly complete?: boolean;
+  readonly expected: boolean;
+}
+
+export interface ExpectedFaultBoundary {
+  readonly cleanupDescriptorCount?: number;
+  readonly cleanupDirectoryDescriptorCount?: number;
+  readonly cleanupFileDescriptorCount?: number;
+  readonly cleanupGenerationCount?: number;
+  readonly cleanupResourcesRemoved?: number;
+  readonly flowCleanupAttempts?: number;
+  readonly flowCleanupCompleted?: boolean;
+  readonly flowResourcesClosed?: boolean;
+  readonly removedTempFiles?: number;
+  readonly tempCleanupAttempts?: number;
+  readonly tempCleanupCompleted?: boolean;
+}
+
+export interface ExpectedFaultError {
+  readonly code?: string;
+  readonly expected: boolean;
+  readonly name?: string;
+}
+
 export interface LocalRegistryPackageFile {
   readonly content: string;
   readonly path: string;
@@ -160,9 +249,18 @@ export interface LocalRegistryScenario {
 export interface DetectorFixtureExpectation {
   readonly additionalCodes?: readonly LiminaCheckIssueCode[];
   readonly allowUnexpectedIssues?: boolean;
+  readonly boundary?: ExpectedFaultBoundary;
+  readonly error?: ExpectedFaultError;
   readonly exitCode: number;
   readonly issues: readonly ExpectedIssue[];
   readonly primaryCode?: LiminaCheckIssueCode;
+  readonly runOutcome?: LiminaCheckRunResult;
+  readonly snapshot?: ExpectedSnapshot;
+  readonly stderr?: ExpectedStreamOutput;
+  readonly stdout?: ExpectedStreamOutput;
+  readonly taskStates?: Readonly<
+    Partial<Record<LiminaCheckTaskName, LiminaCheckRunTaskStatus>>
+  >;
 }
 
 export interface DetectorFixtureDefinition {
@@ -171,10 +269,12 @@ export interface DetectorFixtureDefinition {
   readonly copyPolicy?: FixtureCopyPolicy;
   readonly environment?: Readonly<Record<string, string>>;
   readonly expected: DetectorFixtureExpectation;
+  readonly fault?: FaultInjectionDefinition;
   readonly id: string;
   readonly kind: 'external-tool' | 'fault-injection' | 'filesystem';
   readonly mutations?: readonly FixtureMutation[];
   readonly registry?: LocalRegistryScenario;
+  readonly secondaryFault?: FaultInjectionDefinition;
   readonly setup?: readonly FixtureSetupOperation[];
   readonly tools?: readonly FixtureToolName[];
 }

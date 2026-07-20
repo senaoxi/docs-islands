@@ -15,6 +15,10 @@ const finalWatchdogDelay = 5000;
 export interface RunLiminaOptions {
   args: readonly string[];
   cwd: string;
+  entry?: {
+    readonly args: readonly string[];
+    readonly executable: string;
+  };
   env?: NodeJS.ProcessEnv;
   fixtureName: string;
   inheritParentEnv?: boolean;
@@ -102,9 +106,13 @@ async function terminateProcessTree(
 export function createLiminaSpawnSpec(
   options: RunLiminaOptions,
 ): LiminaSpawnSpec {
-  return {
-    args: [liminaBinPath, ...options.args],
+  const entry = options.entry ?? {
+    args: [liminaBinPath],
     executable: process.execPath,
+  };
+  return {
+    args: [...entry.args, ...options.args],
+    executable: entry.executable,
     options: {
       cwd: options.cwd,
       detached: process.platform !== 'win32',
@@ -324,11 +332,12 @@ function runLiminaWithDependencies(
 
     child.on('close', (code, signal) => {
       settle(() => {
+        const spec = createLiminaSpawnSpec(options);
         resolve({
-          args: [liminaBinPath, ...options.args],
+          args: spec.args,
           code,
           cwd: options.cwd,
-          executable: process.execPath,
+          executable: spec.executable,
           fixtureName: options.fixtureName,
           signal,
           stderr,

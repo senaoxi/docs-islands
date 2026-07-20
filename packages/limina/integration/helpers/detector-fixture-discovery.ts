@@ -9,6 +9,8 @@ import {
 } from '../../src/check-reporting/codes';
 import {
   LIMINA_CHECK_TASK_NAMES,
+  type LiminaCheckRunResult,
+  type LiminaCheckRunTaskStatus,
   type LiminaCheckTaskName,
 } from '../../src/check-reporting/snapshot';
 import {
@@ -19,9 +21,13 @@ import {
   type DetectorFixtureDefinition,
   type DetectorFixtureExpectation,
   type ExpectedEvidence,
+  type ExpectedFaultBoundary,
+  type ExpectedFaultError,
   type ExpectedIssue,
   type ExpectedLocation,
   type ExpectedRegistryRequest,
+  type ExpectedSnapshot,
+  type ExpectedStreamOutput,
   FIXTURE_TOOL_NAMES,
   type FixtureCopyPolicy,
   type FixtureMutation,
@@ -32,6 +38,10 @@ import {
   type LocalRegistryResponseBody,
   type LocalRegistryScenario,
 } from './detector-fixture-types';
+import {
+  assertDistinctFaultInjectionTargets,
+  validateFaultInjectionDefinition,
+} from './fault-injection';
 import { validatePortableRelativePath } from './fixture-paths';
 
 const DEFINITION_KEYS = new Set([
@@ -40,19 +50,28 @@ const DEFINITION_KEYS = new Set([
   'copyPolicy',
   'environment',
   'expected',
+  'fault',
   'id',
   'kind',
   'mutations',
   'registry',
+  'secondaryFault',
   'setup',
   'tools',
 ]);
 const EXPECTATION_KEYS = new Set([
   'additionalCodes',
   'allowUnexpectedIssues',
+  'boundary',
+  'error',
   'exitCode',
   'issues',
   'primaryCode',
+  'runOutcome',
+  'snapshot',
+  'stderr',
+  'stdout',
+  'taskStates',
 ]);
 const EXPECTED_ISSUE_KEYS = new Set([
   'checkerName',
@@ -76,6 +95,32 @@ const EXPECTED_LOCATION_KEYS = new Set([
   'packageManifestPath',
   'scope',
 ]);
+const EXPECTED_SNAPSHOT_KEYS = new Set(['complete', 'expected']);
+const EXPECTED_STREAM_KEYS = new Set(['linesInOrder']);
+const EXPECTED_FAULT_BOUNDARY_KEYS = new Set([
+  'cleanupDescriptorCount',
+  'cleanupDirectoryDescriptorCount',
+  'cleanupFileDescriptorCount',
+  'cleanupGenerationCount',
+  'cleanupResourcesRemoved',
+  'flowCleanupAttempts',
+  'flowCleanupCompleted',
+  'flowResourcesClosed',
+  'removedTempFiles',
+  'tempCleanupAttempts',
+  'tempCleanupCompleted',
+]);
+const EXPECTED_FAULT_BOUNDARY_NUMBER_KEYS = new Set([
+  'cleanupDescriptorCount',
+  'cleanupDirectoryDescriptorCount',
+  'cleanupFileDescriptorCount',
+  'cleanupGenerationCount',
+  'cleanupResourcesRemoved',
+  'flowCleanupAttempts',
+  'removedTempFiles',
+  'tempCleanupAttempts',
+]);
+const EXPECTED_FAULT_ERROR_KEYS = new Set(['code', 'expected', 'name']);
 const COPY_POLICY_KEYS = new Set([
   'excludedNames',
   'includeBuildInfoFiles',
@@ -106,6 +151,21 @@ const LOCAL_REGISTRY_RESPONSE_KEYS = new Set(['body', 'headers', 'status']);
 const FIXTURE_ID_SEGMENT_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const TASK_NAME_SET = new Set<string>(LIMINA_CHECK_TASK_NAMES);
 const TOOL_NAME_SET = new Set<string>(FIXTURE_TOOL_NAMES);
+const RUN_OUTCOME_SET = new Set<LiminaCheckRunResult>([
+  'blocked',
+  'failed',
+  'not-run',
+  'passed',
+  'running',
+]);
+const TASK_STATE_SET = new Set<LiminaCheckRunTaskStatus>([
+  'blocked',
+  'failed',
+  'passed',
+  'planned',
+  'running',
+  'skipped',
+]);
 const TASK_FALLBACK_CODE_SET = new Set<string>(
   Object.values(DEFAULT_ISSUE_CODE_BY_TASK),
 );
@@ -366,9 +426,135 @@ function expectedIssueIdentity(issue: ExpectedIssue): string {
   });
 }
 
+function validateExpectedSnapshot(
+  value: unknown,
+  label: string,
+): ExpectedSnapshot | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  assertOnlyKeys(value, EXPECTED_SNAPSHOT_KEYS, label);
+  if (typeof value.expected !== 'boolean') {
+    throw new TypeError(`${label}.expected must be boolean.`);
+  }
+  if (value.complete !== undefined && typeof value.complete !== 'boolean') {
+    throw new Error(`${label}.complete must be boolean.`);
+  }
+  if (value.expected === false && value.complete !== undefined) {
+    throw new Error(`${label}.complete requires an expected snapshot.`);
+  }
+
+  return {
+    complete: value.complete as boolean | undefined,
+    expected: value.expected,
+  };
+}
+
+function validateExpectedStream(
+  value: unknown,
+  label: string,
+): ExpectedStreamOutput | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  assertOnlyKeys(value, EXPECTED_STREAM_KEYS, label);
+  const linesInOrder =
+    value.linesInOrder === undefined
+      ? undefined
+      : validateStringArray(value.linesInOrder, `${label}.linesInOrder`);
+  if (linesInOrder === undefined || linesInOrder.length === 0) {
+    throw new Error(`${label}.linesInOrder must be a non-empty array.`);
+  }
+
+  return { linesInOrder };
+}
+
+function validateExpectedFaultBoundary(
+  value: unknown,
+  label: string,
+): ExpectedFaultBoundary | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  assertOnlyKeys(value, EXPECTED_FAULT_BOUNDARY_KEYS, label);
+  const output: Record<string, boolean | number> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (EXPECTED_FAULT_BOUNDARY_NUMBER_KEYS.has(key)) {
+      if (!Number.isInteger(entry) || (entry as number) < 0) {
+        throw new Error(`${label}.${key} must be a non-negative integer.`);
+      }
+      output[key] = entry as number;
+    } else if (typeof entry === 'boolean') {
+      output[key] = entry;
+    } else {
+      throw new TypeError(`${label}.${key} must be boolean.`);
+    }
+  }
+  if (Object.keys(output).length === 0) {
+    throw new Error(`${label} must constrain at least one boundary field.`);
+  }
+  return output as ExpectedFaultBoundary;
+}
+
+function validateExpectedFaultError(
+  value: unknown,
+  label: string,
+): ExpectedFaultError | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  assertOnlyKeys(value, EXPECTED_FAULT_ERROR_KEYS, label);
+  if (typeof value.expected !== 'boolean') {
+    throw new TypeError(`${label}.expected must be boolean.`);
+  }
+  const code = optionalNonEmptyString(value.code, `${label}.code`);
+  const name = optionalNonEmptyString(value.name, `${label}.name`);
+  if (!value.expected && (code !== undefined || name !== undefined)) {
+    throw new Error(`${label} cannot constrain an error that is not expected.`);
+  }
+  return { code, expected: value.expected, name };
+}
+
+function validateTaskStates(
+  value: unknown,
+  label: string,
+):
+  | Readonly<Partial<Record<LiminaCheckTaskName, LiminaCheckRunTaskStatus>>>
+  | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} must be a task-state record.`);
+  }
+  const taskStates: Partial<
+    Record<LiminaCheckTaskName, LiminaCheckRunTaskStatus>
+  > = {};
+  for (const [task, state] of Object.entries(value)) {
+    if (!TASK_NAME_SET.has(task)) {
+      throw new Error(`${label} contains an unsupported task: ${task}.`);
+    }
+    if (
+      typeof state !== 'string' ||
+      !TASK_STATE_SET.has(state as LiminaCheckRunTaskStatus)
+    ) {
+      throw new Error(`${label}.${task} is not a supported task state.`);
+    }
+    taskStates[task as LiminaCheckTaskName] = state as LiminaCheckRunTaskStatus;
+  }
+  if (Object.keys(taskStates).length === 0) {
+    throw new Error(`${label} must constrain at least one task.`);
+  }
+
+  return taskStates;
+}
+
 function validateExpectation(
   value: unknown,
   label: string,
+  options: { readonly faultInjection: boolean },
 ): DetectorFixtureExpectation {
   if (!isPlainRecord(value)) {
     throw new Error(`${label} must be an object.`);
@@ -405,7 +591,7 @@ function validateExpectation(
       `${label}.primaryCode is not allowed for a passing fixture.`,
     );
   }
-  if (exitCode !== 0 && primaryCode === undefined) {
+  if (exitCode !== 0 && primaryCode === undefined && !options.faultInjection) {
     throw new Error(`${label}.primaryCode is required for a failing fixture.`);
   }
   if (primaryCode && !issues.some((issue) => issue.code === primaryCode)) {
@@ -413,7 +599,11 @@ function validateExpectation(
       `${label}.primaryCode must be represented by an expected issue.`,
     );
   }
-  if (primaryCode && TASK_FALLBACK_CODE_SET.has(primaryCode)) {
+  if (
+    primaryCode &&
+    TASK_FALLBACK_CODE_SET.has(primaryCode) &&
+    !options.faultInjection
+  ) {
     throw new Error(
       `${label}.primaryCode must be a semantic detector code, not a task fallback code: ${primaryCode}`,
     );
@@ -446,12 +636,32 @@ function validateExpectation(
     throw new Error(`${label}.allowUnexpectedIssues must be boolean.`);
   }
 
+  const runOutcome =
+    value.runOutcome === undefined
+      ? undefined
+      : typeof value.runOutcome === 'string' &&
+          RUN_OUTCOME_SET.has(value.runOutcome as LiminaCheckRunResult)
+        ? (value.runOutcome as LiminaCheckRunResult)
+        : (() => {
+            throw new Error(`${label}.runOutcome is unsupported.`);
+          })();
+
   return {
     additionalCodes,
     allowUnexpectedIssues: value.allowUnexpectedIssues ?? false,
+    boundary: validateExpectedFaultBoundary(
+      value.boundary,
+      `${label}.boundary`,
+    ),
+    error: validateExpectedFaultError(value.error, `${label}.error`),
     exitCode,
     issues,
     primaryCode,
+    runOutcome,
+    snapshot: validateExpectedSnapshot(value.snapshot, `${label}.snapshot`),
+    stderr: validateExpectedStream(value.stderr, `${label}.stderr`),
+    stdout: validateExpectedStream(value.stdout, `${label}.stdout`),
+    taskStates: validateTaskStates(value.taskStates, `${label}.taskStates`),
   };
 }
 
@@ -1002,6 +1212,34 @@ export function validateDetectorFixtureDefinition(
   ) {
     throw new Error(`${label}.kind is unsupported: ${String(value.kind)}`);
   }
+  const faultInjection = value.kind === 'fault-injection';
+  if (faultInjection && value.fault === undefined) {
+    throw new Error(`${label}.fault is required for fault-injection fixtures.`);
+  }
+  if (!faultInjection && value.fault !== undefined) {
+    throw new Error(
+      `${label}.fault is only valid for fault-injection fixtures.`,
+    );
+  }
+  if (!faultInjection && value.secondaryFault !== undefined) {
+    throw new Error(
+      `${label}.secondaryFault is only valid for fault-injection fixtures.`,
+    );
+  }
+  const fault =
+    value.fault === undefined
+      ? undefined
+      : validateFaultInjectionDefinition(value.fault, `${label}.fault`);
+  const secondaryFault =
+    value.secondaryFault === undefined
+      ? undefined
+      : validateFaultInjectionDefinition(
+          value.secondaryFault,
+          `${label}.secondaryFault`,
+        );
+  if (fault) {
+    assertDistinctFaultInjectionTargets(fault, secondaryFault, label);
+  }
   const command = validateStringArray(value.command, `${label}.command`);
   if (command.length === 0) {
     throw new Error(`${label}.command must contain at least one CLI argument.`);
@@ -1070,11 +1308,15 @@ export function validateDetectorFixtureDefinition(
     command,
     copyPolicy: validateCopyPolicy(value.copyPolicy, `${label}.copyPolicy`),
     environment: validateEnvironment(value.environment, `${label}.environment`),
-    expected: validateExpectation(value.expected, `${label}.expected`),
+    expected: validateExpectation(value.expected, `${label}.expected`, {
+      faultInjection,
+    }),
+    fault,
     id,
     kind: value.kind,
     mutations,
     registry,
+    secondaryFault,
     setup,
     tools,
   };

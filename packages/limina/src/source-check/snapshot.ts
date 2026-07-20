@@ -3,7 +3,10 @@ import { isPlainRecord } from '#utils/values';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'pathe';
-import { writeJsonAtomically } from '../check-reporting/atomic-writer';
+import {
+  type AtomicWriteOptions,
+  writeJsonAtomically,
+} from '../check-reporting/atomic-writer';
 import {
   assertIssueTaskMatchesCode,
   assertWritableLiminaCheckIssueCode,
@@ -1053,18 +1056,25 @@ export function getCheckIssueSnapshotPath(rootDir: string): string {
 export async function writeSourceIssueSnapshotOnly(
   namespace: LiminaArtifactNamespace,
   snapshot: SourceIssueSnapshot,
+  atomicWriteOptions: AtomicWriteOptions = {},
 ): Promise<void> {
   const snapshotPath = resolveArtifactNamespacePath(
     namespace,
     'source-check',
     'last-run.json',
   );
-  await writeJsonAtomically(namespace, snapshotPath, snapshot);
+  await writeJsonAtomically(
+    namespace,
+    snapshotPath,
+    snapshot,
+    atomicWriteOptions,
+  );
 }
 
 export async function writeCheckIssueSnapshotOnly(
   namespace: LiminaArtifactNamespace,
   snapshot: CheckIssueSnapshot,
+  atomicWriteOptions: AtomicWriteOptions = {},
 ): Promise<void> {
   if (!isCurrentV7CheckIssueSnapshotStructure(snapshot)) {
     throw new Error('Invalid v7 check snapshot wire model.');
@@ -1085,7 +1095,12 @@ export async function writeCheckIssueSnapshotOnly(
     'check',
     'last-run.json',
   );
-  await writeJsonAtomically(namespace, snapshotPath, snapshot);
+  await writeJsonAtomically(
+    namespace,
+    snapshotPath,
+    snapshot,
+    atomicWriteOptions,
+  );
 }
 
 export const writeSourceIssueSnapshot: typeof writeSourceIssueSnapshotOnly =

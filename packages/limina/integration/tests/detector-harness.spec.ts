@@ -239,7 +239,7 @@ afterEach(async () => {
 });
 
 describe('detector fixture declaration and discovery', () => {
-  it('executes filesystem and external-tool fixtures but rejects fault injection', () => {
+  it('executes filesystem, external-tool, and fault-injection fixtures', () => {
     const definition = validFailingDefinition();
 
     expect(() =>
@@ -259,7 +259,7 @@ describe('detector fixture declaration and discovery', () => {
         definition: { ...definition, kind: 'fault-injection' },
         id: definition.id,
       }),
-    ).toThrow('harness v2 executes filesystem and external-tool fixtures only');
+    ).not.toThrow();
   });
 
   it('applies strict expectation defaults to a valid declaration', () => {
