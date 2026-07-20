@@ -4,7 +4,18 @@ import { isNamedWorkspacePackage } from '#core/workspace/actions';
 import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import type { JSONReport } from 'knip';
 import { execFile } from 'node:child_process';
-import { access, mkdir, mkdtemp, rm, rmdir, writeFile } from 'node:fs/promises';
+import {
+  access,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  rmdir,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'pathe';
@@ -474,32 +485,81 @@ async function withTemporaryKnipConfig<T>(
   }
 }
 
-async function withTemporaryRootPackageJson<T>(
+async function mirrorKnipAnalysisRootEntry(options: {
+  entryName: string;
+  rootDir: string;
+  shadowRootDir: string;
+}): Promise<void> {
+  const sourcePath = path.join(options.rootDir, options.entryName);
+  const shadowPath = path.join(options.shadowRootDir, options.entryName);
+  const sourceStat = await stat(sourcePath).catch((error: unknown) => {
+    if ((error as { code?: string }).code === 'ENOENT') {
+      return;
+    }
+
+    throw error;
+  });
+
+  if (!sourceStat) {
+    return;
+  }
+
+  if (sourceStat.isDirectory()) {
+    await symlink(
+      sourcePath,
+      shadowPath,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    return;
+  }
+
+  if (sourceStat.isFile()) {
+    await copyFile(sourcePath, shadowPath);
+  }
+}
+
+async function withKnipAnalysisRoot<T>(
   rootDir: string,
-  run: () => Promise<T>,
+  run: (analysisRootDir: string) => Promise<T>,
 ): Promise<T> {
   const packageJsonPath = path.join(rootDir, 'package.json');
 
   if (await pathExists(packageJsonPath)) {
-    return await run();
+    return await run(rootDir);
   }
 
-  await writeFile(
-    packageJsonPath,
-    `${JSON.stringify(
-      {
-        private: true,
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  const shadowRootDir = await mkdtemp(path.join(tmpdir(), 'limina-knip-root-'));
 
   try {
-    return await run();
+    await writeFile(
+      path.join(shadowRootDir, 'package.json'),
+      `${JSON.stringify(
+        {
+          private: true,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const entries = await readdir(rootDir, { withFileTypes: true });
+
+    await Promise.all(
+      entries
+        .filter((entry) => entry.name !== 'package.json')
+        .map((entry) =>
+          mirrorKnipAnalysisRootEntry({
+            entryName: entry.name,
+            rootDir,
+            shadowRootDir,
+          }),
+        ),
+    );
+
+    return await run(shadowRootDir);
   } finally {
-    await rm(packageJsonPath, {
+    await rm(shadowRootDir, {
       force: true,
+      recursive: true,
     });
   }
 }
@@ -672,9 +732,9 @@ export async function collectKnipSourceIssues(options: {
         workspacePackages: options.workspacePackages,
       });
 
-      return await withTemporaryRootPackageJson(
+      return await withKnipAnalysisRoot(
         options.config.rootDir,
-        async () =>
+        async (analysisRootDir) =>
           withTemporaryKnipConfig(knipConfig, async (configPath) =>
             mergeKnipReports(
               await Promise.all(
@@ -684,7 +744,7 @@ export async function collectKnipSourceIssues(options: {
                       await (options.knipRunner ?? runKnipCli)({
                         configPath,
                         include,
-                        rootDir: options.config.rootDir,
+                        rootDir: analysisRootDir,
                         ...(analysisGroup.tsConfigFile
                           ? { tsConfigFile: analysisGroup.tsConfigFile }
                           : {}),

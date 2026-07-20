@@ -53,6 +53,12 @@ jobs:
         with:
           filters: |
             src:
+              # Limina release gates depend on fixture declarations, fixture
+              # repositories, smoke metadata, and non-.ts config files too.
+              - 'packages/limina/**'
+              - 'limina.config.{js,mjs,ts,mts}'
+              - 'nx.json'
+
               # Source code from packages directory (excluding docs, playground, dist, node_modules, and eslint-config)
               - 'packages/!(eslint-config)/!(docs|playground|dist|node_modules)/**/*.{js,ts,tsx,jsx,vue}'
 
