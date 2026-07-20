@@ -27,9 +27,6 @@ export type DetectorCoverageRegistry = Readonly<
   Record<LiminaCheckIssueCode, DetectorCoverageEntry>
 >;
 
-const DIRECT_CODE_TASK_ASSERTION_PLANNED =
-  'The production producer is reachable, but no current producer-focused test directly triggers this detector and asserts both its canonical code and task.';
-
 const FALLBACK_CONTRACT_TEST =
   'packages/limina/src/__tests__/issue-code-contracts.spec.ts';
 
@@ -44,20 +41,27 @@ export const LIMINA_CHECK_ISSUE_DETECTOR_COVERAGE: DetectorCoverageRegistry = {
     tests: [FALLBACK_CONTRACT_TEST],
   },
   [LIMINA_CHECK_ISSUE_CODES.checkerPeerDependencyMissing]: {
-    kind: 'unit',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/commands/typecheck.ts#createCheckerFailureIssues',
     ],
     task: 'checker:build',
-    tests: ['packages/limina/src/__tests__/cli.spec.ts'],
+    tests: [
+      'packages/limina/fixtures/detectors/checker/peer-dependency-missing/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+      'packages/limina/src/__tests__/cli.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.checkerTargetSelectionFailed]: {
-    kind: 'planned',
+    kind: 'fixture',
     producers: [
       'packages/limina/src/commands/typecheck.ts#createCheckerFailureIssues',
     ],
-    reason: DIRECT_CODE_TASK_ASSERTION_PLANNED,
     task: 'checker:build',
+    tests: [
+      'packages/limina/fixtures/detectors/checker/target-selection-preset/case.mts',
+      'packages/limina/integration/tests/detector-fixtures.spec.ts',
+    ],
   },
   [LIMINA_CHECK_ISSUE_CODES.checkerTypecheckFailed]: {
     kind: 'fault-injection',

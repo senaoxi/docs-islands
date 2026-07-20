@@ -27,6 +27,9 @@ const detectorFixtures = await discoverDetectorFixtures({
 describe('declarative detector fixtures', () => {
   it('discovers the checked-in fixtures in portable order', () => {
     expect(detectorFixtures.map((fixture) => fixture.id)).toEqual([
+      'checker/build-valid',
+      'checker/peer-dependency-missing',
+      'checker/target-selection-preset',
       'graph/access-denied-import-dependency',
       'graph/access-denied-reference',
       'graph/condition-domain-mismatch',

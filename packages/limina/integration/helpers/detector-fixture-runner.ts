@@ -11,9 +11,11 @@ import {
 } from '../../src/package-check/release-registry-test-seam';
 import { createDetectorInvocationEnvironment } from './detector-environment';
 import type { DetectorFixtureCase } from './detector-fixture-discovery';
+import type { DetectorStructuredSnapshotKind } from './detector-snapshot';
 import {
-  assertNoPreexistingCheckSnapshot,
-  readDetectorCheckSnapshot,
+  assertNoPreexistingDetectorSnapshots,
+  getDetectorStructuredSnapshotKind,
+  readDetectorStructuredSnapshot,
 } from './detector-snapshot';
 import {
   applyFixtureSetup,
@@ -61,10 +63,6 @@ export function assertExecutableDetectorFixtureKind(
       `Detector fixture ${fixture.id} uses fault-injection; harness v2 executes filesystem and external-tool fixtures only.`,
     );
   }
-}
-
-function isFormalSnapshotCommand(command: readonly string[]): boolean {
-  return command[0] === 'check';
 }
 
 function formatUnknownError(error: unknown): string {
@@ -148,8 +146,23 @@ function assertCliResult(options: {
 function assertSnapshotOutcome(options: {
   readonly expectedExitCode: number;
   readonly fixtureId: string;
+  readonly kind: DetectorStructuredSnapshotKind;
   readonly snapshot: CheckIssueSnapshot;
 }): void {
+  if (options.kind === 'standalone-invocation') {
+    if (options.expectedExitCode === 0) {
+      throw new Error(
+        `Detector fixture ${options.fixtureId} expected a successful standalone invocation, but formal standalone snapshots record failures only.`,
+      );
+    }
+    if (options.snapshot.status !== 'completed') {
+      throw new Error(
+        `Detector fixture ${options.fixtureId} standalone invocation snapshot is not completed.`,
+      );
+    }
+    return;
+  }
+
   const runResult = options.snapshot.run?.result;
   if (options.expectedExitCode === 0 && runResult !== 'passed') {
     throw new Error(
@@ -167,11 +180,7 @@ export async function runDetectorFixture(
   fixture: DetectorFixtureCase,
 ): Promise<DetectorFixtureRunResult> {
   assertExecutableDetectorFixtureKind(fixture);
-  if (!isFormalSnapshotCommand(fixture.definition.command)) {
-    throw new Error(
-      `Detector fixture ${fixture.id} must use a formal snapshot-producing Limina check command.`,
-    );
-  }
+  getDetectorStructuredSnapshotKind(fixture.definition.command);
   if ((fixture.definition.mutations?.length ?? 0) > 0) {
     throw new Error(
       `Detector fixture ${fixture.id} declares mutations, but multi-run mutation execution is not enabled in harness v2.`,
@@ -188,7 +197,7 @@ export async function runDetectorFixture(
     configPath,
     ...fixture.definition.command,
   ];
-  const snapshotPath = getCheckIssueSnapshotPath(sandbox.repoRoot);
+  let snapshotPath = getCheckIssueSnapshotPath(sandbox.repoRoot);
   let cli: RunLiminaResult | undefined;
   let registry: LocalRegistryFixture | undefined;
   let registryResult:
@@ -246,7 +255,7 @@ export async function runDetectorFixture(
       ignoredPathPrefixes: DEFAULT_SANDBOX_IGNORED_PATH_PREFIXES,
       rootDir: sandbox.sandboxRoot,
     });
-    await assertNoPreexistingCheckSnapshot(sandbox.repoRoot);
+    await assertNoPreexistingDetectorSnapshots(sandbox.repoRoot);
     const invocationStartedAtMs = Date.now();
 
     try {
@@ -263,15 +272,18 @@ export async function runDetectorFixture(
         fixtureId: fixture.id,
         result: cli,
       });
-      snapshot = await readDetectorCheckSnapshot({
+      const structuredSnapshot = await readDetectorStructuredSnapshot({
         command: fixture.definition.command,
         fixtureId: fixture.id,
         invocationStartedAtMs,
         repoRoot: sandbox.repoRoot,
       });
+      snapshot = structuredSnapshot.snapshot;
+      snapshotPath = structuredSnapshot.snapshotPath;
       assertSnapshotOutcome({
         expectedExitCode: fixture.definition.expected.exitCode,
         fixtureId: fixture.id,
+        kind: structuredSnapshot.kind,
         snapshot,
       });
       assertDetectorIssues({

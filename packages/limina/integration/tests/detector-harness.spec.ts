@@ -23,6 +23,10 @@ import {
   LIMINA_CHECK_ISSUE_CODES,
 } from '../../src/check-reporting/codes';
 import {
+  getStandaloneIssueInvocationPath,
+  STANDALONE_ISSUE_INVOCATION_VERSION,
+} from '../../src/check-reporting/invocation-snapshot';
+import {
   CHECK_ISSUE_SNAPSHOT_VERSION,
   getCheckIssueSnapshotPath,
   type LiminaCheckIssue,
@@ -40,7 +44,9 @@ import type {
 } from '../helpers/detector-fixture-types';
 import {
   assertNoPreexistingCheckSnapshot,
+  assertNoPreexistingDetectorSnapshots,
   readDetectorCheckSnapshot,
+  readDetectorStructuredSnapshot,
 } from '../helpers/detector-snapshot';
 import { createDeterministicPackageTarball } from '../helpers/deterministic-tarball';
 import { validatePortableRelativePath } from '../helpers/fixture-paths';
@@ -171,6 +177,39 @@ async function writeSnapshot(
 ): Promise<string> {
   const snapshotPath = getCheckIssueSnapshotPath(rootDir);
   await writeText(snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`);
+  return snapshotPath;
+}
+
+async function writeStandaloneInvocationSnapshot(
+  rootDir: string,
+  overrides: Record<string, unknown> = {},
+): Promise<string> {
+  const invocationId = '123e4567-e89b-42d3-a456-426614174000';
+  const snapshotPath = getStandaloneIssueInvocationPath(rootDir, invocationId);
+  const completedAt = new Date().toISOString();
+  await writeText(
+    snapshotPath,
+    `${JSON.stringify(
+      {
+        command: 'limina checker build',
+        completedAt,
+        invocationId,
+        issues: [
+          actualIssue({
+            code: LIMINA_CHECK_ISSUE_CODES.checkerTargetSelectionFailed,
+            filePath: 'packages/app/tsconfig.json',
+            task: 'checker:build',
+          }),
+        ],
+        kind: 'standalone-invocation',
+        result: 'failed',
+        version: STANDALONE_ISSUE_INVOCATION_VERSION,
+        ...overrides,
+      },
+      null,
+      2,
+    )}\n`,
+  );
   return snapshotPath;
 }
 
@@ -859,6 +898,18 @@ describe('minimal tool bridge and invocation boundary', () => {
     expect(await pathExists(path.join(bridge.binDirectory, 'tsc.cmd'))).toBe(
       true,
     );
+    const hostTypeScriptManifest = createRequire(import.meta.url).resolve(
+      'typescript/package.json',
+    );
+    const hostTypeScriptCompiler = await realpath(
+      path.join(path.dirname(hostTypeScriptManifest), 'bin/tsc'),
+    );
+    expect(
+      await readFile(path.join(bridge.binDirectory, 'tsc'), 'utf8'),
+    ).toContain(hostTypeScriptCompiler);
+    expect(
+      await readFile(path.join(bridge.binDirectory, 'tsc.cmd'), 'utf8'),
+    ).toContain(hostTypeScriptCompiler);
     expect(await readdir(path.join(repoRoot, 'node_modules'))).toEqual([
       '.bin',
       'typescript',
@@ -1071,6 +1122,59 @@ describe('formal structured snapshot reader', () => {
         repoRoot: commandRoot,
       }),
     ).rejects.toThrow('snapshot command mismatch');
+  });
+
+  it('reads one current standalone checker invocation through the product reader', async () => {
+    const repoRoot = await createTemporaryRoot('snapshot-standalone');
+    const startedAt = Date.now() - 10;
+    const snapshotPath = await writeStandaloneInvocationSnapshot(repoRoot);
+
+    await expect(
+      readDetectorStructuredSnapshot({
+        command: [
+          'checker',
+          'build',
+          'packages/app/tsconfig.json',
+          '--preset',
+          'tsgo',
+        ],
+        fixtureId: 'checker/target-selection',
+        invocationStartedAtMs: startedAt,
+        repoRoot,
+      }),
+    ).resolves.toMatchObject({
+      kind: 'standalone-invocation',
+      snapshot: {
+        command: 'limina checker build',
+        issues: [
+          expect.objectContaining({
+            code: LIMINA_CHECK_ISSUE_CODES.checkerTargetSelectionFailed,
+            task: 'checker:build',
+          }),
+        ],
+        status: 'completed',
+      },
+      snapshotPath,
+    });
+  });
+
+  it('rejects stale standalone invocations and unsupported standalone commands', async () => {
+    const repoRoot = await createTemporaryRoot('snapshot-standalone-stale');
+    await writeStandaloneInvocationSnapshot(repoRoot);
+
+    await expect(
+      assertNoPreexistingDetectorSnapshots(repoRoot),
+    ).rejects.toThrow('stale standalone invocation snapshots');
+    await expect(
+      readDetectorStructuredSnapshot({
+        command: ['build', 'packages/app/tsconfig.json'],
+        fixtureId: 'checker/unsupported-command',
+        invocationStartedAtMs: Date.now(),
+        repoRoot,
+      }),
+    ).rejects.toThrow(
+      'does not produce a supported formal structured snapshot',
+    );
   });
 });
 
