@@ -12,10 +12,12 @@ import { LiminaOptionalToolMissingError } from '../execution/tools';
 
 interface KnipUnusedWorkspaceDependencyIssue {
   dependencyName: string;
+  externalCode: 'dependencies' | 'devDependencies' | 'optionalPeerDependencies';
   packageJsonPath: string;
 }
 
 export interface KnipUnusedSourceFileIssue {
+  externalCode: 'files';
   filePath: string;
 }
 
@@ -537,6 +539,7 @@ function collectUnusedWorkspaceDependencyIssues(options: {
 
         const issue = {
           dependencyName: dependency.name,
+          externalCode: field,
           packageJsonPath,
         };
 
@@ -594,6 +597,7 @@ export function collectUnusedSourceFileIssues(options: {
   return [...filePaths]
     .sort((left, right) => left.localeCompare(right))
     .map((filePath) => ({
+      externalCode: 'files' as const,
       filePath,
     }));
 }

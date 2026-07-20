@@ -29,6 +29,7 @@ export const LIMINA_CHECK_ISSUE_CODES = {
   packageCheckFailed: 'LIMINA_PACKAGE_CHECK_FAILED',
   packageManifestInvalid: 'LIMINA_PACKAGE_MANIFEST_INVALID',
   packagePublint: 'LIMINA_PACKAGE_PUBLINT',
+  /** @deprecated Historical alias. New command issues use LIMINA_COMMAND_FAILED. */
   pipelineCommandFailed: 'LIMINA_PIPELINE_COMMAND_FAILED',
   proofAllowlistInvalid: 'LIMINA_PROOF_ALLOWLIST_INVALID',
   proofCheckerCoverageInvalid: 'LIMINA_PROOF_CHECKER_COVERAGE_INVALID',
@@ -75,13 +76,20 @@ export const LIMINA_CHECK_ISSUE_CODES = {
 export type LiminaCheckIssueCode =
   (typeof LIMINA_CHECK_ISSUE_CODES)[keyof typeof LIMINA_CHECK_ISSUE_CODES];
 
+export type LiminaWritableCheckIssueCode = Exclude<
+  LiminaCheckIssueCode,
+  typeof LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed
+>;
+
 export interface LiminaCheckIssueRuleMetadata {
   code: LiminaCheckIssueCode;
   description: string;
   task: LiminaCheckTaskName;
 }
 
-const LIMINA_CHECK_ISSUE_RULE_METADATA = {
+const LIMINA_CHECK_ISSUE_RULE_METADATA: Readonly<
+  Record<LiminaCheckIssueCode, LiminaCheckIssueRuleMetadata>
+> = {
   [LIMINA_CHECK_ISSUE_CODES.checkerBuildFailed]: {
     code: LIMINA_CHECK_ISSUE_CODES.checkerBuildFailed,
     description: 'Checker build execution failed for one or more targets.',
@@ -218,7 +226,8 @@ const LIMINA_CHECK_ISSUE_RULE_METADATA = {
   },
   [LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed]: {
     code: LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed,
-    description: 'A configured pipeline command failed.',
+    description:
+      'Deprecated legacy alias for command failures; new issues use LIMINA_COMMAND_FAILED.',
     task: 'command',
   },
   [LIMINA_CHECK_ISSUE_CODES.proofAllowlistInvalid]: {
@@ -404,11 +413,18 @@ const LIMINA_CHECK_ISSUE_RULE_METADATA = {
       'Multiple activated package roots resolve to the same physical directory.',
     task: 'workspace:validate',
   },
-} satisfies Record<LiminaCheckIssueCode, LiminaCheckIssueRuleMetadata>;
+};
+
+const LIMINA_CHECK_ISSUE_CODE_VALUES: readonly LiminaCheckIssueCode[] =
+  Object.values(LIMINA_CHECK_ISSUE_CODES);
 
 const LIMINA_CHECK_ISSUE_CODE_SET: ReadonlySet<string> = new Set(
-  Object.values(LIMINA_CHECK_ISSUE_CODES),
+  LIMINA_CHECK_ISSUE_CODE_VALUES,
 );
+
+const RETIRED_LIMINA_CHECK_ISSUE_CODE_SET: ReadonlySet<string> = new Set([
+  LIMINA_CHECK_ISSUE_CODES.pipelineCommandFailed,
+]);
 
 export function isLiminaCheckIssueCode(
   code: string,
@@ -416,8 +432,17 @@ export function isLiminaCheckIssueCode(
   return LIMINA_CHECK_ISSUE_CODE_SET.has(code);
 }
 
-export function listLiminaCheckIssueCodes(): readonly string[] {
-  return [...LIMINA_CHECK_ISSUE_CODE_SET].sort();
+export function listLiminaCheckIssueCodes(): readonly LiminaCheckIssueCode[] {
+  return [...LIMINA_CHECK_ISSUE_CODE_VALUES].sort();
+}
+
+export function isWritableLiminaCheckIssueCode(
+  code: string,
+): code is LiminaWritableCheckIssueCode {
+  return (
+    isLiminaCheckIssueCode(code) &&
+    !RETIRED_LIMINA_CHECK_ISSUE_CODE_SET.has(code)
+  );
 }
 
 export function getLiminaCheckIssueRuleMetadata(
@@ -434,6 +459,49 @@ export function listLiminaCheckIssueRuleMetadata(): readonly LiminaCheckIssueRul
   );
 }
 
-export function defaultTaskFailureCode(task: LiminaCheckTaskName): string {
-  return `LIMINA_${task.replaceAll(/[:.-]/gu, '_').toUpperCase()}_FAILED`;
+export function assertIssueTaskMatchesCode(
+  code: LiminaCheckIssueCode,
+  task: LiminaCheckTaskName,
+): void {
+  const expectedTask = getLiminaCheckIssueRuleMetadata(code).task;
+
+  if (task !== expectedTask) {
+    throw new Error(
+      `Issue code ${code} belongs to ${expectedTask}, not ${task}.`,
+    );
+  }
+}
+
+export function assertWritableLiminaCheckIssueCode(
+  code: string,
+): asserts code is LiminaWritableCheckIssueCode {
+  if (!isLiminaCheckIssueCode(code)) {
+    throw new Error(`Unknown canonical Limina issue code: ${code}.`);
+  }
+
+  if (!isWritableLiminaCheckIssueCode(code)) {
+    throw new Error(`Retired Limina issue code is read-only: ${code}.`);
+  }
+}
+
+export const DEFAULT_ISSUE_CODE_BY_TASK: Readonly<
+  Record<LiminaCheckTaskName, LiminaWritableCheckIssueCode>
+> = {
+  'checker:build': LIMINA_CHECK_ISSUE_CODES.checkerBuildFailed,
+  'checker:typecheck': LIMINA_CHECK_ISSUE_CODES.checkerTypecheckFailed,
+  command: LIMINA_CHECK_ISSUE_CODES.commandFailed,
+  'graph:check': LIMINA_CHECK_ISSUE_CODES.graphCheckFailed,
+  'graph:materialize': LIMINA_CHECK_ISSUE_CODES.graphMaterializeFailed,
+  'graph:prepare': LIMINA_CHECK_ISSUE_CODES.graphPrepareFailed,
+  'package:check': LIMINA_CHECK_ISSUE_CODES.packageCheckFailed,
+  'proof:check': LIMINA_CHECK_ISSUE_CODES.proofCheckFailed,
+  'release:check': LIMINA_CHECK_ISSUE_CODES.releaseCheckFailed,
+  'source:check': LIMINA_CHECK_ISSUE_CODES.sourceCheckFailed,
+  'workspace:validate': LIMINA_CHECK_ISSUE_CODES.workspaceValidationFailed,
+};
+
+export function defaultTaskFailureCode(
+  task: LiminaCheckTaskName,
+): LiminaWritableCheckIssueCode {
+  return DEFAULT_ISSUE_CODE_BY_TASK[task];
 }
