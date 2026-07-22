@@ -14,9 +14,7 @@ export default defineDetectorFixture({
     issues: [
       {
         code: LIMINA_CHECK_ISSUE_CODES.graphConfigInvalid,
-        evidence: [
-          { label: 'field', value: 'graph.conditionDomains[0].name' },
-        ],
+        evidence: [{ label: 'field', value: 'graph.conditionDomains[0].name' }],
         filePath: 'limina.config.mts',
         task: 'graph:check',
       },

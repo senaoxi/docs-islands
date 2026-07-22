@@ -1,3 +1,19 @@
-import { getReleaseDetectorFixture } from '../../../../integration/helpers/release-detector-fixtures';
+import { defineDetectorFixture } from '../../../../integration/helpers/detector-fixture-types';
 
-export default getReleaseDetectorFixture('release/tarball-valid');
+export default defineDetectorFixture({
+  command: ['check', 'detector'],
+  copyPolicy: {
+    excludedNames: [],
+    includeBuildInfoFiles: false,
+    includeOutputDirectories: true,
+  },
+  expected: {
+    additionalCodes: [],
+    exitCode: 0,
+    issues: [],
+  },
+  id: 'release/tarball-valid',
+  kind: 'filesystem',
+  setup: [],
+  tools: [],
+});

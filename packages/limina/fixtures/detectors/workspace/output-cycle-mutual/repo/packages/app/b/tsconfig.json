@@ -1,7 +1,7 @@
 {
   "liminaOptions": {
     "outputs": {
-      "outDir": "../a"
-    }
-  }
+      "outDir": "../a",
+    },
+  },
 }

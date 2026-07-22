@@ -14,7 +14,8 @@ export default {
           deps: [
             {
               name: 'node:*',
-              reason: 'browser-facing runtime code must not import Node builtins',
+              reason:
+                'browser-facing runtime code must not import Node builtins',
             },
           ],
         },
