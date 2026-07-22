@@ -1,5 +1,6 @@
 import { defineDetectorFixture } from '../../../../integration/helpers/detector-fixture-types';
 import { createReleaseContentDiffEvidenceLine } from '../../../../integration/helpers/release-detector-assertions';
+import { createReleaseOutputFileSetup } from '../../../../integration/helpers/release-fixture-output';
 import { LIMINA_CHECK_ISSUE_CODES } from '../../../../src/check-reporting/codes';
 
 export default defineDetectorFixture({
@@ -115,6 +116,13 @@ export default defineDetectorFixture({
       },
     },
   },
-  setup: [],
+  setup: [
+    createReleaseOutputFileSetup({
+      content: 'export const value = 2;\n',
+      fileName: 'index.js',
+      overwrite: true,
+      packageName: 'dependency',
+    }),
+  ],
   tools: [],
 });

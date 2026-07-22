@@ -1,4 +1,5 @@
 import { defineDetectorFixture } from '../../../../integration/helpers/detector-fixture-types';
+import { createReleaseOutputPackageSetup } from '../../../../integration/helpers/release-fixture-output';
 import { LIMINA_CHECK_ISSUE_CODES } from '../../../../src/check-reporting/codes';
 
 export default defineDetectorFixture({
@@ -44,6 +45,6 @@ export default defineDetectorFixture({
   },
   id: 'release/packed-manifest-lint',
   kind: 'external-tool',
-  setup: [],
+  setup: [createReleaseOutputPackageSetup({ license: false })],
   tools: ['npm-package-json-lint'],
 });

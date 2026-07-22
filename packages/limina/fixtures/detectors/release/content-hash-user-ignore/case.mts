@@ -1,4 +1,5 @@
 import { defineDetectorFixture } from '../../../../integration/helpers/detector-fixture-types';
+import { createReleaseOutputFileSetup } from '../../../../integration/helpers/release-fixture-output';
 
 export default defineDetectorFixture({
   command: ['check', 'detector'],
@@ -71,6 +72,12 @@ export default defineDetectorFixture({
       },
     },
   },
-  setup: [],
+  setup: [
+    createReleaseOutputFileSetup({
+      content: 'export const generated = true;\n',
+      fileName: 'generated.js',
+      packageName: 'dependency',
+    }),
+  ],
   tools: [],
 });

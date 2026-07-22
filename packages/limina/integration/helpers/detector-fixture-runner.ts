@@ -39,6 +39,7 @@ import {
   type RecordedRegistryRequest,
   startLocalRegistryFixture,
 } from './local-registry';
+import { materializeReleaseFixtureOutputs } from './release-fixture-output';
 import { liminaBinPath, runLimina, type RunLiminaResult } from './run-limina';
 import { createFixtureToolBridges } from './tool-bridge';
 
@@ -489,13 +490,25 @@ export async function runDetectorFixture(
     | Awaited<ReturnType<typeof captureTreeSnapshot>>
     | undefined;
   let primaryError: unknown;
+  const shouldMaterializeReleaseOutputs =
+    fixture.id.startsWith('release/') &&
+    fixture.definition.copyPolicy?.includeOutputDirectories === true;
+  const copyPolicy = shouldMaterializeReleaseOutputs
+    ? {
+        ...fixture.definition.copyPolicy,
+        includeOutputDirectories: false,
+      }
+    : fixture.definition.copyPolicy;
 
   try {
     await copyFixtureRepository({
       destinationRoot: sandbox.repoRoot,
-      policy: fixture.definition.copyPolicy,
+      policy: copyPolicy,
       sourceRoot: fixture.repoSourceRoot,
     });
+    if (shouldMaterializeReleaseOutputs) {
+      await materializeReleaseFixtureOutputs({ repoRoot: sandbox.repoRoot });
+    }
     await requireConfigFile(configPath, fixture.id);
     await applyFixtureSetup({
       fixtureId: fixture.id,

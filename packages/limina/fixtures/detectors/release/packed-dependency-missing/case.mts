@@ -1,4 +1,5 @@
 import { defineDetectorFixture } from '../../../../integration/helpers/detector-fixture-types';
+import { createReleaseOutputPackageSetup } from '../../../../integration/helpers/release-fixture-output';
 import { LIMINA_CHECK_ISSUE_CODES } from '../../../../src/check-reporting/codes';
 
 export default defineDetectorFixture({
@@ -100,6 +101,6 @@ export default defineDetectorFixture({
       },
     },
   },
-  setup: [],
+  setup: [createReleaseOutputPackageSetup({})],
   tools: [],
 });

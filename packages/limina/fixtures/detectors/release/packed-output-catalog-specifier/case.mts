@@ -1,4 +1,5 @@
 import { defineDetectorFixture } from '../../../../integration/helpers/detector-fixture-types';
+import { createReleaseOutputPackageSetup } from '../../../../integration/helpers/release-fixture-output';
 import { LIMINA_CHECK_ISSUE_CODES } from '../../../../src/check-reporting/codes';
 
 export default defineDetectorFixture({
@@ -46,6 +47,10 @@ export default defineDetectorFixture({
   },
   id: 'release/packed-output-catalog-specifier',
   kind: 'filesystem',
-  setup: [],
+  setup: [
+    createReleaseOutputPackageSetup({
+      dependencies: { '@fixture/release-dependency': 'catalog:default' },
+    }),
+  ],
   tools: [],
 });
