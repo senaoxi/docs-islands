@@ -15,7 +15,7 @@
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "workspace:*",
     "rollup-plugin-license": "catalog:dev",
-    "logaria": "catalog:prod",
+    "logaria": "catalog:dev",
     "rolldown": "catalog:dev",
     "del-cli": "catalog:dev",
     "typescript": "catalog:dev"

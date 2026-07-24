@@ -49,8 +49,7 @@
     "htmlparser2": "catalog:dev",
     "magic-string": "catalog:dev",
     "markdown-it": "catalog:dev",
-    "pathe": "catalog:dev",
-    "logaria": "catalog:prod"
+    "pathe": "catalog:dev"
   },
   "devDependencies": {
     "@types/babel__generator": "catalog:dev",
@@ -62,6 +61,7 @@
     "@types/markdown-it": "catalog:dev",
     "@types/react": "catalog:dev",
     "@typescript-eslint/parser": "catalog:lint",
+    "logaria": "catalog:dev",
     "del-cli": "catalog:dev",
     "eslint": "catalog:lint",
     "globals": "catalog:test",

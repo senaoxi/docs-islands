@@ -13,13 +13,11 @@
     "build:watch": "rolldown --config rolldown.config.ts --watch",
     "clean": "del-cli .tsbuild dist node_modules"
   },
-  "dependencies": {
-    "logaria": "catalog:prod"
-  },
   "devDependencies": {
     "@types/node": "catalog:dev",
     "@docs-islands/utils": "workspace:*",
     "del-cli": "catalog:dev",
+    "logaria": "catalog:dev",
     "rolldown": "catalog:dev",
     "rolldown-plugin-dts": "catalog:dev",
     "tsx": "catalog:dev",

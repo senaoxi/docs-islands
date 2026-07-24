@@ -97,6 +97,7 @@ catalogs:
     yaml: ^2.9.0
     zod: ^4.3.6
     shescape: ^2.1.13
+    logaria: 0.0.3
   docs-dev:
     '@nolebase/vitepress-plugin-enhanced-mark': ^2.18.2
     '@types/http-proxy': ^1.17.16
@@ -139,7 +140,6 @@ catalogs:
   prod:
     cheerio: ^1.2.0
     ignore: ^7.0.6
-    logaria: 0.0.3
     oxc-parser: ^0.138.0
     oxc-resolver: ^11.23.0
     picomatch: ^4.0.5

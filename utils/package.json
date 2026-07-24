@@ -21,7 +21,6 @@
     "clean": "del-cli .tsbuild .eslintcache dist node_modules"
   },
   "dependencies": {
-    "logaria": "catalog:prod",
     "tinyglobby": "catalog:prod"
   },
   "devDependencies": {
@@ -38,6 +37,7 @@
     "is-in-ci": "catalog:dev",
     "zod": "catalog:dev",
     "del-cli": "catalog:dev",
+    "logaria": "catalog:dev",
     "vite": "catalog:prod",
     "vitest": "catalog:test"
   },

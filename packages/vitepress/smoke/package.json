@@ -10,7 +10,6 @@
     "clean": "del-cli .tsbuild .eslintcache node_modules"
   },
   "dependencies": {
-    "logaria": "catalog:prod",
     "cheerio": "catalog:prod",
     "vue": "catalog:prod"
   },
@@ -21,6 +20,7 @@
     "@typescript-eslint/parser": "catalog:lint",
     "@vitejs/plugin-react-swc": "catalog:dev",
     "@playwright/test": "catalog:test",
+    "logaria": "catalog:dev",
     "del-cli": "catalog:dev",
     "eslint": "catalog:lint",
     "globals": "catalog:test",

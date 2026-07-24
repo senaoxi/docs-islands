@@ -27,8 +27,7 @@
   "dependencies": {
     "react": "catalog:dev",
     "react-dom": "catalog:dev",
-    "vue": "catalog:prod",
-    "logaria": "catalog:prod"
+    "vue": "catalog:prod"
   },
   "devDependencies": {
     "@types/react": "catalog:dev",
@@ -38,6 +37,7 @@
     "@types/node": "catalog:dev",
     "typescript": "catalog:dev",
     "vue-tsc": "catalog:dev",
+    "logaria": "catalog:dev",
     "vitepress": "catalog:frameworks",
     "vitepress-plugin-group-icons": "catalog:docs-dev",
     "vitepress-plugin-llms": "catalog:docs-dev",
