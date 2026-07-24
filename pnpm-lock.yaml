@@ -103,6 +103,9 @@ catalogs:
     lint-staged:
       specifier: ^16.1.5
       version: 16.2.6
+    logaria:
+      specifier: 0.0.3
+      version: 0.0.3
     magic-string:
       specifier: ^0.30.17
       version: 0.30.21
@@ -270,9 +273,6 @@ catalogs:
     cheerio:
       specifier: ^1.2.0
       version: 1.2.0
-    logaria:
-      specifier: 0.0.3
-      version: 0.0.3
     picomatch:
       specifier: ^4.0.5
       version: 4.0.5
@@ -497,10 +497,6 @@ importers:
         specifier: catalog:dev
         version: 3.2.4(typescript@6.0.3)
   packages/agents:
-    dependencies:
-      logaria:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
     devDependencies:
       '@docs-islands/utils':
         specifier: workspace:*
@@ -511,6 +507,9 @@ importers:
       del-cli:
         specifier: catalog:dev
         version: 7.0.0
+      logaria:
+        specifier: catalog:dev
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       rolldown:
         specifier: catalog:dev
         version: 1.1.4
@@ -540,9 +539,6 @@ importers:
       htmlparser2:
         specifier: catalog:dev
         version: 10.1.0
-      logaria:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       magic-string:
         specifier: catalog:dev
         version: 0.30.21
@@ -589,6 +585,9 @@ importers:
       jsdom:
         specifier: catalog:test
         version: 28.0.0(supports-color@7.2.0)
+      logaria:
+        specifier: catalog:dev
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       rolldown:
         specifier: catalog:dev
         version: 1.1.4
@@ -844,7 +843,7 @@ importers:
         specifier: catalog:lint
         version: 9.39.2(jiti@2.7.0)
       logaria:
-        specifier: catalog:prod
+        specifier: catalog:dev
         version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       rolldown:
         specifier: catalog:dev
@@ -1001,9 +1000,6 @@ importers:
         version: 3.2.4(typescript@6.0.3)
   packages/vitepress/docs:
     dependencies:
-      logaria:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -1050,6 +1046,9 @@ importers:
       is-in-ci:
         specifier: catalog:dev
         version: 2.0.0
+      logaria:
+        specifier: catalog:dev
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       pathe:
         specifier: catalog:dev
         version: 2.0.3
@@ -1160,9 +1159,6 @@ importers:
       cheerio:
         specifier: catalog:prod
         version: 1.2.0
-      logaria:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       vue:
         specifier: catalog:prod
         version: 3.5.39(typescript@6.0.3)
@@ -1191,6 +1187,9 @@ importers:
       globals:
         specifier: catalog:test
         version: 17.3.0
+      logaria:
+        specifier: catalog:dev
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -1208,9 +1207,6 @@ importers:
         version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@22.18.0)(@types/react@18.3.26)(axios@1.18.0)(change-case@5.4.4)(less@4.4.2)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@6.0.3)
   utils:
     dependencies:
-      logaria:
-        specifier: catalog:prod
-        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       tinyglobby:
         specifier: catalog:prod
         version: 0.2.17
@@ -1242,6 +1238,9 @@ importers:
       is-in-ci:
         specifier: catalog:dev
         version: 2.0.0
+      logaria:
+        specifier: catalog:dev
+        version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)
       pathe:
         specifier: catalog:dev
         version: 2.0.3
@@ -8742,7 +8741,7 @@ snapshots:
       '@babel/helpers': 7.29.7
       '@babel/parser': 7.29.7
       '@babel/template': 7.29.7
-      '@babel/traverse': 7.29.7(supports-color@7.2.0)
+      '@babel/traverse': 7.29.7
       '@babel/types': 7.29.7
       '@jridgewell/remapping': 2.3.5
       convert-source-map: 2.0.0
@@ -8785,7 +8784,7 @@ snapshots:
   '@babel/helper-globals@7.29.7': {}
   '@babel/helper-module-imports@7.29.7':
     dependencies:
-      '@babel/traverse': 7.29.7(supports-color@7.2.0)
+      '@babel/traverse': 7.29.7
       '@babel/types': 7.29.7
     transitivePeerDependencies:
     - supports-color
@@ -8794,7 +8793,7 @@ snapshots:
       '@babel/core': 7.29.7(supports-color@7.2.0)
       '@babel/helper-module-imports': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
-      '@babel/traverse': 7.29.7(supports-color@7.2.0)
+      '@babel/traverse': 7.29.7
     transitivePeerDependencies:
     - supports-color
   '@babel/helper-string-parser@7.27.1': {}
@@ -8821,7 +8820,7 @@ snapshots:
     dependencies:
       '@babel/code-frame': 7.29.0
       '@babel/parser': 7.29.7
-      '@babel/types': 7.29.0
+      '@babel/types': 7.29.7
   '@babel/template@7.29.7':
     dependencies:
       '@babel/code-frame': 7.29.7
@@ -8838,7 +8837,7 @@ snapshots:
       debug: 4.4.3(supports-color@7.2.0)
     transitivePeerDependencies:
     - supports-color
-  '@babel/traverse@7.29.7(supports-color@7.2.0)':
+  '@babel/traverse@7.29.7':
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/generator': 7.29.7
@@ -10213,7 +10212,7 @@ snapshots:
   '@vue/compiler-core@3.5.28':
     dependencies:
       '@babel/parser': 7.29.7
-      '@babel/types': 7.29.0
+      '@babel/types': 8.0.0
       '@vue/shared': 3.5.28
       entities: 7.0.1
       estree-walker: 2.0.2
@@ -10221,7 +10220,7 @@ snapshots:
   '@vue/compiler-core@3.5.35':
     dependencies:
       '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
+      '@babel/types': 8.0.0
       '@vue/shared': 3.5.35
       entities: 7.0.1
       estree-walker: 2.0.2
@@ -11938,9 +11937,9 @@ snapshots:
       wrap-ansi: 9.0.2
   logaria@0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4):
     dependencies:
-      '@babel/parser': 7.29.0
-      '@babel/traverse': 7.29.0(supports-color@7.2.0)
-      '@babel/types': 7.29.0
+      '@babel/parser': 7.29.7
+      '@babel/traverse': 7.29.7
+      '@babel/types': 7.29.7
       picocolors: 1.1.1
       picomatch: 4.0.4
       unplugin: 3.0.0

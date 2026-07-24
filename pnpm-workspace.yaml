@@ -84,6 +84,7 @@ catalogs:
     '@pnpm/exportable-manifest': 1000.4.2
     yaml: ^2.9.0
     zod: ^4.3.6
+    logaria: 0.0.3
   docs-dev:
     '@nolebase/vitepress-plugin-enhanced-mark': ^2.18.2
     '@types/http-proxy': ^1.17.16
@@ -120,7 +121,6 @@ catalogs:
     yaml-eslint-parser: ^2.0.0
   prod:
     cheerio: ^1.2.0
-    logaria: 0.0.3
     picomatch: ^4.0.5
     tinyglobby: ^0.2.17
     unplugin: ^3.0.0

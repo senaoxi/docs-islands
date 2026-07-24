@@ -12,14 +12,20 @@ const { config } = loadEnv();
 const { sourcemap, minify } = config;
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
+interface PackageManifest {
+  readonly dependencies?: Readonly<Record<string, string>>;
+  readonly name: string;
+  readonly optionalDependencies?: Readonly<Record<string, string>>;
+  readonly peerDependencies?: Readonly<Record<string, string>>;
+}
+
 let hasCleanedDist = false;
+const manifest: PackageManifest = pkg;
 
 const externalDeps = [
-  ...Object.keys(pkg.dependencies || {}),
-  // @ts-expect-error No type checking is needed here.
-  ...Object.keys(pkg.peerDependencies ?? {}),
-  // @ts-expect-error No type checking is needed here.
-  ...Object.keys(pkg.optionalDependencies ?? {}),
+  ...Object.keys(manifest.dependencies ?? {}),
+  ...Object.keys(manifest.peerDependencies ?? {}),
+  ...Object.keys(manifest.optionalDependencies ?? {}),
 ];
 const isExternalDependency = (id: string): boolean =>
   isNodeLikeBuiltin(id) ||

@@ -7,7 +7,7 @@ import {
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { escapePath, glob, isDynamicPattern } from 'tinyglobby';
-import { findMonorepoRoot } from './path.js';
+import { findMonorepoRoot } from './path.ts';
 
 export type DependencyMap = Record<string, string>;
 export type CatalogMap = Record<string, DependencyMap>;
