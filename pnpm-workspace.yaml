@@ -230,3 +230,6 @@ trustPolicyExclude:
   - semver
 
 verifyDepsBeforeRun: install
+minimumReleaseAgeExclude:
+  # Renovate security update: shescape@2.1.14
+  - shescape@2.1.14
