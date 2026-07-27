@@ -61,7 +61,7 @@
   "dependencies": {
     "logaria": "workspace:*",
     "cheerio": "catalog:prod",
-    "vite": "catalog:prod"
+    "vite": "catalog:docs-dev"
   },
   "devDependencies": {
     "@babel/generator": "catalog:dev",

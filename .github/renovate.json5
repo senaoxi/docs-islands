@@ -1,12 +1,19 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:recommended", "schedule:weekly", "group:allNonMajor"],
+  dependencyDashboard: true,
   labels: ["dependencies", "automated"],
-  ignorePaths: ["**/__tests__/**", "**/dist/**"],
+  ignorePaths: ["**/__tests__/**", "**/dist/**", "**/fixtures/**"],
   rangeStrategy: "bump",
   postUpdateOptions: ["pnpmDedupe"],
+  vulnerabilityAlerts: {
+    minimumReleaseAge: "1440 minutes",
+    internalChecksFilter: "strict"
+  },
   packageRules: [
     {
+      description: "Do not automatically change workspace peer dependency contracts",
+      matchManagers: ["npm"],
       matchDepTypes: ["peerDependencies"],
       enabled: false
     },
@@ -15,42 +22,26 @@
       pinDigests: true
     },
     {
-      matchDepTypes: ["npm"],
-      minimumReleaseAge: "1440 minutes"
+      matchDatasources: ["npm"],
+      minimumReleaseAge: "1440 minutes",
+      internalChecksFilter: "strict"
     },
     {
-      groupName: "vite 5 maintenance",
+      description: "Keep current Vite v5 dependencies on the v5 release line",
+      matchManagers: ["npm"],
       matchPackageNames: ["vite"],
-      matchFileNames: ["pnpm-workspace.yaml"],
-      allowedVersions: "<6.0.0"
+      matchCurrentVersion: ">=5.0.0 <6.0.0",
+      allowedVersions: ">=5.0.0 <6.0.0"
     },
     {
       groupName: "typescript-checker toolchain",
       matchDepNames: [
         "typescript",
         "vue-tsc",
-        "vue-tsgo",
         "@typescript/native-preview",
-        "@types/node",
-        "rolldown-plugin-dts",
-        "oxc-resolver",
-        "oxc-*",
-        "@oxc-project/*"
+        "@types/node"
       ],
       dependencyDashboardApproval: true
-    },
-    {
-      groupName: "vitepress documentation stack",
-      matchDepNames: [
-        "vite",
-        "vitepress",
-        "@vitejs/*",
-        "@vue/*",
-        "vue",
-        "vue-router",
-        "vitepress-plugin-*",
-        "@nolebase/*"
-      ]
     },
     {
       groupName: "development tooling",

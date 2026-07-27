@@ -60,7 +60,6 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "vite": "catalog:prod",
     "tinyglobby": "catalog:prod"
   },
   "devDependenciesComments": {

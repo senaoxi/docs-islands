@@ -62,6 +62,8 @@ function runPnpm(
 }
 
 async function main(): Promise<void> {
+  // The build of @docs-islands/agents subpackage depends on
+  // the build of the upstream packages and uses Nx to maintain the build dependency order.
   await runPnpm(['nx', 'run', '@docs-islands/agents:build'], {
     env: {
       ...process.env,

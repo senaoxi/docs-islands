@@ -29,7 +29,7 @@
     "typescript": "catalog:dev",
     "react": "catalog:dev",
     "react-dom": "catalog:dev",
-    "vite": "catalog:prod",
+    "vite": "catalog:docs-dev",
     "vitepress": "catalog:frameworks",
     "@docs-islands/vitepress": "link:../dist",
     "@vitejs/plugin-react-swc": "catalog:dev",

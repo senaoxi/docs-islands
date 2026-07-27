@@ -44,7 +44,7 @@
     "@nolebase/vitepress-plugin-enhanced-mark": "catalog:docs-dev",
     "@docs-islands/vitepress": "link:../dist",
     "@docs-islands/utils": "workspace:*",
-    "vite": "catalog:prod",
+    "vite": "catalog:docs-dev",
     "@vitejs/plugin-react-swc": "catalog:dev",
     "@vercel/analytics": "catalog:docs-dev",
     "vue-router": "catalog:dev",

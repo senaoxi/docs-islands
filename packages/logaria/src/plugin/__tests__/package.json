@@ -11,7 +11,7 @@
     "esbuild": "catalog:dev",
     "rolldown": "catalog:dev",
     "rollup": "catalog:dev",
-    "vite": "catalog:prod",
+    "vite": "catalog:docs-dev",
     "vitest": "catalog:test",
     "webpack": "catalog:dev"
   }
