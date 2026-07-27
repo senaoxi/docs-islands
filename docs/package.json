@@ -28,7 +28,7 @@
     "vue-tsc": "catalog:dev",
     "http-proxy": "catalog:docs-dev",
     "magic-string": "catalog:dev",
-    "vite": "catalog:prod",
+    "vite": "catalog:docs-dev",
     "@docs-islands/utils": "workspace:*",
     "picocolors": "catalog:dev",
     "picomatch": "catalog:prod",

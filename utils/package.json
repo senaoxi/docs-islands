@@ -37,7 +37,7 @@
     "zod": "catalog:dev",
     "del-cli": "catalog:dev",
     "logaria": "catalog:dev",
-    "vite": "catalog:prod",
+    "vite": "catalog:dev",
     "vitest": "catalog:test"
   },
   "exports": {

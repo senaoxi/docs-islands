@@ -1,0 +1,26 @@
+name: Update Dependencies
+
+on:
+  schedule:
+    - cron: "0 3 * * 3" # Wednesdays 03:00 UTC (offset from Renovate's Monday schedule)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    if: github.repository == 'senaoxi/docs-islands'
+    steps:
+      - uses: pnpm/setup@v1
+      - uses: pnpm/update@v0
+        with:
+          # Renovate handles individual package version bumps;
+          # this job focuses on lockfile refresh + pnpm/Node.js version tracking.
+          update-deps: false
+          changesets: false
+          verify: |
+            pnpm build
+            pnpm test:unit

@@ -1,0 +1,31 @@
+name: autofix.ci
+
+env:
+  # Reduce memory usage - 4GB is typically sufficient
+  NODE_OPTIONS: --max-old-space-size=4096
+  NODE_VERSION: "22.18.0"
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          # Fetch full history for change detection
+          fetch-depth: 0
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Format
+        run: pnpm format
+
+      - uses: autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a
