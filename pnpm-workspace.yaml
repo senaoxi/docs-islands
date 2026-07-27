@@ -96,7 +96,7 @@ catalogs:
     '@pnpm/exportable-manifest': 1000.4.2
     yaml: ^2.9.0
     zod: ^4.3.6
-    shescape: ^2.1.13
+    shescape: ^2.1.14
     logaria: 0.0.3
     vite: ^8.1.5
   docs-dev:
