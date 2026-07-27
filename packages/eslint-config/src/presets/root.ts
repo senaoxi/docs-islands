@@ -148,7 +148,12 @@ const config: Config = [
     languageOptions: { parser: await import('yaml-eslint-parser') },
     plugins: { pnpm: eslintPluginPnpm },
     rules: {
-      'pnpm/yaml-no-duplicate-catalog-item': 'error',
+      'pnpm/yaml-no-duplicate-catalog-item': [
+        'error',
+        {
+          allow: ['vite'],
+        },
+      ],
       'pnpm/yaml-no-unused-catalog-item': 'error',
     },
   },
