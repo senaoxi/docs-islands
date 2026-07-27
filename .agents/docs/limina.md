@@ -197,6 +197,8 @@ The package can refactor internal modules without changing users when the public
 
 Limina can execute commands and configured pipelines, but its exported dependency graph is not sufficient to act as a general task graph or build-order authority.
 
+CLI process tests must keep commands that mutate the same `.limina` artifact namespace sequential. Once an invocation record or completed check snapshot exists, independent `check --issues` queries are read-only and can run concurrently; this avoids making fixed per-test budgets depend on repeated development-entry cold starts on slower CI platforms.
+
 ## Human direction requiring confirmation
 
 The supplied Codex memory contains repeated user instructions that are not implementation proof. They are recorded here as unvouched direction requiring human review:
