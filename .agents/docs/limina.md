@@ -92,6 +92,8 @@ The built-in checker adapters currently have two execution classes:
 
 `checker:build` runs build-capable adapters. `checker:typecheck` runs typecheck-only adapters. A checker being available as a preset does not mean it is active in the current repository configuration.
 
+The repository's `limina:typecheck` Nx target preserves this global checker-build meaning. Its task graph declares build dependencies for the workspace projects whose published artifacts are consumed by that global checker graph, so a fresh invocation does not depend on ignored `dist` state.
+
 ### Source configs and generated graph
 
 Source-owned TypeScript configuration and Limina-generated configuration have different roles.
@@ -108,6 +110,8 @@ Generated declaration references currently come from two explicit evidence paths
 Oxc resolution is used for runtime-like import analysis, but an Oxc-only resolution does not establish a TypeScript declaration provider. When Oxc resolves a specifier and TypeScript does not, generated declaration-reference preparation reports the mismatch instead of using the Oxc result as the type graph.
 
 Cross-checker provider edges are permitted only when the implementation can select a compatible declaration provider. Generated references that cross incompatible checker build engines are rejected.
+
+Migration plans JSONC changes as parser-derived local text edits. It updates only Limina-governed schema, compiler, output, and source-reference fields while leaving unrelated comments, trailing commas, compact structures, and whitespace outside those fields intact; the existing transaction layer still owns drift checks, atomic replacement, rollback, and recovery.
 
 Graph-rule labels are read from source configuration and projected onto generated declaration projects. Configured graph rules can constrain dependency names and project references for labeled projects.
 
@@ -167,6 +171,8 @@ A completed check writes structured run and issue state under the `.limina` arti
 `limina check --issues` reads persisted state. It does not execute a fresh check. It can query the last completed check or a selected standalone invocation and filter by rule, file, scope, task, checker, or package.
 
 Current output formats are human-readable text, JSON, and NDJSON. Human output can be bounded for terminal use. Machine-readable issue output remains separate from terminal presentation.
+
+Source finding producers retain typed semantic facts. Canonical issue identity incorporates those facts internally without adding them to the public issue schema, so distinct same-location findings remain distinct while repeated observations of the same finding deduplicate to a stable issue ID. Canonical issue collection uses code-unit ordering rather than the process locale.
 
 Snapshot and profile writes use the repository's atomic writer. Profiling output is enabled only when `LIMINA_PROFILE=1`.
 
