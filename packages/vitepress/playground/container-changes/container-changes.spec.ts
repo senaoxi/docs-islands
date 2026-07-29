@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect } from 'vitest';
 
 const waitForVitePressContentRender = async () => {
   await page.waitForFunction(() => {

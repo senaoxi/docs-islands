@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "pnpm smoke",
-    "smoke": "playwright test",
+    "smoke": "vitest run",
     "typecheck": "limina checker build",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "clean": "del-cli .tsbuild .eslintcache node_modules"
@@ -19,15 +19,16 @@
     "limina": "workspace:*",
     "@typescript-eslint/parser": "catalog:lint",
     "@vitejs/plugin-react-swc": "catalog:dev",
-    "@playwright/test": "catalog:test",
     "logaria": "catalog:dev",
     "del-cli": "catalog:dev",
     "eslint": "catalog:lint",
     "globals": "catalog:test",
     "react": "catalog:dev",
     "react-dom": "catalog:dev",
+    "playwright-chromium": "catalog:test",
     "tsx": "catalog:dev",
     "typescript": "catalog:dev",
-    "vitepress": "catalog:frameworks"
+    "vitepress": "catalog:frameworks",
+    "vitest": "catalog:test"
   }
 }

@@ -1,8 +1,8 @@
-import { expect, test } from '@playwright/test';
 import { createElapsedTimer } from 'logaria/helper';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { expect, test } from 'vitest';
 import {
   assertDistArtifacts,
   assertNoManagedLoggerSpecifier,

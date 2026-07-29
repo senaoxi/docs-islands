@@ -94,7 +94,6 @@
     "vue-json-pretty": "catalog:dev",
     "shiki": "catalog:dev",
     "pathe": "catalog:dev",
-    "playwright-chromium": "catalog:test",
     "picocolors": "catalog:dev",
     "react": "catalog:dev",
     "react-dom": "catalog:dev",

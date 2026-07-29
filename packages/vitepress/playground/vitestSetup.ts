@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Browser, chromium } from 'playwright-chromium';
 import { glob } from 'tinyglobby';
+import './test-utils/playwright-matchers';
 
 let browser: Browser;
 let allowRuntimeFailures = false;

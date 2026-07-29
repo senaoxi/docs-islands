@@ -62,9 +62,6 @@
   "dependencies": {
     "tinyglobby": "catalog:prod"
   },
-  "devDependenciesComments": {
-    "@playwright/test": "It ensures CI can execute playwright commands."
-  },
   "devDependencies": {
     "@types/node": "catalog:dev",
     "@types/prompts": "catalog:dev",
@@ -88,8 +85,7 @@
     "del-cli": "catalog:dev",
     "husky": "catalog:dev",
     "concurrently": "catalog:dev",
-    "yaml": "catalog:dev",
-    "@playwright/test": "catalog:test"
+    "yaml": "catalog:dev"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,vue,mjs,cjs}": [

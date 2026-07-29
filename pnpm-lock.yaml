@@ -345,9 +345,6 @@ catalogs:
       specifier: ^3.5.39
       version: 3.5.39
   test:
-    '@playwright/test':
-      specifier: 1.58.2
-      version: 1.58.2
     '@vitest/eslint-plugin':
       specifier: ^1.6.17
       version: 1.6.17
@@ -364,8 +361,8 @@ catalogs:
       specifier: ^28.0.0
       version: 28.0.0
     playwright-chromium:
-      specifier: 1.58.2
-      version: 1.58.2
+      specifier: 1.62.0
+      version: 1.62.0
     vitest:
       specifier: 4.1.7
       version: 4.1.7
@@ -417,9 +414,6 @@ importers:
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:utils
-      '@playwright/test':
-        specifier: catalog:test
-        version: 1.58.2
       '@types/node':
         specifier: 22.18.0
         version: 22.18.0
@@ -1221,9 +1215,6 @@ importers:
       picocolors:
         specifier: catalog:dev
         version: 1.1.1
-      playwright-chromium:
-        specifier: catalog:test
-        version: 1.58.2
       prettier:
         specifier: catalog:format
         version: 3.5.3
@@ -1385,9 +1376,6 @@ importers:
       '@docs-islands/vitepress':
         specifier: link:../dist
         version: link:../dist
-      '@playwright/test':
-        specifier: catalog:test
-        version: 1.58.2
       '@types/react':
         specifier: catalog:dev
         version: 18.3.26
@@ -1411,7 +1399,7 @@ importers:
         version: link:../../limina
       playwright-chromium:
         specifier: catalog:test
-        version: 1.58.2
+        version: 1.62.0
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -1446,9 +1434,6 @@ importers:
       '@docs-islands/utils':
         specifier: workspace:*
         version: link:../../../utils
-      '@playwright/test':
-        specifier: catalog:test
-        version: 1.58.2
       '@typescript-eslint/parser':
         specifier: catalog:lint
         version: 8.62.1(eslint@9.39.2(jiti@2.7.0))(supports-color@7.2.0)(typescript@6.0.3)
@@ -1470,6 +1455,9 @@ importers:
       logaria:
         specifier: catalog:dev
         version: 0.0.3(@rollup/plugin-replace@6.0.3(rollup@4.62.2))(rolldown@1.1.4)(supports-color@7.2.0)
+      playwright-chromium:
+        specifier: catalog:test
+        version: 1.62.0
       react:
         specifier: catalog:dev
         version: 18.3.1
@@ -1485,6 +1473,9 @@ importers:
       vitepress:
         specifier: catalog:frameworks
         version: 1.6.4(patch_hash=ae56336e3fa10baaab04ac208146b4a00b0385bde11b766fc0d9bbfdc35184e3)(@algolia/client-search@5.42.0)(@types/node@22.18.0)(@types/react@18.3.26)(axios@1.18.0)(change-case@5.4.4)(less@4.4.2)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(terser@5.46.2)(typescript@6.0.3)
+      vitest:
+        specifier: catalog:test
+        version: 4.1.7(@types/node@22.18.0)(esbuild@0.28.1)(jiti@2.7.0)(jsdom@28.0.0)(less@4.4.2)(terser@5.46.2)(tsx@4.22.4)(yaml@2.9.0)
 
   utils:
     dependencies:
@@ -4198,14 +4189,6 @@ packages:
         integrity: sha512-QNqXyfVS2wm9hweSYD2O7F0G06uurj9kZ96TRQE5Y9hU7+tgdZwIkbAKc5Ocy1HxEY2kuDQa6cQ1WRs/O5LFKA==,
       }
     engines: { node: ^12.20.0 || ^14.18.0 || >=16.0.0 }
-
-  '@playwright/test@1.58.2':
-    resolution:
-      {
-        integrity: sha512-akea+6bHYBBfA9uQqSYmlJXn61cTa+jbO87xVLCWbTqbWadRVmhxlXATaOjOgcBaWU4ePo0wB41KMFv3o35IXA==,
-      }
-    engines: { node: '>=18' }
-    hasBin: true
 
   '@pnpm/catalogs.protocol-parser@1001.0.0':
     resolution:
@@ -8128,14 +8111,6 @@ packages:
       }
     engines: { node: '>=14.14' }
 
-  fsevents@2.3.2:
-    resolution:
-      {
-        integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==,
-      }
-    engines: { node: ^8.16.0 || ^10.6.0 || >=11.0.0 }
-    os: [darwin]
-
   fsevents@2.3.3:
     resolution:
       {
@@ -10543,28 +10518,20 @@ packages:
         integrity: sha512-/Jm5M4RvtBFVkKWRu2BLUTNP8/M2a+UwuAX+ae4770q1qVGtfjG+WTCupoZixokjmHiry8uI+dlY8KXYV5HVVQ==,
       }
 
-  playwright-chromium@1.58.2:
+  playwright-chromium@1.62.0:
     resolution:
       {
-        integrity: sha512-SCoQ3hjBs7FfO46CoOtgAUg77BuYwCni1bzQgm47IUyLBTipnGkLxLnaUNRKXvPYO4hAyt8++Z6wVShVnhrzmw==,
+        integrity: sha512-zigjm5a+G5PUky+O9XMnZDhHFD+SqVgdp0Kki4mU2/vtAmSGJTpl2AiumLknu5485gQLIA8PjF6VPDIALkUQlg==,
       }
-    engines: { node: '>=18' }
+    engines: { node: '>=20' }
     hasBin: true
 
-  playwright-core@1.58.2:
+  playwright-core@1.62.0:
     resolution:
       {
-        integrity: sha512-yZkEtftgwS8CsfYo7nm0KE8jsvm6i/PTgVtB8DL726wNf6H2IMsDuxCpJj59KDaxCtSnrWan2AeDqM7JBaultg==,
+        integrity: sha512-nsNRyq0r2zsG8AcRHWknc9QRA5XCueC7gWMrs+Gx2tlZn9hcl8zudfh00lhJPY1DE7NmZ6bDsT9g2yey8mXljA==,
       }
-    engines: { node: '>=18' }
-    hasBin: true
-
-  playwright@1.58.2:
-    resolution:
-      {
-        integrity: sha512-vA30H8Nvkq/cPBnNw4Q8TWz1EJyqgpuinBcHET0YVJVFldr8JDNiU9LaWAE1KqSkRYazuaBhTpB5ZzShOezQ6A==,
-      }
-    engines: { node: '>=18' }
+    engines: { node: '>=20' }
     hasBin: true
 
   plur@4.0.0:
@@ -14227,10 +14194,6 @@ snapshots:
 
   '@pkgr/core@0.2.9': {}
 
-  '@playwright/test@1.58.2':
-    dependencies:
-      playwright: 1.58.2
-
   '@pnpm/catalogs.protocol-parser@1001.0.0': {}
 
   '@pnpm/catalogs.resolver@1000.0.5':
@@ -16774,9 +16737,6 @@ snapshots:
       jsonfile: 6.2.1
       universalify: 2.0.1
 
-  fsevents@2.3.2:
-    optional: true
-
   fsevents@2.3.3:
     optional: true
 
@@ -18531,17 +18491,11 @@ snapshots:
       mlly: 1.8.0
       pathe: 2.0.3
 
-  playwright-chromium@1.58.2:
+  playwright-chromium@1.62.0:
     dependencies:
-      playwright-core: 1.58.2
+      playwright-core: 1.62.0
 
-  playwright-core@1.58.2: {}
-
-  playwright@1.58.2:
-    dependencies:
-      playwright-core: 1.58.2
-    optionalDependencies:
-      fsevents: 2.3.2
+  playwright-core@1.62.0: {}
 
   plur@4.0.0:
     dependencies:

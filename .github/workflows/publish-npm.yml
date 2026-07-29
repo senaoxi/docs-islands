@@ -90,7 +90,7 @@ jobs:
 
       - name: Install Playwright browser
         if: env.PACKAGE_SELECTOR == 'vitepress'
-        run: pnpm playwright install chromium
+        run: pnpm --filter @docs-islands/vitepress-playground exec playwright install --only-shell chromium
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "0"
 

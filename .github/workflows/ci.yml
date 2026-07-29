@@ -256,9 +256,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa024
         with:
           name: test-results-${{ matrix.name }}
-          path: |
-            test-results/
-            playwright-report/
+          path: .smoke/test-results/**
           retention-days: 7
 
   limina-atomic-writer-windows:
@@ -368,9 +366,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa024
         with:
           name: test-results-smoke
-          path: |
-            test-results/
-            playwright-report/
+          path: .smoke/test-results/**
           retention-days: 7
 
   build:

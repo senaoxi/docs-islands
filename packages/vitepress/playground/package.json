@@ -35,7 +35,6 @@
     "@vitejs/plugin-react-swc": "catalog:dev",
     "vitest": "catalog:test",
     "playwright-chromium": "catalog:test",
-    "@playwright/test": "catalog:test",
     "get-port": "catalog:test",
     "del-cli": "catalog:dev"
   }

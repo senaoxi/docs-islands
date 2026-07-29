@@ -65,6 +65,23 @@ Build tools differ by package:
 
 The repository does not use one build tool uniformly for every package.
 
+## Browser testing
+
+Browser-facing tests use the Vitest Node runner for orchestration and drive
+Chromium directly through the `playwright-chromium` library. The repository
+does not use Playwright Test, Vitest Browser Mode, or the full `playwright`
+package.
+
+The VitePress playground keeps its shared VitePress development server and
+Chromium server in Vitest global setup. Each test receives an isolated page,
+and playground-local asynchronous matchers poll real Playwright locators.
+
+The VitePress consumer smoke suite uses Vitest fixtures: Chromium is scoped to
+the worker, while the consumer installation, development server, browser
+context, and page are recreated for every test attempt. Failed browser smoke
+tests retain text diagnostics, a screenshot, and a trace as Vitest
+attachments. The MPA integration smoke remains a Node-only Vitest test.
+
 ## Limina
 
 The repository uses Limina as a development-time architecture, source, package, release, proof, and TypeScript governance tool.

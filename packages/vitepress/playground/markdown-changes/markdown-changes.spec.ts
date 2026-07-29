@@ -1,6 +1,6 @@
-import { expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { expect } from 'vitest';
 
 const originalMarkdownContent =
   '<!-- This file is used to test the HMR of markdown content changes. -->\n';

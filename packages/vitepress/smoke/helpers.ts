@@ -1,5 +1,4 @@
 import { createLogger } from '@docs-islands/utils/logger';
-import type { ConsoleMessage, Page, Request, Response } from '@playwright/test';
 import { load } from 'cheerio';
 import type { createElapsedTimer } from 'logaria/helper';
 import { formatErrorMessage } from 'logaria/helper';
@@ -10,6 +9,12 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import type {
+  ConsoleMessage,
+  Page,
+  Request,
+  Response,
+} from 'playwright-chromium';
 
 export interface DistPackageJson {
   dependencies?: Record<string, string>;
@@ -66,6 +71,12 @@ export const DIST_CLIENT_ENTRY_PATH = 'client/adapters/react.mjs';
 const MANAGED_LOGGER_SPECIFIERS = ['@docs-islands/utils/logger'] as const;
 
 export const PACKAGE_ROOT_DIR = fileURLToPath(new URL('..', import.meta.url));
+export const REPO_ROOT_DIR = path.resolve(PACKAGE_ROOT_DIR, '../..');
+export const SMOKE_RESULTS_DIR = path.join(
+  REPO_ROOT_DIR,
+  '.smoke/test-results',
+  'vitepress-smoke',
+);
 export const DIST_DIR = path.join(PACKAGE_ROOT_DIR, 'dist');
 export const LOGARIA_DIST_DIR = path.join(
   PACKAGE_ROOT_DIR,
@@ -92,6 +103,13 @@ export function getSmokeLogger(group: string): SmokeLogger {
 
 export function formatUnknownError(error: unknown): string {
   return formatErrorMessage(error);
+}
+
+export async function createSmokeArtifactPath(
+  fileName: string,
+): Promise<string> {
+  await mkdir(SMOKE_RESULTS_DIR, { recursive: true });
+  return path.join(SMOKE_RESULTS_DIR, fileName);
 }
 
 export function getPnpmCommand(): string {
