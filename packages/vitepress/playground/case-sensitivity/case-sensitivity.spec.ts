@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect } from 'vitest';
 
 describe('Case Sensitivity', () => {
   describe('PascalCase Component Matching', () => {

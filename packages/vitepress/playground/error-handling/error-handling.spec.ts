@@ -1,5 +1,5 @@
 import { loadEnv } from '@docs-islands/utils/env';
-import { expect } from '@playwright/test';
+import { expect } from 'vitest';
 import { getPlaygroundLogger } from '../test-utils/logger';
 import {
   debugElementState,

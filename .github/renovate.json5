@@ -54,7 +54,7 @@
         "@typescript-eslint/*",
         "eslint-*",
         "lint-staged",
-        "@playwright/test"
+        "playwright-chromium"
       ],
       matchUpdateTypes: ["minor", "patch"]
     }

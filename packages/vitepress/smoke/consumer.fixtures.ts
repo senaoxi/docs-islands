@@ -1,8 +1,15 @@
-import { test as base } from '@playwright/test';
+import { loadEnv } from '@docs-islands/utils/env';
 import { createElapsedTimer } from 'logaria/helper';
 import { type ChildProcess, execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  type Browser,
+  chromium,
+  devices,
+  type Page,
+} from 'playwright-chromium';
+import { test as base } from 'vitest';
 import {
   createConsumerFixture,
   formatUnknownError,
@@ -24,11 +31,17 @@ interface ConsumerServer {
   serverLogs: string[];
 }
 
-interface ConsumerSmokeWorkerFixtures {
-  consumerServer: ConsumerServer;
+interface ConsumerSmokeFixtures {
+  $test: {
+    consumerServer: ConsumerServer;
+    page: Page;
+  };
+  $worker: {
+    browser: Browser;
+  };
 }
 
-type ConsumerSmokeTestFixtures = object;
+const { ci: isCi } = loadEnv();
 
 async function writeConsumerSmokeFixtureFiles(
   fixtureDir: string,
@@ -156,96 +169,114 @@ export default function HelloWorld(): JSX.Element {
   );
 }
 
-export const test = base.extend<
-  ConsumerSmokeTestFixtures,
-  ConsumerSmokeWorkerFixtures
->({
-  consumerServer: [
-    async ({ browserName }, use) => {
-      if (browserName !== 'chromium') {
-        throw new Error(
-          `Consumer smoke only supports chromium, got ${browserName}.`,
-        );
-      }
-      const logger = getSmokeLogger('task.consumer-smoke');
-      const smokeElapsed = createElapsedTimer();
-      let cleanupPackedDist: (() => Promise<void>) | undefined;
-      let cleanupPackedLogaria: (() => Promise<void>) | undefined;
-      let cleanupFixture: (() => Promise<void>) | undefined;
-      let childProcess: ChildProcess | undefined;
-      let serverLogs: string[] = [];
+export const test = base.extend<ConsumerSmokeFixtures>({
+  browser: [
+    // Vitest requires an object pattern even when a worker fixture has no dependencies.
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, use) => {
+      const browser = await chromium.launch({
+        args: isCi ? ['--no-sandbox', '--disable-setuid-sandbox'] : undefined,
+        headless: true,
+      });
 
       try {
-        const manifest = readDistManifest();
-
-        logger.info('packing vitepress dist tarball for consumer smoke');
-        const packedDist = await packVitepressDist();
-        cleanupPackedDist = packedDist.cleanup;
-        logger.info('packing logaria dist tarball for consumer smoke');
-        const packedLogaria = await packLogariaDist();
-        cleanupPackedLogaria = packedLogaria.cleanup;
-
-        const fixture = await createConsumerFixture({
-          fixtureRootPrefix: 'docs-islands-consumer-smoke-',
-          installLogMessage: 'installing consumer fixture dependencies',
-          logger,
-          localDependencyTarballPaths: {
-            logaria: packedLogaria.tarballPath,
-          },
-          manifest,
-          tarballPath: packedDist.tarballPath,
-          writeFiles: writeConsumerSmokeFixtureFiles,
-        });
-        cleanupFixture = fixture.cleanup;
-
-        const port = await reserveTcpPort();
-        const server = startVitePressDevServer({
-          fixtureDir: fixture.fixtureDir,
-          port,
-        });
-        childProcess = server.process;
-        serverLogs = server.logs;
-        await waitForServerReady({
-          logs: server.logs,
-          port,
-          process: server.process,
-        });
-        await use({
-          fixtureDir: fixture.fixtureDir,
-          port,
-          serverLogs: server.logs,
-        });
-        logger.success('Consumer smoke passed', smokeElapsed());
-      } catch (error) {
-        const renderedLogs =
-          serverLogs.length > 0
-            ? `\n\nDev server logs:\n${serverLogs.join('')}`
-            : '';
-        logger.error(
-          `Consumer smoke failed: ${formatUnknownError(error)}${renderedLogs}`,
-          smokeElapsed(),
-        );
-        throw error;
+        await use(browser);
       } finally {
-        if (childProcess) {
-          stopChildProcess(childProcess);
-        }
-        if (cleanupFixture) {
-          await cleanupFixture();
-        }
-        if (cleanupPackedDist) {
-          await cleanupPackedDist();
-        }
-        if (cleanupPackedLogaria) {
-          await cleanupPackedLogaria();
-        }
+        await browser.close();
       }
     },
     {
       scope: 'worker',
-      timeout: 300_000,
     },
   ],
+  consumerServer: async ({ task }, use) => {
+    const logger = getSmokeLogger('task.consumer-smoke');
+    const testName = task.name;
+    const smokeElapsed = createElapsedTimer();
+    let cleanupPackedDist: (() => Promise<void>) | undefined;
+    let cleanupPackedLogaria: (() => Promise<void>) | undefined;
+    let cleanupFixture: (() => Promise<void>) | undefined;
+    let childProcess: ChildProcess | undefined;
+    let serverLogs: string[] = [];
+
+    try {
+      const manifest = readDistManifest();
+
+      logger.info('packing vitepress dist tarball for consumer smoke');
+      const packedDist = await packVitepressDist();
+      cleanupPackedDist = packedDist.cleanup;
+      logger.info('packing logaria dist tarball for consumer smoke');
+      const packedLogaria = await packLogariaDist();
+      cleanupPackedLogaria = packedLogaria.cleanup;
+
+      const fixture = await createConsumerFixture({
+        fixtureRootPrefix: 'docs-islands-consumer-smoke-',
+        installLogMessage: 'installing consumer fixture dependencies',
+        logger,
+        localDependencyTarballPaths: {
+          logaria: packedLogaria.tarballPath,
+        },
+        manifest,
+        tarballPath: packedDist.tarballPath,
+        writeFiles: writeConsumerSmokeFixtureFiles,
+      });
+      cleanupFixture = fixture.cleanup;
+
+      const port = await reserveTcpPort();
+      const server = startVitePressDevServer({
+        fixtureDir: fixture.fixtureDir,
+        port,
+      });
+      childProcess = server.process;
+      serverLogs = server.logs;
+      await waitForServerReady({
+        logs: server.logs,
+        port,
+        process: server.process,
+      });
+      await use({
+        fixtureDir: fixture.fixtureDir,
+        port,
+        serverLogs: server.logs,
+      });
+      logger.success(`Consumer smoke passed: ${testName}`, smokeElapsed());
+    } catch (error) {
+      const renderedLogs =
+        serverLogs.length > 0
+          ? `\n\nDev server logs:\n${serverLogs.join('')}`
+          : '';
+      logger.error(
+        `Consumer smoke failed (${testName}): ${formatUnknownError(error)}${renderedLogs}`,
+        smokeElapsed(),
+      );
+      throw error;
+    } finally {
+      if (childProcess) {
+        stopChildProcess(childProcess);
+      }
+      if (cleanupFixture) {
+        await cleanupFixture();
+      }
+      if (cleanupPackedDist) {
+        await cleanupPackedDist();
+      }
+      if (cleanupPackedLogaria) {
+        await cleanupPackedLogaria();
+      }
+    }
+  },
+  page: async ({ browser }, use) => {
+    const context = await browser.newContext({
+      ...devices['Desktop Chrome'],
+    });
+    const page = await context.newPage();
+
+    try {
+      await use(page);
+    } finally {
+      await context.close();
+    }
+  },
 });
 
-export { expect } from '@playwright/test';
+export { expect } from 'vitest';

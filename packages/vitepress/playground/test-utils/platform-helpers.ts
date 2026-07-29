@@ -1,5 +1,6 @@
 import { loadEnv } from '@docs-islands/utils/env';
-import { expect, type Locator, type Page } from '@playwright/test';
+import type { Locator, Page } from 'playwright-chromium';
+import { expect } from 'vitest';
 import { getPlaygroundLogger } from './logger';
 
 const { ci } = loadEnv();
