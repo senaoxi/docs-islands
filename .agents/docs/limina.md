@@ -168,7 +168,9 @@ Limina maintains canonical issue codes and rule metadata. Issue codes are associ
 
 A completed check writes structured run and issue state under the `.limina` artifact namespace. The current check snapshot version is `7`; the source-issue snapshot remains a separate version-`1` format. Standalone issue-producing commands write addressable invocation records.
 
-`limina check --issues` reads persisted state. It does not execute a fresh check. It can query the last completed check or a selected standalone invocation and filter by rule, file, scope, task, checker, or package.
+Check execution publishes metadata only after config loading, semantic validation, preflight/profile setup, and execution-plan validation succeed. Each published attempt has a monotonically increasing sequence plus started and terminal metadata. `last-run.json` remains the only completed version-`7` inventory; `latest-completed.json` authenticates its attempt identity, sequence, timestamp, and content hash. Attempt directories do not contain copies of the inventory.
+
+`limina check --issues` reads persisted state. It does not execute a fresh check. It can query the latest freshness-authenticated completed check or a selected standalone invocation and filter by rule, file, scope, task, checker, or package. A published latest attempt that is running, incomplete, interrupted, aborted, persistence-failed, or inconsistent prevents fallback to older issues. A corrupt `latest-attempt.json` also prevents both query and sequence allocation. A torn `last-run.json`/`latest-completed.json` pair fails closed until a later higher-sequence successful check overwrites the pair.
 
 Current output formats are human-readable text, JSON, and NDJSON. Human output can be bounded for terminal use. Machine-readable issue output remains separate from terminal presentation.
 
@@ -179,6 +181,14 @@ Snapshot and profile writes use the repository's atomic writer. Profiling output
 ### Artifact and mutation boundaries
 
 The `.limina` directory is represented as an authenticated artifact namespace with a logical root, canonical root, generation identity, and generation token. Artifact paths are checked for lexical and canonical containment.
+
+Generated artifact materialization uses a canonical-root cross-process reader/writer lease with a 30-second bounded wait. A writer validates the plan's base revision after taking the lease and may rebuild the complete plan once if it drifted. Before its first mutation it atomically publishes an in-progress marker containing the base and desired revisions plus the complete owned-path universe. The manifest is written last. Readers fail closed while recovery is required; the next writer force-writes one fresh complete plan, removes non-target owned paths, verifies the desired tree, and only then removes the marker. This recovery model intentionally does not add a journal, backup tree, roll-forward state machine, completed-commit marker, or consumer-side second revision handshake.
+
+Checker project-config parsing caches belong to an `AnalysisProviderSet` and therefore to one repository generation. Graph, source, proof, owner, and checker projections share that generation's cache; advancing creates a new provider set and cache. Direct parser calls without a cache remain uncached, and virtual-file identities remain separate from physical-file identities.
+
+Runtime-like import collection recognizes CommonJS `require` through a TypeScript syntax-AST lexical binding pass shared by the Oxc and TypeScript paths. Shadowed `require` names are not treated as the global loader. Only direct immutable `createRequire(import.meta.url)` bindings are recognized; mutable, transitive, destructured, computed, optional, and indirect aliases are excluded.
+
+Programmatic custom analysis providers are generation-zero only. An attempted generation advance fails before disposing the current providers, incrementing generation, or replacing them with defaults.
 
 Configured output roots are collected while validating the workspace context. Limina creates mutation authorities that distinguish:
 
