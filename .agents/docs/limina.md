@@ -215,6 +215,8 @@ Limina can execute commands and configured pipelines, but its exported dependenc
 
 CLI process tests must keep commands that mutate the same `.limina` artifact namespace sequential. Once an invocation record or completed check snapshot exists, independent `check --issues` queries are read-only and can run concurrently; this avoids making fixed per-test budgets depend on repeated development-entry cold starts on slower CI platforms.
 
+Cross-platform tests must represent Limina-owned absolute paths in their canonical portable form even when Node filesystem calls use platform-native paths. Inline ESM child processes must import local modules through `file:` URLs rather than raw filesystem paths so Windows drive letters are not interpreted as URL schemes.
+
 ## Human direction requiring confirmation
 
 The supplied Codex memory contains repeated user instructions that are not implementation proof. They are recorded here as unvouched direction requiring human review:

@@ -143,8 +143,8 @@ catalogs:
   prod:
     cheerio: ^1.2.0
     ignore: ^7.0.6
-    oxc-parser: ^0.138.0
-    oxc-resolver: ^11.23.0
+    oxc-parser: ^0.142.0
+    oxc-resolver: ^11.24.2
     picomatch: ^4.0.5
     tinyglobby: ^0.2.17
     unplugin: ^3.0.0
