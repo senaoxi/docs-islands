@@ -193,7 +193,7 @@ graph: {
 - Bare package imports are authorized by the nearest package manifest.
 - `#imports` specifiers match the current package's `imports` field and do not escape to another workspace owner.
 - Node builtins and self-package imports are exempt from normal external dependency authorization.
-- Knip-backed checks find unused workspace dependencies and unused source modules unless `source.knip` is `false`.
+- Knip-backed checks find unused workspace dependencies and unused source modules only when `source.knip` is explicitly enabled with `true` or an object containing `workspaces`.
 - Tsconfig governance verifies that package-owned source modules map upward to one ordinary `tsconfig.json` owner. Fix the source `tsconfig.json` coverage/reference shape when this fails.
 
 ## What `proof:check` Adds

@@ -167,12 +167,12 @@ Validates package-owner and source usage rules:
 - Bare package imports are checked from TypeScript's resolved entry first. Current-owner targets are allowed; other workspace or artifact-package targets require manifest authorization.
 - Dependency authorization accepts `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`.
 - `#imports` specifiers must match the current package's `imports` field, must stay within the owner unless resolving to a declared artifact package, and must not resolve to another workspace owner.
-- Knip-backed unused workspace dependency and unused module checks run unless `source.knip` is `false`.
+- Knip-backed unused workspace dependency and unused module checks run only when `source.knip` is `true` or an object with `workspaces`.
 - Package-owned source modules must resolve upward to one ordinary `tsconfig.json` governance unit. Fix the `tsconfig.json` coverage/reference shape when this check fails.
 
 `--package`, `--rule`, `--file`, and `--scope` filter source issue details and may be repeated. `--verbose` expands them.
 
-If `knip` is unavailable, the Knip-backed portion is reported as skipped and the remaining source checks continue. Missing `knip` alone does not make the command fail.
+If `source.knip` is enabled but `knip` is unavailable, the command fails with a missing peer dependency error before source analysis. When `source.knip` is disabled, Limina does not resolve or run Knip.
 
 Exit code: 1 on any runnable violation.
 

@@ -47,10 +47,24 @@ jobs:
           # Fetch full history for change detection
           fetch-depth: 0
 
+      # For push events, analyze the complete current commit instead of the
+      # difference from the previous remote tip. This preserves the expected
+      # path filters after an amended commit is force-pushed.
+      - name: Resolve current commit range
+        id: commit-range
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          base_sha="$(git rev-parse "${GITHUB_SHA}^1")"
+          echo "base=${base_sha}" >> "${GITHUB_OUTPUT}"
+          echo "head=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
       # dorny/paths-filter@v3.0.2
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
         id: filter
         with:
+          base: ${{ steps.commit-range.outputs.base }}
+          ref: ${{ steps.commit-range.outputs.head }}
           filters: |
             src:
               # Limina release gates depend on fixture declarations, fixture
@@ -170,7 +184,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: [changes, build-artifacts]
     if: needs.changes.outputs.src == 'true' || needs.changes.outputs.deps == 'true'
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

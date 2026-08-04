@@ -217,6 +217,10 @@ CLI process tests must keep commands that mutate the same `.limina` artifact nam
 
 Cross-platform tests must represent Limina-owned absolute paths in their canonical portable form even when Node filesystem calls use platform-native paths. Inline ESM child processes must import local modules through `file:` URLs rather than raw filesystem paths so Windows drive letters are not interpreted as URL schemes.
 
+Cross-process materialization tests must release deliberately paused children through an already-open process channel rather than polling a filesystem sentinel. This keeps the lease contention under test while removing filesystem polling and scheduler timing from the synchronization barrier; child-result assertions should include captured process output when an exit is unsuccessful.
+
+Isolated package fixtures that project pnpm dependencies into a temporary `node_modules` tree must keep scoped namespace directories physical and junction each package below them individually. Junctioning the namespace directory itself adds a nested reparse-point boundary that can make scoped ESM packages unreachable on Windows before the fixture reaches its intended dependency-resolution boundary.
+
 ## Human direction requiring confirmation
 
 The supplied Codex memory contains repeated user instructions that are not implementation proof. They are recorded here as unvouched direction requiring human review:

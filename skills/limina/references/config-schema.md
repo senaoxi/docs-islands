@@ -180,7 +180,7 @@ interface SourceAmbientDeclarationConfig {
 }
 
 interface SourceKnipCheckConfig {
-  workspaces?: Record<string, SourceKnipWorkspaceConfig>;
+  workspaces: Record<string, SourceKnipWorkspaceConfig>;
 }
 
 interface SourceKnipWorkspaceConfig {
@@ -217,15 +217,16 @@ interface SourceImportAuthorityWorkspaceRootGrant {
 
 `source.knip` behavior:
 
-- `true` or omitted enables Limina's generated Knip config.
-- `false` skips Knip-backed unused dependency and unused module checks.
-- Object form configures package-keyed source analysis through `source.knip.workspaces`.
+- Omitted or `false` disables Knip-backed checks.
+- `true` enables Limina's generated Knip config.
+- Object form enables package-keyed source analysis through `source.knip.workspaces` and must own the `workspaces` field; use `{ workspaces: {} }` for no workspace-specific rules.
+- Empty objects, `null`, arrays, scalars, unknown fields, and non-object `workspaces` values are invalid.
 - Workspace keys must name existing pnpm workspace packages.
 - `entry` adds package-owned source modules that should be treated as reachable roots.
 - `ignoreDependencies` suppresses declared workspace dependency findings by `dep` and `reason`.
 - `ignoreFiles` suppresses unused source module findings by `file` and `reason`.
 - Limina uses Knip defaults unless a package has a supported static script such as `limina build tsconfig.json`; `source.knip.workspaces` accepts `entry`, `ignoreDependencies`, and `ignoreFiles`.
-- If `knip` is unavailable, the Knip-backed work is marked skipped and other source checks continue; missing `knip` alone may still exit 0.
+- If `knip` is unavailable while Knip is enabled, `source check` fails with a missing peer dependency error before source analysis; when disabled, Limina does not resolve or run Knip.
 
 `source.declarations.ambient` behavior:
 

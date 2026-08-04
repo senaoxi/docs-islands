@@ -364,8 +364,8 @@ Nested `pnpm-workspace.yaml` roots are automatic owner-local boundaries, not `re
 
 ### `<tool> is not installed; skipping check`
 
-- **Cause**: Enabled optional analyzer `knip`, `publint`, or `@arethetypeswrong/core` is not installed.
-- **Fix**: Install and verify the analyzer when CI requires that coverage. The skipped analyzer alone may leave the command successful; do not interpret exit code 0 as proof that an absent analyzer ran.
+- **Cause**: An enabled optional analyzer such as `publint` or `@arethetypeswrong/core` is not installed. An enabled `source.knip` has a separate hard-failure path.
+- **Fix**: Install and verify the analyzer when CI requires that coverage. For `source.knip`, install `knip` or disable the feature explicitly; an enabled but missing Knip peer dependency fails `source check` before analysis.
 
 ### `No package entries are configured.` / `No package entry named "..." is configured.`
 
