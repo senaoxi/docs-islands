@@ -100,7 +100,7 @@ Source-owned TypeScript configuration and Limina-generated configuration have di
 
 A source `tsconfig` that declares `references` must satisfy the current solution-style shape. An ordinary source leaf with a `references` field is rejected. A solution-style config can route to referenced ordinary source configs, but it cannot declare `liminaOptions.outputs`.
 
-Ordinary source leaves provide the compiler scope from which Limina creates generated declaration and build projects under the `.limina` artifact namespace. Generated files are outputs, not user-authored configuration authority.
+Ordinary source leaves provide the compiler scope from which Limina creates generated declaration and build projects under the `.limina` artifact namespace. Generated files are outputs, not user-authored configuration authority. Generated declaration configs explicitly set both `compilerOptions.outDir` and `compilerOptions.declarationDir` to the same managed `.limina/dts` root, so inherited source declaration output settings cannot redirect checker declarations.
 
 Generated declaration references currently come from two explicit evidence paths:
 
@@ -111,7 +111,7 @@ Oxc resolution is used for runtime-like import analysis, but an Oxc-only resolut
 
 Cross-checker provider edges are permitted only when the implementation can select a compatible declaration provider. Generated references that cross incompatible checker build engines are rejected.
 
-Migration plans JSONC changes as parser-derived local text edits. It updates only Limina-governed schema, compiler, output, and source-reference fields while leaving unrelated comments, trailing commas, compact structures, and whitespace outside those fields intact; the existing transaction layer still owns drift checks, atomic replacement, rollback, and recovery.
+Migration plans JSONC changes as parser-derived local text edits. It reads each target's effective TypeScript config, including `extends`, before planning writes. A direct `compilerOptions.declarationDir` is removed only when it is equivalent to the planned single managed artifact root; a declarationDir-only leaf moves its relative path to `liminaOptions.outputs.outDir`, while split output, effective `outFile`, invalid direct values, and mixed solution aggregators fail closed. Inherited declarationDir remains in its base config. It updates only Limina-governed schema, compiler, output, and source-reference fields while leaving unrelated comments, trailing commas, compact structures, and whitespace outside those fields intact; the existing transaction layer still owns drift checks, atomic replacement, rollback, and recovery.
 
 Graph-rule labels are read from source configuration and projected onto generated declaration projects. Configured graph rules can constrain dependency names and project references for labeled projects.
 
