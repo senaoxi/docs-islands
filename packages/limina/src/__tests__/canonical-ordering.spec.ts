@@ -102,6 +102,7 @@ function createTestManifest(
         name: scriptValue,
       })),
     })),
+    governedSourcesByChecker: new Map(),
     ownedArtifacts: values.map((value) => `${value}.json`),
     projectsByChecker: new Map(),
     providerEdges,

@@ -203,6 +203,7 @@ export interface PreparedCheckerGraph {
   collection: CheckerSourceConfigCollection;
   entryPath: string;
   governedSources: GovernedSourceUnit[];
+  primaryProjects: SourceProject[];
   projects: SourceProject[];
   rootBuildPaths: string[];
   solutions: SolutionProject[];

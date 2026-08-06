@@ -18,6 +18,7 @@ import {
 } from './target-descriptors';
 
 export type OutputBuildResolutionKind =
+  | 'managed-dependency'
   | 'managed-output'
   | 'outputless-project'
   | 'outputless-solution'
@@ -94,9 +95,26 @@ function getResolutionKind(options: {
   buildCapableDeclarationTargets: readonly BuildTargetDescriptor[];
   checkerTargets: readonly BuildTargetDescriptor[];
   declarationTargets: readonly BuildTargetDescriptor[];
+  dependencyTargetSelection: boolean;
 }): OutputBuildResolutionKind {
-  if (options.checkerTargets.length > 0) return 'managed-output';
+  if (options.checkerTargets.length > 0) {
+    return options.dependencyTargetSelection
+      ? 'managed-dependency'
+      : 'managed-output';
+  }
   return getMissingOutputResolutionKind(options);
+}
+
+function isFrameworkDependencyTarget(options: {
+  generatedGraph: GeneratedTsconfigGraphResult;
+  target: BuildTargetDescriptor;
+}): boolean {
+  return (
+    options.generatedGraph.governedSources
+      .get(options.target.checker.name)
+      ?.get(options.target.sourceConfigPath)?.buildProjection.kind ===
+    'transparent-solution'
+  );
 }
 
 function getSelectedCheckerField(checker: BuildCheckerPreset | undefined): {
@@ -179,14 +197,21 @@ async function resolveManagedBuildTarget(options: {
     managed.declarationTargets.filter(isBuildCapable);
   const buildCapableOutputTargets =
     managed.outputTargets.filter(isBuildCapable);
+  const frameworkDependencyTargets = buildCapableDeclarationTargets.filter(
+    (target) => isFrameworkDependencyTarget({ generatedGraph, target }),
+  );
+  const dependencyTargetSelection = buildCapableOutputTargets.length === 0;
+  const selectableTargets = dependencyTargetSelection
+    ? frameworkDependencyTargets
+    : buildCapableOutputTargets;
   const checkerTargets = selectCheckerTargets({
     checker: options.request.checker,
-    targets: buildCapableOutputTargets,
+    targets: selectableTargets,
   });
   return {
     allCheckers,
     availableCheckers: uniqueSortedStrings(
-      buildCapableOutputTargets.map(({ checker }) => checker.preset),
+      selectableTargets.map(({ checker }) => checker.preset),
     ),
     checkerTargets,
     generatedGraph,
@@ -196,6 +221,7 @@ async function resolveManagedBuildTarget(options: {
       buildCapableDeclarationTargets,
       checkerTargets,
       declarationTargets: managed.declarationTargets,
+      dependencyTargetSelection,
     }),
     ...getSelectedCheckerField(options.request.checker),
     sourceConfigPath: options.sourceConfigPath,

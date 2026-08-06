@@ -259,10 +259,13 @@ describe('AnalysisProviderSet', () => {
         const unit = graph.governedSources
           .get('typescript')
           ?.get(sourceConfigPath);
+        const projection = unit?.buildProjection;
         const projectedConfigPath =
-          unit && 'dtsConfigPath' in unit.buildProjection
-            ? unit.buildProjection.dtsConfigPath
-            : sourceConfigPath;
+          projection === undefined
+            ? sourceConfigPath
+            : 'buildConfigPath' in projection
+              ? projection.buildConfigPath
+              : projection.dtsConfigPath;
         const sourceGraph =
           await fixture.core.tsconfig.getSourceGraphProjects();
         const sourceProject = sourceGraph.projects.find(

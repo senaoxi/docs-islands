@@ -1393,6 +1393,82 @@ describe('runBuild', () => {
     }
   });
 
+  it('builds a pure framework dependency solution over its TypeScript provider closure', async () => {
+    const calls: TypecheckTarget[] = [];
+    const infoSpy = vi
+      .spyOn(TypecheckLogger, 'info')
+      .mockImplementation(() => {});
+    const fixture = await createFixture({
+      'packages/a/src/App.astro':
+        "import '../../b/src/index.ts';\nexport const app = true;\n",
+      'packages/a/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*'],
+      }),
+      'packages/b/src/index.ts': 'export const dependency = 1;\n',
+      'packages/b/tsconfig.json': tsconfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await runBuild({
+        config: {
+          config: {
+            checkers: {
+              typescript: {
+                include: ['packages/**/tsconfig.json'],
+                preset: 'tsc',
+              },
+            },
+          },
+          configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+          rootDir: fixture.rootDir,
+        },
+        configPath: 'packages/a/tsconfig.json',
+        cwd: fixture.rootDir,
+        runner: passingRunner(calls),
+      });
+
+      expect(result.passed).toBe(true);
+      expect(calls.map(({ command }) => command)).toEqual(['tsc']);
+      expect(calls.map(({ configPath }) => toPortablePath(configPath))).toEqual(
+        [expect.stringContaining('/solutions/packages/a/tsconfig.build.json')],
+      );
+      const solutionConfig = JSON.parse(
+        await readFile(calls[0]!.configPath, 'utf8'),
+      ) as { files: string[]; references: { path: string }[] };
+      expect(solutionConfig.files).toEqual([]);
+      expect(solutionConfig.references).toHaveLength(1);
+      expect(solutionConfig.references[0]?.path).toContain(
+        '/projects/packages/b/tsconfig.dts.json',
+      );
+      expect(
+        infoSpy.mock.calls.some(([message]) =>
+          String(message).includes(
+            'TypeScript dependency solution (framework application build is not included).',
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      infoSpy.mockRestore();
+      await fixture.cleanup();
+    }
+  });
+
   it('proves safe TS, JS, JSON, source-map, and declaration-map outputs inside outDir', async () => {
     const calls: TypecheckTarget[] = [];
     const fixture = await createFixture({

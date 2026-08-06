@@ -1742,7 +1742,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
           ?.get(sourceConfigPath);
 
         expect(unit).toMatchObject({
-          buildProjection: { kind: 'declaration-project' },
+          buildProjection: { kind: 'transparent-solution' },
           configPath: sourceConfigPath,
           declarationFileNames: [],
           frameworkCapabilities: [
@@ -1759,12 +1759,253 @@ describe('prepareGeneratedTsconfigGraph', () => {
         ]);
         expect(
           result.sourceToDts.get('typescript')?.has(sourceConfigPath),
-        ).toBe(true);
+        ).toBe(false);
+        expect(
+          result.sourceToBuild.get('typescript')?.get(sourceConfigPath),
+        ).toMatchObject({ kind: 'solution' });
+        if (unit?.buildProjection.kind !== 'transparent-solution') return;
+        const solutionConfig = JSON.parse(
+          await readFile(unit.buildProjection.buildConfigPath, 'utf8'),
+        ) as { files?: string[]; references?: { path: string }[] };
+        expect(solutionConfig.files).toEqual([]);
+        expect(solutionConfig.references).toEqual([]);
+        expect(
+          existsSync(
+            path.join(
+              fixture.rootDir,
+              `.limina/tsconfig/checkers/typescript/projects/packages/app/tsconfig.dts.json`,
+            ),
+          ),
+        ).toBe(false);
       } finally {
         await fixture.cleanup();
       }
     },
   );
+
+  it.each([
+    {
+      checkerName: 'typescript',
+      family: 'astro',
+      nativeExtension: 'ts',
+      preset: 'tsc',
+    },
+    {
+      checkerName: 'vue',
+      family: 'astro',
+      nativeExtension: 'vue',
+      preset: 'vue-tsc',
+    },
+  ] as const)(
+    'wraps $preset declaration inputs when .$family capability is present',
+    async ({ checkerName, family, nativeExtension, preset }) => {
+      const fixture = await createFixture({
+        [`packages/app/src/App.${family}`]: '<h1>Framework</h1>\n',
+        [`packages/app/src/native.${nativeExtension}`]:
+          nativeExtension === 'vue'
+            ? '<script setup lang="ts">const value = 1;</script>\n'
+            : 'export const value = 1;\n',
+        'packages/app/tsconfig.json': json({
+          compilerOptions: managedOutputCompilerOptions(),
+          include: ['src/**/*'],
+        }),
+      });
+      fixture.config.config = {
+        checkers: {
+          [checkerName]: {
+            include: ['packages/**/tsconfig.json'],
+            preset,
+          },
+        },
+      };
+
+      try {
+        const result = await prepareGeneratedTsconfigGraph(fixture.config);
+        const sourceConfigPath = normalizeAbsolutePath(
+          path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
+        );
+        const unit = result.governedSources
+          .get(checkerName)
+          ?.get(sourceConfigPath);
+
+        expect(unit?.buildProjection.kind).toBe('wrapped-project');
+        expect(unit?.declarationFileNames).toEqual([
+          normalizeAbsolutePath(
+            path.join(
+              fixture.rootDir,
+              `packages/app/src/native.${nativeExtension}`,
+            ),
+          ),
+        ]);
+        expect(
+          result.sourceToBuild.get(checkerName)?.get(sourceConfigPath),
+        ).toMatchObject({ kind: 'solution' });
+        expect(result.sourceToDts.get(checkerName)?.has(sourceConfigPath)).toBe(
+          true,
+        );
+        if (unit?.buildProjection.kind !== 'wrapped-project') return;
+        const dtsConfig = JSON.parse(
+          await readFile(unit.buildProjection.dtsConfigPath, 'utf8'),
+        ) as { files: string[] };
+        const solutionConfig = JSON.parse(
+          await readFile(unit.buildProjection.buildConfigPath, 'utf8'),
+        ) as { files: string[]; references: { path: string }[] };
+        expect(dtsConfig.files).toHaveLength(1);
+        expect(dtsConfig.files[0]).toContain(`native.${nativeExtension}`);
+        expect(dtsConfig.files.join('\n')).not.toContain(`.${family}`);
+        expect(solutionConfig.files).toEqual([]);
+        expect(solutionConfig.references).toHaveLength(1);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
+
+  it('uses one transparent solution for combined Astro and Svelte capabilities', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/App.astro': '<h1>Astro</h1>\n',
+      'packages/app/src/App.svelte': '<h1>Svelte</h1>\n',
+      'packages/app/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+      const sourceConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
+      );
+      const unit = result.governedSources
+        .get('typescript')
+        ?.get(sourceConfigPath);
+
+      expect(unit?.buildProjection.kind).toBe('transparent-solution');
+      expect(unit?.frameworkCapabilities.map(({ family }) => family)).toEqual([
+        'astro',
+        'svelte',
+      ]);
+      expect(result.sourceToDts.get('typescript')?.size).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('fails closed when a framework source config declares application outputs', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/App.astro': '<h1>Astro</h1>\n',
+      'packages/app/src/index.ts': 'export const value = 1;\n',
+      'packages/app/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*'],
+        liminaOptions: { outputs: {} },
+      }),
+    });
+
+    try {
+      await expect(
+        prepareGeneratedTsconfigGraph(fixture.config),
+      ).rejects.toThrow('Limina only projects TypeScript declaration builds');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('routes declaration and framework imports into separate reference sinks', async () => {
+    const fixture = await createFixture({
+      'packages/a/src/App.astro':
+        "import '../../c/src/index.ts';\nexport const framework = true;\n",
+      'packages/a/src/index.ts':
+        "import { value } from '../../b/src/index.ts';\nexport { value };\n",
+      'packages/a/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*'],
+      }),
+      'packages/b/src/index.ts': 'export const value = 1;\n',
+      'packages/b/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*.ts'],
+      }),
+      'packages/c/src/index.ts': 'export const scheduled = 1;\n',
+      'packages/c/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+      const sourceConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/a/tsconfig.json'),
+      );
+      const bConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/b/tsconfig.json'),
+      );
+      const cConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/c/tsconfig.json'),
+      );
+      const unit = result.governedSources
+        .get('typescript')
+        ?.get(sourceConfigPath);
+      const bDtsPath = result.sourceToDts.get('typescript')?.get(bConfigPath);
+      const cDtsPath = result.sourceToDts.get('typescript')?.get(cConfigPath);
+
+      expect(unit?.buildProjection.kind).toBe('wrapped-project');
+      expect([...unit!.declarationReferences]).toEqual([bDtsPath]);
+      expect([...unit!.frameworkSchedulingReferences]).toEqual([cDtsPath]);
+      if (unit?.buildProjection.kind !== 'wrapped-project') return;
+      const projection = unit.buildProjection;
+      const solution = JSON.parse(
+        await readFile(projection.buildConfigPath, 'utf8'),
+      ) as { references: { path: string }[] };
+      const solutionReferences = solution.references.map(({ path: value }) =>
+        normalizeAbsolutePath(
+          path.resolve(path.dirname(projection.buildConfigPath), value),
+        ),
+      );
+      expect(solutionReferences).toEqual(
+        [projection.dtsConfigPath, cDtsPath].sort(),
+      );
+      const dts = JSON.parse(
+        await readFile(projection.dtsConfigPath, 'utf8'),
+      ) as { references: { path: string }[] };
+      expect(dts.references).toHaveLength(1);
+      expect(
+        normalizeAbsolutePath(
+          path.resolve(
+            path.dirname(projection.dtsConfigPath),
+            dts.references[0]!.path,
+          ),
+        ),
+      ).toBe(bDtsPath);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects a native import of a framework-only source without a declaration provider', async () => {
+    const fixture = await createFixture({
+      'packages/a/src/index.ts':
+        "import '../../b/src/App.svelte';\nexport const value = 1;\n",
+      'packages/a/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*.ts'],
+      }),
+      'packages/b/src/App.svelte': '<h1>Svelte</h1>\n',
+      'packages/b/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      await expect(
+        prepareGeneratedTsconfigGraph(fixture.config),
+      ).rejects.toThrow(/declaration (project|provider)/u);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 
   it('writes a manifest and generated declaration leaf for source configs', async () => {
     const fixture = await createFixture({

@@ -6,8 +6,11 @@ import { createGovernedSourceUnit } from './governed-sources';
 import { collectCheckerSourceConfigs } from './source-config-collection';
 import { createSolutionProject, createSourceProject } from './source-projects';
 import type {
+  GovernedSourceUnit,
   PreparedCheckerGraph,
   ResolvedCheckerEntrySelection,
+  SolutionProject,
+  SourceProject,
 } from './types';
 
 function getPackageRootDir(options: {
@@ -52,6 +55,61 @@ function getRootBuildPaths(
     .map((module) => module!.path);
 }
 
+function applyBuildProjections(options: {
+  collection: PreparedCheckerGraph['collection'];
+  governedSources: GovernedSourceUnit[];
+}): void {
+  for (const unit of options.governedSources) {
+    const projection = unit.buildProjection;
+    options.collection.buildModulesBySourcePath.set(
+      unit.configPath,
+      'buildConfigPath' in projection
+        ? { kind: 'solution', path: projection.buildConfigPath }
+        : { kind: 'project', path: projection.dtsConfigPath },
+    );
+  }
+}
+
+function getDeclarationProjects(options: {
+  governedSources: GovernedSourceUnit[];
+  primaryProjects: SourceProject[];
+}): SourceProject[] {
+  const declarationUnitsByConfigPath = new Map(
+    options.governedSources.flatMap((unit) =>
+      'dtsConfigPath' in unit.buildProjection
+        ? [[unit.configPath, unit] as const]
+        : [],
+    ),
+  );
+  return options.primaryProjects.flatMap((project) => {
+    const unit = declarationUnitsByConfigPath.get(project.configPath);
+    return unit === undefined
+      ? []
+      : [{ ...project, fileNames: [...unit.declarationFileNames] }];
+  });
+}
+
+function createProjectionSolutions(
+  governedSources: GovernedSourceUnit[],
+): SolutionProject[] {
+  return governedSources.flatMap((unit) => {
+    const projection = unit.buildProjection;
+    if (!('buildConfigPath' in projection)) return [];
+    return [
+      {
+        buildConfigPath: projection.buildConfigPath,
+        checkerName: unit.primaryCheckerName,
+        configPath: unit.configPath,
+        packageRootDir: unit.packageRootDir,
+        references: new Set([
+          ...('dtsConfigPath' in projection ? [projection.dtsConfigPath] : []),
+          ...unit.frameworkSchedulingReferences,
+        ]),
+      },
+    ];
+  });
+}
+
 export function prepareCheckerGraph(options: {
   activatedRegions: WorkspaceRegionPathIndex;
   config: ResolvedLiminaConfig;
@@ -66,7 +124,7 @@ export function prepareCheckerGraph(options: {
     entryConfigPaths: options.selection.selection.effectiveEntryPaths,
     projectConfigCache: options.projectConfigCache,
   });
-  const projects = [...collection.projectConfigPaths]
+  const primaryProjects = [...collection.projectConfigPaths]
     .sort()
     .map((sourceConfigPath) =>
       createSourceProject({
@@ -81,13 +139,18 @@ export function prepareCheckerGraph(options: {
         sourceConfigPath,
       }),
     );
-  const governedSources = projects.map((project) =>
+  const governedSources = primaryProjects.map((project) =>
     createGovernedSourceUnit({
       config: options.config,
       project,
       projectConfigCache: options.projectConfigCache,
     }),
   );
+  applyBuildProjections({ collection, governedSources });
+  const projects = getDeclarationProjects({
+    governedSources,
+    primaryProjects,
+  });
   return {
     checker: options.selection.checker,
     collection,
@@ -96,14 +159,18 @@ export function prepareCheckerGraph(options: {
       rootDir: options.config.rootDir,
     }),
     governedSources,
+    primaryProjects,
     projects,
     rootBuildPaths: getRootBuildPaths(collection),
-    solutions: createCheckerSolutions({
-      activatedRegions: options.activatedRegions,
-      collection,
-      config: options.config,
-      selection: options.selection,
-    }),
+    solutions: [
+      ...createCheckerSolutions({
+        activatedRegions: options.activatedRegions,
+        collection,
+        config: options.config,
+        selection: options.selection,
+      }),
+      ...createProjectionSolutions(governedSources),
+    ],
   };
 }
 

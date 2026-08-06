@@ -1,4 +1,7 @@
-import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
+import type {
+  GeneratedTsconfigGraphResult,
+  GovernedSourceUnit,
+} from '#core/build-graph/runner';
 
 export function getGeneratedCheckerNamespace(
   configPath: string,
@@ -112,9 +115,27 @@ function addGovernedProjectCheckerNames(
   checkerNamesByPath: Map<string, string>,
 ): void {
   for (const [checkerName, governedSources] of generatedGraph.governedSources) {
-    for (const sourceConfigPath of governedSources.keys()) {
-      checkerNamesByPath.set(sourceConfigPath, checkerName);
-    }
+    addGovernedCheckerProjectNames({
+      checkerName,
+      checkerNamesByPath,
+      governedSources,
+    });
+  }
+}
+
+function addGovernedCheckerProjectNames(options: {
+  checkerName: string;
+  checkerNamesByPath: Map<string, string>;
+  governedSources: ReadonlyMap<string, GovernedSourceUnit>;
+}): void {
+  for (const unit of options.governedSources.values()) {
+    options.checkerNamesByPath.set(unit.configPath, options.checkerName);
+    options.checkerNamesByPath.set(
+      'buildConfigPath' in unit.buildProjection
+        ? unit.buildProjection.buildConfigPath
+        : unit.buildProjection.dtsConfigPath,
+      options.checkerName,
+    );
   }
 }
 

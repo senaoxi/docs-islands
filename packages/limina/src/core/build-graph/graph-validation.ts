@@ -4,6 +4,10 @@ import type {
 } from '#config/runner';
 import { compareCodeUnits } from '#utils/collections';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
+import {
+  addFrameworkOutputProblems,
+  synchronizeProjectionSolutionReferences,
+} from './build-projections';
 import { addCrossCheckerProviderCompatibilityProblems } from './cross-checker-compatibility';
 import {
   addDuplicateCheckerOwnershipProblems,
@@ -27,6 +31,30 @@ function getAllProjects(
   return [...state.projectsByChecker.values()].flat();
 }
 
+function getAllPrimaryProjects(
+  state: GeneratedGraphPreparationState,
+): ReturnType<typeof getCheckerProjects> {
+  return [...state.primaryProjectsByChecker.values()].flat();
+}
+
+function getAllGovernedSources(state: GeneratedGraphPreparationState) {
+  return [...state.governedSourcesByChecker.values()].flat();
+}
+
+function getCheckerGovernedSources(options: {
+  checkerName: string;
+  state: GeneratedGraphPreparationState;
+}) {
+  return options.state.governedSourcesByChecker.get(options.checkerName) ?? [];
+}
+
+function getCheckerPrimaryProjects(options: {
+  checkerName: string;
+  state: GeneratedGraphPreparationState;
+}) {
+  return options.state.primaryProjectsByChecker.get(options.checkerName) ?? [];
+}
+
 function addCheckerOwnershipProblems(options: {
   checkers: ResolvedCheckerConfig[];
   config: ResolvedLiminaConfig;
@@ -46,6 +74,7 @@ function addCheckerOwnershipProblems(options: {
 function addProjectValidationProblems(options: {
   activatedRegions: WorkspaceRegionPathIndex;
   allProjects: ReturnType<typeof getAllProjects>;
+  allPrimaryProjects: ReturnType<typeof getAllPrimaryProjects>;
   config: ResolvedLiminaConfig;
   projectConfigCache?: PrepareGeneratedTsconfigGraphOptions['projectConfigCache'];
   state: GeneratedGraphPreparationState;
@@ -65,13 +94,14 @@ function addProjectValidationProblems(options: {
     config: options.config,
     problems: options.state.problems,
     projectConfigCache: options.projectConfigCache,
-    projects: options.allProjects,
+    projects: options.allPrimaryProjects,
   });
 }
 
 function addInferredReferences(options: {
   activatedRegions: WorkspaceRegionPathIndex;
   allProjects: ReturnType<typeof getAllProjects>;
+  allGovernedSources: ReturnType<typeof getAllGovernedSources>;
   checkers: ResolvedCheckerConfig[];
   config: ResolvedLiminaConfig;
   importAnalysisContext?: PrepareGeneratedTsconfigGraphOptions['importAnalysisContext'];
@@ -83,11 +113,32 @@ function addInferredReferences(options: {
       activatedRegions: options.activatedRegions,
       config: options.config,
       importAnalysisContext: options.importAnalysisContext,
+      governedSources: getCheckerGovernedSources({
+        checkerName: checker.name,
+        state: options.state,
+      }),
+      ownerGovernedSources: options.allGovernedSources,
       ownerProjects: options.allProjects,
+      primaryProjects: getCheckerPrimaryProjects({
+        checkerName: checker.name,
+        state: options.state,
+      }),
       projects: getCheckerProjects({ checker, state: options.state }),
+      sourceToBuildByChecker: options.state.sourceToBuildByChecker,
     });
     options.state.problems.push(...collection.problems);
     options.state.providerEdges.push(...collection.providerEdges);
+  }
+}
+
+function synchronizeBuildProjectionSolutions(
+  state: GeneratedGraphPreparationState,
+): void {
+  for (const [checkerName, governedSources] of state.governedSourcesByChecker) {
+    synchronizeProjectionSolutionReferences({
+      governedSources,
+      solutions: state.solutionsByChecker.get(checkerName) ?? [],
+    });
   }
 }
 
@@ -173,8 +224,24 @@ export function validateAndCompleteGeneratedGraph(options: {
 }): void {
   addCheckerOwnershipProblems(options);
   const allProjects = getAllProjects(options.state);
-  addProjectValidationProblems({ ...options, allProjects });
-  addInferredReferences({ ...options, allProjects });
+  const allPrimaryProjects = getAllPrimaryProjects(options.state);
+  const allGovernedSources = getAllGovernedSources(options.state);
+  addProjectValidationProblems({
+    ...options,
+    allPrimaryProjects,
+    allProjects,
+  });
+  addFrameworkOutputProblems({
+    config: options.config,
+    governedSources: allGovernedSources,
+    problems: options.state.problems,
+  });
+  addInferredReferences({
+    ...options,
+    allGovernedSources,
+    allProjects,
+  });
+  synchronizeBuildProjectionSolutions(options.state);
   addCrossCheckerProviderCompatibilityProblems({
     config: options.config,
     problems: options.state.problems,

@@ -1,7 +1,10 @@
 import type { CheckerProjectParseContext } from '#checkers';
 import type { ResolvedLiminaConfig } from '#config/runner';
 import type { AnalysisProviderSet } from '#core';
-import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
+import type {
+  GeneratedTsconfigGraphResult,
+  GovernedSourceUnit,
+} from '#core/build-graph/runner';
 import {
   isDtsProjectConfig,
   type ProjectInfo,
@@ -79,9 +82,28 @@ function addGovernedCheckerMappings(options: {
 }): void {
   for (const [checkerName, governedSources] of options.generatedGraph
     .governedSources) {
-    for (const sourceConfigPath of governedSources.keys()) {
-      addCheckerName(options.namesByPath, sourceConfigPath, checkerName);
-    }
+    addGovernedCheckerUnitMappings({
+      checkerName,
+      governedSources,
+      namesByPath: options.namesByPath,
+    });
+  }
+}
+
+function addGovernedCheckerUnitMappings(options: {
+  checkerName: string;
+  governedSources: ReadonlyMap<string, GovernedSourceUnit>;
+  namesByPath: Map<string, string[]>;
+}): void {
+  for (const unit of options.governedSources.values()) {
+    addCheckerName(options.namesByPath, unit.configPath, options.checkerName);
+    addCheckerName(
+      options.namesByPath,
+      'buildConfigPath' in unit.buildProjection
+        ? unit.buildProjection.buildConfigPath
+        : unit.buildProjection.dtsConfigPath,
+      options.checkerName,
+    );
   }
 }
 

@@ -1,5 +1,6 @@
 import {
   type CheckerProjectConfigCache,
+  isBuildCapablePreset,
   normalizeExtensions,
   parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
@@ -8,6 +9,7 @@ import type { ResolvedLiminaConfig } from '#config/runner';
 import { uniqueCodeUnitSortedStrings as uniqueSortedStrings } from '#utils/collections';
 import { normalizeAbsolutePath } from '#utils/path';
 import { capabilityDiscoveryExtensions } from './generated/file-extensions';
+import { getGeneratedLeafSolutionBuildConfigPath } from './generated/paths';
 import {
   collectConfirmedFrameworkCapabilities,
   partitionSourceFiles,
@@ -18,6 +20,52 @@ import type {
   GovernedSourceUnit,
   SourceProject,
 } from './types';
+
+function createBuildProjection(options: {
+  declarationFileNames: readonly string[];
+  config: ResolvedLiminaConfig;
+  frameworkCapabilities: FrameworkCapabilityDescriptor[];
+  project: SourceProject;
+}): GovernedSourceUnit['buildProjection'] {
+  if (!requiresFrameworkProjection(options)) {
+    return {
+      dtsConfigPath: options.project.dtsConfigPath,
+      kind: 'declaration-project',
+    };
+  }
+  const buildConfigPath = getGeneratedLeafSolutionBuildConfigPath({
+    checkerName: options.project.checkerName,
+    packageRootDir: options.project.packageRootDir,
+    rootDir: options.config.rootDir,
+    sourceConfigPath: options.project.configPath,
+  });
+  return options.declarationFileNames.length === 0
+    ? { buildConfigPath, kind: 'transparent-solution' }
+    : {
+        buildConfigPath,
+        dtsConfigPath: options.project.dtsConfigPath,
+        kind: 'wrapped-project',
+      };
+}
+
+function requiresFrameworkProjection(options: {
+  frameworkCapabilities: readonly FrameworkCapabilityDescriptor[];
+  project: SourceProject;
+}): boolean {
+  return (
+    options.frameworkCapabilities.length > 0 &&
+    isBuildCapablePreset(options.project.context.checkerPresets[0]!)
+  );
+}
+
+function createDeclarationFileNames(project: SourceProject): string[] {
+  if (!isBuildCapablePreset(project.context.checkerPresets[0]!)) {
+    return [...project.fileNames];
+  }
+  return project.fileNames.filter(
+    (fileName) => !fileName.endsWith('.astro') && !fileName.endsWith('.svelte'),
+  );
+}
 
 function createFrameworkCapabilities(options: {
   fileNames: readonly string[];
@@ -64,20 +112,24 @@ export function createGovernedSourceUnit(options: {
       .map(normalizeAbsolutePath)
       .filter((fileName) => !isInsideNodeModules(fileName)),
   );
+  const frameworkCapabilities = createFrameworkCapabilities({
+    fileNames: ownedFileNames,
+    packageRootDir: options.project.packageRootDir,
+    sourceConfigPath: options.project.configPath,
+  });
+  const declarationFileNames = createDeclarationFileNames(options.project);
 
   return {
-    buildProjection: {
-      dtsConfigPath: options.project.dtsConfigPath,
-      kind: 'declaration-project',
-    },
-    configPath: options.project.configPath,
-    declarationFileNames: [...options.project.fileNames],
-    declarationReferences: options.project.references,
-    frameworkCapabilities: createFrameworkCapabilities({
-      fileNames: ownedFileNames,
-      packageRootDir: options.project.packageRootDir,
-      sourceConfigPath: options.project.configPath,
+    buildProjection: createBuildProjection({
+      config: options.config,
+      declarationFileNames,
+      frameworkCapabilities,
+      project: options.project,
     }),
+    configPath: options.project.configPath,
+    declarationFileNames,
+    declarationReferences: options.project.references,
+    frameworkCapabilities,
     frameworkSchedulingReferences: new Set(),
     ownedFileNames,
     packageRootDir: options.project.packageRootDir,

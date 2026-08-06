@@ -10,6 +10,7 @@ import type {
   GeneratedBuildModuleManifest,
   GeneratedProviderEdge,
   GeneratedTsconfigGraphManifest,
+  GovernedSourceUnit,
   SourceProject,
 } from './types';
 
@@ -71,6 +72,13 @@ function getModuleMap(options: {
   return options.modulesByChecker.get(options.checkerName) ?? new Map();
 }
 
+function getCheckerValues<T>(
+  valuesByChecker: ReadonlyMap<string, T[]>,
+  checkerName: string,
+): T[] {
+  return valuesByChecker.get(checkerName) ?? [];
+}
+
 function createCheckerManifest(options: {
   checker: ResolvedCheckerConfig;
   checkerEntries: ReadonlyMap<string, string>;
@@ -78,6 +86,7 @@ function createCheckerManifest(options: {
     string,
     Map<string, GeneratedBuildModule>
   >;
+  governedSourcesByChecker: ReadonlyMap<string, GovernedSourceUnit[]>;
   projectsByChecker: ReadonlyMap<string, SourceProject[]>;
   rootDir: string;
   sourceToBuildByChecker: ReadonlyMap<
@@ -89,7 +98,10 @@ function createCheckerManifest(options: {
   if (!entryPath) {
     return null;
   }
-  const projects = options.projectsByChecker.get(options.checker.name) ?? [];
+  const projects = getCheckerValues(
+    options.projectsByChecker,
+    options.checker.name,
+  );
   const sourceDtsRecords = createSourceDtsRecords({
     projects,
     rootDir: options.rootDir,
@@ -104,8 +116,11 @@ function createCheckerManifest(options: {
     }),
     preset: options.checker.preset,
     entry: toManifestPath(options.rootDir, entryPath),
-    roots: projects
-      .map((project) => toManifestPath(options.rootDir, project.configPath))
+    roots: getCheckerValues(
+      options.governedSourcesByChecker,
+      options.checker.name,
+    )
+      .map((unit) => toManifestPath(options.rootDir, unit.configPath))
       .sort(compareCodeUnits),
     sourceToBuild: createBuildModuleRecord({
       modules: getModuleMap({
@@ -126,6 +141,7 @@ function createManifestCheckers(options: {
     string,
     Map<string, GeneratedBuildModule>
   >;
+  governedSourcesByChecker: ReadonlyMap<string, GovernedSourceUnit[]>;
   projectsByChecker: ReadonlyMap<string, SourceProject[]>;
   rootDir: string;
   sourceToBuildByChecker: ReadonlyMap<
@@ -252,6 +268,7 @@ export function createManifest(options: {
   configToOutputBuildByChecker: Map<string, Map<string, GeneratedBuildModule>>;
   generatedKnipDiagnostics: GeneratedKnipPackageDiagnostic[];
   generatedKnipPackageConfigs: GeneratedKnipPackageConfig[];
+  governedSourcesByChecker: Map<string, GovernedSourceUnit[]>;
   ownedArtifacts: string[];
   projectsByChecker: Map<string, SourceProject[]>;
   providerEdges: GeneratedProviderEdge[];

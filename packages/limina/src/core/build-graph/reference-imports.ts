@@ -6,6 +6,7 @@ import type {
 } from './reference-import-types';
 import { addMappedReference } from './reference-recording';
 import {
+  addMissingOwnedDeclarationProviderProblem,
   createReferenceTarget,
   isValidReferenceTarget,
   resolveUsableProvider,
@@ -14,9 +15,20 @@ import type { SourceProject } from './types';
 
 export type { ReferenceImportContext } from './reference-import-types';
 
+function addFallbackProviderProblem(options: {
+  initialProblemCount: number;
+  reference: ReferenceImportOptions;
+}): void {
+  if (options.reference.context.problems.length !== options.initialProblemCount)
+    return;
+  addMissingOwnedDeclarationProviderProblem(options.reference);
+}
+
 function processReferenceImport(options: ReferenceImportOptions): void {
+  const initialProblemCount = options.context.problems.length;
   const provider = resolveUsableProvider(options);
   if (!provider) {
+    addFallbackProviderProblem({ initialProblemCount, reference: options });
     return;
   }
   const target = createReferenceTarget({ base: options, provider });

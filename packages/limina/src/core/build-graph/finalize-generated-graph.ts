@@ -45,6 +45,7 @@ export async function finalizeGeneratedGraph(options: {
     generatedKnipPackageConfigs: options.generatedKnip.configs.map(
       (entry) => entry.config,
     ),
+    governedSourcesByChecker: options.state.governedSourcesByChecker,
     ownedArtifacts: createOwnedArtifactLedger({
       artifactNamespace: options.artifactNamespace,
       expectedFiles: options.state.writeContext.expectedFiles,

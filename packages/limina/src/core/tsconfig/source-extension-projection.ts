@@ -121,9 +121,9 @@ function projectGovernedSourceExtensions(options: {
 }
 
 function getGovernedProjectPath(unit: GovernedSourceUnit): string {
-  return 'dtsConfigPath' in unit.buildProjection
-    ? unit.buildProjection.dtsConfigPath
-    : unit.configPath;
+  return 'buildConfigPath' in unit.buildProjection
+    ? unit.buildProjection.buildConfigPath
+    : unit.buildProjection.dtsConfigPath;
 }
 
 function projectGovernedUnits(options: {
