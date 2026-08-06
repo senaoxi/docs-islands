@@ -14,10 +14,17 @@ export interface CollectionContext {
   checkerPreset: ResolvedCheckerConfig['preset'];
   collection: CheckerSourceConfigCollection;
   config: ResolvedLiminaConfig;
+  discoveryExtensions?: string[];
   problems: string[];
   projectConfigCache?: CheckerProjectConfigCache;
   seenConfigs: Set<string>;
+  sourceConfigInspector?: SourceConfigInspector;
 }
+
+export type SourceConfigInspector = (options: {
+  configObject: JsonObject;
+  sourceConfigPath: string;
+}) => void;
 
 export interface ConfigVisit extends CollectionContext {
   referencedFromConfigPath?: string;
@@ -35,6 +42,7 @@ export interface CollectCheckerSourceConfigsOptions {
   checkerName: string;
   checkerPreset: ResolvedCheckerConfig['preset'];
   config: ResolvedLiminaConfig;
+  discoveryExtensions?: string[];
   entryConfigPaths: readonly string[];
   projectConfigCache?: CheckerProjectConfigCache;
 }
@@ -43,7 +51,9 @@ export interface CollectAutoSourceConfigModulesOptions {
   activatedRegions: WorkspaceRegionPathIndex;
   collection: CheckerSourceConfigCollection;
   config: ResolvedLiminaConfig;
+  discoveryExtensions: string[];
   entryConfigPath: string;
   problems: string[];
   projectConfigCache?: CheckerProjectConfigCache;
+  sourceConfigInspector: SourceConfigInspector;
 }

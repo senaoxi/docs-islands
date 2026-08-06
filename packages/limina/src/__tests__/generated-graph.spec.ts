@@ -1512,7 +1512,177 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it('rejects unsupported extensions in auto scopes', async () => {
+  it.each(['astro', 'svelte'])(
+    'discovers unsupported .%s files from broad auto includes',
+    async (extension) => {
+      const fixture = await createFixture({
+        [`packages/app/src/App.${extension}`]:
+          '<script lang="ts">const value = 1;</script>\n',
+        'packages/app/tsconfig.json': json({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*'],
+        }),
+      });
+
+      try {
+        let thrown: unknown;
+        try {
+          await prepareGeneratedTsconfigGraph({
+            ...fixture.config,
+            config: {
+              checkers: {
+                mode: 'auto',
+              },
+            },
+          });
+        } catch (error) {
+          thrown = error;
+        }
+
+        expect(thrown).toBeInstanceOf(LiminaStructuredError);
+        expect(String(thrown)).toContain(
+          'Unsupported auto checker source file extension',
+        );
+        expect(String(thrown)).toContain(`extension: .${extension}`);
+        expect((thrown as LiminaStructuredError).issues).toMatchObject([
+          {
+            code: 'LIMINA_GRAPH_PREPARE_FAILED',
+            title: 'Unsupported auto checker source file extension',
+          },
+        ]);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
+
+  it('discovers Astro files from an inherited effective include', async () => {
+    const fixture = await createFixture({
+      'packages/app/base.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*'],
+      }),
+      'packages/app/src/App.astro':
+        '<script lang="ts">const value = 1;</script>\n',
+      'packages/app/tsconfig.json': json({
+        extends: './base.json',
+      }),
+    });
+
+    try {
+      let thrown: unknown;
+      try {
+        await prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              mode: 'auto',
+            },
+          },
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(LiminaStructuredError);
+      expect(String(thrown)).toContain('extension: .astro');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not treat inherited framework intent as confirmed capability', async () => {
+    const fixture = await createFixture({
+      'packages/app/base.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          plugins: [{ name: '@astrojs/ts-plugin' }],
+          strict: true,
+          target: 'ES2023',
+          types: ['astro/client'],
+        },
+        include: ['src/**/*.ts'],
+      }),
+      'packages/app/src/index.ts': 'export const value = 1;\n',
+      'packages/app/tsconfig.json': json({
+        extends: './base.json',
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: {
+            mode: 'auto',
+          },
+        },
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          include: ['packages/app/tsconfig.json'],
+          name: 'typescript',
+          preset: 'tsc',
+        },
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('fails closed before classifying a missing generated extends', async () => {
+    const fixture = await createFixture({
+      'packages/app/tsconfig.json': json({
+        extends: './.astro/tsconfigs/strict.json',
+      }),
+    });
+
+    try {
+      let thrown: unknown;
+      try {
+        await prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              mode: 'auto',
+            },
+          },
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(LiminaStructuredError);
+      expect(String(thrown)).toContain(
+        'Unavailable auto checker extends config',
+      );
+      expect(String(thrown)).toContain('.astro/tsconfigs/strict.json');
+      expect((thrown as LiminaStructuredError).issues).toMatchObject([
+        {
+          code: 'LIMINA_GRAPH_PREPARE_FAILED',
+          title: 'Unavailable auto checker extends config',
+        },
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('retains the existing Svelte auto-scope rejection contract', async () => {
     const fixture = await createFixture({
       'packages/app/src/App.svelte':
         '<script lang="ts">const value = 1;</script>\n',

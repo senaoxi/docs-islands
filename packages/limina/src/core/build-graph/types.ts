@@ -18,6 +18,10 @@ import type {
   GeneratedKnipPackageDiagnostic,
 } from './generated-knip';
 import type { OutputOptions } from './generated/config-readers';
+import type {
+  AutoFrameworkEvidence,
+  SourceFilePartition,
+} from './source-capabilities';
 
 interface GeneratedCheckerManifest {
   configToOutputBuild: Record<string, GeneratedBuildModuleManifest>;
@@ -213,12 +217,14 @@ export interface AutoScopeProject {
   configPath: string;
   context: CheckerProjectParseContext;
   fileNames: string[];
+  filePartition: SourceFilePartition;
   options: ts.CompilerOptions;
 }
 
 export interface AutoScope {
   collection: CheckerSourceConfigCollection;
   entryConfigPath: string;
+  frameworkEvidence: AutoFrameworkEvidence[];
   projects: AutoScopeProject[];
 }
 

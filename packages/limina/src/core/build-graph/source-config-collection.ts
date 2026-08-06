@@ -1,13 +1,8 @@
 import {
-  parseCheckerProjectConfigForContext,
-  resolveCheckerProjectExtensions,
-} from '#checkers';
-import {
   collectReferencePathInfosForConfig,
   isLiminaSolutionConfig,
   isOrdinarySourceTypecheckConfigPath,
   type JsonObject,
-  readJsonConfig,
   validateUserMaintainedLiminaTsconfigMetadata,
 } from '#core/tsconfig/actions';
 import { uniqueCodeUnitSortedStrings as uniqueSortedStrings } from '#utils/collections';
@@ -22,6 +17,7 @@ import {
   readOutputOptions,
 } from './generated/config-readers';
 import { createGeneratedGraphStructuredError } from './problems';
+import { parseSourceConfig } from './source-config-analysis';
 import type {
   CollectCheckerSourceConfigsOptions,
   CollectionContext,
@@ -33,30 +29,6 @@ import {
   getOutsideRegionProblem,
 } from './source-config-problems';
 import type { CheckerSourceConfigCollection } from './types';
-
-function parseSourceConfig(options: ConfigVisit): SourceConfigAnalysis {
-  const configObject = readJsonConfig(options.config, options.sourceConfigPath);
-  const extensions = resolveCheckerProjectExtensions({
-    configPath: options.sourceConfigPath,
-    preset: options.checkerPreset,
-    projectRootDir: options.config.rootDir,
-  });
-  const parsed = parseCheckerProjectConfigForContext({
-    allowNoInputDiagnostics: true,
-    cache: options.projectConfigCache,
-    configPath: options.sourceConfigPath,
-    context: {
-      checkerPresets: [options.checkerPreset],
-      extensions,
-    },
-    projectRootDir: options.config.rootDir,
-  });
-  return {
-    configObject,
-    fileNames: parsed.fileNames,
-    options: parsed.options,
-  };
-}
 
 function rejectOutsideActivatedRegion(options: ConfigVisit): boolean {
   if (options.activatedRegions.isSourceConfigPath(options.sourceConfigPath)) {
@@ -233,21 +205,33 @@ export function collectCheckerSourceConfigModules(options: ConfigVisit): void {
     return;
   }
   const packageRootDir = registerSourceConfig(options);
-  const analysis = parseSourceConfig(options);
+  collectParsedSourceConfig({ options, packageRootDir });
+}
+
+function collectParsedSourceConfig(options: {
+  options: ConfigVisit;
+  packageRootDir: string;
+}): void {
+  const analysis = parseSourceConfig(options.options);
+  if (analysis === null) return;
   validateUserMaintainedLiminaTsconfigMetadata({
     configObject: analysis.configObject,
-    configPath: options.sourceConfigPath,
+    configPath: options.options.sourceConfigPath,
   });
-  if (hasInvalidSourceReferences(options.sourceConfigPath, analysis)) {
+  if (hasInvalidSourceReferences(options.options.sourceConfigPath, analysis)) {
     addSourceReferenceConfigProblems({
-      config: options.config,
+      config: options.options.config,
       configObject: analysis.configObject,
-      problems: options.problems,
-      sourceConfigPath: options.sourceConfigPath,
+      problems: options.options.problems,
+      sourceConfigPath: options.options.sourceConfigPath,
     });
     return;
   }
-  collectValidConfig({ analysis, packageRootDir, visit: options });
+  collectValidConfig({
+    analysis,
+    packageRootDir: options.packageRootDir,
+    visit: options.options,
+  });
 }
 
 export function createEmptySourceConfigCollection(
