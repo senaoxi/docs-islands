@@ -3,6 +3,8 @@ import type {
   ResolvedCheckerConfig,
   ResolvedLiminaConfig,
 } from '#config/runner';
+import type { JsonObject } from '#core/tsconfig/actions';
+import type ts from 'typescript';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
 import type { CheckerSourceConfigCollection } from './types';
 
@@ -20,6 +22,12 @@ export interface CollectionContext {
 export interface ConfigVisit extends CollectionContext {
   referencedFromConfigPath?: string;
   sourceConfigPath: string;
+}
+
+export interface SourceConfigAnalysis {
+  configObject: JsonObject;
+  fileNames: string[];
+  options: ts.CompilerOptions;
 }
 
 export interface CollectCheckerSourceConfigsOptions {

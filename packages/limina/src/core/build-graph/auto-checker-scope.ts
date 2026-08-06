@@ -14,9 +14,10 @@ import {
 } from './generated/file-extensions';
 import { createGeneratedGraphStructuredError } from './problems';
 import {
-  collectAutoSourceConfigModules,
+  collectCheckerSourceConfigModules,
   createEmptySourceConfigCollection,
 } from './source-config-collection';
+import type { CollectAutoSourceConfigModulesOptions } from './source-config-collection-types';
 import type { AutoCheckerPreset, AutoScope, AutoScopeProject } from './types';
 
 function createAutoScopeProject(options: {
@@ -47,6 +48,22 @@ function setAutoRootConfigPaths(scope: AutoScope): void {
     scope.collection.buildModulesBySourcePath.has(scope.entryConfigPath)
       ? [scope.entryConfigPath]
       : [];
+}
+
+function collectAutoSourceConfigModules(
+  options: CollectAutoSourceConfigModulesOptions,
+): void {
+  collectCheckerSourceConfigModules({
+    activatedRegions: options.activatedRegions,
+    checkerName: '__auto__',
+    checkerPreset: 'tsc',
+    collection: options.collection,
+    config: options.config,
+    problems: options.problems,
+    projectConfigCache: options.projectConfigCache,
+    seenConfigs: new Set(),
+    sourceConfigPath: options.entryConfigPath,
+  });
 }
 
 function createAutoScope(options: {

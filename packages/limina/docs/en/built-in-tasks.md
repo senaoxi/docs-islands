@@ -67,7 +67,7 @@ Limina's governance is built on the generated graph. The graph comes from ordina
 
 - checker build entries;
 - generated declaration build `tsconfig` files;
-- solution-style build aggregator configs;
+- supported `tsconfig.json` solution build aggregator configs;
 - the generated manifest;
 - generated configs used by source usage analysis.
 

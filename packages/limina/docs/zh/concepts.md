@@ -74,7 +74,7 @@ packages/core/tsconfig.tools.json
 
 ## 聚合器配置
 
-聚合器是只包含 `files: []` 和 `references` 的 `tsconfig`。它不拥有源码文件，只负责把多个源码配置组合成一个入口。
+当检查器解析出的文件集合为空，并且配置直接声明了 `references` 时，Limina 才把它视为 TypeScript solution。文件集合会使用当前检查器解析，因此会考虑 `extends`、`.vue` 等框架扩展名以及 TypeScript 项目规则。`files: []` 是最清楚、最稳定的写法，但不是唯一合法写法。
 
 ```jsonc
 {
@@ -83,7 +83,9 @@ packages/core/tsconfig.tools.json
 }
 ```
 
-Limina 允许默认入口 `tsconfig.json` 作为聚合器。运行 `limina graph prepare` 时，Limina 会从检查器入口出发，沿着这些 `references` 展开源码配置，并在 `.limina/` 下生成检查器实际消费的构建图。
+只有路径名称恰好为 `tsconfig.json` 的 solution 才是 Limina 支持的聚合器。解析后仍拥有源码文件的默认 `tsconfig.json` 属于普通源码叶子；如果它同时声明 `references`，Limina 会报告源码引用问题，而不会把它当作聚合器。`tsconfig.solution.json` 这类带名称的配置虽然可能符合 TypeScript 的 solution 语义，但不是 Limina 支持的 solution 入口，不能这样使用。
+
+运行 `limina graph prepare` 时，Limina 会从检查器入口出发，沿着受支持的 `tsconfig.json` solution 的有效 `references` 展开源码配置，并生成检查器实际消费的构建图。
 
 不要把聚合器当成源码拥有者。需要区分不同运行环境、测试范围或构建目标时，应让聚合器引用多个源码叶子配置，而不是让一个配置同时承担聚合和源码归属两种职责。
 

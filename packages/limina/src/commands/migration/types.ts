@@ -39,7 +39,8 @@ export interface MigrationTarget {
   configObject: JsonObject;
   configPath: string;
   effectiveConfig: MigrationEffectiveConfig;
-  isSolutionStyle: boolean;
+  isLiminaSolution: boolean;
+  isTypeScriptSolution: boolean;
   originalBytes: Buffer;
   originalContent: string;
 }

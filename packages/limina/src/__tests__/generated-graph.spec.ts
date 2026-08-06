@@ -1207,6 +1207,94 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
+  it('classifies an empty include solution from its checker-resolved file set', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/index.ts': 'export const value = 1;\n',
+      'packages/app/tsconfig.json': json({
+        include: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/app/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: {
+            mode: 'auto',
+          },
+        },
+      });
+
+      expect(result.manifest.checkers.typescript?.roots).toEqual([
+        'packages/app/tsconfig.lib.json',
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects a named TypeScript solution reached through a default entry', async () => {
+    const fixture = await createFixture({
+      'packages/app/tsconfig.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.solution.json',
+          },
+        ],
+      }),
+      'packages/app/tsconfig.solution.json': json({
+        files: [],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/app/src/index.ts': 'export const value = 1;\n',
+      'packages/app/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+
+    try {
+      await expect(
+        prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              mode: 'auto',
+            },
+          },
+        }),
+      ).rejects.toThrow('Source typecheck config declares project references');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('respects auto checker exclude for discovered entries', async () => {
     const fixture = await createFixture({
       'packages/app/src/index.ts': 'export const value = 1;\n',
@@ -3280,6 +3368,49 @@ describe('prepareGeneratedTsconfigGraph', () => {
               typescript: {
                 preset: 'tsc',
                 include: ['packages/pkg/tsconfig.json'],
+              },
+            },
+          },
+        }),
+      ).rejects.toThrow('Source typecheck config declares project references');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('uses Vue checker files when deciding whether a default config is a solution', async () => {
+    const fixture = await createFixture({
+      'packages/pkg/src/App.vue':
+        '<script setup lang="ts">const value = 1;</script>\n',
+      'packages/pkg/tsconfig.json': json({
+        include: ['src/**/*'],
+        references: [
+          {
+            path: './tsconfig.lib.json',
+          },
+        ],
+      }),
+      'packages/pkg/tsconfig.lib.json': json({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*.vue'],
+      }),
+    });
+
+    try {
+      await expect(
+        prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              vue: {
+                include: ['packages/pkg/tsconfig.json'],
+                preset: 'vue-tsc',
               },
             },
           },

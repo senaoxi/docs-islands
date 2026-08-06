@@ -20,21 +20,6 @@ export function isDefaultSourceTsconfigPath(configPath: string): boolean {
   );
 }
 
-function hasEmptyFiles(configObject: Record<string, unknown>): boolean {
-  return Array.isArray(configObject.files) && configObject.files.length === 0;
-}
-
-export function isSolutionStyleTsconfig(
-  configPath: string,
-  configObject: Record<string, unknown>,
-): boolean {
-  return (
-    isDefaultTsconfigPath(configPath) &&
-    hasEmptyFiles(configObject) &&
-    Object.hasOwn(configObject, 'references')
-  );
-}
-
 function getGraphRulesValue(configObject: Record<string, unknown>): unknown {
   const options = configObject.liminaOptions;
   return isPlainRecord(options) ? options.graphRules : undefined;
@@ -62,15 +47,14 @@ export function readGraphRules(
 
 export function addSourceReferenceConfigProblems(options: {
   config: ResolvedLiminaConfig;
+  configObject?: Record<string, unknown>;
   problems: string[];
   sourceConfigPath: string;
 }): void {
-  const configObject = readJsonConfig(options.config, options.sourceConfigPath);
+  const configObject =
+    options.configObject ??
+    readJsonConfig(options.config, options.sourceConfigPath);
   if (!Object.hasOwn(configObject, 'references')) {
-    return;
-  }
-
-  if (isSolutionStyleTsconfig(options.sourceConfigPath, configObject)) {
     return;
   }
 

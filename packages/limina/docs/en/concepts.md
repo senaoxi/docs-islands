@@ -74,7 +74,7 @@ The `path` of an `implicitRefs` entry must point to an ordinary source `tsconfig
 
 ## Aggregator Config
 
-An aggregator is a `tsconfig` that contains only `files: []` and `references`. It owns no source files and only groups several source configs into one entry.
+Limina treats a config as a TypeScript solution when the checker-resolved file set is empty and the config directly declares `references`. The resolved file set is computed with the active checker, so `extends`, framework extensions such as `.vue`, and other TypeScript project rules are included in this decision. `files: []` is the clearest way to make that intent explicit, but it is not the only accepted spelling.
 
 ```jsonc
 {
@@ -83,7 +83,9 @@ An aggregator is a `tsconfig` that contains only `files: []` and `references`. I
 }
 ```
 
-Limina allows the default entry `tsconfig.json` to act as an aggregator. When `limina graph prepare` runs, Limina starts from checker entries, follows these `references` to expand source configs, and generates the build graph actually consumed by checkers under `.limina/`.
+Only a solution at a path named exactly `tsconfig.json` is a Limina-managed aggregator. A default `tsconfig.json` that resolves any source file is an ordinary source leaf; if it also declares `references`, Limina reports the source-reference violation instead of treating it as an aggregator. A named config such as `tsconfig.solution.json` can still be a TypeScript solution according to the compiler, but it is not a supported Limina solution entry and must not be used as one.
+
+When `limina graph prepare` runs, Limina starts from checker entries, follows valid `references` from the supported `tsconfig.json` solutions, and generates the build graph consumed by checkers.
 
 Do not treat an aggregator as a source owner. When different runtime environments, test scopes, or build targets need to be separated, let the aggregator reference multiple source leaf configs instead of making one config both aggregate projects and own source files.
 

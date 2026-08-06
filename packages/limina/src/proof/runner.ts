@@ -39,6 +39,17 @@ import { addDuplicateTypecheckOwnershipFindings } from './typecheck-ownership';
 
 export type { RunProofCheckOptions } from './runner-types';
 
+function collectSolutionConfigPaths(
+  generatedGraph: ProofRunState['generatedGraph'],
+): ReadonlySet<string> {
+  return new Set(
+    [...generatedGraph.sourceToBuild.values()]
+      .flatMap((sourceToBuild) => [...sourceToBuild])
+      .filter(([, module]) => module.kind === 'solution')
+      .map(([configPath]) => configPath),
+  );
+}
+
 async function addRouteFindings(state: ProofRunState): Promise<void> {
   const [graphCollection, entryCollection] = await Promise.all([
     state.preflight.ensureGraphProjectRoutes(),
@@ -70,6 +81,7 @@ function addProjectConfigFindings(state: ProofRunState): void {
     state.config,
     state.entryRoutes,
   );
+  const solutionConfigPaths = collectSolutionConfigPaths(state.generatedGraph);
   const defaultTsconfigPaths = state.ordinaryConfigPaths.filter(
     (configPath) => path.basename(configPath) === 'tsconfig.json',
   );
@@ -96,6 +108,7 @@ function addProjectConfigFindings(state: ProofRunState): void {
   addDefaultTsconfigShapeFindings({
     config: state.config,
     findings: state.findings,
+    solutionConfigPaths,
     tsconfigPaths: defaultTsconfigPaths,
     workspaceLookup: state.workspaceLookup,
   });
@@ -103,6 +116,7 @@ function addProjectConfigFindings(state: ProofRunState): void {
     config: state.config,
     findings: state.findings,
     ordinaryConfigPaths: state.ordinaryConfigPaths,
+    solutionConfigPaths,
     workspaceLookup: state.workspaceLookup,
   });
   addDefaultTsconfigEnvironmentFindings({

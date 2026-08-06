@@ -2977,7 +2977,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('keeps rejecting non-pure solution-style tsconfig aggregators', async () => {
+  it('accepts semantic solutions with non-source-owning compiler options', async () => {
     const fixture = await createFixture(
       createPassingFiles({
         'tsconfig.json': JSON.stringify({
@@ -2995,7 +2995,7 @@ describe('runProofCheck dts config semantics', () => {
     );
 
     try {
-      await expect(runProofCheck(fixture.config)).resolves.toBe(false);
+      await expect(runProofCheck(fixture.config)).resolves.toBe(true);
     } finally {
       await fixture.cleanup();
     }

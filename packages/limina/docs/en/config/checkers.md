@@ -30,7 +30,7 @@ export default defineConfig({
 - **Type:** `{ mode: 'auto'; exclude?: string[] }`
 - **Default:** used when `config.checkers` is omitted
 
-`auto` mode discovers ordinary `tsconfig.json` entries independently in every activated package island, including external packages. An entry with only `TypeScript`, `JavaScript`, and `JSON` files goes to `tsc`. An entry containing `.vue` files goes to `vue-tsc`. `solution-style tsconfig.json` files are handled as aggregators, and Limina classifies them from the referenced source configs. Parent discovery never reads through an activated child root or an owner-local nested workspace boundary; an activated child starts its own discovery job.
+`auto` mode discovers ordinary `tsconfig.json` entries independently in every activated package island, including external packages. An entry with only `TypeScript`, `JavaScript`, and `JSON` files goes to `tsc`. An entry containing `.vue` files goes to `vue-tsc`. Limina recognizes a TypeScript solution when the checker-resolved file list is empty and the config directly declares `references`; only a solution whose basename is exactly `tsconfig.json` is expanded as a Limina aggregator. Parent discovery never reads through an activated child root or an owner-local nested workspace boundary; an activated child starts its own discovery job.
 
 If a `TypeScript` entry imports a `Vue` entry, `auto` mode sends that `TypeScript` entry to `vue-tsc` too. This promotion continues through dependency chains, so the generated build graph avoids an incompatible `tsc` project depending on a `vue-tsc` project.
 
@@ -106,7 +106,7 @@ included entries = activated-region entries matching include
 effective entries = included entries minus exclude
 ```
 
-An `include` match outside every activated workspace package, or below an excluded or inaccessible region boundary, is not an included entry. Each effective entry must belong to only one checker. From there, Limina follows `TypeScript references` on `solution-style tsconfig.json` files and brings existing ordinary source configs into the managed scope. A reference outside the activated regions is a cross-region error; `exclude` does not suppress that reference.
+An `include` match outside every activated workspace package, or below an excluded or inaccessible region boundary, is not an included entry. Each effective entry must belong to only one checker. From there, Limina follows `TypeScript references` on supported solution `tsconfig.json` files and brings existing ordinary source configs into the managed scope. A reference outside the activated regions is a cross-region error; `exclude` does not suppress that reference.
 
 Non-entry configs such as `tsconfig.lib.json`, `tsconfig.test.json`, or `tsconfig.tools.json` are therefore useful, but they are not selected directly by `checker.include`. They enter Limina's managed scope only when a selected `tsconfig.json` entry references them. A standalone base, build-only, or helper config that is not reachable from an entry is not treated as a source check target.
 

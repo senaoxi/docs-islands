@@ -30,7 +30,7 @@ export default defineConfig({
 - **类型：** `{ mode: 'auto'; exclude?: string[] }`
 - **默认值：** 省略 `config.checkers` 时使用
 
-`auto` 模式会在每个激活 package island 中独立发现普通 `tsconfig.json`，包括外部激活包。只包含 `TypeScript`、`JavaScript` 和 `JSON` 的入口会交给 `tsc`；包含 `.vue` 文件的入口会交给 `vue-tsc`。`solution-style tsconfig.json` 会按聚合器处理，Limina 根据它引用到的源码配置判断应该使用哪种能力。父级发现不会穿过激活子包根目录或 owner-local 嵌套工作区边界；激活子包会启动自己的发现任务。
+`auto` 模式会在每个激活 package island 中独立发现普通 `tsconfig.json`，包括外部激活包。只包含 `TypeScript`、`JavaScript` 和 `JSON` 的入口会交给 `tsc`；包含 `.vue` 文件的入口会交给 `vue-tsc`。当检查器解析出的文件列表为空、且配置直接声明 `references` 时，Limina 才把它识别为 TypeScript solution；只有 basename 恰好为 `tsconfig.json` 的 solution 才会作为 Limina 聚合器展开。父级发现不会穿过激活子包根目录或 owner-local 嵌套工作区边界；激活子包会启动自己的发现任务。
 
 如果 `TypeScript` 入口 `import` 到 `Vue` 入口，`auto` 模式会把这个 `TypeScript` 入口也交给 `vue-tsc`。这个提升会沿依赖链继续传播，避免生成的构建图里出现 `tsc` 项目依赖 `vue-tsc` 项目的不兼容关系。
 
@@ -106,7 +106,7 @@ included entries = 已激活区域内匹配 include 的入口
 effective entries = included entries 减去 exclude
 ```
 
-如果一个 `include` 匹配项不属于任何已激活工作区包，或者位于已排除、不可访问的区域边界之下，它就不会进入 included entries。每个 effective entry 只能属于一个检查器。之后 Limina 会跟随 `solution-style tsconfig.json` 上的 `TypeScript references`，把存在的普通源码配置纳入治理。引用越过已激活区域时会报告跨区域错误；`exclude` 不会屏蔽这条引用。
+如果一个 `include` 匹配项不属于任何已激活工作区包，或者位于已排除、不可访问的区域边界之下，它就不会进入 included entries。每个 effective entry 只能属于一个检查器。之后 Limina 会跟随受支持的 solution `tsconfig.json` 上的 `TypeScript references`，把存在的普通源码配置纳入治理。引用越过已激活区域时会报告跨区域错误；`exclude` 不会屏蔽这条引用。
 
 因此，`tsconfig.lib.json`、`tsconfig.test.json`、`tsconfig.tools.json` 这类非入口配置依然有用，但不要直接写进 `checker.include`。它们只有在被某个已选中的 `tsconfig.json` 入口 `reference` 到时，才会进入 Limina 的检查范围。单独存在的基础配置、仅构建配置或工具辅助配置，如果没有从入口可达，Limina 不会把它当成源码检查目标。
 

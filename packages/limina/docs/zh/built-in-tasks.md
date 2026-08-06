@@ -67,7 +67,7 @@ Limina 的治理建立在生成图之上。生成图来自普通源码 `tsconfig
 
 - 检查器构建入口；
 - 生成的声明构建 `tsconfig`；
-- `solution-style` 构建聚合配置；
+- 受支持的 `tsconfig.json` solution 构建聚合配置；
 - 生成清单；
 - 供源码使用分析使用的生成配置。
 
