@@ -101,12 +101,30 @@ export function createGeneratedProjectCheckerNamesByPath(
 ): Map<string, string> {
   const checkerNamesByPath = new Map<string, string>();
 
-  for (const [checkerName, sourceToDts] of generatedGraph.sourceToDts) {
-    for (const [sourceConfigPath, dtsConfigPath] of sourceToDts) {
+  addGovernedProjectCheckerNames(generatedGraph, checkerNamesByPath);
+  addDeclarationProjectCheckerNames(generatedGraph, checkerNamesByPath);
+
+  return checkerNamesByPath;
+}
+
+function addGovernedProjectCheckerNames(
+  generatedGraph: GeneratedTsconfigGraphResult,
+  checkerNamesByPath: Map<string, string>,
+): void {
+  for (const [checkerName, governedSources] of generatedGraph.governedSources) {
+    for (const sourceConfigPath of governedSources.keys()) {
       checkerNamesByPath.set(sourceConfigPath, checkerName);
+    }
+  }
+}
+
+function addDeclarationProjectCheckerNames(
+  generatedGraph: GeneratedTsconfigGraphResult,
+  checkerNamesByPath: Map<string, string>,
+): void {
+  for (const [checkerName, sourceToDts] of generatedGraph.sourceToDts) {
+    for (const dtsConfigPath of sourceToDts.values()) {
       checkerNamesByPath.set(dtsConfigPath, checkerName);
     }
   }
-
-  return checkerNamesByPath;
 }

@@ -86,6 +86,7 @@ export async function finalizeGeneratedGraph(options: {
     changed: options.state.writeContext.changed,
     checkers: options.checkers,
     generatedFiles: options.state.writeContext.files,
+    governedSourcesByChecker: options.state.governedSourcesByChecker,
     manifest,
     manifestPath,
     outputDeclarationCopiesByChecker:

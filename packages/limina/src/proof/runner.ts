@@ -184,6 +184,7 @@ function addCoverageFindings(options: {
     findings: options.state.findings,
     ownersByFile: collectConfigFileOwners({
       config: options.state.config,
+      generatedGraph: options.state.generatedGraph,
       graphRoutes: options.state.graphRoutes,
       projectConfigCache: options.state.preflight.providers.projectConfigs,
       sourceFiles: options.sourceFiles,
@@ -220,6 +221,7 @@ async function runCoveragePhase(state: ProofRunState): Promise<boolean> {
   const baseCoverageByFile = collectCoverage({
     checkerTargets: state.checkerTargets,
     config: state.config,
+    generatedGraph: state.generatedGraph,
     graphRoutes: state.graphRoutes,
     outsideSourceCoverageByFile: outsideCoverage,
     projectConfigCache: state.preflight.providers.projectConfigs,

@@ -2,6 +2,7 @@ import type { CheckerProjectConfigCache } from '#checkers';
 import type { ResolvedLiminaConfig } from '#config/runner';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
 import { getGeneratedCheckerEntryPath } from './generated/paths';
+import { createGovernedSourceUnit } from './governed-sources';
 import { collectCheckerSourceConfigs } from './source-config-collection';
 import { createSolutionProject, createSourceProject } from './source-projects';
 import type {
@@ -80,6 +81,13 @@ export function prepareCheckerGraph(options: {
         sourceConfigPath,
       }),
     );
+  const governedSources = projects.map((project) =>
+    createGovernedSourceUnit({
+      config: options.config,
+      project,
+      projectConfigCache: options.projectConfigCache,
+    }),
+  );
   return {
     checker: options.selection.checker,
     collection,
@@ -87,6 +95,7 @@ export function prepareCheckerGraph(options: {
       checkerName: options.selection.checker.name,
       rootDir: options.config.rootDir,
     }),
+    governedSources,
     projects,
     rootBuildPaths: getRootBuildPaths(collection),
     solutions: createCheckerSolutions({

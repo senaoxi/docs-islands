@@ -1,7 +1,11 @@
 export { resolveGeneratedGraphCheckers } from './checker-resolution';
 export { prepareGeneratedTsconfigGraph } from './prepare';
-export { collectGeneratedSourceConfigPaths } from './result';
+export {
+  collectGeneratedSourceConfigPaths,
+  collectGovernedSourceConfigPaths,
+} from './result';
 export type {
+  FrameworkCapabilityDescriptor,
   GeneratedBuildModule,
   GeneratedBuildModuleKind,
   GeneratedBuildModuleManifest,
@@ -9,5 +13,7 @@ export type {
   GeneratedProviderEdge,
   GeneratedTsconfigGraphManifest,
   GeneratedTsconfigGraphResult,
+  GovernedSourceUnit,
   PrepareGeneratedTsconfigGraphOptions,
+  SourceBuildProjection,
 } from './types';

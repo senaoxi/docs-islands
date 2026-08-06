@@ -324,6 +324,7 @@ function createCheckerGraphCoverageProofGeneratedGraph(
     generatedKnipConfigs: [],
     generatedKnipDiagnostics: [],
     generatedFiles: new Map(),
+    governedSources: new Map(),
     manifest: {
       checkers: {},
       generatedBy: 'limina',

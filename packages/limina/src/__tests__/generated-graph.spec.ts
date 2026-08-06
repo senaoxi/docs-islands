@@ -1714,6 +1714,58 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
+  it.each(['astro', 'svelte'] as const)(
+    'indexes pure .%s source ownership independently from declaration artifacts',
+    async (family) => {
+      const sourcePath = `packages/app/src/App.${family}`;
+      const fixture = await createFixture({
+        [sourcePath]: '<script lang="ts">const value = 1;</script>\n',
+        'packages/app/tsconfig.json': json({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*'],
+        }),
+      });
+
+      try {
+        const result = await prepareGeneratedTsconfigGraph(fixture.config);
+        const sourceConfigPath = normalizeAbsolutePath(
+          path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
+        );
+        const unit = result.governedSources
+          .get('typescript')
+          ?.get(sourceConfigPath);
+
+        expect(unit).toMatchObject({
+          buildProjection: { kind: 'declaration-project' },
+          configPath: sourceConfigPath,
+          declarationFileNames: [],
+          frameworkCapabilities: [
+            {
+              family,
+              sourceConfigPath,
+            },
+          ],
+          primaryCheckerName: 'typescript',
+          primaryCheckerPreset: 'tsc',
+        });
+        expect(unit?.ownedFileNames).toEqual([
+          normalizeAbsolutePath(path.join(fixture.rootDir, sourcePath)),
+        ]);
+        expect(
+          result.sourceToDts.get('typescript')?.has(sourceConfigPath),
+        ).toBe(true);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
+
   it('writes a manifest and generated declaration leaf for source configs', async () => {
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',

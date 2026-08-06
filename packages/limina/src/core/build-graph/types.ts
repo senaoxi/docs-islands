@@ -100,6 +100,7 @@ export interface GeneratedTsconfigGraphResult {
   dtsToSource: Map<string, Map<string, string>>;
   generatedKnipConfigs: GeneratedKnipPackageConfig[];
   generatedKnipDiagnostics: GeneratedKnipPackageDiagnostic[];
+  governedSources: Map<string, Map<string, GovernedSourceUnit>>;
   providerEdges: GeneratedProviderEdge[];
   manifest: GeneratedTsconfigGraphManifest;
   generatedFiles: ReadonlyMap<string, string>;
@@ -127,6 +128,40 @@ export interface SourceProject {
   packageRootDir: string;
   options: ts.CompilerOptions;
   references: Set<string>;
+}
+
+export interface FrameworkCapabilityDescriptor {
+  family: 'astro' | 'svelte';
+  packageRootDir: string;
+  sourceConfigPath: string;
+}
+
+export type SourceBuildProjection =
+  | {
+      dtsConfigPath: string;
+      kind: 'declaration-project';
+    }
+  | {
+      buildConfigPath: string;
+      kind: 'transparent-solution';
+    }
+  | {
+      buildConfigPath: string;
+      dtsConfigPath: string;
+      kind: 'wrapped-project';
+    };
+
+export interface GovernedSourceUnit {
+  buildProjection: SourceBuildProjection;
+  configPath: string;
+  declarationFileNames: string[];
+  declarationReferences: Set<string>;
+  frameworkCapabilities: FrameworkCapabilityDescriptor[];
+  frameworkSchedulingReferences: Set<string>;
+  ownedFileNames: string[];
+  packageRootDir: string;
+  primaryCheckerName: string;
+  primaryCheckerPreset: ResolvedCheckerConfig['preset'];
 }
 
 export interface SolutionProject {
@@ -167,6 +202,7 @@ export interface PreparedCheckerGraph {
   checker: ResolvedCheckerConfig;
   collection: CheckerSourceConfigCollection;
   entryPath: string;
+  governedSources: GovernedSourceUnit[];
   projects: SourceProject[];
   rootBuildPaths: string[];
   solutions: SolutionProject[];

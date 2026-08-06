@@ -5,6 +5,7 @@ import type {
   GeneratedGraphWriteContext,
   GeneratedOutputDeclarationCopyContext,
   GeneratedProviderEdge,
+  GovernedSourceUnit,
   OutputSolutionProject,
   PreparedCheckerGraph,
   SolutionProject,
@@ -23,6 +24,7 @@ export interface GeneratedGraphPreparationState {
   outputSolutionsByChecker: Map<string, OutputSolutionProject[]>;
   problems: string[];
   projectsByChecker: Map<string, SourceProject[]>;
+  governedSourcesByChecker: Map<string, GovernedSourceUnit[]>;
   providerEdges: GeneratedProviderEdge[];
   rootBuildPathsByChecker: Map<string, string[]>;
   solutionsByChecker: Map<string, SolutionProject[]>;
@@ -42,6 +44,7 @@ export function createGeneratedGraphPreparationState(
     outputSolutionsByChecker: new Map(),
     problems: [],
     projectsByChecker: new Map(),
+    governedSourcesByChecker: new Map(),
     providerEdges: [],
     rootBuildPathsByChecker: new Map(),
     solutionsByChecker: new Map(),
@@ -68,6 +71,10 @@ export function registerPreparedChecker(options: {
   options.state.projectsByChecker.set(
     checkerName,
     options.preparedChecker.projects,
+  );
+  options.state.governedSourcesByChecker.set(
+    checkerName,
+    options.preparedChecker.governedSources,
   );
   options.state.solutionsByChecker.set(
     checkerName,

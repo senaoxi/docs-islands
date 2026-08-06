@@ -1,8 +1,10 @@
 import {
+  normalizeExtensions,
   parseCheckerProjectConfigForContext,
   resolveCheckerProjectExtensions,
 } from '#checkers';
 import { readJsonConfig } from '#core/tsconfig/actions';
+import { capabilityDiscoveryExtensions } from './generated/file-extensions';
 import type {
   ConfigVisit,
   SourceConfigAnalysis,
@@ -10,11 +12,14 @@ import type {
 
 function resolveDiscoveryExtensions(options: ConfigVisit): string[] {
   if (options.discoveryExtensions) return options.discoveryExtensions;
-  return resolveCheckerProjectExtensions({
-    configPath: options.sourceConfigPath,
-    preset: options.checkerPreset,
-    projectRootDir: options.config.rootDir,
-  });
+  return normalizeExtensions([
+    ...capabilityDiscoveryExtensions,
+    ...resolveCheckerProjectExtensions({
+      configPath: options.sourceConfigPath,
+      preset: options.checkerPreset,
+      projectRootDir: options.config.rootDir,
+    }),
+  ]);
 }
 
 function inspectionAddedProblems(options: {

@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { runPipeline } from '../pipeline/runner';
 import { LiminaPreflightManager } from '../preflight';
 import { createProfilingMetricsRecorder } from '../profiling/metrics';
+import { collectCoverage } from '../proof/coverage-collection';
+import { createSourceCheckState } from '../source-check/run-state';
 import { toPortablePath, toPortablePaths } from './helpers/path';
 
 const buildCompilerOptions = {
@@ -225,6 +227,90 @@ describe('AnalysisProviderSet', () => {
       await fixture.cleanup();
     }
   });
+
+  it.each(['astro', 'svelte'] as const)(
+    'governs pure .%s sources across ownership, graph, proof, and package domains',
+    async (family) => {
+      const fixture = await createCoreFixture();
+      const sourceConfigPath = path.join(
+        fixture.rootDir,
+        'packages/a/tsconfig.lib.json',
+      );
+      const sourceFilePath = path.join(
+        fixture.rootDir,
+        `packages/a/src/App.${family}`,
+      );
+      fixture.config.config = {
+        ...fixture.config.config,
+        source: { include: [`**/*.${family}`] },
+      };
+      await writeText(
+        sourceConfigPath,
+        stringifyJson({
+          compilerOptions: buildCompilerOptions,
+          include: [`src/**/*.${family}`],
+          liminaOptions: { graphRules: ['framework'] },
+        }),
+      );
+      await writeText(sourceFilePath, '<h1>Framework source</h1>\n');
+
+      try {
+        const graph = await fixture.core.buildGraph.getGraph();
+        const unit = graph.governedSources
+          .get('typescript')
+          ?.get(sourceConfigPath);
+        const projectedConfigPath =
+          unit && 'dtsConfigPath' in unit.buildProjection
+            ? unit.buildProjection.dtsConfigPath
+            : sourceConfigPath;
+        const sourceGraph =
+          await fixture.core.tsconfig.getSourceGraphProjects();
+        const sourceProject = sourceGraph.projects.find(
+          (project) => project.configPath === projectedConfigPath,
+        );
+        const owner =
+          await fixture.core.tsconfig.findOwningProject(sourceFilePath);
+        const preflight = new LiminaPreflightManager({
+          config: fixture.config,
+          providers: fixture.core,
+        });
+        const sourceState = await createSourceCheckState(fixture.config, {
+          preflight,
+        });
+        const coverage = collectCoverage({
+          checkerTargets: [],
+          config: fixture.config,
+          generatedGraph: graph,
+          graphRoutes: [],
+          sourceFiles: new Set([sourceFilePath]),
+          virtualFiles: graph.generatedFiles,
+        });
+        const domain =
+          await fixture.core.packages.getPackageDomain('@fixture/a');
+
+        expect(unit?.ownedFileNames).toEqual([sourceFilePath]);
+        expect(sourceProject?.ownedFileNames).toEqual([sourceFilePath]);
+        expect(sourceProject?.labels).toEqual(['framework']);
+        expect(owner?.resolverConfigPath).toBe(sourceConfigPath);
+        expect(
+          sourceState.sourceProjectEntries.find(
+            (entry) => entry.project.configPath === projectedConfigPath,
+          )?.fileNames,
+        ).toEqual([sourceFilePath]);
+        expect(coverage.get(sourceFilePath)).toMatchObject([
+          {
+            checkerName: 'typescript',
+            projectPath: sourceConfigPath,
+            type: 'graph',
+          },
+        ]);
+        expect(domain.sourceConfigPaths).toContain(sourceConfigPath);
+        expect(domain.sourceModulePaths).toContain(sourceFilePath);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
 
   it('shares one workspace path and lookup index within a provider generation', async () => {
     const fixture = await createCoreFixture();

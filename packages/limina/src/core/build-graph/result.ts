@@ -13,6 +13,7 @@ import type {
   GeneratedOutputDeclarationCopyContext,
   GeneratedTsconfigGraphManifest,
   GeneratedTsconfigGraphResult,
+  GovernedSourceUnit,
 } from './types';
 
 function toAbsolutePath(rootDir: string, relativePath: string): string {
@@ -160,11 +161,39 @@ function cloneOutputDeclarationCopies(
   );
 }
 
+function cloneGovernedSource(unit: GovernedSourceUnit): GovernedSourceUnit {
+  return {
+    ...unit,
+    buildProjection: { ...unit.buildProjection },
+    declarationFileNames: [...unit.declarationFileNames],
+    declarationReferences: new Set(unit.declarationReferences),
+    frameworkCapabilities: unit.frameworkCapabilities.map((capability) => ({
+      ...capability,
+    })),
+    frameworkSchedulingReferences: new Set(unit.frameworkSchedulingReferences),
+    ownedFileNames: [...unit.ownedFileNames],
+  };
+}
+
+function createGovernedSourceMap(
+  governedSourcesByChecker: ReadonlyMap<string, readonly GovernedSourceUnit[]>,
+): GeneratedTsconfigGraphResult['governedSources'] {
+  return new Map(
+    [...governedSourcesByChecker].map(([checkerName, units]) => [
+      checkerName,
+      new Map(
+        units.map((unit) => [unit.configPath, cloneGovernedSource(unit)]),
+      ),
+    ]),
+  );
+}
+
 export function createResult(options: {
   artifactPlan: ArtifactPlan;
   changed: boolean;
   checkers: ResolvedCheckerConfig[];
   generatedFiles: ReadonlyMap<string, string>;
+  governedSourcesByChecker: ReadonlyMap<string, readonly GovernedSourceUnit[]>;
   manifest: GeneratedTsconfigGraphManifest;
   manifestPath: string;
   outputDeclarationCopiesByChecker: Map<
@@ -195,6 +224,7 @@ export function createResult(options: {
       diagnostics: options.manifest.knip.diagnostics,
       rootDir: options.rootDir,
     }),
+    governedSources: createGovernedSourceMap(options.governedSourcesByChecker),
     providerEdges: createProviderEdges(options),
     manifest: options.manifest,
     generatedFiles: new Map(options.generatedFiles),
@@ -207,6 +237,16 @@ export function collectGeneratedSourceConfigPaths(
   return uniqueSortedStrings(
     [...generatedGraph.sourceToBuild.values()].flatMap((sourceToBuild) => [
       ...sourceToBuild.keys(),
+    ]),
+  );
+}
+
+export function collectGovernedSourceConfigPaths(
+  generatedGraph: GeneratedTsconfigGraphResult,
+): string[] {
+  return uniqueSortedStrings(
+    [...generatedGraph.governedSources.values()].flatMap((governedSources) => [
+      ...governedSources.keys(),
     ]),
   );
 }
