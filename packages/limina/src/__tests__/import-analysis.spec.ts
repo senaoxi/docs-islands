@@ -47,6 +47,56 @@ async function linkCompilerSfc(rootDir: string): Promise<void> {
   );
 }
 
+function createSvelteCompilerSource(options: {
+  failMessage?: string;
+  version: string;
+}): string {
+  return [
+    `'use strict';`,
+    `exports.VERSION = ${JSON.stringify(options.version)};`,
+    'exports.parse = function parse(source) {',
+    ...(options.failMessage === undefined
+      ? []
+      : [`  throw new SyntaxError(${JSON.stringify(options.failMessage)});`]),
+    '  if (source.includes("<syntax-error>")) throw new SyntaxError("fixture syntax error");',
+    '  const root = { instance: null, module: null };',
+    '  const pattern = /<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/giu;',
+    '  for (const match of source.matchAll(pattern)) {',
+    '    const content = match[2] || "";',
+    '    const start = (match.index || 0) + match[0].indexOf(content);',
+    '    const script = { content: { start, end: start + content.length } };',
+    '    const attrs = match[1] || "";',
+    '    const isModule = /(?:^|\\s)module(?:\\s|=|$)/u.test(attrs) || /context\\s*=\\s*["\']module["\']/u.test(attrs);',
+    '    root[isModule ? "module" : "instance"] = script;',
+    '  }',
+    '  return root;',
+    '};',
+    '',
+  ].join('\n');
+}
+
+async function writeSvelteCompiler(options: {
+  failMessage?: string;
+  packageRootDir: string;
+  version: string;
+}): Promise<void> {
+  await writeText(
+    options.packageRootDir,
+    'node_modules/svelte/package.json',
+    JSON.stringify({
+      exports: { './compiler': './compiler.cjs' },
+      name: 'svelte',
+      type: 'commonjs',
+      version: options.version,
+    }),
+  );
+  await writeText(
+    options.packageRootDir,
+    'node_modules/svelte/compiler.cjs',
+    createSvelteCompilerSource(options),
+  );
+}
+
 describe('import analysis', () => {
   it('keeps full UTF-16 string-token locators and duplicate occurrences stable', async () => {
     const rootDir = await createTempDir();
@@ -481,6 +531,205 @@ describe('import analysis', () => {
 
       expect(() => collectImportsFromFile(filePath, rootDir, context)).toThrow(
         /Unable to parse Vue SFC for import analysis/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it.each(['context="module"', 'module'])(
+    'collects Svelte instance and %s script imports with domains and source locations',
+    async (moduleAttribute) => {
+      const rootDir = await createTempDir();
+      const sourceText = [
+        `<script ${moduleAttribute}>`,
+        "export { server } from './server';",
+        '</script>',
+        '<h1>Component</h1>',
+        '<script lang="ts">',
+        "import value from './value';",
+        "import './theme.css?inline';",
+        "import { page } from '$app/state';",
+        "import { local } from '$lib/local';",
+        "void import('./lazy');",
+        'void [value, page, local];',
+        '</script>',
+        '',
+      ].join('\r\n');
+
+      try {
+        await writeSvelteCompiler({
+          packageRootDir: rootDir,
+          version: '5.1.0',
+        });
+        const filePath = await writeText(rootDir, 'src/App.svelte', sourceText);
+
+        expect(
+          collectImportsFromFile(filePath, rootDir).map((record) => ({
+            domain: record.domain,
+            kind: record.kind,
+            line: record.line,
+            specifier: record.specifier,
+            token: sourceText.slice(
+              record.locator.sourceStart,
+              record.locator.sourceEnd,
+            ),
+          })),
+        ).toEqual([
+          {
+            domain: 'svelte-module-script',
+            kind: 'export',
+            line: 2,
+            specifier: './server',
+            token: "'./server'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'static',
+            line: 6,
+            specifier: './value',
+            token: "'./value'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'static',
+            line: 7,
+            specifier: './theme.css?inline',
+            token: "'./theme.css?inline'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'static',
+            line: 8,
+            specifier: '$app/state',
+            token: "'$app/state'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'static',
+            line: 9,
+            specifier: '$lib/local',
+            token: "'$lib/local'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'dynamic',
+            line: 10,
+            specifier: './lazy',
+            token: "'./lazy'",
+          },
+        ]);
+      } finally {
+        await rm(rootDir, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it('resolves the Svelte compiler from the supplied leaf package root', async () => {
+    const rootDir = await createTempDir();
+    const leafRootDir = path.join(rootDir, 'packages/leaf');
+
+    try {
+      await writeSvelteCompiler({
+        failMessage: 'wrong compiler scope',
+        packageRootDir: rootDir,
+        version: '5.0.0',
+      });
+      await writeSvelteCompiler({
+        packageRootDir: leafRootDir,
+        version: '5.2.0',
+      });
+      const filePath = await writeText(
+        rootDir,
+        'packages/leaf/src/App.svelte',
+        '<script>import value from "./value";</script>\n',
+      );
+
+      expect(
+        collectImportsFromFile(filePath, leafRootDir).map(
+          (record) => record.specifier,
+        ),
+      ).toEqual(['./value']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('reports a structured Svelte analysis error when the parser is missing', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      const filePath = await writeText(
+        rootDir,
+        'src/App.svelte',
+        '<script>import value from "./value";</script>\n',
+      );
+
+      expect(() => collectImportsFromFile(filePath, rootDir)).toThrow(
+        /Unable to load Svelte compiler for import analysis:[\s\S]*dependency category: analysis runtime/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('reports Svelte parser syntax errors with the source file', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await writeSvelteCompiler({ packageRootDir: rootDir, version: '5.1.0' });
+      const filePath = await writeText(
+        rootDir,
+        'src/App.svelte',
+        '<syntax-error>\n',
+      );
+
+      expect(() => collectImportsFromFile(filePath, rootDir)).toThrow(
+        /Unable to parse Svelte component for import analysis:[\s\S]*src\/App\.svelte[\s\S]*fixture syntax error/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('isolates Svelte import caches by leaf root and parser identity', async () => {
+    const rootDir = await createTempDir();
+    const firstLeaf = path.join(rootDir, 'packages/first');
+    const secondLeaf = path.join(rootDir, 'packages/second');
+
+    try {
+      await writeSvelteCompiler({
+        packageRootDir: firstLeaf,
+        version: '5.1.0',
+      });
+      await writeSvelteCompiler({
+        packageRootDir: secondLeaf,
+        version: '5.2.0',
+      });
+      const filePath = await writeText(
+        rootDir,
+        'shared/App.svelte',
+        '<script>import value from "./value";</script>\n',
+      );
+      const metrics = createProfilingMetricsRecorder();
+      const context = createImportAnalysisContext({ metrics });
+
+      context.collectImportsFromFile(filePath, firstLeaf);
+      context.collectImportsFromFile(filePath, secondLeaf);
+      context.collectImportsFromFile(filePath, firstLeaf);
+
+      const providerMetrics = metrics
+        .snapshot()
+        .filter(
+          (metric) =>
+            metric.kind === 'imports' &&
+            metric.name.startsWith('provider-cache-'),
+        );
+      expect(providerMetrics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ count: 2, name: 'provider-cache-miss' }),
+          expect.objectContaining({ count: 1, name: 'provider-cache-hit' }),
+        ]),
       );
     } finally {
       await rm(rootDir, { force: true, recursive: true });

@@ -1,6 +1,11 @@
 import { normalizeAbsolutePath } from '#utils/path';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import {
+  createFrameworkImportProviderRegistry,
+  getFrameworkImportProvider,
+  getTypeScriptParserIdentity,
+} from './framework-providers';
 import { collectSourceTextImports } from './oxc-imports';
 import type { ImportRecord } from './records';
 import type {
@@ -8,7 +13,6 @@ import type {
   ImportAnalysisCaches,
   ImportAnalysisMetricsRecorder,
 } from './types';
-import { collectVueImports } from './vue-imports';
 
 interface SourceProvider {
   collectImportsFromFile(filePath: string, rootDir: string): ImportRecord[];
@@ -61,39 +65,26 @@ function createSourceTextReader(options: {
   };
 }
 
-function resolveProjectRoot(options: {
-  configuredRoot: string | undefined;
-  rootDir: string;
-}): string {
-  if (options.configuredRoot !== undefined) {
-    return normalizeAbsolutePath(options.configuredRoot);
-  }
-  return normalizeAbsolutePath(options.rootDir);
-}
-
 function createImportsCacheKey(options: {
   filePath: string;
-  projectRootDir: string;
-  vueParser: string;
+  packageRootDir: string;
+  parserKind: string;
+  parserMode: string;
+  parserVersion: string;
 }): string {
   return JSON.stringify(options);
 }
 
-function isVueFile(filePath: string): boolean {
-  return filePath.endsWith('.vue');
-}
-
 function collectFileImports(options: {
   filePath: string;
-  projectRootDir: string;
+  packageRootDir: string;
+  provider: ReturnType<typeof getFrameworkImportProvider>;
   sourceText: string;
-  vueParser: NonNullable<CreateImportAnalysisContextOptions['vueParser']>;
 }): ImportRecord[] {
-  if (isVueFile(options.filePath)) {
-    return collectVueImports({
+  if (options.provider !== null) {
+    return options.provider.collectImports({
       filePath: options.filePath,
-      parser: options.vueParser,
-      projectRootDir: options.projectRootDir,
+      packageRootDir: options.packageRootDir,
       sourceText: options.sourceText,
     });
   }
@@ -120,17 +111,25 @@ export function createSourceProvider(options: {
     metrics,
   });
   const vueParser = getVueParser(options.contextOptions.vueParser);
+  const providers = createFrameworkImportProviderRegistry({ vueParser });
   return {
     collectImportsFromFile: (filePath, rootDir) => {
       const normalizedFilePath = normalizeAbsolutePath(filePath);
-      const projectRootDir = resolveProjectRoot({
-        configuredRoot: options.contextOptions.projectRootDir,
-        rootDir,
+      const packageRootDir = normalizeAbsolutePath(rootDir);
+      const provider = getFrameworkImportProvider({
+        filePath: normalizedFilePath,
+        providers,
       });
+      const parserIdentity =
+        provider === null
+          ? getTypeScriptParserIdentity()
+          : provider.getParserIdentity({ packageRootDir });
       const cacheKey = createImportsCacheKey({
         filePath: normalizedFilePath,
-        projectRootDir,
-        vueParser,
+        packageRootDir,
+        parserKind: parserIdentity.kind,
+        parserMode: parserIdentity.mode,
+        parserVersion: parserIdentity.version,
       });
       const cached = options.caches.importsCache.get(cacheKey);
       recordCacheAccess({
@@ -141,9 +140,9 @@ export function createSourceProvider(options: {
       if (cached !== undefined) return cached;
       const imports = collectFileImports({
         filePath: normalizedFilePath,
-        projectRootDir,
+        packageRootDir,
+        provider,
         sourceText: readSourceText(normalizedFilePath),
-        vueParser,
       });
       recordSourceOperation({
         filePath: normalizedFilePath,

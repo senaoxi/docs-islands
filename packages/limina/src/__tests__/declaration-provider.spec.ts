@@ -91,6 +91,7 @@ describe('active TypeScript declaration provider selection', () => {
       });
       const containingFile = path.join(fixture.rootDir, 'src/index.ts');
       const importRecord = {
+        domain: 'typescript' as const,
         filePath: containingFile,
         kind: 'static' as const,
         line: 1,

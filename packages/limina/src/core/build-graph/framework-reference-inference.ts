@@ -9,6 +9,7 @@ import {
 import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import path from 'pathe';
 import { classifyImportRuntimeEvidence } from '../import-analysis/evidence';
+import { reportUnresolvedFrameworkImport } from './framework-import-problems';
 import type { ReferenceImportContext } from './reference-import-types';
 import type {
   GeneratedBuildModule,
@@ -163,11 +164,18 @@ function resolveFrameworkImportResolution(
     typeScriptResolution: pair.typescript,
   });
   if (evidence.classification === 'resource') return null;
-  return selectOwnedResolution({
+  const resolution = selectOwnedResolution({
     context: options.context,
     oxcResolvedFilePath: pair.oxc,
     typeScriptResolvedFilePath: getResolvedFilePath(pair.typescript),
   });
+  reportUnresolvedFrameworkImport({
+    context: options.context,
+    importRecord: options.importRecord,
+    resolutionFound: resolution !== null,
+    source: options.source,
+  });
+  return resolution;
 }
 
 function resolveFrameworkImportTarget(
@@ -208,14 +216,25 @@ function processFrameworkImport(options: FrameworkImportOptions): void {
 function processFrameworkFile(
   options: Omit<FrameworkImportOptions, 'importRecord'>,
 ): void {
-  const imports = collectImportsFromFile(
-    options.fileName,
-    options.context.config.rootDir,
-    options.context.importAnalysis,
-  );
+  let imports: ReturnType<typeof collectImportsFromFile>;
+  try {
+    imports = collectImportsFromFile(
+      options.fileName,
+      options.source.packageRootDir,
+      options.context.importAnalysis,
+    );
+  } catch (error) {
+    options.context.problems.push(formatThrownError(error));
+    return;
+  }
   for (const importRecord of imports) {
     processFrameworkImport({ ...options, importRecord });
   }
+}
+
+function formatThrownError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 function processFrameworkSource(options: {

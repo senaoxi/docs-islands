@@ -33,6 +33,22 @@ function stringifyConfig(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+const svelteCompilerFixture = [
+  `'use strict';`,
+  'exports.VERSION = "5.1.0";',
+  'exports.parse = function parse(source) {',
+  '  const root = { instance: null, module: null };',
+  '  const pattern = /<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/giu;',
+  '  for (const match of source.matchAll(pattern)) {',
+  '    const content = match[2] || "";',
+  '    const start = (match.index || 0) + match[0].indexOf(content);',
+  '    root.instance = { content: { start, end: start + content.length } };',
+  '  }',
+  '  return root;',
+  '};',
+  '',
+].join('\n');
+
 function getFixtureWorkspacePackageManifestPath(
   relativePath: string,
 ): string | null {
@@ -85,6 +101,13 @@ function createFixtureFiles(
 
   return {
     'pnpm-workspace.yaml': 'packages:\n  - app\n  - packages/*\n',
+    'node_modules/svelte/compiler.cjs': svelteCompilerFixture,
+    'node_modules/svelte/package.json': stringifyConfig({
+      exports: { './compiler': './compiler.cjs' },
+      name: 'svelte',
+      type: 'commonjs',
+      version: '5.1.0',
+    }),
     ...packageManifests,
     ...files,
     '.gitignore': gitignore,

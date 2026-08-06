@@ -25,6 +25,26 @@ import { toPortablePath } from './helpers/path';
 
 const execFileAsync = promisify(execFile);
 
+const svelteCompilerFixture = [
+  `'use strict';`,
+  'exports.VERSION = "5.1.0";',
+  'exports.parse = function parse(source) {',
+  '  if (source.includes("<syntax-error>")) throw new SyntaxError("fixture syntax error");',
+  '  const root = { instance: null, module: null };',
+  '  const pattern = /<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/giu;',
+  '  for (const match of source.matchAll(pattern)) {',
+  '    const content = match[2] || "";',
+  '    const start = (match.index || 0) + match[0].indexOf(content);',
+  '    const script = { content: { start, end: start + content.length } };',
+  '    const attrs = match[1] || "";',
+  '    const isModule = /(?:^|\\s)module(?:\\s|=|$)/u.test(attrs) || /context\\s*=\\s*["\']module["\']/u.test(attrs);',
+  '    root[isModule ? "module" : "instance"] = script;',
+  '  }',
+  '  return root;',
+  '};',
+  '',
+].join('\n');
+
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, text);
@@ -32,7 +52,7 @@ async function writeText(filePath: string, text: string): Promise<void> {
 
 async function createFixture(
   files: Record<string, string>,
-  options: { source?: SourceCheckConfig } = {},
+  options: { source?: SourceCheckConfig; svelteCompiler?: boolean } = {},
 ): Promise<{
   cleanup: () => Promise<void>;
   config: ResolvedLiminaConfig;
@@ -51,6 +71,17 @@ async function createFixture(
       2,
     )}\n`,
     'pnpm-workspace.yaml': 'packages:\n  - app\n  - packages/*\n',
+    ...(options.svelteCompiler === false
+      ? {}
+      : {
+          'node_modules/svelte/compiler.cjs': svelteCompilerFixture,
+          'node_modules/svelte/package.json': json({
+            exports: { './compiler': './compiler.cjs' },
+            name: 'svelte',
+            type: 'commonjs',
+            version: '5.1.0',
+          }),
+        }),
     ...files,
   };
 
@@ -1982,6 +2013,125 @@ describe('prepareGeneratedTsconfigGraph', () => {
       await fixture.cleanup();
     }
   });
+
+  it('schedules a cross-package Svelte component import without treating resources or virtual modules as projects', async () => {
+    const fixture = await createFixture({
+      'packages/a/src/App.svelte': [
+        '<script lang="ts">',
+        "import Widget from '../../b/src/Widget.svelte';",
+        "import '$app/environment';",
+        "import './theme.css?inline';",
+        'void Widget;',
+        '</script>',
+        '',
+      ].join('\n'),
+      'packages/a/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*'],
+      }),
+      'packages/b/src/Widget.svelte': '<h1>Widget</h1>\n',
+      'packages/b/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      const result = await prepareGeneratedTsconfigGraph(fixture.config);
+      const aConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/a/tsconfig.json'),
+      );
+      const bConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/b/tsconfig.json'),
+      );
+      const source = result.governedSources.get('typescript')?.get(aConfigPath);
+      const targetBuild = result.sourceToBuild
+        .get('typescript')
+        ?.get(bConfigPath);
+
+      expect(targetBuild).toMatchObject({ kind: 'solution' });
+      expect([...source!.frameworkSchedulingReferences]).toEqual([
+        targetBuild?.path,
+      ]);
+      expect(result.providerEdges).toMatchObject([
+        {
+          importedSpecifier: '../../b/src/Widget.svelte',
+          toConfigPath: bConfigPath,
+        },
+      ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('fails closed for unresolved local and generated-alias Svelte imports', async () => {
+    const fixture = await createFixture({
+      'packages/app/src/App.svelte': [
+        '<script>',
+        "import './missing.ts';",
+        "import '$lib/missing';",
+        '</script>',
+        '',
+      ].join('\n'),
+      'packages/app/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*'],
+      }),
+    });
+
+    try {
+      await expect(
+        prepareGeneratedTsconfigGraph(fixture.config),
+      ).rejects.toThrow(
+        /Unable to resolve framework source import:[\s\S]*\.\/missing\.ts[\s\S]*\$lib\/missing/u,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it.each([
+    {
+      expected: 'Unable to load Svelte compiler for import analysis',
+      file: '<h1>Missing compiler</h1>\n',
+      svelteCompiler: false,
+    },
+    {
+      expected: 'Unable to parse Svelte component for import analysis',
+      file: '<syntax-error>\n',
+      svelteCompiler: true,
+    },
+  ])(
+    'converts Svelte parser failures into generated-graph structured diagnostics',
+    async ({ expected, file, svelteCompiler }) => {
+      const fixture = await createFixture(
+        {
+          'packages/app/src/App.svelte': file,
+          'packages/app/tsconfig.json': json({
+            compilerOptions: managedOutputCompilerOptions(),
+            include: ['src/**/*'],
+          }),
+        },
+        { svelteCompiler },
+      );
+
+      try {
+        let thrown: unknown;
+        try {
+          await prepareGeneratedTsconfigGraph(fixture.config);
+        } catch (error) {
+          thrown = error;
+        }
+        expect(thrown).toBeInstanceOf(LiminaStructuredError);
+        expect(String(thrown)).toContain(expected);
+        expect((thrown as LiminaStructuredError).issues).toMatchObject([
+          { code: 'LIMINA_GRAPH_PREPARE_FAILED' },
+        ]);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
 
   it('rejects a native import of a framework-only source without a declaration provider', async () => {
     const fixture = await createFixture({

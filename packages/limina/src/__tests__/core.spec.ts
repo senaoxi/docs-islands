@@ -36,6 +36,22 @@ function stringifyJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+const svelteCompilerFixture = [
+  `'use strict';`,
+  'exports.VERSION = "5.1.0";',
+  'exports.parse = function parse(source) {',
+  '  const root = { instance: null, module: null };',
+  '  const pattern = /<script\\b[^>]*>([\\s\\S]*?)<\\/script>/giu;',
+  '  for (const match of source.matchAll(pattern)) {',
+  '    const content = match[1] || "";',
+  '    const start = (match.index || 0) + match[0].indexOf(content);',
+  '    root.instance = { content: { start, end: start + content.length } };',
+  '  }',
+  '  return root;',
+  '};',
+  '',
+].join('\n');
+
 async function createCoreFixture(): Promise<{
   cleanup: () => Promise<void>;
   config: ResolvedLiminaConfig;
@@ -76,6 +92,19 @@ async function createCoreFixture(): Promise<{
       name: '@fixture/a',
       version: '1.0.0',
     }),
+  );
+  await writeText(
+    path.join(rootDir, 'packages/a/node_modules/svelte/package.json'),
+    stringifyJson({
+      exports: { './compiler': './compiler.cjs' },
+      name: 'svelte',
+      type: 'commonjs',
+      version: '5.1.0',
+    }),
+  );
+  await writeText(
+    path.join(rootDir, 'packages/a/node_modules/svelte/compiler.cjs'),
+    svelteCompilerFixture,
   );
   await writeText(
     path.join(rootDir, 'packages/a/tsconfig.json'),

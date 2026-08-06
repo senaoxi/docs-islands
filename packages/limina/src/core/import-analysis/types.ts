@@ -37,7 +37,10 @@ export type StandaloneInternalImportArguments = [
 
 export interface ImportAnalysisContext {
   clearOxcResolverCaches?: () => void;
-  collectImportsFromFile: (filePath: string, rootDir: string) => ImportRecord[];
+  collectImportsFromFile: (
+    filePath: string,
+    packageRootDir: string,
+  ) => ImportRecord[];
   resolveInternalImport: (...args: ImportResolutionArguments) => string | null;
   resolveOxcImport: (...args: ImportResolutionArguments) => string | null;
   resolveModulePair: (
@@ -144,4 +147,25 @@ export interface VueCompilerSfc {
     };
     errors: unknown[];
   };
+  version?: string;
+}
+
+export interface FrameworkImportCollectionOptions {
+  filePath: string;
+  packageRootDir: string;
+  sourceText: string;
+}
+
+export interface FrameworkImportParserIdentity {
+  kind: string;
+  mode: string;
+  version: string;
+}
+
+export interface FrameworkImportProvider {
+  collectImports(options: FrameworkImportCollectionOptions): ImportRecord[];
+  extension: string;
+  getParserIdentity(options: {
+    packageRootDir: string;
+  }): FrameworkImportParserIdentity;
 }

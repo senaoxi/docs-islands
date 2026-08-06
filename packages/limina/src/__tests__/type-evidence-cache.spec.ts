@@ -80,6 +80,7 @@ describe('type evidence generation cache', () => {
   it('keys duplicate imports by stable locator occurrence', () => {
     const providerKey = 'provider';
     const createRecord = (occurrence: number) => ({
+      domain: 'typescript' as const,
       filePath: path.join(process.cwd(), 'src/index.ts'),
       kind: 'static' as const,
       line: occurrence + 1,
@@ -126,6 +127,7 @@ describe('type evidence cache locator identities', () => {
     expect(
       createImportTypeEvidenceCacheKey({
         importRecord: {
+          domain: 'typescript',
           filePath: 'C:\\repo\\packages\\app\\src\\index.ts',
           kind: 'dynamic',
           line: 3,
@@ -137,6 +139,7 @@ describe('type evidence cache locator identities', () => {
     ).toBe(
       createImportTypeEvidenceCacheKey({
         importRecord: {
+          domain: 'typescript',
           filePath: 'C:/repo/packages/app/src/index.ts',
           kind: 'dynamic',
           line: 3,
