@@ -1,5 +1,4 @@
-import type { ResolvedLiminaConfig, VueImportParser } from '#config/runner';
-import { createImportAnalysisContext } from '#core/import-graph/context';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import { compareCodeUnits } from '#utils/collections';
 import { createManagedOutputDeclarationLookup } from '../import-graph/managed-output-provider';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
@@ -8,6 +7,7 @@ import {
   processFrameworkSchedulingReferences,
 } from './framework-reference-inference';
 import { addImplicitProjectReferences } from './implicit-references';
+import { resolveBuildGraphImportAnalysis } from './import-analysis-context';
 import {
   createDtsProjectsBySourcePath,
   createManagedOutputProjectContexts,
@@ -24,28 +24,6 @@ import type {
   PrepareGeneratedTsconfigGraphOptions,
   SourceProject,
 } from './types';
-
-function getVueParser(
-  config: ResolvedLiminaConfig,
-): VueImportParser | undefined {
-  if (!config.config) {
-    return undefined;
-  }
-  return config.config.imports ? config.config.imports.vue : undefined;
-}
-
-function createImportAnalysis(options: {
-  config: ResolvedLiminaConfig;
-  importAnalysisContext?: PrepareGeneratedTsconfigGraphOptions['importAnalysisContext'];
-}) {
-  if (options.importAnalysisContext) {
-    return options.importAnalysisContext;
-  }
-  return createImportAnalysisContext({
-    projectRootDir: options.config.rootDir,
-    vueParser: getVueParser(options.config),
-  });
-}
 
 function createOwnerLookup(
   governedSources: readonly GovernedSourceUnit[],
@@ -178,7 +156,7 @@ export function inferProjectReferences(options: {
     config: options.config,
     dtsProjectsBySourcePath: createDtsProjectsBySourcePath(ownerProjects),
     fileOwnerLookup: createOwnerLookup(ownerGovernedSources),
-    importAnalysis: createImportAnalysis(options),
+    importAnalysis: resolveBuildGraphImportAnalysis(options),
     managedOutputLookup: createManagedOutputDeclarationLookup(
       createManagedOutputProjectContexts(ownerProjects),
     ),

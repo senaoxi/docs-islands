@@ -41,6 +41,10 @@ export interface ImportAnalysisContext {
     filePath: string,
     packageRootDir: string,
   ) => ImportRecord[];
+  prewarmImportsFromFile?: (
+    filePath: string,
+    packageRootDir: string,
+  ) => Promise<void>;
   resolveInternalImport: (...args: ImportResolutionArguments) => string | null;
   resolveOxcImport: (...args: ImportResolutionArguments) => string | null;
   resolveModulePair: (
@@ -115,6 +119,7 @@ export interface NormalizedModuleResolutionRequest {
 
 export interface ImportAnalysisCaches {
   importsCache: Map<string, ImportRecord[]>;
+  importsPromiseCache: Map<string, Promise<ImportRecord[]>>;
   moduleResolutionIndex: Map<string, LazyModuleResolutionRecord>;
   moduleResolverIdentityCache: Map<string, number>;
   nextModuleResolverIdentity: number;
@@ -163,7 +168,10 @@ export interface FrameworkImportParserIdentity {
 }
 
 export interface FrameworkImportProvider {
-  collectImports(options: FrameworkImportCollectionOptions): ImportRecord[];
+  collectionMode: 'async' | 'sync';
+  collectImports(
+    options: FrameworkImportCollectionOptions,
+  ): ImportRecord[] | Promise<ImportRecord[]>;
   extension: string;
   getParserIdentity(options: {
     packageRootDir: string;

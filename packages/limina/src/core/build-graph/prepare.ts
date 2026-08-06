@@ -7,8 +7,10 @@ import {
 } from '../workspace/validated-context';
 import { resolveGeneratedGraphCheckerSelections } from './checker-resolution';
 import { finalizeGeneratedGraph } from './finalize-generated-graph';
+import { prewarmGeneratedFrameworkImports } from './framework-import-prewarm';
 import { prepareGeneratedKnipPackageConfigs } from './generated-knip';
 import { validateAndCompleteGeneratedGraph } from './graph-validation';
+import { resolveBuildGraphImportAnalysis } from './import-analysis-context';
 import { prepareCheckerGraphs } from './prepare-checkers';
 import {
   createGeneratedGraphPreparationState,
@@ -55,9 +57,13 @@ export async function prepareGeneratedTsconfigGraph(
     workspaceContext,
     workspacePathIndex: options.workspacePathIndex,
   });
-  const checkerSelections = await resolveGeneratedGraphCheckerSelections({
+  const importAnalysisContext = resolveBuildGraphImportAnalysis({
     config,
     importAnalysisContext: options.importAnalysisContext,
+  });
+  const checkerSelections = await resolveGeneratedGraphCheckerSelections({
+    config,
+    importAnalysisContext,
     projectConfigCache: options.projectConfigCache,
     workspaceContext,
     workspacePathIndex: activatedRegions,
@@ -73,11 +79,16 @@ export async function prepareGeneratedTsconfigGraph(
   for (const preparedChecker of preparedCheckers) {
     registerPreparedChecker({ preparedChecker, state });
   }
+  await prewarmGeneratedFrameworkImports({
+    config,
+    importAnalysis: importAnalysisContext,
+    state,
+  });
   validateAndCompleteGeneratedGraph({
     activatedRegions,
     checkers,
     config,
-    importAnalysisContext: options.importAnalysisContext,
+    importAnalysisContext,
     projectConfigCache: options.projectConfigCache,
     state,
   });

@@ -13,6 +13,7 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +25,7 @@ import { prepareAndMaterializeGeneratedTsconfigGraph as prepareGeneratedTsconfig
 import { toPortablePath } from './helpers/path';
 
 const execFileAsync = promisify(execFile);
+const requireFromTest = createRequire(import.meta.url);
 
 const svelteCompilerFixture = [
   `'use strict';`,
@@ -50,9 +52,27 @@ async function writeText(filePath: string, text: string): Promise<void> {
   await writeFile(filePath, text);
 }
 
+async function linkAstroCompiler(rootDir: string): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    '@astrojs/compiler/package.json',
+  );
+  const nodeModulesDir = path.join(rootDir, 'node_modules', '@astrojs');
+
+  await mkdir(nodeModulesDir, { recursive: true });
+  await symlink(
+    path.dirname(compilerPackagePath),
+    path.join(nodeModulesDir, 'compiler'),
+    'junction',
+  );
+}
+
 async function createFixture(
   files: Record<string, string>,
-  options: { source?: SourceCheckConfig; svelteCompiler?: boolean } = {},
+  options: {
+    astroCompiler?: boolean;
+    source?: SourceCheckConfig;
+    svelteCompiler?: boolean;
+  } = {},
 ): Promise<{
   cleanup: () => Promise<void>;
   config: ResolvedLiminaConfig;
@@ -87,6 +107,12 @@ async function createFixture(
 
   for (const [relativePath, text] of Object.entries(fixtureFiles)) {
     await writeText(path.join(rootDir, relativePath), text);
+  }
+  if (
+    options.astroCompiler !== false &&
+    Object.keys(files).some((filePath) => filePath.endsWith('.astro'))
+  ) {
+    await linkAstroCompiler(rootDir);
   }
 
   return {
@@ -1944,8 +1970,17 @@ describe('prepareGeneratedTsconfigGraph', () => {
 
   it('routes declaration and framework imports into separate reference sinks', async () => {
     const fixture = await createFixture({
-      'packages/a/src/App.astro':
-        "import '../../c/src/index.ts';\nexport const framework = true;\n",
+      'packages/a/src/App.astro': [
+        '---',
+        "import '../../c/src/index.ts';",
+        "import { getCollection } from 'astro:content';",
+        "import './theme.css?inline';",
+        "import hero from './hero.png?url';",
+        'void [getCollection, hero];',
+        '---',
+        '<h1>Framework</h1>',
+        '',
+      ].join('\n'),
       'packages/a/src/index.ts':
         "import { value } from '../../b/src/index.ts';\nexport { value };\n",
       'packages/a/tsconfig.json': json({
@@ -2009,6 +2044,38 @@ describe('prepareGeneratedTsconfigGraph', () => {
           ),
         ),
       ).toBe(bDtsPath);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reports a structured graph error when an Astro analysis runtime is missing', async () => {
+    const fixture = await createFixture(
+      {
+        'packages/app/src/App.astro': '<h1>Astro</h1>\n',
+        'packages/app/tsconfig.json': json({
+          compilerOptions: managedOutputCompilerOptions(),
+          include: ['src/**/*'],
+        }),
+      },
+      { astroCompiler: false },
+    );
+
+    try {
+      let thrown: unknown;
+      try {
+        await prepareGeneratedTsconfigGraph(fixture.config);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(LiminaStructuredError);
+      expect(String(thrown)).toContain(
+        'Unable to load Astro compiler for import analysis',
+      );
+      expect((thrown as LiminaStructuredError).issues).toMatchObject([
+        { code: 'LIMINA_GRAPH_PREPARE_FAILED' },
+      ]);
     } finally {
       await fixture.cleanup();
     }

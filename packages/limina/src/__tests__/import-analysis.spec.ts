@@ -47,6 +47,34 @@ async function linkCompilerSfc(rootDir: string): Promise<void> {
   );
 }
 
+async function linkAstroCompiler(
+  rootDir: string,
+  packageName = '@astrojs/compiler',
+): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    `${packageName}/package.json`,
+  );
+  const nodeModulesDir = path.join(rootDir, 'node_modules', '@astrojs');
+
+  await mkdir(nodeModulesDir, { recursive: true });
+  await symlink(
+    path.dirname(compilerPackagePath),
+    path.join(nodeModulesDir, 'compiler'),
+    'junction',
+  );
+}
+
+async function prewarmImportsFromFile(options: {
+  context: ReturnType<typeof createImportAnalysisContext>;
+  filePath: string;
+  packageRootDir: string;
+}): Promise<void> {
+  const prewarm = options.context.prewarmImportsFromFile;
+  if (prewarm === undefined)
+    throw new Error('Expected import prewarm support.');
+  await prewarm(options.filePath, options.packageRootDir);
+}
+
 function createSvelteCompilerSource(options: {
   failMessage?: string;
   version: string;
@@ -531,6 +559,323 @@ describe('import analysis', () => {
 
       expect(() => collectImportsFromFile(filePath, rootDir, context)).toThrow(
         /Unable to parse Vue SFC for import analysis/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('prewarms actual Astro imports with domains and UTF-16 source locations', async () => {
+    const rootDir = await createTempDir();
+    const sourceText = [
+      '---',
+      "const label = '資料😀';",
+      "import Page from './Page.astro';",
+      "export { server } from './server';",
+      "void import('./lazy');",
+      "import { getCollection } from 'astro:content';",
+      "import './theme.css?inline';",
+      "import hero from './hero.png?url';",
+      'void [Page, label, getCollection, hero];',
+      '---',
+      '<Page />',
+      '<script type="application/json">{"source":"import \'./ignored\'"}</script>',
+      '<script type="module">',
+      "import { client } from './client';",
+      "void import('./client-lazy');",
+      'void client;',
+      '</script>',
+      '',
+    ].join('\r\n');
+
+    try {
+      await linkAstroCompiler(rootDir);
+      const filePath = await writeText(rootDir, 'src/Page.astro', sourceText);
+      const metrics = createProfilingMetricsRecorder();
+      const context = createImportAnalysisContext({ metrics });
+
+      expect(() => context.collectImportsFromFile(filePath, rootDir)).toThrow(
+        /Framework import analysis was not asynchronously prepared/u,
+      );
+      await Promise.all([
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+      ]);
+
+      expect(
+        context.collectImportsFromFile(filePath, rootDir).map((record) => ({
+          domain: record.domain,
+          kind: record.kind,
+          line: record.line,
+          specifier: record.specifier,
+          token: sourceText.slice(
+            record.locator.sourceStart,
+            record.locator.sourceEnd,
+          ),
+        })),
+      ).toEqual([
+        {
+          domain: 'astro-frontmatter',
+          kind: 'static',
+          line: 3,
+          specifier: './Page.astro',
+          token: "'./Page.astro'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'export',
+          line: 4,
+          specifier: './server',
+          token: "'./server'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'dynamic',
+          line: 5,
+          specifier: './lazy',
+          token: "'./lazy'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'static',
+          line: 6,
+          specifier: 'astro:content',
+          token: "'astro:content'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'static',
+          line: 7,
+          specifier: './theme.css?inline',
+          token: "'./theme.css?inline'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'static',
+          line: 8,
+          specifier: './hero.png?url',
+          token: "'./hero.png?url'",
+        },
+        {
+          domain: 'astro-client-script',
+          kind: 'static',
+          line: 14,
+          specifier: './client',
+          token: "'./client'",
+        },
+        {
+          domain: 'astro-client-script',
+          kind: 'dynamic',
+          line: 15,
+          specifier: './client-lazy',
+          token: "'./client-lazy'",
+        },
+      ]);
+      expect(
+        metrics
+          .snapshot()
+          .find(
+            (metric) =>
+              metric.name === 'source-parse' && metric.kind === '.astro',
+          )?.count,
+      ).toBe(1);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('resolves the actual Astro compiler from the supplied leaf root', async () => {
+    const rootDir = await createTempDir();
+    const leafRootDir = path.join(rootDir, 'packages/leaf');
+
+    try {
+      await writeText(
+        rootDir,
+        'node_modules/@astrojs/compiler/package.json',
+        JSON.stringify({
+          main: './index.cjs',
+          name: '@astrojs/compiler',
+          version: '1.0.0',
+        }),
+      );
+      await writeText(
+        rootDir,
+        'node_modules/@astrojs/compiler/index.cjs',
+        'throw new Error("wrong compiler scope");\n',
+      );
+      await linkAstroCompiler(leafRootDir);
+      const filePath = await writeText(
+        rootDir,
+        'packages/leaf/src/Page.astro',
+        '---\nimport value from "./value";\n---\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: leafRootDir,
+      });
+      expect(
+        context
+          .collectImportsFromFile(filePath, leafRootDir)
+          .map((record) => record.specifier),
+      ).toEqual(['./value']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('parses imports with the selected minimum actual Astro compiler', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await linkAstroCompiler(rootDir, '@astrojs/compiler-v2');
+      const filePath = await writeText(
+        rootDir,
+        'src/Page.astro',
+        '---\nimport value from "./value";\n---\n<h1>Astro 2</h1>\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: rootDir,
+      });
+      expect(
+        context
+          .collectImportsFromFile(filePath, rootDir)
+          .map((record) => record.specifier),
+      ).toEqual(['./value']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('isolates concurrent Astro import caches by leaf root and compiler version', async () => {
+    const rootDir = await createTempDir();
+    const currentLeaf = path.join(rootDir, 'packages/current');
+    const minimumLeaf = path.join(rootDir, 'packages/minimum');
+
+    try {
+      await Promise.all([
+        linkAstroCompiler(currentLeaf),
+        linkAstroCompiler(minimumLeaf, '@astrojs/compiler-v2'),
+      ]);
+      const filePath = await writeText(
+        rootDir,
+        'shared/Page.astro',
+        '---\nimport value from "./value";\n---\n',
+      );
+      const metrics = createProfilingMetricsRecorder();
+      const context = createImportAnalysisContext({ metrics });
+
+      await Promise.all([
+        prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: currentLeaf,
+        }),
+        prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: minimumLeaf,
+        }),
+      ]);
+      expect(
+        context.collectImportsFromFile(filePath, currentLeaf)[0]?.specifier,
+      ).toBe('./value');
+      expect(
+        context.collectImportsFromFile(filePath, minimumLeaf)[0]?.specifier,
+      ).toBe('./value');
+      expect(
+        metrics
+          .snapshot()
+          .find(
+            (metric) =>
+              metric.name === 'source-parse' && metric.kind === '.astro',
+          )?.count,
+      ).toBe(2);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('reports missing and unsupported Astro analysis runtimes', async () => {
+    const missingRootDir = await createTempDir();
+    const unsupportedRootDir = await createTempDir();
+
+    try {
+      const missingFilePath = await writeText(
+        missingRootDir,
+        'src/Page.astro',
+        '<h1>Missing</h1>\n',
+      );
+      const missingContext = createImportAnalysisContext();
+      await expect(
+        prewarmImportsFromFile({
+          context: missingContext,
+          filePath: missingFilePath,
+          packageRootDir: missingRootDir,
+        }),
+      ).rejects.toThrow(
+        /Unable to load Astro compiler for import analysis:[\s\S]*dependency category: analysis runtime/u,
+      );
+
+      await writeText(
+        unsupportedRootDir,
+        'node_modules/@astrojs/compiler/package.json',
+        JSON.stringify({
+          main: './index.cjs',
+          name: '@astrojs/compiler',
+          version: '1.0.0',
+        }),
+      );
+      await writeText(
+        unsupportedRootDir,
+        'node_modules/@astrojs/compiler/index.cjs',
+        'exports.parse = async () => ({ ast: { type: "root" } });\n',
+      );
+      const unsupportedFilePath = await writeText(
+        unsupportedRootDir,
+        'src/Page.astro',
+        '<h1>Unsupported</h1>\n',
+      );
+      const unsupportedContext = createImportAnalysisContext();
+      await expect(
+        prewarmImportsFromFile({
+          context: unsupportedContext,
+          filePath: unsupportedFilePath,
+          packageRootDir: unsupportedRootDir,
+        }),
+      ).rejects.toThrow(
+        /Unsupported Astro compiler for import analysis:[\s\S]*installed version: 1\.0\.0[\s\S]*supported range: >=2\.0\.0 <5\.0\.0/u,
+      );
+    } finally {
+      await Promise.all([
+        rm(missingRootDir, { force: true, recursive: true }),
+        rm(unsupportedRootDir, { force: true, recursive: true }),
+      ]);
+    }
+  });
+
+  it('reports actual Astro compiler parse diagnostics with the source file', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await linkAstroCompiler(rootDir);
+      const filePath = await writeText(
+        rootDir,
+        'src/Page.astro',
+        '<html>\n<body>\n{/*\n</body>\n</html>\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await expect(
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+      ).rejects.toThrow(
+        /Unable to parse Astro component for import analysis:[\s\S]*src\/Page\.astro[\s\S]*Unterminated comment/u,
       );
     } finally {
       await rm(rootDir, { force: true, recursive: true });

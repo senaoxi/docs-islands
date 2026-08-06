@@ -1,4 +1,4 @@
-const virtualModulePrefixes = ['\0', 'virtual:', '$app/', '$env/'];
+const virtualModulePrefixes = ['\0', 'virtual:', 'astro:', '$app/', '$env/'];
 
 export function isKnownFrameworkVirtualSpecifier(specifier: string): boolean {
   return (

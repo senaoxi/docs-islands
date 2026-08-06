@@ -12,6 +12,7 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { availableParallelism, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -35,9 +36,25 @@ import type {
 import { createVueTsgoCachePaths } from '../typecheck/targets';
 import { createFixturePathResolver, toPortablePath } from './helpers/path';
 
+const requireFromTest = createRequire(import.meta.url);
+
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, text);
+}
+
+async function linkAstroCompiler(rootDir: string): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    '@astrojs/compiler/package.json',
+  );
+  const nodeModulesDir = path.join(rootDir, 'node_modules', '@astrojs');
+
+  await mkdir(nodeModulesDir, { recursive: true });
+  await symlink(
+    path.dirname(compilerPackagePath),
+    path.join(nodeModulesDir, 'compiler'),
+    'junction',
+  );
 }
 
 async function createFixture(files: Record<string, string>): Promise<{
@@ -62,6 +79,9 @@ async function createFixture(files: Record<string, string>): Promise<{
 
   for (const [relativePath, text] of Object.entries(fixtureFiles)) {
     await writeText(path.join(rootDir, relativePath), text);
+  }
+  if (Object.keys(files).some((filePath) => filePath.endsWith('.astro'))) {
+    await linkAstroCompiler(rootDir);
   }
 
   return {
@@ -1400,7 +1420,7 @@ describe('runBuild', () => {
       .mockImplementation(() => {});
     const fixture = await createFixture({
       'packages/a/src/App.astro':
-        "import '../../b/src/index.ts';\nexport const app = true;\n",
+        '---\nimport "../../b/src/index.ts";\nexport const app = true;\n---\n',
       'packages/a/tsconfig.json': tsconfig({
         compilerOptions: {
           module: 'ESNext',

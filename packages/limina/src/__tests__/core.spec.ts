@@ -1,7 +1,15 @@
 import type { ResolvedLiminaConfig } from '#config/runner';
 import { type AnalysisProviderSet, createAnalysisProviders } from '#core';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -11,6 +19,8 @@ import { createProfilingMetricsRecorder } from '../profiling/metrics';
 import { collectCoverage } from '../proof/coverage-collection';
 import { createSourceCheckState } from '../source-check/run-state';
 import { toPortablePath, toPortablePaths } from './helpers/path';
+
+const requireFromTest = createRequire(import.meta.url);
 
 const buildCompilerOptions = {
   composite: true,
@@ -30,6 +40,20 @@ const buildCompilerOptions = {
 async function writeText(filePath: string, text: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, text);
+}
+
+async function linkAstroCompiler(packageRootDir: string): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    '@astrojs/compiler/package.json',
+  );
+  const nodeModulesDir = path.join(packageRootDir, 'node_modules', '@astrojs');
+
+  await mkdir(nodeModulesDir, { recursive: true });
+  await symlink(
+    path.dirname(compilerPackagePath),
+    path.join(nodeModulesDir, 'compiler'),
+    'junction',
+  );
 }
 
 function stringifyJson(value: unknown): string {
@@ -106,6 +130,7 @@ async function createCoreFixture(): Promise<{
     path.join(rootDir, 'packages/a/node_modules/svelte/compiler.cjs'),
     svelteCompilerFixture,
   );
+  await linkAstroCompiler(path.join(rootDir, 'packages/a'));
   await writeText(
     path.join(rootDir, 'packages/a/tsconfig.json'),
     stringifyJson({

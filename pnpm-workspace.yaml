@@ -30,6 +30,8 @@ catalogMode: strict
 
 catalogs:
   dev:
+    '@astrojs/compiler': ^4.0.0
+    '@astrojs/compiler-v2': npm:@astrojs/compiler@2.0.0
     '@babel/generator': ^7.29.1
     '@babel/parser': ^7.29.0
     '@babel/traverse': ^7.29.0

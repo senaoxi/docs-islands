@@ -1,4 +1,6 @@
 import type { VueImportParser } from '#config/runner';
+import { getAstroParserIdentity } from './astro-compiler';
+import { collectAstroImports } from './astro-imports';
 import {
   collectSvelteImports,
   getSvelteParserIdentity,
@@ -26,6 +28,7 @@ function getVueParserIdentity(options: {
 
 function createVueProvider(parser: VueImportParser): FrameworkImportProvider {
   return {
+    collectionMode: 'sync',
     collectImports: (options) =>
       collectVueImports({
         ...options,
@@ -39,15 +42,27 @@ function createVueProvider(parser: VueImportParser): FrameworkImportProvider {
 }
 
 const svelteProvider: FrameworkImportProvider = {
+  collectionMode: 'sync',
   collectImports: collectSvelteImports,
   extension: '.svelte',
   getParserIdentity: getSvelteParserIdentity,
 };
 
+const astroProvider: FrameworkImportProvider = {
+  collectionMode: 'async',
+  collectImports: collectAstroImports,
+  extension: '.astro',
+  getParserIdentity: getAstroParserIdentity,
+};
+
 export function createFrameworkImportProviderRegistry(options: {
   vueParser: VueImportParser;
 }): ReadonlyMap<string, FrameworkImportProvider> {
-  const providers = [createVueProvider(options.vueParser), svelteProvider];
+  const providers = [
+    astroProvider,
+    createVueProvider(options.vueParser),
+    svelteProvider,
+  ];
   return new Map(providers.map((provider) => [provider.extension, provider]));
 }
 

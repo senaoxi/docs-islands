@@ -11,6 +11,7 @@ import type {
 export function createImportAnalysisCaches(): ImportAnalysisCaches {
   return {
     importsCache: new Map(),
+    importsPromiseCache: new Map(),
     moduleResolutionIndex: new Map(),
     moduleResolverIdentityCache: new Map(),
     nextModuleResolverIdentity: 0,
