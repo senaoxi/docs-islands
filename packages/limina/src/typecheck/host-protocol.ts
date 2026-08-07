@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { terminateChildProcessTree } from './process-tree';
 
 export interface CheckerHostSpawnSpec {
   args: string[];
@@ -72,10 +73,6 @@ function notifyChild(
   if (listener !== undefined) listener(child);
 }
 
-function abortChild(child: ChildProcess): void {
-  if (child.exitCode === null && child.signalCode === null) child.kill();
-}
-
 /**
  * Spawns one checker command and measures its lifetime from spawn until the
  * close/error event. The measurement is only accurate when the surrounding
@@ -95,6 +92,7 @@ export function spawnAndMeasure(
     return Promise.resolve(createCancelledCheckerMeasurement(signal!));
   }
   return new Promise((resolve) => {
+    let cancelledMeasurement: CheckerHostSpawnMeasurement | undefined;
     let settled = false;
     const startedAt = performance.now();
     const finalize = (measurement: CheckerHostSpawnMeasurement): void => {
@@ -110,6 +108,7 @@ export function spawnAndMeasure(
     const child = spawn(spec.command, spec.args, {
       cwd: spec.cwd,
       env: spec.env,
+      detached: process.platform !== 'win32',
       shell: spec.shell,
       stdio: spec.stdio,
     });
@@ -117,26 +116,31 @@ export function spawnAndMeasure(
     notifyChild(options.onChild, child);
 
     const handleAbort = (): void => {
-      abortChild(child);
-      finalize(createCancelledCheckerMeasurement(signal!));
+      cancelledMeasurement ??= createCancelledCheckerMeasurement(signal!);
+      terminateChildProcessTree(child);
     };
     if (signal !== undefined) {
       signal.addEventListener('abort', handleAbort, { once: true });
+      if (signal.aborted) handleAbort();
     }
 
     child.on('error', (error) => {
-      finalize({
-        durationMs: performance.now() - startedAt,
-        error,
-        status: 1,
-      });
+      finalize(
+        cancelledMeasurement ?? {
+          durationMs: performance.now() - startedAt,
+          error,
+          status: 1,
+        },
+      );
     });
 
     child.on('close', (code) => {
-      finalize({
-        durationMs: performance.now() - startedAt,
-        status: code ?? 1,
-      });
+      finalize(
+        cancelledMeasurement ?? {
+          durationMs: performance.now() - startedAt,
+          status: code ?? 1,
+        },
+      );
     });
   });
 }

@@ -26,6 +26,7 @@ export {
 } from './framework-target-preflight';
 export {
   collectFrameworkCapabilityDescriptors,
+  collectFrameworkSupplementalCapabilityDescriptors,
   createFrameworkCheckerTarget,
   createFrameworkCheckerTargets,
 } from './framework-targets';

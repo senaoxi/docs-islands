@@ -2,6 +2,7 @@ import { normalizeAbsolutePath } from '#utils/path';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { isResolvedFromLeafInstalledPackage } from '../packages/leaf-package-resolution';
 import { loadInitializedAstroCompiler } from './astro-compiler-loader';
 import type { FrameworkImportParserIdentity } from './types';
 
@@ -189,10 +190,26 @@ function getCompilerPackageImportPath(
   return getCompilerImportPath(compilerPackage);
 }
 
+function assertLeafInstalledAstroCompiler(options: {
+  packageRootDir: string;
+  resolvedPath: string;
+}): void {
+  if (
+    isResolvedFromLeafInstalledPackage({
+      packageName: ASTRO_COMPILER_PACKAGE,
+      ...options,
+    })
+  ) {
+    return;
+  }
+  throw createMissingCompilerError(options.packageRootDir);
+}
+
 function resolveInstalledAstroCompiler(options: {
   packageRootDir: string;
   resolvedPath: string;
 }): ResolvedAstroCompiler {
+  assertLeafInstalledAstroCompiler(options);
   const compilerPackage = findAstroCompilerManifest(options.resolvedPath);
   const version = getCompilerVersion(compilerPackage);
   if (!isSupportedAstroCompilerVersion(version)) {

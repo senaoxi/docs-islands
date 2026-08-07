@@ -1,6 +1,9 @@
 import type { ResolvedLiminaConfig } from '#config/runner';
 import type { ImportAnalysisContext } from '#core/import-graph/context';
 import { compareCodeUnits } from '#utils/collections';
+import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
+import { getAutoScopeFilePackageRoot } from './auto-checker-file-roots';
+import { getFrameworkFilePackageRoot } from './framework-file-root';
 import type { GeneratedGraphPreparationState } from './prepare-state';
 import { createGeneratedGraphStructuredError } from './problems';
 import type { AutoScope } from './types';
@@ -24,32 +27,41 @@ function compareRequests(
   );
 }
 
-function collectSourcePrewarmRequests(source: {
-  ownedFileNames: readonly string[];
-  packageRootDir: string;
-}): FrameworkImportPrewarmRequest[] {
-  return source.ownedFileNames.filter(isFrameworkFile).map((filePath) => ({
-    filePath,
-    packageRootDir: source.packageRootDir,
-  }));
-}
-
-function registerSourcePrewarmRequests(
-  requestsByKey: Map<string, FrameworkImportPrewarmRequest>,
-  source: Parameters<typeof collectSourcePrewarmRequests>[0],
-): void {
-  for (const request of collectSourcePrewarmRequests(source)) {
-    requestsByKey.set(JSON.stringify(request), request);
+function registerGovernedSourcePrewarmRequests(options: {
+  activatedRegions: WorkspaceRegionPathIndex;
+  requestsByKey: Map<string, FrameworkImportPrewarmRequest>;
+  source: {
+    ownedFileNames: readonly string[];
+    packageRootDir: string;
+  };
+}): void {
+  for (const filePath of options.source.ownedFileNames.filter(
+    isFrameworkFile,
+  )) {
+    const request = {
+      filePath,
+      packageRootDir: getFrameworkFilePackageRoot({
+        activatedRegions: options.activatedRegions,
+        fallbackPackageRootDir: options.source.packageRootDir,
+        fileName: filePath,
+      }),
+    };
+    options.requestsByKey.set(JSON.stringify(request), request);
   }
 }
 
 function collectFrameworkImportPrewarmRequests(
   state: GeneratedGraphPreparationState,
+  activatedRegions: WorkspaceRegionPathIndex,
 ): FrameworkImportPrewarmRequest[] {
   const requestsByKey = new Map<string, FrameworkImportPrewarmRequest>();
   for (const sources of state.governedSourcesByChecker.values()) {
     for (const source of sources) {
-      registerSourcePrewarmRequests(requestsByKey, source);
+      registerGovernedSourcePrewarmRequests({
+        activatedRegions,
+        requestsByKey,
+        source,
+      });
     }
   }
   return [...requestsByKey.values()].sort(compareRequests);
@@ -59,23 +71,19 @@ function collectAutoFrameworkImportPrewarmRequests(
   scopes: readonly AutoScope[],
 ): FrameworkImportPrewarmRequest[] {
   const requestsByKey = new Map<string, FrameworkImportPrewarmRequest>();
-  const sources = scopes.flatMap((scope) =>
-    scope.projects.map((project) => ({
-      ownedFileNames: [
+  const requests = scopes.flatMap((scope) =>
+    scope.projects.flatMap((project) =>
+      [
         ...project.filePartition.astroFiles,
         ...project.filePartition.svelteFiles,
-      ],
-      packageRootDir: scope.collection.packageRootBySourcePath.get(
-        project.configPath,
-      ),
-    })),
+      ].map((filePath) => ({
+        filePath,
+        packageRootDir: getAutoScopeFilePackageRoot(project, filePath),
+      })),
+    ),
   );
-  for (const source of sources) {
-    if (source.packageRootDir === undefined) continue;
-    registerSourcePrewarmRequests(requestsByKey, {
-      ownedFileNames: source.ownedFileNames,
-      packageRootDir: source.packageRootDir,
-    });
+  for (const request of requests) {
+    requestsByKey.set(JSON.stringify(request), request);
   }
   return [...requestsByKey.values()].sort(compareRequests);
 }
@@ -122,6 +130,7 @@ export async function prewarmAutoFrameworkImports(options: {
 }
 
 export async function prewarmGeneratedFrameworkImports(options: {
+  activatedRegions: WorkspaceRegionPathIndex;
   config: ResolvedLiminaConfig;
   importAnalysis: ImportAnalysisContext;
   state: GeneratedGraphPreparationState;
@@ -129,6 +138,9 @@ export async function prewarmGeneratedFrameworkImports(options: {
   await prewarmFrameworkImports({
     config: options.config,
     importAnalysis: options.importAnalysis,
-    requests: collectFrameworkImportPrewarmRequests(options.state),
+    requests: collectFrameworkImportPrewarmRequests(
+      options.state,
+      options.activatedRegions,
+    ),
   });
 }

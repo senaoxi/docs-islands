@@ -8,12 +8,11 @@ import {
 import type { ResolvedLiminaConfig } from '#config/runner';
 import { uniqueCodeUnitSortedStrings as uniqueSortedStrings } from '#utils/collections';
 import { normalizeAbsolutePath } from '#utils/path';
+import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
+import { getFrameworkFilePackageRoot } from './framework-file-root';
 import { capabilityDiscoveryExtensions } from './generated/file-extensions';
 import { getGeneratedLeafSolutionBuildConfigPath } from './generated/paths';
-import {
-  collectConfirmedFrameworkCapabilities,
-  partitionSourceFiles,
-} from './source-capabilities';
+import { partitionSourceFiles } from './source-capabilities';
 import { isInsideNodeModules } from './source-projects';
 import type {
   FrameworkCapabilityDescriptor,
@@ -68,26 +67,46 @@ function createDeclarationFileNames(project: SourceProject): string[] {
 }
 
 function createFrameworkCapabilities(options: {
+  activatedRegions: WorkspaceRegionPathIndex;
   fileNames: readonly string[];
   packageRootDir: string;
   preset: SourceProject['context']['checkerPresets'][number];
   sourceConfigPath: string;
 }): FrameworkCapabilityDescriptor[] {
   if (!isBuildCapablePreset(options.preset)) return [];
-  return collectConfirmedFrameworkCapabilities(
-    partitionSourceFiles(options.fileNames),
-  )
-    .filter((family): family is FrameworkCapabilityDescriptor['family'] =>
-      ['astro', 'svelte'].includes(family),
-    )
-    .map((family) => ({
-      family,
-      packageRootDir: options.packageRootDir,
-      sourceConfigPath: options.sourceConfigPath,
-    }));
+  const partition = partitionSourceFiles(options.fileNames);
+  const capabilities = [
+    ['astro', partition.astroFiles],
+    ['svelte', partition.svelteFiles],
+  ] as const;
+  return capabilities.flatMap(([family, fileNames]) => {
+    if (fileNames.length === 0) return [];
+    const packageRoots = uniqueSortedStrings(
+      fileNames.map((fileName) =>
+        getFrameworkFilePackageRoot({
+          activatedRegions: options.activatedRegions,
+          fallbackPackageRootDir: options.packageRootDir,
+          fileName,
+        }),
+      ),
+    );
+    if (packageRoots.length !== 1) {
+      throw new Error(
+        `Framework capability spans multiple leaf package roots for ${family} at ${options.sourceConfigPath}.`,
+      );
+    }
+    return [
+      {
+        family,
+        packageRootDir: packageRoots[0]!,
+        sourceConfigPath: options.sourceConfigPath,
+      },
+    ];
+  });
 }
 
 export function createGovernedSourceUnit(options: {
+  activatedRegions: WorkspaceRegionPathIndex;
   config: ResolvedLiminaConfig;
   project: SourceProject;
   projectConfigCache?: CheckerProjectConfigCache;
@@ -115,6 +134,7 @@ export function createGovernedSourceUnit(options: {
       .filter((fileName) => !isInsideNodeModules(fileName)),
   );
   const frameworkCapabilities = createFrameworkCapabilities({
+    activatedRegions: options.activatedRegions,
     fileNames: ownedFileNames,
     packageRootDir: options.project.packageRootDir,
     preset: options.project.context.checkerPresets[0]!,

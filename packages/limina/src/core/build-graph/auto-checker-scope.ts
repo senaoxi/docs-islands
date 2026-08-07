@@ -23,8 +23,10 @@ import type { CollectAutoSourceConfigModulesOptions } from './source-config-coll
 import type { AutoCheckerPreset, AutoScope, AutoScopeProject } from './types';
 
 function createAutoScopeProject(options: {
+  activatedRegions: WorkspaceRegionPathIndex;
   config: ResolvedLiminaConfig;
   configPath: string;
+  packageRootDir: string;
   projectConfigCache?: CheckerProjectConfigCache;
 }): AutoScopeProject {
   const context: CheckerProjectParseContext = {
@@ -37,12 +39,21 @@ function createAutoScopeProject(options: {
     context,
     projectRootDir: options.config.rootDir,
   });
+  const fileNames = parsed.fileNames.map(normalizeAbsolutePath).sort();
   return {
     configPath: options.configPath,
     context,
-    fileNames: parsed.fileNames.map(normalizeAbsolutePath).sort(),
-    filePartition: partitionSourceFiles(parsed.fileNames),
+    fileNames,
+    filePartition: partitionSourceFiles(fileNames),
     options: parsed.options,
+    packageRootByFileName: new Map(
+      fileNames.map((fileName) => [
+        fileName,
+        options.activatedRegions.findPackageForPath(fileName)?.directory ??
+          options.packageRootDir,
+      ]),
+    ),
+    packageRootDir: options.packageRootDir,
   };
 }
 
@@ -110,13 +121,19 @@ function createAutoScope(options: {
 
   const projects = [...collection.projectConfigPaths]
     .sort(compareCodeUnits)
-    .map((configPath) =>
-      createAutoScopeProject({
+    .map((configPath) => {
+      const packageRootDir = collection.packageRootBySourcePath.get(configPath);
+      if (packageRootDir === undefined) {
+        throw new Error(`Missing auto checker package root for ${configPath}.`);
+      }
+      return createAutoScopeProject({
+        activatedRegions: options.activatedRegions,
         config: options.config,
         configPath,
+        packageRootDir,
         projectConfigCache: options.projectConfigCache,
-      }),
-    );
+      });
+    });
   const projectByConfigPath = new Map(
     projects.map((project) => [project.configPath, project]),
   );

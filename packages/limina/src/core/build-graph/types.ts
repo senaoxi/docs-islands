@@ -256,6 +256,8 @@ export interface AutoScopeProject {
   fileNames: string[];
   filePartition: SourceFilePartition;
   options: ts.CompilerOptions;
+  packageRootByFileName: Map<string, string>;
+  packageRootDir: string;
 }
 
 export interface AutoScope {

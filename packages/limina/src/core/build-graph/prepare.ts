@@ -80,6 +80,7 @@ export async function prepareGeneratedTsconfigGraph(
     registerPreparedChecker({ preparedChecker, state });
   }
   await prewarmGeneratedFrameworkImports({
+    activatedRegions,
     config,
     importAnalysis: importAnalysisContext,
     state,

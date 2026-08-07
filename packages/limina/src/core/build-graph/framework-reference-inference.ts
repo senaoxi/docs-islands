@@ -9,6 +9,7 @@ import {
 import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import path from 'pathe';
 import { classifyImportRuntimeEvidence } from '../import-analysis/evidence';
+import { getFrameworkFilePackageRoot } from './framework-file-root';
 import { reportUnresolvedFrameworkImport } from './framework-import-problems';
 import type { ReferenceImportContext } from './reference-import-types';
 import type {
@@ -220,7 +221,11 @@ function processFrameworkFile(
   try {
     imports = collectImportsFromFile(
       options.fileName,
-      options.source.packageRootDir,
+      getFrameworkFilePackageRoot({
+        activatedRegions: options.context.activatedRegions,
+        fallbackPackageRootDir: options.source.packageRootDir,
+        fileName: options.fileName,
+      }),
       options.context.importAnalysis,
     );
   } catch (error) {

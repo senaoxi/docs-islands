@@ -52,6 +52,27 @@ async function waitForMacrotasks(durationMs: number): Promise<void> {
   });
 }
 
+async function waitForFile(filePath: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (existsSync(filePath)) return;
+    await waitForMacrotasks(20);
+  }
+  throw new Error(`Timed out waiting for ${filePath}.`);
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !(
+      error instanceof Error &&
+      'code' in error &&
+      String(error.code) === 'ESRCH'
+    );
+  }
+}
+
 afterEach(() => {
   delete process.env.LIMINA_CHECKER_HOST;
   delete process.env.LIMINA_CHECKER_HOST_TEST_CRASH;
@@ -177,6 +198,46 @@ describe('createDefaultRunner duration measurement', () => {
     expect(result.status).toBe(1);
     expect(result.error?.message).toBe('cancel checker target');
     expect(performance.now() - startedAt).toBeLessThan(3000);
+  });
+
+  it('waits for a stubborn checker process tree to exit before resolving cancellation', async () => {
+    const rootDir = await mkdtemp(
+      path.join(tmpdir(), 'limina-host-cancellation-'),
+    );
+    const pidPath = path.join(rootDir, 'checker.pid');
+
+    try {
+      const controller = new AbortController();
+      const runner = createDefaultRunner({ stdio: 'ignore' });
+      const target: TypecheckTarget = {
+        args: [
+          '-e',
+          [
+            `require('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));`,
+            "process.on('SIGTERM', () => undefined);",
+            'setInterval(() => undefined, 1000);',
+          ].join(''),
+        ],
+        command: process.execPath,
+        configPath: '/virtual/stubborn/tsconfig.json',
+        cwd: process.cwd(),
+        id: createCheckerTargetId(['test', 'stubborn']),
+      };
+      const resultPromise = Promise.resolve(
+        runner(target, { signal: controller.signal }),
+      );
+      await waitForFile(pidPath);
+      const pid = Number.parseInt(await readFile(pidPath, 'utf8'), 10);
+
+      controller.abort(new Error('cancel stubborn checker'));
+      const result = await resultPromise;
+
+      expect(result.error?.message).toBe('cancel stubborn checker');
+      expect(result.status).toBe(1);
+      expect(isProcessRunning(pid)).toBe(false);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
   });
 
   it('runs inline with a single degradation notice when LIMINA_CHECKER_HOST=off', async () => {

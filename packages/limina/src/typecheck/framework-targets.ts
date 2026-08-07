@@ -1,4 +1,7 @@
-import type { CheckerDependencyRequirement } from '#checkers';
+import {
+  type CheckerDependencyRequirement,
+  getCheckerCapabilityFamily,
+} from '#checkers';
 import type {
   FrameworkCapabilityDescriptor,
   GeneratedTsconfigGraphResult,
@@ -109,6 +112,44 @@ export function collectFrameworkCapabilityDescriptors(
   return [...descriptorsByKey.values()].sort(compareDescriptors);
 }
 
+function collectExplicitFrameworkCoverage(
+  generatedGraph: GeneratedTsconfigGraphResult,
+): Set<string> {
+  const coveredDescriptors = new Set<string>();
+  for (const checker of generatedGraph.checkers) {
+    for (const key of collectCheckerFrameworkCoverage(
+      generatedGraph,
+      checker,
+    )) {
+      coveredDescriptors.add(key);
+    }
+  }
+  return coveredDescriptors;
+}
+
+function collectCheckerFrameworkCoverage(
+  generatedGraph: GeneratedTsconfigGraphResult,
+  checker: GeneratedTsconfigGraphResult['checkers'][number],
+): string[] {
+  if (getCheckerCapabilityFamily(checker.preset) !== 'svelte') return [];
+  const governedSources = generatedGraph.governedSources.get(checker.name);
+  if (governedSources === undefined) return [];
+  return [...governedSources.values()].flatMap((source) =>
+    source.frameworkCapabilities
+      .filter((capability) => capability.family === 'svelte')
+      .map(descriptorKey),
+  );
+}
+
+export function collectFrameworkSupplementalCapabilityDescriptors(
+  generatedGraph: GeneratedTsconfigGraphResult,
+): FrameworkCapabilityDescriptor[] {
+  const explicitCoverage = collectExplicitFrameworkCoverage(generatedGraph);
+  return collectFrameworkCapabilityDescriptors(generatedGraph).filter(
+    (descriptor) => !explicitCoverage.has(descriptorKey(descriptor)),
+  );
+}
+
 function createFrameworkCommandTarget(
   descriptor: FrameworkCapabilityDescriptor,
 ): Pick<TypecheckTarget, 'args' | 'command' | 'label'> {
@@ -185,11 +226,12 @@ export function createFrameworkCheckerTargets(options: {
   generatedGraph: GeneratedTsconfigGraphResult;
   workspaceRootDir: string;
 }): TypecheckTarget[] {
-  return collectFrameworkCapabilityDescriptors(options.generatedGraph).map(
-    (descriptor) =>
-      createFrameworkCheckerTarget({
-        descriptor,
-        workspaceRootDir: options.workspaceRootDir,
-      }),
+  return collectFrameworkSupplementalCapabilityDescriptors(
+    options.generatedGraph,
+  ).map((descriptor) =>
+    createFrameworkCheckerTarget({
+      descriptor,
+      workspaceRootDir: options.workspaceRootDir,
+    }),
   );
 }

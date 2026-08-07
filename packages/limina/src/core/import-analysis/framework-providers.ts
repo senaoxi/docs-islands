@@ -42,7 +42,7 @@ function createVueProvider(parser: VueImportParser): FrameworkImportProvider {
 }
 
 const svelteProvider: FrameworkImportProvider = {
-  collectionMode: 'sync',
+  collectionMode: 'async',
   collectImports: collectSvelteImports,
   extension: '.svelte',
   getParserIdentity: getSvelteParserIdentity,

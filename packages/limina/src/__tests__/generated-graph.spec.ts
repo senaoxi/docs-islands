@@ -30,6 +30,21 @@ const requireFromTest = createRequire(import.meta.url);
 const svelteCompilerFixture = [
   `'use strict';`,
   'exports.VERSION = "5.1.0";',
+  'exports.preprocess = async function preprocess(source, preprocessor) {',
+  '  const replacements = [];',
+  '  const pattern = /<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/giu;',
+  '  for (const match of source.matchAll(pattern)) {',
+  '    const content = match[2] || "";',
+  '    const start = (match.index || 0) + match[0].indexOf(content);',
+  '    const processed = await preprocessor.script({ content });',
+  '    replacements.push({ start, end: start + content.length, code: processed.code });',
+  '  }',
+  '  let code = source;',
+  '  for (const replacement of replacements.reverse()) {',
+  '    code = code.slice(0, replacement.start) + replacement.code + code.slice(replacement.end);',
+  '  }',
+  '  return { code };',
+  '};',
   'exports.parse = function parse(source) {',
   '  if (source.includes("<syntax-error>")) throw new SyntaxError("fixture syntax error");',
   '  const root = { instance: null, module: null };',
@@ -1024,6 +1039,49 @@ describe('prepareGeneratedTsconfigGraph', () => {
         'packages/app/tsconfig.json':
           '.limina/tsconfig/checkers/vue/projects/packages/app/tsconfig.dts.json',
       });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('uses the owning leaf package root for framework imports in auto scopes', async () => {
+    const fixture = await createFixture(
+      {
+        'packages/app/package.json': json({
+          name: '@fixture/app',
+          private: true,
+        }),
+        'packages/app/src/Page.astro':
+          '---\nimport value from "./value";\nvoid value;\n---\n',
+        'packages/app/src/value.ts': 'export default 1;\n',
+        'tsconfig.json': json({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['packages/app/src/**/*'],
+        }),
+      },
+      { astroCompiler: false },
+    );
+
+    try {
+      await linkAstroCompiler(path.join(fixture.rootDir, 'packages/app'));
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: { checkers: { mode: 'auto' } },
+      });
+
+      expect(result.checkers).toMatchObject([
+        {
+          include: ['tsconfig.json'],
+          name: 'typescript',
+          preset: 'tsc',
+        },
+      ]);
     } finally {
       await fixture.cleanup();
     }

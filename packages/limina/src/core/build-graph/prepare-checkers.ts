@@ -141,6 +141,7 @@ export function prepareCheckerGraph(options: {
     );
   const governedSources = primaryProjects.map((project) =>
     createGovernedSourceUnit({
+      activatedRegions: options.activatedRegions,
       config: options.config,
       project,
       projectConfigCache: options.projectConfigCache,

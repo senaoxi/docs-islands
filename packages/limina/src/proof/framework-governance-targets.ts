@@ -7,7 +7,7 @@ import { toRelativePath } from '#utils/path';
 import type { WorkspaceLookupIndex } from '../core/workspace/lookup';
 import { collectFrameworkTargetPreflightFailures } from '../typecheck/framework-target-preflight';
 import {
-  collectFrameworkCapabilityDescriptors,
+  collectFrameworkSupplementalCapabilityDescriptors,
   createFrameworkCheckerTargets,
   type TypecheckTarget,
 } from '../typecheck/targets';
@@ -246,7 +246,7 @@ function addDescriptorTargetFindings(
 }
 
 export function addFrameworkTargetFindings(options: TargetOptions): void {
-  const descriptors = collectFrameworkCapabilityDescriptors(
+  const descriptors = collectFrameworkSupplementalCapabilityDescriptors(
     options.generatedGraph,
   );
   const targets = createFrameworkCheckerTargets({

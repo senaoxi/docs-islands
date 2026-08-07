@@ -64,6 +64,22 @@ async function linkAstroCompiler(
   );
 }
 
+async function linkSvelteCompiler(
+  rootDir: string,
+  packageName = 'svelte-v4-min',
+): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    `${packageName}/package.json`,
+  );
+  const nodeModulesDir = path.join(rootDir, 'node_modules');
+  await mkdir(nodeModulesDir, { recursive: true });
+  await symlink(
+    path.dirname(compilerPackagePath),
+    path.join(nodeModulesDir, 'svelte'),
+    'junction',
+  );
+}
+
 async function prewarmImportsFromFile(options: {
   context: ReturnType<typeof createImportAnalysisContext>;
   filePath: string;
@@ -82,6 +98,21 @@ function createSvelteCompilerSource(options: {
   return [
     `'use strict';`,
     `exports.VERSION = ${JSON.stringify(options.version)};`,
+    'exports.preprocess = async function preprocess(source, preprocessor) {',
+    '  const replacements = [];',
+    '  const pattern = /<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/giu;',
+    '  for (const match of source.matchAll(pattern)) {',
+    '    const content = match[2] || "";',
+    '    const start = (match.index || 0) + match[0].indexOf(content);',
+    '    const processed = await preprocessor.script({ content });',
+    '    replacements.push({ start, end: start + content.length, code: processed.code });',
+    '  }',
+    '  let code = source;',
+    '  for (const replacement of replacements.reverse()) {',
+    '    code = code.slice(0, replacement.start) + replacement.code + code.slice(replacement.end);',
+    '  }',
+    '  return { code };',
+    '};',
     'exports.parse = function parse(source) {',
     ...(options.failMessage === undefined
       ? []
@@ -580,7 +611,9 @@ describe('import analysis', () => {
       '---',
       '<Page />',
       '<script type="application/json">{"source":"import \'./ignored\'"}</script>',
-      '<script type="module">',
+      '<script is:inline>import "./inline-ignored";</script>',
+      '<script type="module">import "./typed-ignored";</script>',
+      '<script>',
       "import { client } from './client';",
       "void import('./client-lazy');",
       'void client;',
@@ -659,14 +692,14 @@ describe('import analysis', () => {
         {
           domain: 'astro-client-script',
           kind: 'static',
-          line: 14,
+          line: 16,
           specifier: './client',
           token: "'./client'",
         },
         {
           domain: 'astro-client-script',
           kind: 'dynamic',
-          line: 15,
+          line: 17,
           specifier: './client-lazy',
           token: "'./client-lazy'",
         },
@@ -748,6 +781,38 @@ describe('import analysis', () => {
           .collectImportsFromFile(filePath, rootDir)
           .map((record) => record.specifier),
       ).toEqual(['./value']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('does not inherit an Astro compiler from an ancestor package root', async () => {
+    const rootDir = await createTempDir();
+    const leafRootDir = path.join(rootDir, 'packages/leaf');
+
+    try {
+      await linkAstroCompiler(rootDir);
+      await writeText(
+        rootDir,
+        'packages/leaf/package.json',
+        '{"name":"leaf","private":true}\n',
+      );
+      const filePath = await writeText(
+        rootDir,
+        'packages/leaf/src/Page.astro',
+        '---\nimport value from "./value";\n---\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await expect(
+        prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: leafRootDir,
+        }),
+      ).rejects.toThrow(
+        /Unable to load Astro compiler for import analysis:[\s\S]*leaf package root/u,
+      );
     } finally {
       await rm(rootDir, { force: true, recursive: true });
     }
@@ -909,8 +974,14 @@ describe('import analysis', () => {
         });
         const filePath = await writeText(rootDir, 'src/App.svelte', sourceText);
 
+        const context = createImportAnalysisContext();
+        await prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: rootDir,
+        });
         expect(
-          collectImportsFromFile(filePath, rootDir).map((record) => ({
+          context.collectImportsFromFile(filePath, rootDir).map((record) => ({
             domain: record.domain,
             kind: record.kind,
             line: record.line,
@@ -970,6 +1041,33 @@ describe('import analysis', () => {
     },
   );
 
+  it('prewarms TypeScript scripts with the actual Svelte 4 compiler', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await linkSvelteCompiler(rootDir);
+      const filePath = await writeText(
+        rootDir,
+        'src/App.svelte',
+        '<script lang="ts">\nlet value: number = 1;\nimport dep from "./dep";\nvoid [value, dep];\n</script>\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: rootDir,
+      });
+      expect(
+        context
+          .collectImportsFromFile(filePath, rootDir)
+          .map((record) => record.specifier),
+      ).toEqual(['./dep']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
   it('resolves the Svelte compiler from the supplied leaf package root', async () => {
     const rootDir = await createTempDir();
     const leafRootDir = path.join(rootDir, 'packages/leaf');
@@ -990,11 +1088,52 @@ describe('import analysis', () => {
         '<script>import value from "./value";</script>\n',
       );
 
+      const context = createImportAnalysisContext();
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: leafRootDir,
+      });
       expect(
-        collectImportsFromFile(filePath, leafRootDir).map(
-          (record) => record.specifier,
-        ),
+        context
+          .collectImportsFromFile(filePath, leafRootDir)
+          .map((record) => record.specifier),
       ).toEqual(['./value']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('does not inherit a Svelte compiler from an ancestor package root', async () => {
+    const rootDir = await createTempDir();
+    const leafRootDir = path.join(rootDir, 'packages/leaf');
+
+    try {
+      await writeSvelteCompiler({
+        packageRootDir: rootDir,
+        version: '5.1.0',
+      });
+      await writeText(
+        rootDir,
+        'packages/leaf/package.json',
+        '{"name":"leaf","private":true}\n',
+      );
+      const filePath = await writeText(
+        rootDir,
+        'packages/leaf/src/App.svelte',
+        '<script>import value from "./value";</script>\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await expect(
+        prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: leafRootDir,
+        }),
+      ).rejects.toThrow(
+        /Unable to load Svelte compiler for import analysis:[\s\S]*leaf package root/u,
+      );
     } finally {
       await rm(rootDir, { force: true, recursive: true });
     }
@@ -1010,7 +1149,10 @@ describe('import analysis', () => {
         '<script>import value from "./value";</script>\n',
       );
 
-      expect(() => collectImportsFromFile(filePath, rootDir)).toThrow(
+      const context = createImportAnalysisContext();
+      await expect(
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+      ).rejects.toThrow(
         /Unable to load Svelte compiler for import analysis:[\s\S]*dependency category: analysis runtime/u,
       );
     } finally {
@@ -1029,7 +1171,10 @@ describe('import analysis', () => {
         '<syntax-error>\n',
       );
 
-      expect(() => collectImportsFromFile(filePath, rootDir)).toThrow(
+      const context = createImportAnalysisContext();
+      await expect(
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+      ).rejects.toThrow(
         /Unable to parse Svelte component for import analysis:[\s\S]*src\/App\.svelte[\s\S]*fixture syntax error/u,
       );
     } finally {
@@ -1059,6 +1204,16 @@ describe('import analysis', () => {
       const metrics = createProfilingMetricsRecorder();
       const context = createImportAnalysisContext({ metrics });
 
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: firstLeaf,
+      });
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: secondLeaf,
+      });
       context.collectImportsFromFile(filePath, firstLeaf);
       context.collectImportsFromFile(filePath, secondLeaf);
       context.collectImportsFromFile(filePath, firstLeaf);
@@ -1073,7 +1228,7 @@ describe('import analysis', () => {
       expect(providerMetrics).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ count: 2, name: 'provider-cache-miss' }),
-          expect.objectContaining({ count: 1, name: 'provider-cache-hit' }),
+          expect.objectContaining({ count: 3, name: 'provider-cache-hit' }),
         ]),
       );
     } finally {

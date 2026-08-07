@@ -8,6 +8,10 @@ import type {
 } from '#checkers';
 import { normalizeSlashes, toRelativePath } from '#utils/path';
 import path from 'pathe';
+import {
+  isResolvedFromLeafInstalledPackage,
+  resolveLeafInstalledPackageDirectory,
+} from '../core/packages/leaf-package-resolution';
 import type { TypecheckTarget } from './target-types';
 
 type FrameworkFamily = NonNullable<TypecheckTarget['checkerFamily']>;
@@ -44,14 +48,42 @@ function resolvePackageFromRoot(options: {
   packageName: string;
   projectRootDir: string;
 }): string | undefined {
+  if (
+    resolveLeafInstalledPackageDirectory({
+      packageName: options.packageName,
+      packageRootDir: options.projectRootDir,
+    }) === null
+  ) {
+    return undefined;
+  }
   const requireFromRoot = createRequire(
     path.join(options.projectRootDir, 'package.json'),
   );
   try {
-    return requireFromRoot.resolve(`${options.packageName}/package.json`);
+    const resolvedPath = requireFromRoot.resolve(
+      `${options.packageName}/package.json`,
+    );
+    return resolveVerifiedLeafPackagePath({ ...options, resolvedPath });
   } catch (error) {
     return handlePackageResolutionError(error, options.packageName);
   }
+}
+
+function resolveVerifiedLeafPackagePath(options: {
+  packageName: string;
+  projectRootDir: string;
+  resolvedPath: string;
+}): string | undefined {
+  if (
+    isResolvedFromLeafInstalledPackage({
+      packageName: options.packageName,
+      packageRootDir: options.projectRootDir,
+      resolvedPath: options.resolvedPath,
+    })
+  ) {
+    return options.resolvedPath;
+  }
+  return undefined;
 }
 
 function quoteCommandPath(value: string): string {

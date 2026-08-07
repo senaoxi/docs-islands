@@ -1,5 +1,6 @@
 import { collectImportsFromFile } from '#core/import-graph/context';
 import { shouldInferDeclarationReferenceFromImportRecord } from '../import-graph/declaration-reference-evidence';
+import { getFrameworkFilePackageRoot } from './framework-file-root';
 import type {
   ReferenceImportContext,
   ReferenceImportOptions,
@@ -44,7 +45,11 @@ function processProjectFileImports(options: {
 }): void {
   const imports = collectImportsFromFile(
     options.fileName,
-    options.context.config.rootDir,
+    getFrameworkFilePackageRoot({
+      activatedRegions: options.context.activatedRegions,
+      fallbackPackageRootDir: options.project.packageRootDir,
+      fileName: options.fileName,
+    }),
     options.context.importAnalysis,
   );
   for (const importRecord of imports) {

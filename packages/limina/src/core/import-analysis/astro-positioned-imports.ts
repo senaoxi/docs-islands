@@ -26,15 +26,6 @@ interface AstroSourcePoint {
   line?: number;
 }
 
-const JAVASCRIPT_SCRIPT_TYPES = new Set([
-  'application/ecmascript',
-  'application/javascript',
-  'module',
-  'text/ecmascript',
-  'text/javascript',
-  'text/typescript',
-]);
-
 function createAstroPositionError(options: {
   domain: AstroSourceRegion['domain'];
   filePath: string;
@@ -67,15 +58,6 @@ function normalizeAttributeName(name: string | undefined): string {
   return name?.toLowerCase() ?? '';
 }
 
-function getAttributeValue(node: AstroNode, name: string): string | undefined {
-  for (const attribute of getNodeAttributes(node)) {
-    if (normalizeAttributeName(attribute.name) === name) {
-      return attribute.value;
-    }
-  }
-  return undefined;
-}
-
 function isFrontmatterNode(node: AstroNode): boolean {
   return node.type === 'frontmatter' && typeof node.value === 'string';
 }
@@ -86,8 +68,10 @@ function isScriptElement(node: AstroNode): boolean {
   return node.name.toLowerCase() === 'script';
 }
 
-function isJavaScriptScriptType(type: string | undefined): boolean {
-  return type === undefined || JAVASCRIPT_SCRIPT_TYPES.has(type.toLowerCase());
+function isProcessedAstroScript(node: AstroNode): boolean {
+  return getNodeAttributes(node).every(
+    (attribute) => normalizeAttributeName(attribute.name) === 'src',
+  );
 }
 
 function isTextNodeWithValue(
@@ -98,7 +82,7 @@ function isTextNodeWithValue(
 
 function collectScriptRegions(node: AstroNode): AstroSourceRegion[] {
   if (!isScriptElement(node)) return [];
-  if (!isJavaScriptScriptType(getAttributeValue(node, 'type'))) return [];
+  if (!isProcessedAstroScript(node)) return [];
   return getNodeChildren(node)
     .filter(isTextNodeWithValue)
     .map((child) => ({

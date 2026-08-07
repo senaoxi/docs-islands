@@ -4,6 +4,7 @@ import {
   type CheckerHostResponse,
   spawnAndMeasure,
 } from './host-protocol';
+import { terminateChildProcessTree } from './process-tree';
 
 // The idle timeout must comfortably exceed the longest synchronous stretch on
 // the parent's main thread, because a blocked parent cannot ping. The host
@@ -21,15 +22,32 @@ function isRunningChild(child: ChildProcess): boolean {
   return child.exitCode === null && child.signalCode === null;
 }
 
-function exitWithCheckerCleanup(): void {
-  for (const child of liveCheckerChildren) {
-    if (isRunningChild(child)) {
-      child.kill();
-    }
-  }
+let exitPending = false;
+
+function waitForChildClose(child: ChildProcess): Promise<void> {
+  if (!isRunningChild(child)) return Promise.resolve();
+  return new Promise((resolve) => child.once('close', () => resolve()));
+}
+
+async function exitWithCheckerCleanup(): Promise<void> {
+  if (exitPending) return;
+  exitPending = true;
+  const runningChildren = [...liveCheckerChildren].filter(isRunningChild);
+  const closePromises = runningChildren.map(waitForChildClose);
+  for (const child of runningChildren) terminateChildProcessTree(child);
+  await Promise.race([
+    Promise.all(closePromises),
+    new Promise((resolve) => setTimeout(resolve, 1500)),
+  ]);
 
   // eslint-disable-next-line unicorn/no-process-exit -- Dedicated host process entry: exiting after checker cleanup is its lifecycle contract.
   process.exit(0);
+}
+
+function scheduleCheckerCleanup(): void {
+  exitWithCheckerCleanup().catch(() => {
+    process.exitCode = 1;
+  });
 }
 
 function send(message: CheckerHostResponse): void {
@@ -42,7 +60,7 @@ function send(message: CheckerHostResponse): void {
   } catch {
     // The channel is gone, so the parent is gone: results have no audience
     // and any remaining checker children must not be leaked.
-    exitWithCheckerCleanup();
+    scheduleCheckerCleanup();
   }
 }
 
@@ -51,7 +69,7 @@ type SpawnRequest = Extract<CheckerHostRequest, { type: 'spawn' }>;
 
 function cancelChecker(request: CancelRequest): void {
   const child = checkerChildrenByRequestId.get(request.id);
-  if (child !== undefined && isRunningChild(child)) child.kill();
+  if (child !== undefined) terminateChildProcessTree(child);
 }
 
 function spawnChecker(request: SpawnRequest): void {
@@ -96,7 +114,7 @@ process.on('message', (request: CheckerHostRequest) => {
 });
 
 process.on('disconnect', () => {
-  exitWithCheckerCleanup();
+  scheduleCheckerCleanup();
 });
 
 // IPC disconnect does not reach this process when the parent dies abruptly
@@ -108,7 +126,7 @@ setInterval(() => {
     pendingSpawnCount === 0 &&
     Date.now() - lastParentSignalAt > PARENT_LIVENESS_TIMEOUT_MS
   ) {
-    exitWithCheckerCleanup();
+    scheduleCheckerCleanup();
   }
 }, PARENT_LIVENESS_CHECK_INTERVAL_MS);
 

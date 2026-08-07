@@ -12,6 +12,7 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -110,6 +111,7 @@ function createGovernedSource(options: {
 }
 
 function createGraph(options: {
+  checkers?: GeneratedTsconfigGraphResult['checkers'];
   descriptorsByChecker: Record<string, FrameworkCapabilityDescriptor[]>;
   namespace?: ReturnType<typeof createLiminaArtifactNamespace>;
   rootDir: string;
@@ -142,7 +144,7 @@ function createGraph(options: {
     artifactPlan: createArtifactPlan(namespace, [], []),
     changed: false,
     checkerEntries: new Map(),
-    checkers: [],
+    checkers: options.checkers ?? [],
     governedSources,
   } as unknown as GeneratedTsconfigGraphResult;
 }
@@ -272,6 +274,53 @@ describe('framework checker targets', () => {
         'astro-check',
         'svelte-check',
       ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('suppresses supplemental Svelte targets already covered by an explicit checker', async () => {
+    const fixture = await createFixture();
+    try {
+      const packageRootDir = fixture.path('packages', 'a');
+      const sourceConfigPath = fixture.path('packages', 'a', 'tsconfig.json');
+      const astro = descriptor({
+        family: 'astro',
+        packageRootDir,
+        sourceConfigPath,
+      });
+      const svelte = descriptor({
+        family: 'svelte',
+        packageRootDir,
+        sourceConfigPath,
+      });
+      const graph = createGraph({
+        checkers: [
+          {
+            exclude: [],
+            extensions: ['.svelte'],
+            include: ['packages/a/tsconfig.json'],
+            name: 'svelte',
+            preset: 'svelte-check',
+          },
+        ],
+        descriptorsByChecker: {
+          svelte: [svelte],
+          typescript: [astro, svelte],
+        },
+        rootDir: fixture.rootDir,
+      });
+
+      expect(collectFrameworkCapabilityDescriptors(graph)).toEqual([
+        astro,
+        svelte,
+      ]);
+      expect(
+        createFrameworkCheckerTargets({
+          generatedGraph: graph,
+          workspaceRootDir: fixture.rootDir,
+        }).map((target) => target.checkerFamily),
+      ).toEqual(['astro']);
     } finally {
       await fixture.cleanup();
     }
@@ -437,6 +486,36 @@ describe('framework checker targets', () => {
       expect(problems).toContain(
         'pnpm --dir packages/a add -D astro @astrojs/check',
       );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not accept framework dependencies inherited from an ancestor root', async () => {
+    const fixture = await createFixture();
+    try {
+      const packagePath = requireFromTest.resolve('svelte-v4-min/package.json');
+      await mkdir(fixture.path('node_modules'), { recursive: true });
+      await symlink(
+        path.dirname(packagePath),
+        fixture.path('node_modules', 'svelte'),
+        'junction',
+      );
+      const target = createFrameworkCheckerTarget({
+        descriptor: descriptor({
+          family: 'svelte',
+          packageRootDir: fixture.path('packages', 'a'),
+          sourceConfigPath: fixture.path('packages', 'a', 'tsconfig.json'),
+        }),
+        workspaceRootDir: fixture.rootDir,
+      });
+
+      const problems = collectFrameworkTargetPreflightFailures({
+        targets: [target],
+        workspaceRootDir: fixture.rootDir,
+      }).flatMap((failure) => failure.problems);
+
+      expect(problems.join('\n')).toContain('missing package: svelte');
     } finally {
       await fixture.cleanup();
     }

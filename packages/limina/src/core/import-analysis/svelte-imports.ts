@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import ts from 'typescript';
+import { isResolvedFromLeafInstalledPackage } from '../packages/leaf-package-resolution';
 import { collectSourceTextImports } from './oxc-imports';
 import {
   buildLineStarts,
@@ -11,6 +12,7 @@ import {
   type ImportRecord,
   setImportRecordDomain,
 } from './records';
+import { maskSvelteScriptContents } from './svelte-script-mask';
 import type { FrameworkImportParserIdentity } from './types';
 
 interface SvelteProgram {
@@ -23,8 +25,8 @@ interface SvelteScript {
 }
 
 interface SvelteAstRoot {
-  instance: SvelteScript | null;
-  module: SvelteScript | null;
+  instance?: SvelteScript | null;
+  module?: SvelteScript | null;
 }
 
 interface SvelteCompiler {
@@ -33,6 +35,9 @@ interface SvelteCompiler {
     source: string,
     options: { filename?: string; modern: true },
   ): SvelteAstRoot;
+  preprocess: Parameters<
+    typeof maskSvelteScriptContents
+  >[0]['compiler']['preprocess'];
 }
 
 interface ResolvedSvelteCompiler {
@@ -139,6 +144,15 @@ function resolveSvelteCompiler(packageRootDir: string): ResolvedSvelteCompiler {
     const resolvedPath = normalizeAbsolutePath(
       requireFromLeaf.resolve('svelte/compiler'),
     );
+    if (
+      !isResolvedFromLeafInstalledPackage({
+        packageName: 'svelte',
+        packageRootDir,
+        resolvedPath,
+      })
+    ) {
+      throw createMissingCompilerError(packageRootDir);
+    }
     const compiler = requireFromLeaf('svelte/compiler') as SvelteCompiler;
     return {
       compiler,
@@ -224,10 +238,10 @@ function collectOptionalScriptImports(options: {
   domain: ImportDomain;
   filePath: string;
   lineStarts: number[];
-  script: SvelteScript | null;
+  script: SvelteScript | null | undefined;
   sourceText: string;
 }): ImportRecord[] {
-  if (options.script === null) return [];
+  if (options.script == null) return [];
   return collectScriptImports({ ...options, script: options.script });
 }
 
@@ -261,15 +275,17 @@ export function collectSvelteImports(options: {
   filePath: string;
   packageRootDir: string;
   sourceText: string;
-}): ImportRecord[] {
+}): Promise<ImportRecord[]> {
   const { compiler } = resolveSvelteCompiler(options.packageRootDir);
-  try {
-    const root = compiler.parse(options.sourceText, {
-      filename: options.filePath,
-      modern: true,
+  return maskSvelteScriptContents({ compiler, ...options })
+    .then((processedSource) => {
+      const root = compiler.parse(processedSource, {
+        filename: options.filePath,
+        modern: true,
+      });
+      return collectRootScriptImports({ ...options, root });
+    })
+    .catch((error: unknown) => {
+      throw createSvelteParseError({ ...options, error });
     });
-    return collectRootScriptImports({ ...options, root });
-  } catch (error) {
-    throw createSvelteParseError({ ...options, error });
-  }
 }

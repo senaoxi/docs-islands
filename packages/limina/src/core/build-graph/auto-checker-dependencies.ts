@@ -5,6 +5,7 @@ import {
 } from '#core/import-graph/context';
 import { normalizeAbsolutePath } from '#utils/path';
 import path from 'pathe';
+import { getAutoScopeFilePackageRoot } from './auto-checker-file-roots';
 import { capabilityDiscoveryExtensions } from './generated/file-extensions';
 import { resolveBuildGraphImportAnalysis } from './import-analysis-context';
 import type {
@@ -144,7 +145,7 @@ function addFileImportDependencies(options: {
 }): void {
   const importRecords = collectImportsFromFile(
     options.fileName,
-    options.config.rootDir,
+    getAutoScopeFilePackageRoot(options.project, options.fileName),
     options.importAnalysis,
   );
   for (const importRecord of importRecords) {

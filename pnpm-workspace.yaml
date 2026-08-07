@@ -24,6 +24,22 @@ auditConfig:
     - GHSA-fx2h-pf6j-xcff
     - GHSA-v6wh-96g9-6wx3
     - GHSA-h67p-54hq-rp68
+    # svelte-v4-min is the exact dev-only Svelte 4.0.0 compatibility floor;
+    # the affected runtime and SSR paths are not executed by Limina's tests.
+    - GHSA-8266-84wp-wv5c
+    - GHSA-crpf-4hrx-3jrp
+    - GHSA-m56q-vw4c-c2cp
+    - GHSA-f7gr-6p89-r883
+    - GHSA-phwv-c562-gvmh
+    - GHSA-rcqx-6q8c-2c42
+    - GHSA-pr6f-5x2q-rwfp
+    # astro-v7-min is the exact dev-only Astro 7.0.0 CLI compatibility floor;
+    # tests do not execute the affected runtime or optional sharp image paths.
+    - GHSA-4g3v-8h47-v7g6
+    - GHSA-8mv7-9c27-98vc
+    - GHSA-f48w-9m4c-m7f5
+    - GHSA-7pw4-f3q4-r2p2
+    - GHSA-f88m-g3jw-g9cj
 
 autoInstallPeers: false
 
@@ -185,12 +201,12 @@ minimumReleaseAge: 1440
 nodeVersion: 22.18.0
 
 overrides:
-  '@eslint/eslintrc>js-yaml': 4.3.0
+  'js-yaml@^4.0.0': 4.3.1
   '@swc/core': 1.15.43
   '@types/node': 22.18.0
   browserslist: ^4.28.4
   form-data: 4.0.6
-  'gray-matter>js-yaml': 3.15.0
+  'gray-matter>js-yaml': 3.15.1
   lodash: 4.18.0
   markdown-it: ^14.2.0
   minimatch@^10.0.0: ^10.2.5
