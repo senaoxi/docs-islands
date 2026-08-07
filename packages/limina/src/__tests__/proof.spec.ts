@@ -22,6 +22,7 @@ import {
   type LiminaCheckIssue,
   readCheckIssueSnapshot,
 } from '../source-check/snapshot';
+import { prepareAndMaterializeGeneratedTsconfigGraph } from './helpers/generated-graph';
 import { toPortablePath } from './helpers/path';
 
 async function writeText(filePath: string, text: string): Promise<void> {
@@ -367,12 +368,267 @@ function createCheckerGraphCoverageProofGeneratedGraph(
   };
 }
 
+type MutableFrameworkProofGraph = Omit<
+  GeneratedTsconfigGraphResult,
+  'generatedFiles'
+> & {
+  generatedFiles: Map<string, string>;
+};
+
+function cloneFrameworkProofGraph(
+  graph: GeneratedTsconfigGraphResult,
+): MutableFrameworkProofGraph {
+  return {
+    ...graph,
+    generatedFiles: new Map(graph.generatedFiles),
+    governedSources: new Map(
+      [...graph.governedSources.entries()].map(([checkerName, units]) => [
+        checkerName,
+        new Map(
+          [...units.entries()].map(([configPath, unit]) => [
+            configPath,
+            {
+              ...unit,
+              buildProjection: { ...unit.buildProjection },
+              declarationFileNames: [...unit.declarationFileNames],
+              declarationReferences: new Set(unit.declarationReferences),
+              frameworkCapabilities: unit.frameworkCapabilities.map(
+                (capability) => ({ ...capability }),
+              ),
+              frameworkSchedulingReferences: new Set(
+                unit.frameworkSchedulingReferences,
+              ),
+              ownedFileNames: [...unit.ownedFileNames],
+            },
+          ]),
+        ),
+      ]),
+    ),
+    sourceToBuild: new Map(
+      [...graph.sourceToBuild.entries()].map(([checkerName, modules]) => [
+        checkerName,
+        new Map(modules),
+      ]),
+    ),
+    sourceToDts: new Map(
+      [...graph.sourceToDts.entries()].map(([checkerName, sourceToDts]) => [
+        checkerName,
+        new Map(sourceToDts),
+      ]),
+    ),
+  };
+}
+
+function findCheckerCoverageFact(
+  findings: readonly ProofFinding[],
+  kind:
+    | 'build-projection'
+    | 'framework-target'
+    | 'generated-build-extension'
+    | 'primary-owner'
+    | 'supplemental-capability',
+) {
+  return findings.find(
+    (finding) =>
+      finding.code === LIMINA_CHECK_ISSUE_CODES.proofCheckerCoverageInvalid &&
+      finding.facts.kind === kind,
+  );
+}
+
 describe('runProofCheck dts config semantics', () => {
   it('accepts a single-environment dts leaf paired with default tsconfig.json', async () => {
     const fixture = await createFixture(createPassingFiles());
 
     try {
       await expect(runProofCheck(fixture.config)).resolves.toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('proves supplemental framework coverage, targets, projections, and generated extensions', async () => {
+    const fixture = await createFixture({
+      'node_modules/svelte-check/package.json': stringifyConfig({
+        name: 'svelte-check',
+        version: '4.0.0',
+      }),
+      'node_modules/typescript/package.json': stringifyConfig({
+        name: 'typescript',
+        version: '5.9.0',
+      }),
+      'packages/app/src/App.svelte':
+        '<script lang="ts">export const value = 1;</script>\n',
+      'packages/app/src/index.ts': 'export const nativeValue = 1;\n',
+      'packages/app/tsconfig.json': stringifyConfig({
+        compilerOptions: {
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          target: 'ES2023',
+          types: [],
+        },
+        include: ['src/**/*'],
+      }),
+      'tsconfig.json': stringifyConfig({
+        files: [],
+        references: [{ path: './packages/app/tsconfig.json' }],
+      }),
+    });
+    const config: ResolvedLiminaConfig = {
+      ...fixture.config,
+      config: {
+        checkers: { mode: 'auto' },
+        source: { include: ['...', '**/*.svelte'] },
+      },
+    };
+
+    try {
+      const graph = await prepareAndMaterializeGeneratedTsconfigGraph(config);
+      const checkerName = 'typescript';
+      const sourceConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
+      );
+      const baseline = await collectTypedProofFindings(config, {
+        generatedGraphProvider: async () => graph,
+      });
+
+      expect(baseline.passed).toBe(true);
+
+      const missingCapability = cloneFrameworkProofGraph(graph);
+      missingCapability.governedSources
+        .get(checkerName)!
+        .get(sourceConfigPath)!.frameworkCapabilities = [];
+      const missingResult = await collectTypedProofFindings(config, {
+        generatedGraphProvider: async () => missingCapability,
+      });
+      expect(
+        findCheckerCoverageFact(
+          missingResult.findings,
+          'supplemental-capability',
+        )?.facts,
+      ).toMatchObject({
+        family: 'svelte',
+        kind: 'supplemental-capability',
+        violation: 'missing',
+      });
+
+      const duplicateCapability = cloneFrameworkProofGraph(graph);
+      const duplicateUnit = duplicateCapability.governedSources
+        .get(checkerName)!
+        .get(sourceConfigPath)!;
+      duplicateUnit.frameworkCapabilities.push({
+        ...duplicateUnit.frameworkCapabilities[0]!,
+      });
+      const duplicateResult = await collectTypedProofFindings(config, {
+        generatedGraphProvider: async () => duplicateCapability,
+      });
+      expect(
+        findCheckerCoverageFact(
+          duplicateResult.findings,
+          'supplemental-capability',
+        )?.facts,
+      ).toMatchObject({
+        family: 'svelte',
+        kind: 'supplemental-capability',
+        violation: 'duplicate',
+      });
+
+      const duplicatePrimary = cloneFrameworkProofGraph(graph);
+      duplicatePrimary.governedSources.set(
+        'second-primary',
+        new Map([
+          [
+            sourceConfigPath,
+            {
+              ...duplicatePrimary.governedSources
+                .get(checkerName)!
+                .get(sourceConfigPath)!,
+              primaryCheckerName: 'second-primary',
+            },
+          ],
+        ]),
+      );
+      const primaryResult = await collectTypedProofFindings(config, {
+        generatedGraphProvider: async () => duplicatePrimary,
+      });
+      expect(
+        findCheckerCoverageFact(primaryResult.findings, 'primary-owner')?.facts,
+      ).toMatchObject({ kind: 'primary-owner' });
+
+      const dtsConfigPath = graph.sourceToDts
+        .get(checkerName)!
+        .get(sourceConfigPath)!;
+      const invalidProjection = cloneFrameworkProofGraph(graph);
+      invalidProjection.sourceToDts.get(checkerName)!.delete(sourceConfigPath);
+      const projectionResult = await collectTypedProofFindings(config, {
+        generatedGraphProvider: async () => invalidProjection,
+      });
+      expect(
+        findCheckerCoverageFact(projectionResult.findings, 'build-projection')
+          ?.facts,
+      ).toMatchObject({
+        kind: 'build-projection',
+        violation: 'declaration-provider-mismatch',
+      });
+
+      const invalidSolutionKind = cloneFrameworkProofGraph(graph);
+      const invalidKindUnit = invalidSolutionKind.governedSources
+        .get(checkerName)!
+        .get(sourceConfigPath)!;
+      invalidKindUnit.buildProjection = {
+        dtsConfigPath,
+        kind: 'declaration-project',
+      };
+      const solutionKindResult = await collectTypedProofFindings(config, {
+        generatedGraphProvider: async () => invalidSolutionKind,
+      });
+      expect(
+        findCheckerCoverageFact(solutionKindResult.findings, 'build-projection')
+          ?.facts,
+      ).toMatchObject({
+        kind: 'build-projection',
+        violation: 'solution-kind-mismatch',
+      });
+
+      const invalidGeneratedFile = cloneFrameworkProofGraph(graph);
+      const dtsConfig = JSON.parse(
+        invalidGeneratedFile.generatedFiles.get(dtsConfigPath)!,
+      ) as { files: string[] };
+      dtsConfig.files.push('../../../../../../packages/app/src/App.svelte');
+      invalidGeneratedFile.generatedFiles.set(
+        dtsConfigPath,
+        stringifyConfig(dtsConfig),
+      );
+      const extensionResult = await collectTypedProofFindings(config, {
+        generatedGraphProvider: async () => invalidGeneratedFile,
+      });
+      expect(
+        findCheckerCoverageFact(
+          extensionResult.findings,
+          'generated-build-extension',
+        )?.facts,
+      ).toMatchObject({ kind: 'generated-build-extension' });
+
+      const missingDependencyRoot = await realpath(
+        await mkdtemp(path.join(tmpdir(), 'limina-proof-missing-deps-')),
+      );
+      const missingTarget = cloneFrameworkProofGraph(graph);
+      missingTarget.governedSources
+        .get(checkerName)!
+        .get(sourceConfigPath)!.frameworkCapabilities[0]!.packageRootDir =
+        missingDependencyRoot;
+      const targetResult = await collectTypedProofFindings(config, {
+        generatedGraphProvider: async () => missingTarget,
+      });
+      expect(
+        findCheckerCoverageFact(targetResult.findings, 'framework-target')
+          ?.facts,
+      ).toMatchObject({
+        family: 'svelte',
+        kind: 'framework-target',
+        violation: 'preflight-failed',
+      });
+      await rm(missingDependencyRoot, { force: true, recursive: true });
     } finally {
       await fixture.cleanup();
     }
@@ -1413,7 +1669,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('accepts configured checker entries outside the root graph entry', async () => {
+  it('rejects configured primary checkers that converge on the same source leaf', async () => {
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
       'packages/pkg/tsconfig.test.dts.json': JSON.stringify({
@@ -1498,7 +1754,7 @@ describe('runProofCheck dts config semantics', () => {
             },
           },
         }),
-      ).resolves.toBe(false);
+      ).rejects.toThrow('Duplicate Limina checker ownership');
     } finally {
       await fixture.cleanup();
     }

@@ -73,10 +73,9 @@ A check run creates one preflight context, an execution plan, structured issue c
 
 `config.checkers` supports automatic and explicit modes.
 
-When the field is omitted, or when its mode is `auto`, generated-graph preparation discovers source configuration scopes from the validated workspace context. It currently classifies each scope as:
+When the field is omitted, or when its mode is `auto`, generated-graph preparation discovers source configuration scopes from the validated workspace context. Each scope has one primary declaration-build owner: `vue-tsc` when any governed project owns `.vue` files, otherwise `tsc`. Dependency promotion can move a TypeScript consumer into the Vue-owned scope. Independently, each build-primary source config receives a live Astro capability, Svelte capability, or both when its resolved file set owns those extensions.
 
-- `tsc` when the governed source set is covered by TypeScript-compatible extensions
-- `vue-tsc` when the governed source set includes Vue-only files
+Astro and Svelte capabilities do not make those files declaration inputs. A mixed source config projects a wrapper solution over its declaration-compatible files and its framework scheduling references; a framework-only source config projects a transparent solution. No fake framework declarations are generated. Two build-capable checkers cannot own the same expanded source config, one supplemental family cannot occur twice for the same config, and Astro plus Svelte is a valid supplemental combination.
 
 Explicit checker configuration uses named entries with `preset`, `include`, and optional `exclude` fields.
 
@@ -90,7 +89,7 @@ The built-in checker adapters currently have two execution classes:
 | `vue-tsgo`     | typecheck |                          yes |
 | `svelte-check` | typecheck |                           no |
 
-`checker:build` runs build-capable adapters. `checker:typecheck` runs typecheck-only adapters. A checker being available as a preset does not mean it is active in the current repository configuration.
+`checker:build` runs build-capable adapters. `checker:typecheck` runs explicit typecheck-only adapters plus the live per-leaf Astro and Svelte targets attached to build-primary source configs. Astro targets use `astro check --noSync --root <leaf> --tsconfig <config>` and require leaf-local `astro`, `@astrojs/check`, `typescript`, and `.astro/types.d.ts`; Svelte targets use `svelte-check --workspace <leaf> --tsconfig <config>` and require leaf-local `svelte-check`, `svelte`, and `typescript`. Limina does not run Astro sync or SvelteKit sync, enable Svelte incremental/cache paths, or provide framework watch mode. Target IDs are deterministic over the framework family and workspace-relative source config, so full reruns preserve identity without claiming incremental invalidation. A checker being available as a preset does not mean it is active in the current repository configuration.
 
 The repository's `limina:typecheck` Nx target preserves this global checker-build meaning. Its task graph declares build dependencies for the workspace projects whose published artifacts are consumed by that global checker graph, so a fresh invocation does not depend on ignored `dist` state.
 
@@ -101,6 +100,8 @@ Source-owned TypeScript configuration and Limina-generated configuration have di
 A source `tsconfig` is a TypeScript solution when the checker-resolved file list is empty and the config directly declares `references`; the resolved list includes `extends` and checker-supported extensions. Limina expands that role only at a path whose basename is exactly `tsconfig.json`. An ordinary source leaf with a `references` field is rejected, and a named solution such as `tsconfig.solution.json` is reported as an unsupported named solution during migration. A supported solution can route to referenced ordinary source configs, but it cannot declare `liminaOptions.outputs`.
 
 Ordinary source leaves provide the compiler scope from which Limina creates generated declaration and build projects under the `.limina` artifact namespace. Generated files are outputs, not user-authored configuration authority. Generated declaration configs explicitly set both `compilerOptions.outDir` and `compilerOptions.declarationDir` to the same managed `.limina/dts` root, so inherited source declaration output settings cannot redirect checker declarations.
+
+Framework import analysis uses leaf-local parser providers. Astro analysis resolves and initializes `@astrojs/compiler` before auto dependency promotion; Svelte analysis resolves `svelte/compiler`. Framework imports can add scheduling references between wrapper or transparent solutions, while the declaration-provider graph continues to contain only declaration-compatible source.
 
 Generated declaration references currently come from two explicit evidence paths:
 
@@ -140,7 +141,7 @@ Limina separates validation into distinct domains rather than treating every fai
 
 `source:check` validates source ownership and source-owner boundaries, package import authority, workspace dependency declarations, ambient declaration policy, resource declaration availability, and Knip-backed unused module and dependency findings when Knip analysis is enabled.
 
-`proof:check` compares the configured source boundary with checker and graph coverage. Every source file in the proof boundary must be covered by a checker entry or an explicit allowlist entry. Allowlist entries require a reason and are themselves validated against existing coverage and source-boundary membership.
+`proof:check` compares the configured source boundary with checker and graph coverage. Every source file in the proof boundary must be covered by a checker entry or an explicit allowlist entry. Allowlist entries require a reason and are themselves validated against existing coverage and source-boundary membership. Framework proof additionally verifies governed-source coverage, one primary owner, exact supplemental-family coverage, leaf-local target executability and preflight shape, declaration-versus-solution projection consistency, and the exclusion of `.astro` and `.svelte` inputs from generated build configs.
 
 `checker:build` and `checker:typecheck` execute the active checker adapters according to their execution class.
 
@@ -183,6 +184,8 @@ Snapshot and profile writes use the repository's atomic writer. Profiling output
 The `.limina` directory is represented as an authenticated artifact namespace with a logical root, canonical root, generation identity, and generation token. Artifact paths are checked for lexical and canonical containment.
 
 Generated artifact materialization uses a canonical-root cross-process reader/writer lease with a 30-second bounded wait. A writer validates the plan's base revision after taking the lease and may rebuild the complete plan once if it drifted. Before its first mutation it atomically publishes an in-progress marker containing the base and desired revisions plus the complete owned-path universe. The manifest is written last. Readers fail closed while recovery is required; the next writer force-writes one fresh complete plan, removes non-target owned paths, verifies the desired tree, and only then removes the marker. This recovery model intentionally does not add a journal, backup tree, roll-forward state machine, completed-commit marker, or consumer-side second revision handshake.
+
+The generated-graph manifest remains schema version `3`; live governed-source and framework-capability descriptors are not serialized into it. Supported older positive manifest versions are accepted only as artifact-ownership ledgers so stale owned paths can be deleted before the current plan writes a fresh version-`3` manifest. Future, zero, negative, non-integer, or malformed versions remain invalid. Artifact and descriptor ordering uses code-unit comparison rather than locale-sensitive ordering.
 
 Checker project-config parsing caches belong to an `AnalysisProviderSet` and therefore to one repository generation. Graph, source, proof, owner, and checker projections share that generation's cache; advancing creates a new provider set and cache. Direct parser calls without a cache remain uncached, and virtual-file identities remain separate from physical-file identities.
 

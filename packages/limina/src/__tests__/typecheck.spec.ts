@@ -502,11 +502,8 @@ describe('runCheckerBuild', () => {
     }
   });
 
-  it('does not warn when incompatible presets build separate generated dts configs for the same source config', async () => {
+  it('rejects incompatible primary owners of the same source config before checker execution', async () => {
     const calls: TypecheckTarget[] = [];
-    const warnSpy = vi
-      .spyOn(TypecheckLogger, 'warn')
-      .mockImplementation(() => {});
     const fixture = await createFixture({
       'packages/native/tsconfig.json': tsconfig({
         files: [],
@@ -538,35 +535,33 @@ describe('runCheckerBuild', () => {
     });
 
     try {
-      const result = await runCheckerBuild({
-        config: {
+      await expect(
+        runCheckerBuild({
           config: {
-            checkers: {
-              nativeTypescript: {
-                include: ['packages/native/tsconfig.json'],
-                preset: 'tsgo',
-              },
-              vue: {
-                include: ['packages/vue/tsconfig.json'],
-                preset: 'vue-tsc',
+            config: {
+              checkers: {
+                nativeTypescript: {
+                  include: ['packages/native/tsconfig.json'],
+                  preset: 'tsgo',
+                },
+                vue: {
+                  include: ['packages/vue/tsconfig.json'],
+                  preset: 'vue-tsc',
+                },
               },
             },
+            configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
+            rootDir: fixture.rootDir,
           },
-          configPath: path.join(fixture.rootDir, 'limina.config.mjs'),
-          rootDir: fixture.rootDir,
-        },
-        cwd: fixture.rootDir,
-        runner: passingRunner(calls),
-      });
+          cwd: fixture.rootDir,
+          runner: passingRunner(calls),
+        }),
+      ).rejects.toThrow(
+        /Duplicate Limina checker ownership[\s\S]*primary owners: nativeTypescript \(tsgo\), vue \(vue-tsc\)/u,
+      );
 
-      expect(result.passed).toBe(true);
-      expect(calls.map((target) => target.command).sort()).toEqual([
-        'tsgo',
-        'vue-tsc',
-      ]);
-      expect(warnSpy).not.toHaveBeenCalled();
+      expect(calls).toEqual([]);
     } finally {
-      warnSpy.mockRestore();
       await fixture.cleanup();
     }
   });

@@ -40,16 +40,16 @@ export default defineConfig({
 
 ## 任务总览
 
-| 任务                | 默认检查 | 主要关注点                                            | 应该如何理解                                                       |
-| ------------------- | -------- | ----------------------------------------------------- | ------------------------------------------------------------------ |
-| `graph:prepare`     | 否       | 生成 `.limina` 下的工程图、声明构建配置和相关生成文件 | 物化生成图；不等同于检查图是否符合规则                             |
-| `graph:check`       | 是       | 项目引用、工作区导入、导出解析、图规则和条件域        | 检查 `TypeScript` 项目引用图是否和源码导入关系、配置规则一致       |
-| `source:check`      | 是       | 源码归属、包边界、依赖声明、`Knip` 支持的源码使用分析 | 检查源码依赖关系是否能被包归属和清单文件解释                       |
-| `proof:check`       | 是       | 源码覆盖证明和 `tsconfig` 角色                        | 检查源码是否进入 Limina 管辖的类型检查范围；具体诊断以实现输出为准 |
-| `checker:build`     | 是       | 构建类检查器                                          | 调用底层检查器的构建模式，通常会产出声明文件和构建信息             |
-| `checker:typecheck` | 是       | 只检查不产出的检查器                                  | 调用不能作为构建图提供者的检查器，例如部分框架检查器               |
-| `package:check`     | 否       | 已构建包产物                                          | 对 `outDir` 产物运行打包、类型解析和产物导入边界检查               |
-| `release:check`     | 否       | 发布期产物一致性                                      | 发布前补充检查；不应理解为发布系统或安全保证                       |
+| 任务                | 默认检查 | 主要关注点                                            | 应该如何理解                                                 |
+| ------------------- | -------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| `graph:prepare`     | 否       | 生成 `.limina` 下的工程图、声明构建配置和相关生成文件 | 物化生成图；不等同于检查图是否符合规则                       |
+| `graph:check`       | 是       | 项目引用、工作区导入、导出解析、图规则和条件域        | 检查 `TypeScript` 项目引用图是否和源码导入关系、配置规则一致 |
+| `source:check`      | 是       | 源码归属、包边界、依赖声明、`Knip` 支持的源码使用分析 | 检查源码依赖关系是否能被包归属和清单文件解释                 |
+| `proof:check`       | 是       | 源码覆盖、`tsconfig` 角色和框架投影                   | 检查源码和框架能力是否进入一致、可执行的检查范围             |
+| `checker:build`     | 是       | 构建类检查器                                          | 调用底层检查器的构建模式，通常会产出声明文件和构建信息       |
+| `checker:typecheck` | 是       | 只检查入口和补充框架检查                              | 调用不作为声明构建提供方的第二类检查器                       |
+| `package:check`     | 否       | 已构建包产物                                          | 对 `outDir` 产物运行打包、类型解析和产物导入边界检查         |
+| `release:check`     | 否       | 发布期产物一致性                                      | 发布前补充检查；不应理解为发布系统或安全保证                 |
 
 表中每个任务都会复用当前 generation 已验证的工作区上下文。验证失败时，依赖工作会被阻塞，主要工作区问题仍可安全写入 `.limina/check/last-run.json`；后续 snapshot 写入失败不会替换最初的验证错误。
 
@@ -198,6 +198,8 @@ import { helper } from '@acme/core';
 
 如果某个文件确实不应纳入常规检查范围，应使用带原因的允许清单，而不是让它自然漂在工程图之外。
 
+对框架源码，proof 还会检查：每个源码配置只有一个主要构建归属方；实际存在的每个 Astro 或 Svelte 家族都有且只有一个匹配的补充能力；每个框架目标都能从所属叶子包执行；声明投影和透明 solution 投影一致；生成构建配置不包含 `.astro` 或 `.svelte` 输入。
+
 `proof:check` 的诊断分支很多，这里不逐一展开。阅读诊断时，可以把它归到一个原则下理解：每个源码文件、每个 `tsconfig`，都应有明确角色；同一个文件不应在同一检查域里产生重复或冲突的归属。
 
 ## checker:build：调用构建类检查器
@@ -218,14 +220,16 @@ import { helper } from '@acme/core';
 
 ## checker:typecheck：调用只检查不产出的检查器
 
-`checker:typecheck` 面向执行类型为“只检查”的预设。源码中内置的这类预设包括：
+`checker:typecheck` 会执行显式配置的只检查入口，以及从主要构建源码配置中发现的补充框架目标。内置的显式只检查预设包括：
 
 - `vue-tsgo`
 - `svelte-check`
 
-它们通过各自命令运行，例如 `vue-tsgo --project` 或 `svelte-check --tsconfig`。`vue-tsgo` 的入口仍可参与源码图和覆盖证明；`svelte-check` 参与覆盖证明和类型检查执行，但当前不作为源码图提供者。二者都不会产出声明文件。
+它们通过各自命令运行，例如 `vue-tsgo --project` 或 `svelte-check --tsconfig`。自动发现的 Astro 和 Svelte 能力会为每个源码配置添加一个目标：`astro check --noSync --root <leaf> --tsconfig <config>` 或 `svelte-check --workspace <leaf> --tsconfig <config>`。`vue-tsgo` 的入口仍可参与源码图和覆盖证明；`svelte-check` 参与覆盖证明和类型检查执行，但当前不作为源码图提供者。这些目标都不会产出声明文件。
 
-如果项目只配置了构建类检查器，`checker:typecheck` 可能没有实际检查目标。此时它不应被理解为遗漏了 `TypeScript` 检查；类型构建已经由 `checker:build` 负责。
+框架目标会从所属叶子包解析依赖。Astro 要求 `astro`、`@astrojs/check`、`typescript` 和已存在的 `.astro/types.d.ts`；Svelte 要求 `svelte-check`、`svelte` 和 `typescript`。Limina 绝不运行 `astro sync`，不会启用 Svelte 检查器缓存，并且这个命令不接受 `--watch`。源码配置、解析器依赖、框架生成类型或框架源码变化后，需要重新运行完整命令。
+
+如果项目只配置了构建类检查器，并且没有拥有 Astro 或 Svelte 文件，`checker:typecheck` 可能没有实际检查目标。此时它不应被理解为遗漏了 `TypeScript` 检查；类型构建已经由 `checker:build` 负责。
 
 ## graph:prepare 和 graph export
 

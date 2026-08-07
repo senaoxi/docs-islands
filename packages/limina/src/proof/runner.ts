@@ -18,6 +18,7 @@ import { addDtsConfigFindings } from './declaration-config-findings';
 import { addDefaultTsconfigEnvironmentFindings } from './default-tsconfig-environment-findings';
 import { addDefaultTsconfigShapeFindings } from './default-tsconfig-shape-findings';
 import type { ProofFinding } from './findings';
+import { addFrameworkGovernanceFindings } from './framework-governance-findings';
 import {
   addDuplicateGraphCoverageFindings,
   collectConfigFileOwners,
@@ -133,6 +134,14 @@ function addProjectConfigFindings(state: ProofRunState): void {
     projectConfigCache: state.preflight.providers.projectConfigs,
     workspaceLookup: state.workspaceLookup,
   });
+  state.checks.add(
+    addFrameworkGovernanceFindings({
+      config: state.config,
+      findings: state.findings,
+      generatedGraph: state.generatedGraph,
+      workspaceLookup: state.workspaceLookup,
+    }),
+  );
 }
 
 async function runProjectConfigPhase(state: ProofRunState): Promise<boolean> {

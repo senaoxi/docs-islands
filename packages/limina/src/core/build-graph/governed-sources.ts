@@ -70,8 +70,10 @@ function createDeclarationFileNames(project: SourceProject): string[] {
 function createFrameworkCapabilities(options: {
   fileNames: readonly string[];
   packageRootDir: string;
+  preset: SourceProject['context']['checkerPresets'][number];
   sourceConfigPath: string;
 }): FrameworkCapabilityDescriptor[] {
+  if (!isBuildCapablePreset(options.preset)) return [];
   return collectConfirmedFrameworkCapabilities(
     partitionSourceFiles(options.fileNames),
   )
@@ -115,6 +117,7 @@ export function createGovernedSourceUnit(options: {
   const frameworkCapabilities = createFrameworkCapabilities({
     fileNames: ownedFileNames,
     packageRootDir: options.project.packageRootDir,
+    preset: options.project.context.checkerPresets[0]!,
     sourceConfigPath: options.project.configPath,
   });
   const declarationFileNames = createDeclarationFileNames(options.project);

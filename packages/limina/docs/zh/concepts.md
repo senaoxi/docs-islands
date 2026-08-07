@@ -8,7 +8,7 @@ Limina 的概念可以从一条主线理解：先确定哪些 `tsconfig` 进入�
 
 [检查器入口](./config/checkers.md)用来告诉 Limina：哪些源码 `tsconfig.json` 应该交给哪个检查器处理。
 
-省略 `config.checkers` 时，Limina 会使用默认的 auto 模式。auto 模式会发现普通 `tsconfig.json`，根据源码文件能力在 `tsc` 和 `vue-tsc` 之间选择合适的检查器。需要使用 `tsgo`、`vue-tsgo`、`svelte-check`，或者需要明确控制入口范围时，再改用显式检查器配置。
+省略 `config.checkers` 时，Limina 会使用默认的 auto 模式。auto 模式会发现普通 `tsconfig.json`，选择 `tsc` 或 `vue-tsc` 作为唯一的声明构建归属方，并在存在对应框架文件时为每个配置补充 Astro 或 Svelte 检查。需要使用 `tsgo`、`vue-tsgo`、独立的 `svelte-check` 入口，或者需要明确控制入口范围时，再改用显式检查器配置。
 
 ```js
 import { defineConfig } from 'limina';

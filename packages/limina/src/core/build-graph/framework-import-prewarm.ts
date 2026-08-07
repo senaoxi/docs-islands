@@ -3,6 +3,7 @@ import type { ImportAnalysisContext } from '#core/import-graph/context';
 import { compareCodeUnits } from '#utils/collections';
 import type { GeneratedGraphPreparationState } from './prepare-state';
 import { createGeneratedGraphStructuredError } from './problems';
+import type { AutoScope } from './types';
 
 interface FrameworkImportPrewarmRequest {
   filePath: string;
@@ -54,21 +55,45 @@ function collectFrameworkImportPrewarmRequests(
   return [...requestsByKey.values()].sort(compareRequests);
 }
 
+function collectAutoFrameworkImportPrewarmRequests(
+  scopes: readonly AutoScope[],
+): FrameworkImportPrewarmRequest[] {
+  const requestsByKey = new Map<string, FrameworkImportPrewarmRequest>();
+  const sources = scopes.flatMap((scope) =>
+    scope.projects.map((project) => ({
+      ownedFileNames: [
+        ...project.filePartition.astroFiles,
+        ...project.filePartition.svelteFiles,
+      ],
+      packageRootDir: scope.collection.packageRootBySourcePath.get(
+        project.configPath,
+      ),
+    })),
+  );
+  for (const source of sources) {
+    if (source.packageRootDir === undefined) continue;
+    registerSourcePrewarmRequests(requestsByKey, {
+      ownedFileNames: source.ownedFileNames,
+      packageRootDir: source.packageRootDir,
+    });
+  }
+  return [...requestsByKey.values()].sort(compareRequests);
+}
+
 function formatThrownError(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
 }
 
-export async function prewarmGeneratedFrameworkImports(options: {
+async function prewarmFrameworkImports(options: {
   config: ResolvedLiminaConfig;
   importAnalysis: ImportAnalysisContext;
-  state: GeneratedGraphPreparationState;
+  requests: readonly FrameworkImportPrewarmRequest[];
 }): Promise<void> {
   const prewarmImportsFromFile = options.importAnalysis.prewarmImportsFromFile;
   if (prewarmImportsFromFile === undefined) return;
-  const requests = collectFrameworkImportPrewarmRequests(options.state);
   const results = await Promise.allSettled(
-    requests.map((request) =>
+    options.requests.map((request) =>
       prewarmImportsFromFile(request.filePath, request.packageRootDir),
     ),
   );
@@ -82,4 +107,28 @@ export async function prewarmGeneratedFrameworkImports(options: {
       problems,
     });
   }
+}
+
+export async function prewarmAutoFrameworkImports(options: {
+  config: ResolvedLiminaConfig;
+  importAnalysis: ImportAnalysisContext;
+  scopes: readonly AutoScope[];
+}): Promise<void> {
+  await prewarmFrameworkImports({
+    config: options.config,
+    importAnalysis: options.importAnalysis,
+    requests: collectAutoFrameworkImportPrewarmRequests(options.scopes),
+  });
+}
+
+export async function prewarmGeneratedFrameworkImports(options: {
+  config: ResolvedLiminaConfig;
+  importAnalysis: ImportAnalysisContext;
+  state: GeneratedGraphPreparationState;
+}): Promise<void> {
+  await prewarmFrameworkImports({
+    config: options.config,
+    importAnalysis: options.importAnalysis,
+    requests: collectFrameworkImportPrewarmRequests(options.state),
+  });
 }

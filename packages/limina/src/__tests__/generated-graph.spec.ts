@@ -1569,11 +1569,11 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it.each(['astro', 'svelte'])(
-    'discovers unsupported .%s files from broad auto includes',
-    async (extension) => {
+  it.each(['astro', 'svelte'] as const)(
+    'routes pure .%s auto scopes through tsc plus a supplemental checker',
+    async (family) => {
       const fixture = await createFixture({
-        [`packages/app/src/App.${extension}`]:
+        [`packages/app/src/App.${family}`]:
           '<script lang="ts">const value = 1;</script>\n',
         'packages/app/tsconfig.json': json({
           compilerOptions: {
@@ -1588,38 +1588,39 @@ describe('prepareGeneratedTsconfigGraph', () => {
       });
 
       try {
-        let thrown: unknown;
-        try {
-          await prepareGeneratedTsconfigGraph({
-            ...fixture.config,
-            config: {
-              checkers: {
-                mode: 'auto',
-              },
+        const result = await prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              mode: 'auto',
             },
-          });
-        } catch (error) {
-          thrown = error;
-        }
-
-        expect(thrown).toBeInstanceOf(LiminaStructuredError);
-        expect(String(thrown)).toContain(
-          'Unsupported auto checker source file extension',
+          },
+        });
+        const sourceConfigPath = normalizeAbsolutePath(
+          path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
         );
-        expect(String(thrown)).toContain(`extension: .${extension}`);
-        expect((thrown as LiminaStructuredError).issues).toMatchObject([
+
+        expect(result.checkers).toMatchObject([
           {
-            code: 'LIMINA_GRAPH_PREPARE_FAILED',
-            title: 'Unsupported auto checker source file extension',
+            name: 'typescript',
+            preset: 'tsc',
           },
         ]);
+        expect(
+          result.governedSources.get('typescript')?.get(sourceConfigPath),
+        ).toMatchObject({
+          buildProjection: { kind: 'transparent-solution' },
+          frameworkCapabilities: [{ family, sourceConfigPath }],
+          primaryCheckerName: 'typescript',
+          primaryCheckerPreset: 'tsc',
+        });
       } finally {
         await fixture.cleanup();
       }
     },
   );
 
-  it('discovers Astro files from an inherited effective include', async () => {
+  it('routes Astro files from an inherited effective include', async () => {
     const fixture = await createFixture({
       'packages/app/base.json': json({
         compilerOptions: {
@@ -1639,22 +1640,23 @@ describe('prepareGeneratedTsconfigGraph', () => {
     });
 
     try {
-      let thrown: unknown;
-      try {
-        await prepareGeneratedTsconfigGraph({
-          ...fixture.config,
-          config: {
-            checkers: {
-              mode: 'auto',
-            },
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: {
+            mode: 'auto',
           },
-        });
-      } catch (error) {
-        thrown = error;
-      }
+        },
+      });
+      const sourceConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
+      );
 
-      expect(thrown).toBeInstanceOf(LiminaStructuredError);
-      expect(String(thrown)).toContain('extension: .astro');
+      expect(
+        result.governedSources.get('typescript')?.get(sourceConfigPath),
+      ).toMatchObject({
+        frameworkCapabilities: [{ family: 'astro', sourceConfigPath }],
+      });
     } finally {
       await fixture.cleanup();
     }
@@ -1739,8 +1741,9 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it('retains the existing Svelte auto-scope rejection contract', async () => {
+  it('routes mixed TypeScript and Svelte auto scopes through one primary owner', async () => {
     const fixture = await createFixture({
+      'packages/app/src/index.ts': 'export const value = 1;\n',
       'packages/app/src/App.svelte':
         '<script lang="ts">const value = 1;</script>\n',
       'packages/app/tsconfig.json': json({
@@ -1756,20 +1759,127 @@ describe('prepareGeneratedTsconfigGraph', () => {
     });
 
     try {
-      await expect(
-        prepareGeneratedTsconfigGraph({
-          ...fixture.config,
-          config: {
-            checkers: {
-              mode: 'auto',
-            },
+      const result = await prepareGeneratedTsconfigGraph({
+        ...fixture.config,
+        config: {
+          checkers: {
+            mode: 'auto',
           },
-        }),
-      ).rejects.toThrow('Unsupported auto checker source file extension');
+        },
+      });
+      const sourceConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
+      );
+
+      expect(
+        result.governedSources.get('typescript')?.get(sourceConfigPath),
+      ).toMatchObject({
+        buildProjection: { kind: 'wrapped-project' },
+        frameworkCapabilities: [{ family: 'svelte', sourceConfigPath }],
+        primaryCheckerName: 'typescript',
+      });
     } finally {
       await fixture.cleanup();
     }
   });
+
+  it.each([
+    {
+      checkerName: 'typescript',
+      families: ['astro'] as const,
+      files: ['ts', 'astro'] as const,
+      name: 'TypeScript and Astro',
+      preset: 'tsc',
+      projection: 'wrapped-project',
+    },
+    {
+      checkerName: 'typescript',
+      families: ['astro', 'svelte'] as const,
+      files: ['astro', 'svelte'] as const,
+      name: 'Astro and Svelte',
+      preset: 'tsc',
+      projection: 'transparent-solution',
+    },
+    {
+      checkerName: 'vue',
+      families: ['astro'] as const,
+      files: ['vue', 'astro'] as const,
+      name: 'Vue and Astro',
+      preset: 'vue-tsc',
+      projection: 'wrapped-project',
+    },
+    {
+      checkerName: 'vue',
+      families: ['svelte'] as const,
+      files: ['vue', 'svelte'] as const,
+      name: 'Vue and Svelte',
+      preset: 'vue-tsc',
+      projection: 'wrapped-project',
+    },
+    {
+      checkerName: 'vue',
+      families: ['astro', 'svelte'] as const,
+      files: ['vue', 'astro', 'svelte'] as const,
+      name: 'Vue, Astro, and Svelte',
+      preset: 'vue-tsc',
+      projection: 'wrapped-project',
+    },
+  ])(
+    'routes $name auto scopes through one primary plus supplemental capabilities',
+    async ({ checkerName, families, files, preset, projection }) => {
+      const sourceFiles = Object.fromEntries(
+        files.map((extension) => [
+          `packages/app/src/App.${extension}`,
+          extension === 'ts'
+            ? 'export const value = 1;\n'
+            : extension === 'vue'
+              ? '<script setup lang="ts">const value = 1;</script>\n'
+              : '<script lang="ts">const value = 1;</script>\n',
+        ]),
+      );
+      const fixture = await createFixture({
+        ...sourceFiles,
+        'packages/app/tsconfig.json': json({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*'],
+        }),
+      });
+
+      try {
+        const result = await prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: { checkers: { mode: 'auto' } },
+        });
+        const sourceConfigPath = normalizeAbsolutePath(
+          path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
+        );
+        const unit = result.governedSources
+          .get(checkerName)
+          ?.get(sourceConfigPath);
+
+        expect(result.manifest.version).toBe(3);
+        expect(result.manifest.checkers[checkerName]).not.toHaveProperty(
+          'governedSources',
+        );
+        expect(result.manifest.checkers[checkerName]).not.toHaveProperty(
+          'frameworkCapabilities',
+        );
+        expect(result.checkers).toMatchObject([{ name: checkerName, preset }]);
+        expect(unit?.buildProjection.kind).toBe(projection);
+        expect(unit?.frameworkCapabilities).toMatchObject(
+          families.map((family) => ({ family, sourceConfigPath })),
+        );
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
 
   it.each(['astro', 'svelte'] as const)(
     'indexes pure .%s source ownership independently from declaration artifacts',
@@ -4193,7 +4303,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it('allows isolated multi-checker declaration generation for the same source config', async () => {
+  it('rejects different-preset primary owners that share a solution-expanded leaf', async () => {
     const fixture = await createFixture({
       'packages/one/tsconfig.json': json({
         files: [],
@@ -4225,43 +4335,23 @@ describe('prepareGeneratedTsconfigGraph', () => {
     });
 
     try {
-      const result = await prepareGeneratedTsconfigGraph({
-        ...fixture.config,
-        config: {
-          checkers: {
-            typescript: {
-              preset: 'tsc',
-              include: ['packages/two/tsconfig.json'],
-            },
-            nativeTypescript: {
-              preset: 'tsgo',
-              include: ['packages/one/tsconfig.json'],
+      await expect(
+        prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              typescript: {
+                preset: 'tsc',
+                include: ['packages/two/tsconfig.json'],
+              },
+              nativeTypescript: {
+                preset: 'tsgo',
+                include: ['packages/one/tsconfig.json'],
+              },
             },
           },
-        },
-      });
-
-      expect(Object.keys(result.manifest.checkers)).toEqual([
-        'nativeTypescript',
-        'typescript',
-      ]);
-      expect(
-        result.manifest.checkers.nativeTypescript?.sourceToDts,
-      ).toMatchObject({
-        'packages/shared/tsconfig.lib.json':
-          '.limina/tsconfig/checkers/nativeTypescript/projects/packages/shared/tsconfig.lib.dts.json',
-      });
-      expect(result.manifest.checkers.typescript?.sourceToDts).toMatchObject({
-        'packages/shared/tsconfig.lib.json':
-          '.limina/tsconfig/checkers/typescript/projects/packages/shared/tsconfig.lib.dts.json',
-      });
-      expect(result.manifest.providerEdges).toEqual([]);
-      expect(
-        result.manifest.checkers.nativeTypescript?.configToOutputBuild,
-      ).toEqual({});
-      expect(result.manifest.checkers.typescript?.configToOutputBuild).toEqual(
-        {},
-      );
+        }),
+      ).rejects.toThrow('Duplicate Limina checker ownership');
     } finally {
       await fixture.cleanup();
     }
@@ -4294,7 +4384,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it('allows source files when another checker preset supplies the capability', async () => {
+  it('rejects cross-preset capability overlap on one source config', async () => {
     const fixture = await createFixture({
       'packages/ts/tsconfig.json': json({
         files: [],
@@ -4327,26 +4417,23 @@ describe('prepareGeneratedTsconfigGraph', () => {
     });
 
     try {
-      const result = await prepareGeneratedTsconfigGraph({
-        ...fixture.config,
-        config: {
-          checkers: {
-            typescript: {
-              preset: 'tsc',
-              include: ['packages/ts/tsconfig.json'],
-            },
-            vue: {
-              preset: 'vue-tsc',
-              include: ['packages/vue/tsconfig.json'],
+      await expect(
+        prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              typescript: {
+                preset: 'tsc',
+                include: ['packages/ts/tsconfig.json'],
+              },
+              vue: {
+                preset: 'vue-tsc',
+                include: ['packages/vue/tsconfig.json'],
+              },
             },
           },
-        },
-      });
-
-      expect(result.manifest.checkers.vue?.sourceToDts).toMatchObject({
-        'packages/shared/tsconfig.lib.json':
-          '.limina/tsconfig/checkers/vue/projects/packages/shared/tsconfig.lib.dts.json',
-      });
+        }),
+      ).rejects.toThrow('Duplicate Limina checker ownership');
     } finally {
       await fixture.cleanup();
     }
@@ -4431,7 +4518,7 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it('prefers a unique same-engine provider over different-engine candidates', async () => {
+  it('rejects duplicate primary providers before provider selection', async () => {
     const fixture = await createFixture({
       'packages/app/src/index.ts':
         "import { themeValue } from '../../theme/src/theme';\nexport const value = themeValue;\n",
@@ -4475,48 +4562,27 @@ describe('prepareGeneratedTsconfigGraph', () => {
     });
 
     try {
-      const result = await prepareGeneratedTsconfigGraph({
-        ...fixture.config,
-        config: {
-          checkers: {
-            app: {
-              preset: 'tsc',
-              include: ['packages/app/tsconfig.json'],
-            },
-            themeTypescript: {
-              preset: 'tsc',
-              include: ['packages/theme-ts/tsconfig.json'],
-            },
-            themeVue: {
-              preset: 'vue-tsc',
-              include: ['packages/theme-vue/tsconfig.json'],
+      await expect(
+        prepareGeneratedTsconfigGraph({
+          ...fixture.config,
+          config: {
+            checkers: {
+              app: {
+                preset: 'tsc',
+                include: ['packages/app/tsconfig.json'],
+              },
+              themeTypescript: {
+                preset: 'tsc',
+                include: ['packages/theme-ts/tsconfig.json'],
+              },
+              themeVue: {
+                preset: 'vue-tsc',
+                include: ['packages/theme-vue/tsconfig.json'],
+              },
             },
           },
-        },
-      });
-
-      expect(result.manifest.providerEdges).toEqual([
-        {
-          file: 'packages/app/src/index.ts:1 (kind: static)',
-          fromChecker: 'app',
-          fromConfig: 'packages/app/tsconfig.json',
-          importedSpecifier: '../../theme/src/theme',
-          resolvedFile: 'packages/theme/src/theme.ts',
-          toChecker: 'themeTypescript',
-          toConfig: 'packages/theme/tsconfig.lib.json',
-        },
-      ]);
-      await expect(
-        readGeneratedReferences({
-          checkerName: 'app',
-          projectRelativePath: 'packages/app',
-          rootDir: fixture.rootDir,
         }),
-      ).resolves.toEqual([
-        {
-          path: '../../../../themeTypescript/projects/packages/theme/tsconfig.lib.dts.json',
-        },
-      ]);
+      ).rejects.toThrow('Duplicate Limina checker ownership');
     } finally {
       await fixture.cleanup();
     }
@@ -5910,46 +5976,56 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it('removes stale generated tsconfig files', async () => {
-    const fixture = await createFixture({
-      '.limina/manifest.json': json({
-        generatedBy: 'limina',
-        ownedArtifacts: [
-          'tsconfig/checkers/typescript/projects/stale/tsconfig.dts.json',
-          'manifest.json',
-        ],
-        version: 3,
-      }),
-      '.limina/tsconfig/checkers/typescript/projects/stale/tsconfig.dts.json':
-        '{}\n',
-      'packages/pkg/src/index.ts': 'export const value = 1;\n',
-      'packages/pkg/tsconfig.json': json({
-        compilerOptions: {
-          module: 'ESNext',
-          moduleResolution: 'bundler',
-          strict: true,
-          target: 'ES2023',
-          types: [],
-        },
-        include: ['src/**/*.ts'],
-      }),
-    });
+  it.each([2, 3])(
+    'uses manifest v%s as an ownership ledger while removing stale generated files',
+    async (manifestVersion) => {
+      const fixture = await createFixture({
+        '.limina/manifest.json': json({
+          generatedBy: 'limina',
+          ownedArtifacts: [
+            'tsconfig/checkers/typescript/projects/stale/tsconfig.dts.json',
+            'manifest.json',
+          ],
+          version: manifestVersion,
+        }),
+        '.limina/tsconfig/checkers/typescript/projects/stale/tsconfig.dts.json':
+          '{}\n',
+        'packages/pkg/src/index.ts': 'export const value = 1;\n',
+        'packages/pkg/tsconfig.json': json({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'bundler',
+            strict: true,
+            target: 'ES2023',
+            types: [],
+          },
+          include: ['src/**/*.ts'],
+        }),
+      });
 
-    try {
-      await prepareGeneratedTsconfigGraph(fixture.config);
+      try {
+        await prepareGeneratedTsconfigGraph(fixture.config);
 
-      expect(
-        existsSync(
-          path.join(
-            fixture.rootDir,
-            '.limina/tsconfig/checkers/typescript/projects/stale/tsconfig.dts.json',
+        expect(
+          existsSync(
+            path.join(
+              fixture.rootDir,
+              '.limina/tsconfig/checkers/typescript/projects/stale/tsconfig.dts.json',
+            ),
           ),
-        ),
-      ).toBe(false);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
+        ).toBe(false);
+        const manifest = JSON.parse(
+          await readFile(
+            path.join(fixture.rootDir, '.limina/manifest.json'),
+            'utf8',
+          ),
+        ) as { version: number };
+        expect(manifest.version).toBe(3);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
 
   it('writes implicit references as generated declaration references', async () => {
     const fixture = await createFixture({

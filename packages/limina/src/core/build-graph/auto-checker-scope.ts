@@ -5,13 +5,10 @@ import {
 } from '#checkers';
 import type { ResolvedLiminaConfig } from '#config/runner';
 import { compareCodeUnits } from '#utils/collections';
-import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
+import { normalizeAbsolutePath } from '#utils/path';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
 import { inspectFrameworkIntent } from './framework-intent';
-import {
-  capabilityDiscoveryExtensions,
-  getFileExtension,
-} from './generated/file-extensions';
+import { capabilityDiscoveryExtensions } from './generated/file-extensions';
 import { createGeneratedGraphStructuredError } from './problems';
 import {
   createAutoFrameworkEvidence,
@@ -151,58 +148,9 @@ export function collectAutoScope(options: {
   return scope.collection.projectConfigPaths.size > 0 ? scope : null;
 }
 
-function createUnsupportedExtensionProblem(options: {
-  config: ResolvedLiminaConfig;
-  entryConfigPath: string;
-  extension: string;
-  fileName: string;
-}): string {
-  return [
-    'Unsupported auto checker source file extension:',
-    `  scope: ${toRelativePath(options.config.rootDir, options.entryConfigPath)}`,
-    `  extension: ${options.extension}`,
-    `  example: ${toRelativePath(options.config.rootDir, options.fileName)}`,
-    '  reason: auto checker mode can only route TypeScript, JavaScript, JSON, and Vue source scopes.',
-    '  fix: move this file to an explicit checker scope or configure config.checkers manually.',
-  ].join('\n');
-}
-
-function projectNeedsVue(options: {
-  config: ResolvedLiminaConfig;
-  entryConfigPath: string;
-  project: AutoScopeProject;
-}): boolean {
-  const unsupportedFileName = [
-    ...options.project.filePartition.astroFiles,
-    ...options.project.filePartition.svelteFiles,
-  ].sort(compareCodeUnits)[0];
-  if (unsupportedFileName) {
-    throw createGeneratedGraphStructuredError({
-      config: options.config,
-      fallback: 'Failed to classify auto checker scope.',
-      problems: [
-        createUnsupportedExtensionProblem({
-          config: options.config,
-          entryConfigPath: options.entryConfigPath,
-          extension: getFileExtension(unsupportedFileName),
-          fileName: unsupportedFileName,
-        }),
-      ],
-    });
-  }
-  return options.project.filePartition.vueFiles.length > 0;
-}
-
-export function classifyAutoScope(options: {
-  config: ResolvedLiminaConfig;
-  scope: AutoScope;
-}): AutoCheckerPreset {
-  const needsVue = options.scope.projects.some((project) =>
-    projectNeedsVue({
-      config: options.config,
-      entryConfigPath: options.scope.entryConfigPath,
-      project,
-    }),
+export function classifyAutoScope(scope: AutoScope): AutoCheckerPreset {
+  const needsVue = scope.projects.some(
+    (project) => project.filePartition.vueFiles.length > 0,
   );
   return needsVue ? 'vue-tsc' : 'tsc';
 }

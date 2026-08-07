@@ -3286,7 +3286,7 @@ describe('runGraphCheck graph rules', () => {
     }
   });
 
-  it('allows different checker coverage through separate entries', async () => {
+  it('rejects different primary checker owners reached through separate entries', async () => {
     const fixture = await createFixture(
       {
         'packages/ts/tsconfig.json': stringifyConfig({
@@ -3330,7 +3330,9 @@ describe('runGraphCheck graph rules', () => {
     try {
       await linkCompilerSfc(fixture.rootDir);
 
-      await expect(runGraphCheck(fixture.config)).resolves.toBe(true);
+      await expect(runGraphCheck(fixture.config)).rejects.toThrow(
+        /Duplicate Limina checker ownership[\s\S]*primary owners: typescript \(tsc\), vue \(vue-tsc\)/u,
+      );
     } finally {
       await fixture.cleanup();
     }

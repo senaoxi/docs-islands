@@ -8,7 +8,7 @@ It does not replace `TypeScript`, framework checkers, bundlers, test frameworks,
 
 A [checker entry](./config/checkers.md) tells Limina which source `tsconfig.json` files should be handled by which checker.
 
-When `config.checkers` is omitted, Limina uses the default `auto` mode. Auto mode discovers ordinary `tsconfig.json` files and chooses an appropriate checker between `tsc` and `vue-tsc` based on source-file capability. Switch to explicit checker configuration when you need `tsgo`, `vue-tsgo`, `svelte-check`, or precise control over the entry range.
+When `config.checkers` is omitted, Limina uses the default `auto` mode. Auto mode discovers ordinary `tsconfig.json` files, chooses `tsc` or `vue-tsc` as the single declaration-build owner, and supplements it with per-config Astro or Svelte checks when those framework files are present. Switch to explicit checker configuration when you need `tsgo`, `vue-tsgo`, a standalone `svelte-check` entry, or precise control over the entry range.
 
 ```js
 import { defineConfig } from 'limina';

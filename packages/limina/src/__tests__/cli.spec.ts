@@ -1895,6 +1895,18 @@ export default {
           'checker build --watch requires a config argument.',
         ),
       }),
+      expect(
+        execFileAsync(process.execPath, [
+          cliPath,
+          'checker',
+          'typecheck',
+          '--watch',
+        ]),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining(
+          'checker typecheck does not accept --watch; rerun it after source config, parser package, generated type, or framework source changes.',
+        ),
+      }),
       ...removedOptions.map(assertRemovedOption),
       expect(
         execFileAsync(process.execPath, [

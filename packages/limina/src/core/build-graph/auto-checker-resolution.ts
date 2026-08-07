@@ -11,6 +11,8 @@ import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
 import { collectAutoScopeDependencies } from './auto-checker-dependencies';
 import { promoteAutoScopes } from './auto-checker-promotion';
 import { classifyAutoScope, collectAutoScope } from './auto-checker-scope';
+import { prewarmAutoFrameworkImports } from './framework-import-prewarm';
+import { resolveBuildGraphImportAnalysis } from './import-analysis-context';
 import type {
   AutoCheckerPreset,
   AutoScope,
@@ -146,15 +148,11 @@ function collectAutoScopes(options: {
     .filter((scope): scope is AutoScope => Boolean(scope));
 }
 
-function classifyAutoScopes(options: {
-  config: ResolvedLiminaConfig;
-  scopes: readonly AutoScope[];
-}): Map<string, AutoCheckerPreset> {
+function classifyAutoScopes(
+  scopes: readonly AutoScope[],
+): Map<string, AutoCheckerPreset> {
   return new Map(
-    options.scopes.map((scope) => [
-      scope.entryConfigPath,
-      classifyAutoScope({ config: options.config, scope }),
-    ]),
+    scopes.map((scope) => [scope.entryConfigPath, classifyAutoScope(scope)]),
   );
 }
 
@@ -183,11 +181,17 @@ export async function resolveAutoCheckerSelections(options: {
     entryConfigPaths: selection.effectiveEntryPaths,
     projectConfigCache: options.projectConfigCache,
   });
-  const kindsByEntry = classifyAutoScopes({ config: options.config, scopes });
+  const kindsByEntry = classifyAutoScopes(scopes);
+  const importAnalysis = resolveBuildGraphImportAnalysis(options);
+  await prewarmAutoFrameworkImports({
+    config: options.config,
+    importAnalysis,
+    scopes,
+  });
   promoteAutoScopes({
     dependenciesByEntry: collectAutoScopeDependencies({
       config: options.config,
-      importAnalysisContext: options.importAnalysisContext,
+      importAnalysisContext: importAnalysis,
       scopes,
     }),
     kindsByEntry,

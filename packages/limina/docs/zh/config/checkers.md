@@ -1,6 +1,6 @@
 # 检查器入口
 
-检查器入口用来告诉 Limina：哪些源码 `tsconfig.json` 交给哪个检查器处理。入口发现只会发生在已激活的[治理区域](./regions.md)内。如果没有配置 `config.checkers`，Limina 会使用 `auto` 模式：在这些区域中自动发现普通 `tsconfig.json`，根据里面的文件选择 `tsc` 或 `vue-tsc`，并把依赖 `Vue` 项目的 `TypeScript` 项目一起交给 `vue-tsc`，让首次接入不需要手写路由。
+检查器入口用来告诉 Limina：哪些源码 `tsconfig.json` 交给哪个检查器处理。入口发现只会发生在已激活的[治理区域](./regions.md)内。如果没有配置 `config.checkers`，Limina 会使用 `auto` 模式：在这些区域中自动发现普通 `tsconfig.json`，为每个作用域选择一个声明构建归属方（`tsc` 或 `vue-tsc`），再为每个源码配置拥有的框架文件补充 Astro 或 Svelte 检查。首次接入因此不需要手写框架路由。
 
 需要使用 `tsgo`、只做类型检查的检查器、更小的 `Vue` 覆盖范围，或更明确的 `include` / `exclude` 规则时，再改用显式检查器对象。Limina 会从这些入口出发，继续跟随聚合配置里的 `references`，并把构建所需的声明图、检查器入口、声明输出目录、`.tsbuildinfo` 和清单写到 `.limina/`。
 
@@ -30,7 +30,22 @@ export default defineConfig({
 - **类型：** `{ mode: 'auto'; exclude?: string[] }`
 - **默认值：** 省略 `config.checkers` 时使用
 
-`auto` 模式会在每个激活 package island 中独立发现普通 `tsconfig.json`，包括外部激活包。只包含 `TypeScript`、`JavaScript` 和 `JSON` 的入口会交给 `tsc`；包含 `.vue` 文件的入口会交给 `vue-tsc`。当检查器解析出的文件列表为空、且配置直接声明 `references` 时，Limina 才把它识别为 TypeScript solution；只有 basename 恰好为 `tsconfig.json` 的 solution 才会作为 Limina 聚合器展开。父级发现不会穿过激活子包根目录或 owner-local 嵌套工作区边界；激活子包会启动自己的发现任务。
+`auto` 模式会在每个激活 package island 中独立发现普通 `tsconfig.json`，包括外部激活包。作用域中只要有 `.vue` 文件，就由 `vue-tsc` 作为主要声明构建归属方；其他作用域由 `tsc` 负责。随后，Limina 会按每个源码配置实际拥有的框架文件，附加 Astro 检查、Svelte 检查或两者。当检查器解析出的文件列表为空、且配置直接声明 `references` 时，Limina 才把它识别为 TypeScript solution；只有 basename 恰好为 `tsconfig.json` 的 solution 才会作为 Limina 聚合器展开。父级发现不会穿过激活子包根目录或 owner-local 嵌套工作区边界；激活子包会启动自己的发现任务。
+
+路由结果按能力组合：
+
+| 源码配置拥有的文件            | 主要构建归属方 | 补充检查        |
+| ----------------------------- | -------------- | --------------- |
+| `.ts`                         | `tsc`          | 无              |
+| `.vue`                        | `vue-tsc`      | 无              |
+| `.ts` 和 `.astro`             | `tsc`          | Astro           |
+| `.ts` 和 `.svelte`            | `tsc`          | Svelte          |
+| `.astro` 和 `.svelte`         | `tsc`          | Astro 和 Svelte |
+| `.vue` 和 `.astro`            | `vue-tsc`      | Astro           |
+| `.vue` 和 `.svelte`           | `vue-tsc`      | Svelte          |
+| `.vue`、`.astro` 和 `.svelte` | `vue-tsc`      | Astro 和 Svelte |
+
+主要归属方只构建与 TypeScript 兼容的声明投影。Limina 不会把 `.astro` 或 `.svelte` 文件写进生成的声明项目。框架源码配置同时拥有声明兼容文件时，生成的构建入口会包裹声明项目；只拥有 Astro 或 Svelte 文件时，生成入口是只用于依赖排序的透明 solution。Astro 和 Svelte 始终是补充检查，不会成为声明提供方。
 
 如果 `TypeScript` 入口 `import` 到 `Vue` 入口，`auto` 模式会把这个 `TypeScript` 入口也交给 `vue-tsc`。这个提升会沿依赖链继续传播，避免生成的构建图里出现 `tsc` 项目依赖 `vue-tsc` 项目的不兼容关系。
 
@@ -49,7 +64,18 @@ export default defineConfig({
 
 `exclude` 过滤的是已激活区域内的入口路径。它和 `config.source.exclude` 分开，后者控制的是覆盖证明里的源码文件边界。入口选定后，Limina 会独立跟随聚合器的 `references`；`exclude` 只用来移除入口，不能用来隐藏被引用的源码配置。
 
-`auto` 模式只会在 `tsc` 和 `vue-tsc` 之间选择。需要其他预设或更细的拆分时，改用显式检查器对象。
+`auto` 模式只会在 `tsc` 和 `vue-tsc` 之间选择主要构建归属方，但会独立发现 Astro 和 Svelte 能力。需要其他主要预设或更细的入口拆分时，改用显式检查器对象。
+
+### Astro 与 Svelte 前置条件
+
+框架检查会从拥有源码配置的叶子包解析命令和运行时依赖，不会借用无关的工作区根依赖：
+
+- Astro 要求叶子包安装 `astro`、`@astrojs/check` 和 `typescript`，并且已经存在该叶子的 `.astro/types.d.ts`。Limina 执行 `astro check --noSync --root <leaf> --tsconfig <source-config>`，绝不自动执行 `astro sync`；缺少生成类型时，请显式运行 `pnpm --dir <leaf> exec astro sync`。
+- Svelte 要求叶子包安装 `svelte-check`、`svelte` 和 `typescript`。Limina 执行 `svelte-check --workspace <leaf> --tsconfig <source-config>`，不会运行 `svelte-kit sync`、启用增量模式、写入 `.svelte-check` 缓存或指定输出格式。
+
+Astro 导入分析还会从所属叶子包解析 `@astrojs/compiler`；Svelte 导入分析会从叶子包的 `svelte` 依赖解析 `svelte/compiler`。缺少解析器或检查器依赖时，预检会在启动任何检查器进程之前失败。
+
+`checker typecheck` 不提供框架监听模式。源码配置、解析器包、框架生成类型或框架源码变化后，需要重新运行命令。Limina 不会跨运行保留框架检查器缓存。框架 target ID 由 family 和工作区相对源码配置路径确定生成，因此完整重跑时同一目标会保留相同 identity；这不表示支持增量 watch。
 
 ## Vue import 解析
 
@@ -116,7 +142,9 @@ effective entries = included entries 减去 exclude
 
 `include` 和 `exclude` 计算完成后，不同检查器的入口集合不能重叠。同一个 `tsconfig.json` 入口不能同时写到 `typescript` 和 `vue` 下面，即使预设不同也不行。你需要先选定：这个入口由哪个检查器负责。
 
-这不表示被 `reference` 展开后的源码配置只能有一种能力。入口展开之后，不同预设可以共同覆盖同一个源码配置。这可以用来给同一份源码叠加能力，例如某个源码配置既在 `TypeScript` 图里，又需要 `Vue` 能力。Limina 真正拒绝的是更窄的情况：两个相同预设的检查器同时管到同一个展开后的源码配置。
+入口通过 `references` 展开后，每个源码配置仍然只能有一个主要构建归属方。两个构建型检查器不能共同治理同一个展开后的源码配置，即使预设不同也不行。需要收窄它们的 `include` 或 `exclude`，直到归属唯一。
+
+一个主要归属方可以携带补充框架能力。Astro 和 Svelte 可以同时出现在同一个源码配置上，但同一个补充能力不能为该配置重复注册。主要能力加补充能力是有效组合；两个主要归属方或两个同族补充能力不是。
 
 Limina 还会在展开后检查文件能力。如果某个源码配置包含 `.vue` 文件，却只被 `tsc` 或 `tsgo` 覆盖，`graph prepare` 会失败，并提示需要能处理这个扩展名的检查器。修复方式是加一个能到达该配置的匹配检查器入口，或者把这些文件移到合适检查器管辖的配置里。
 
@@ -169,3 +197,5 @@ absolute、parent-relative、directory expansion、trailing slash、escaped meta
 运行 `limina graph prepare` 会显式物化 `.limina/manifest.json` 和检查器作用域内的 `tsconfig` 图。managed `limina build`、`checker build`、`checker typecheck`，以及包含检查器任务或 `graph:prepare` 的 `check` 流水线，也会按需物化相同文件。`graph check`、`source check`、`proof check` 只在内存中计算生成图，不会因为读取图事实就写出检查器配置。
 
 用户配置和诊断中的规范路径是源码 `tsconfig` 路径。`.limina/tsconfig/checkers/.../*.dts.json` 是内部生成路径，不需要写进用户配置。
+
+框架能力 descriptor 是生成图的实时事实，不会序列化到 `.limina/manifest.json`；manifest schema 仍为 version 3。Limina 读取受支持的旧 manifest 时，只把它当成生成产物归属 ledger，用它删除已经过时的生成路径，然后写入新的当前 manifest。未来版本或格式错误的 manifest 仍会 fail closed。

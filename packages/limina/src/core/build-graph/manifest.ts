@@ -5,6 +5,7 @@ import type {
   GeneratedKnipPackageConfig,
   GeneratedKnipPackageDiagnostic,
 } from './generated-knip';
+import { generatedGraphManifestVersion } from './manifest-version';
 import type {
   GeneratedBuildModule,
   GeneratedBuildModuleManifest,
@@ -276,7 +277,7 @@ export function createManifest(options: {
   sourceToBuildByChecker: Map<string, Map<string, GeneratedBuildModule>>;
 }): GeneratedTsconfigGraphManifest {
   return {
-    version: 3,
+    version: generatedGraphManifestVersion,
     generatedBy: 'limina',
     checkers: createManifestCheckers(options),
     knip: {
