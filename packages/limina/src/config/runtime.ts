@@ -29,7 +29,7 @@ export function isAutoCheckerConfigMode(
   checkers: CheckerConfigMode | undefined,
 ): checkers is AutoCheckerConfig {
   if (checkers === undefined) return false;
-  return checkers.mode === 'auto';
+  return 'mode' in checkers && checkers.mode === 'auto';
 }
 
 export function defineConfig(config: LiminaConfig): LiminaConfig;

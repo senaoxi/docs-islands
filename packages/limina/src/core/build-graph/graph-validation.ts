@@ -21,7 +21,7 @@ import { createGeneratedGraphStructuredError } from './problems';
 import { createSourceProjectsByDtsPath } from './project-indexes';
 import { addOutputBuildOwnerCollisionProblems } from './provider-selection';
 import { inferProjectReferences } from './reference-inference';
-import { createEmptySourceConfigCollection } from './source-config-collection';
+import { createEmptySourceConfigCollection } from './source-config-root-collection';
 import { addActivatedRegionSourceProjectProblems } from './source-projects';
 import type { PrepareGeneratedTsconfigGraphOptions } from './types';
 
@@ -127,7 +127,7 @@ function addInferredReferences(options: {
       sourceToBuildByChecker: options.state.sourceToBuildByChecker,
     });
     options.state.problems.push(...collection.problems);
-    options.state.providerEdges.push(...collection.providerEdges);
+    options.state.dependencyEdges.push(...collection.dependencyEdges);
   }
 }
 
@@ -199,9 +199,9 @@ function addCheckerOutputGraphs(options: {
   }
 }
 
-function compareProviderEdges(
-  left: GeneratedGraphPreparationState['providerEdges'][number],
-  right: GeneratedGraphPreparationState['providerEdges'][number],
+function compareDependencyEdges(
+  left: GeneratedGraphPreparationState['dependencyEdges'][number],
+  right: GeneratedGraphPreparationState['dependencyEdges'][number],
 ): number {
   const comparisons = [
     compareCodeUnits(left.fromChecker, right.fromChecker),
@@ -246,10 +246,10 @@ export function validateAndCompleteGeneratedGraph(options: {
     config: options.config,
     problems: options.state.problems,
     projects: allProjects,
-    providerEdges: options.state.providerEdges,
+    dependencyEdges: options.state.dependencyEdges,
   });
   addCheckerOutputGraphs({ ...options, allProjects });
-  options.state.providerEdges.sort(compareProviderEdges);
+  options.state.dependencyEdges.sort(compareDependencyEdges);
   if (options.state.problems.length > 0) {
     throw createGeneratedGraphStructuredError({
       config: options.config,

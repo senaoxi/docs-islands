@@ -127,7 +127,7 @@ function collectGovernedOwnerEntries(options: {
             options.generatedGraph.checkerEntries.get(checkerName) ??
             unit.configPath,
           checkerName,
-          checkerPreset: unit.primaryCheckerPreset,
+          checkerPreset: unit.primaryCheckerName,
           configPath:
             'dtsConfigPath' in unit.buildProjection
               ? unit.buildProjection.dtsConfigPath

@@ -86,7 +86,7 @@ Limina uses the active checker to parse each reachable config. A config is a Typ
 
 ### How do `limina checker build` and `checker typecheck` choose targets?
 
-`checker build` runs presets that support build mode from configured entries: `tsc -b`, `tsgo -b`, and `vue-tsc -b`. `tsgo` is backed by `Microsoft`'s `@typescript/native-preview` package. `checker typecheck` runs check-only presets, currently `vue-tsgo --project <entry>` and `svelte-check --tsconfig <entry>`. Limina intentionally keeps `vue-tsgo` out of `checker build` because current `vue-tsgo --build` does not preserve `TypeScript` project-reference boundaries or provide incremental build semantics; its configured `tsconfig` entry still participates in Limina graph and coverage checks. Prefer `vue-tsc` for `Vue` build checks.
+`checker build` runs configured build checker identities: `tsc -b`, `tsgo -b`, and `vue-tsc -b`. `tsgo` is backed by Microsoft's `@typescript/native-preview` package. `checker typecheck` runs the supplemental Astro and Svelte targets discovered from actual framework modules. Supplemental scopes filter those targets but do not own declarations.
 
 ### Why do package checks require a build first?
 
@@ -100,7 +100,7 @@ Yes. Workspace package exports may point to source entries or built artifacts. L
 
 ### Should `Vue` or `Svelte` files be placed in the TypeScript graph?
 
-Framework files should be covered by their framework checker entry. Limina can prove coverage through `vue-tsc`, `vue-tsgo`, or `svelte-check` without pretending those files are ordinary `tsc -b` declaration leaves.
+Vue files are covered by `vue-tsc`; actual Astro and Svelte modules receive their corresponding supplemental targets. Limina does not pretend `.astro` or `.svelte` files are ordinary `tsc -b` declaration leaves.
 
 ### What is `--mode` for?
 

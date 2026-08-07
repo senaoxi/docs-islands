@@ -8,7 +8,7 @@ Limina 的概念可以从一条主线理解：先确定哪些 `tsconfig` 进入�
 
 [检查器入口](./config/checkers.md)用来告诉 Limina：哪些源码 `tsconfig.json` 应该交给哪个检查器处理。
 
-省略 `config.checkers` 时，Limina 会使用默认的 auto 模式。auto 模式会发现普通 `tsconfig.json`，选择 `tsc` 或 `vue-tsc` 作为唯一的声明构建归属方，并在存在对应框架文件时为每个配置补充 Astro 或 Svelte 检查。需要使用 `tsgo`、`vue-tsgo`、独立的 `svelte-check` 入口，或者需要明确控制入口范围时，再改用显式检查器配置。
+省略 `config.checkers` 时，Limina 会使用默认的 auto 模式。auto 模式会发现普通 `tsconfig.json`，选择 `tsc` 或 `vue-tsc` 作为唯一的声明构建归属方，并在存在对应框架文件时为每个配置补充 Astro 或 Svelte 检查。要让普通 TypeScript 使用 `tsgo`，可以设置 `useTsgo: true`；需要精确划分归属范围时，再改用显式检查器配置。
 
 ```js
 import { defineConfig } from 'limina';
@@ -16,13 +16,11 @@ import { defineConfig } from 'limina';
 export default defineConfig({
   config: {
     checkers: {
-      typescript: {
-        preset: 'tsc',
+      tsc: {
         include: ['tsconfig.json', 'packages/**/tsconfig.json'],
         exclude: ['**/docs/**'],
       },
-      vue: {
-        preset: 'vue-tsc',
+      'vue-tsc': {
         include: ['packages/app/tsconfig.json'],
       },
     },
@@ -32,13 +30,12 @@ export default defineConfig({
 
 入口选择受治理区域约束：Limina 先把发现范围限制在已激活工作区包区域内，再应用 `include`，最后减去 `exclude`。因此，被排除或不可访问区域下的路径按定义已经不属于 `include`，不需要再写一份 checker exclusion。不要把 `tsconfig.lib.json`、`tsconfig.test.json`、`tsconfig.build.json` 或 `.limina` 下的生成配置直接写进 `checker.include`。这些非入口源码配置只有在被已选中的 `tsconfig.json` 通过 `references` 触达时，才会进入 Limina 的检查范围。checker `exclude` 不会过滤 `references`；如果引用触达已激活区域之外的现有普通源码配置，Limina 会报告跨区域引用。
 
-检查器预设的能力不同：
+固定检查器 identity 的角色不同：
 
-- `tsc`、`tsgo` 和 `vue-tsc` 是构建类预设，可以执行 Limina 生成的声明构建入口；
-- `vue-tsgo` 作为 Vue 类型检查执行器使用，选中的源码仍可参与 Limina 图检查和覆盖证明，但不会作为增量声明构建预设运行；
-- `svelte-check` 以类型检查执行为主，不提供 TypeScript 项目引用式的声明构建语义。
+- `tsc`、`tsgo` 和 `vue-tsc` 可以拥有源码配置，并执行 Limina 生成的声明构建入口；
+- `svelte-check` 和 `astro` 只过滤从实际框架模块发现的补充 target，不会拥有声明。
 
-这个区分会影响后续命令。`limina checker build` 只能使用构建类预设；只被类型检查类预设覆盖的源码配置不能作为声明构建目标。
+这个区分会影响后续命令。`limina checker build` 运行构建检查器，`limina checker typecheck` 运行已发现的补充 target。
 
 ## 源码配置
 

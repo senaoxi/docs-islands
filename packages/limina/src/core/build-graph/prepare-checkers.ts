@@ -1,9 +1,16 @@
 import type { CheckerProjectConfigCache } from '#checkers';
-import type { ResolvedLiminaConfig } from '#config/runner';
+import {
+  isAutoCheckerConfigMode,
+  type ResolvedLiminaConfig,
+} from '#config/runner';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
+import {
+  connectCrossCheckerReferences,
+  createExplicitOwnerMap,
+} from './explicit-checker-ownership';
 import { getGeneratedCheckerEntryPath } from './generated/paths';
 import { createGovernedSourceUnit } from './governed-sources';
-import { collectCheckerSourceConfigs } from './source-config-collection';
+import { collectCheckerSourceConfigs } from './source-config-root-collection';
 import { createSolutionProject, createSourceProject } from './source-projects';
 import type {
   GovernedSourceUnit,
@@ -101,10 +108,9 @@ function createProjectionSolutions(
         checkerName: unit.primaryCheckerName,
         configPath: unit.configPath,
         packageRootDir: unit.packageRootDir,
-        references: new Set([
-          ...('dtsConfigPath' in projection ? [projection.dtsConfigPath] : []),
-          ...unit.frameworkSchedulingReferences,
-        ]),
+        references: new Set(
+          'dtsConfigPath' in projection ? [projection.dtsConfigPath] : [],
+        ),
       },
     ];
   });
@@ -115,13 +121,23 @@ export function prepareCheckerGraph(options: {
   config: ResolvedLiminaConfig;
   projectConfigCache?: CheckerProjectConfigCache;
   selection: ResolvedCheckerEntrySelection;
+  explicitOwnerByConfigPath?: ReadonlyMap<
+    string,
+    ResolvedCheckerEntrySelection['checker']['name']
+  >;
+  inheritedOwnerByConfigPath?: Map<
+    string,
+    ResolvedCheckerEntrySelection['checker']['name']
+  >;
 }): PreparedCheckerGraph {
   const collection = collectCheckerSourceConfigs({
     activatedRegions: options.activatedRegions,
     checkerName: options.selection.checker.name,
-    checkerPreset: options.selection.checker.preset,
+    checkerPreset: options.selection.checker.name,
     config: options.config,
     entryConfigPaths: options.selection.selection.effectiveEntryPaths,
+    explicitOwnerByConfigPath: options.explicitOwnerByConfigPath,
+    inheritedOwnerByConfigPath: options.inheritedOwnerByConfigPath,
     projectConfigCache: options.projectConfigCache,
   });
   const primaryProjects = [...collection.projectConfigPaths]
@@ -129,7 +145,7 @@ export function prepareCheckerGraph(options: {
     .map((sourceConfigPath) =>
       createSourceProject({
         checkerName: options.selection.checker.name,
-        checkerPreset: options.selection.checker.preset,
+        checkerPreset: options.selection.checker.name,
         config: options.config,
         packageRootDir: getPackageRootDir({
           activatedRegions: options.activatedRegions,
@@ -160,6 +176,7 @@ export function prepareCheckerGraph(options: {
       rootDir: options.config.rootDir,
     }),
     governedSources,
+    dependencyEdges: [],
     primaryProjects,
     projects,
     rootBuildPaths: getRootBuildPaths(collection),
@@ -181,7 +198,26 @@ export function prepareCheckerGraphs(options: {
   projectConfigCache?: CheckerProjectConfigCache;
   selections: ResolvedCheckerEntrySelection[];
 }): PreparedCheckerGraph[] {
-  return options.selections.map((selection) =>
-    prepareCheckerGraph({ ...options, selection }),
+  if (isAutoMode(options.config)) {
+    return options.selections.map((selection) =>
+      prepareCheckerGraph({ ...options, selection }),
+    );
+  }
+  const explicitOwnerByConfigPath = createExplicitOwnerMap(options);
+  const inheritedOwnerByConfigPath = new Map(explicitOwnerByConfigPath);
+  const graphs = options.selections.map((selection) =>
+    prepareCheckerGraph({
+      ...options,
+      explicitOwnerByConfigPath,
+      inheritedOwnerByConfigPath,
+      selection,
+    }),
   );
+  connectCrossCheckerReferences({ config: options.config, graphs });
+  return graphs;
+}
+
+function isAutoMode(config: ResolvedLiminaConfig): boolean {
+  const checkers = config.config?.checkers;
+  return checkers === undefined || isAutoCheckerConfigMode(checkers);
 }

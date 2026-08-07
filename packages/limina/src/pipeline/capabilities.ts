@@ -16,6 +16,8 @@ interface CheckerCapabilityBuckets {
   typecheckExecution: string[];
 }
 
+const supplementalCheckerNames = new Set(['astro', 'svelte-check']);
+
 function createCapabilityBuckets(): CheckerCapabilityBuckets {
   return {
     buildExecution: [],
@@ -49,11 +51,14 @@ function appendSourceGraphCapability(options: {
   target.push(options.label);
 }
 
-function getAdapterCapabilities(preset: string): {
+function getAdapterCapabilities(checkerName: string): {
   execution: string | undefined;
   sourceGraph: boolean | undefined;
 } {
-  const adapter = getCheckerAdapter(preset);
+  if (supplementalCheckerNames.has(checkerName)) {
+    return { execution: 'typecheck', sourceGraph: false };
+  }
+  const adapter = getCheckerAdapter(checkerName);
   if (adapter === null) return { execution: undefined, sourceGraph: undefined };
   return { execution: adapter.execution, sourceGraph: adapter.sourceGraph };
 }
@@ -63,8 +68,8 @@ function collectCheckerCapabilities(
 ): CheckerCapabilityBuckets {
   const buckets = createCapabilityBuckets();
   for (const checker of checkers) {
-    const capabilities = getAdapterCapabilities(checker.preset);
-    const label = `${checker.name} (${checker.preset})`;
+    const capabilities = getAdapterCapabilities(checker.name);
+    const label = checker.name;
     appendExecutionCapability({
       buckets,
       execution: capabilities.execution,
@@ -86,17 +91,17 @@ function formatCapabilityList(values: readonly string[]): string {
 function formatTypecheckNote(buckets: CheckerCapabilityBuckets): string[] {
   if (buckets.typecheckExecution.length === 0) return [];
   return [
-    '  note: second-class checkers run through checker:typecheck; source graph participation is reported separately.',
+    '  note: supplemental checkers run through checker:typecheck; source graph participation is reported separately.',
   ];
 }
 
 function formatCapabilitySummary(buckets: CheckerCapabilityBuckets): string {
   return [
     'checker capability summary:',
-    `  first-class build execution: ${formatCapabilityList(
+    `  build checker execution: ${formatCapabilityList(
       buckets.buildExecution,
     )}`,
-    `  second-class typecheck execution: ${formatCapabilityList(
+    `  supplemental checker execution: ${formatCapabilityList(
       buckets.typecheckExecution,
     )}`,
     `  source graph: ${formatCapabilityList(buckets.sourceGraph)}`,

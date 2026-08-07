@@ -65,6 +65,17 @@ const svelteCompilerFixture = [
   '',
 ].join('\n');
 
+const svelteCheckerPeerFiles = {
+  'node_modules/svelte-check/package.json': stringifyConfig({
+    name: 'svelte-check',
+    version: '4.0.0',
+  }),
+  'node_modules/typescript/package.json': stringifyConfig({
+    name: 'typescript',
+    version: '5.9.0',
+  }),
+};
+
 function getFixtureWorkspacePackageManifestPath(
   relativePath: string,
 ): string | null {
@@ -120,7 +131,7 @@ function createFixtureFiles(
     'node_modules/svelte/compiler.cjs': svelteCompilerFixture,
     'node_modules/svelte/package.json': stringifyConfig({
       exports: { './compiler': './compiler.cjs' },
-      name: 'svelte',
+      name: 'svelte-check',
       type: 'commonjs',
       version: '5.1.0',
     }),
@@ -154,8 +165,7 @@ async function createFixture(files: Record<string, string>): Promise<{
     config: {
       config: {
         checkers: {
-          typescript: {
-            preset: 'tsc',
+          tsc: {
             include: ['tsconfig.json', '**/tsconfig.json'],
           },
         },
@@ -348,14 +358,13 @@ function createCheckerGraphCoverageProofGeneratedGraph(
   return {
     artifactPlan: createArtifactPlan(artifactNamespace, [], []),
     changed: false,
-    checkerEntries: new Map([['typescript', checkerEntryPath]]),
+    checkerEntries: new Map([['tsc', checkerEntryPath]]),
     checkers: [
       {
         exclude: [],
         extensions: [],
         include: ['tsconfig.json', '**/tsconfig.json'],
-        name: 'typescript',
-        preset: 'tsc',
+        name: 'tsc',
       },
     ],
     configToOutputBuild: new Map(),
@@ -372,12 +381,12 @@ function createCheckerGraphCoverageProofGeneratedGraph(
         packages: [],
       },
       ownedArtifacts: [],
-      providerEdges: [],
-      version: 3,
+      dependencyEdges: [],
+      version: 4,
     },
     manifestPath: path.join(rootDir, '.limina/manifest.json'),
     outputDeclarationCopies: new Map(),
-    providerEdges: [],
+    dependencyEdges: [],
     sourceToBuild: new Map(),
     sourceToDts: new Map(),
   };
@@ -409,9 +418,6 @@ function cloneFrameworkProofGraph(
               declarationReferences: new Set(unit.declarationReferences),
               frameworkCapabilities: unit.frameworkCapabilities.map(
                 (capability) => ({ ...capability }),
-              ),
-              frameworkSchedulingReferences: new Set(
-                unit.frameworkSchedulingReferences,
               ),
               ownedFileNames: [...unit.ownedFileNames],
             },
@@ -468,13 +474,13 @@ describe('runProofCheck dts config semantics', () => {
         version: '4.0.0',
       }),
       'node_modules/typescript/package.json': stringifyConfig({
-        name: 'typescript',
+        name: 'tsc',
         version: '5.9.0',
       }),
       'packages/app/node_modules/svelte/compiler.cjs': svelteCompilerFixture,
       'packages/app/node_modules/svelte/package.json': stringifyConfig({
         exports: { './compiler': './compiler.cjs' },
-        name: 'svelte',
+        name: 'svelte-check',
         type: 'commonjs',
         version: '5.1.0',
       }),
@@ -483,7 +489,7 @@ describe('runProofCheck dts config semantics', () => {
         version: '4.0.0',
       }),
       'packages/app/node_modules/typescript/package.json': stringifyConfig({
-        name: 'typescript',
+        name: 'tsc',
         version: '5.9.0',
       }),
       'packages/app/src/App.svelte':
@@ -514,7 +520,7 @@ describe('runProofCheck dts config semantics', () => {
 
     try {
       const graph = await prepareAndMaterializeGeneratedTsconfigGraph(config);
-      const checkerName = 'typescript';
+      const checkerName = 'tsc';
       const sourceConfigPath = normalizeAbsolutePath(
         path.join(fixture.rootDir, 'packages/app/tsconfig.json'),
       );
@@ -565,7 +571,7 @@ describe('runProofCheck dts config semantics', () => {
 
       const duplicatePrimary = cloneFrameworkProofGraph(graph);
       duplicatePrimary.governedSources.set(
-        'second-primary',
+        'tsgo',
         new Map([
           [
             sourceConfigPath,
@@ -573,7 +579,7 @@ describe('runProofCheck dts config semantics', () => {
               ...duplicatePrimary.governedSources
                 .get(checkerName)!
                 .get(sourceConfigPath)!,
-              primaryCheckerName: 'second-primary',
+              primaryCheckerName: 'tsgo',
             },
           ],
         ]),
@@ -694,10 +700,10 @@ describe('runProofCheck dts config semantics', () => {
 
       expect(result.passed).toBe(false);
       expect(finding).toMatchObject({
-        checkerName: 'typescript',
+        checkerName: 'tsc',
         code: LIMINA_CHECK_ISSUE_CODES.proofCheckerCoverageInvalid,
         facts: {
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           diagnosticReason:
             'run limina graph prepare before collecting checker graph routes.',
           diagnosticTitle: 'Missing generated checker graph entry',
@@ -841,7 +847,7 @@ describe('runProofCheck dts config semantics', () => {
       expect(finding).toMatchObject({
         code: LIMINA_CHECK_ISSUE_CODES.proofDuplicateSourceOwner,
         facts: {
-          checkerNames: ['typescript'],
+          checkerNames: ['tsc'],
           kind: 'multiple-typecheck-owners',
           ownerProjectPaths: [
             toPortablePath(
@@ -965,7 +971,7 @@ describe('runProofCheck dts config semantics', () => {
       expect(finding).toMatchObject({
         code: LIMINA_CHECK_ISSUE_CODES.proofDuplicateGraphCoverage,
         facts: {
-          checkerNames: ['typescript'],
+          checkerNames: ['tsc'],
           checkerPreset: 'tsc',
           declarationProjectPaths: [
             toPortablePath(
@@ -1682,12 +1688,10 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              primary: {
-                preset: 'tsc',
+              tsc: {
                 include: ['tsconfig.json'],
               },
-              secondary: {
-                preset: 'tsc',
+              tsgo: {
                 include: ['tsconfig.alt.json'],
               },
             },
@@ -1699,7 +1703,7 @@ describe('runProofCheck dts config semantics', () => {
     }
   });
 
-  it('rejects configured primary checkers that converge on the same source leaf', async () => {
+  it('hands referenced configs to their explicit build checker owner', async () => {
     const fixture = await createFixture({
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
       'packages/pkg/tsconfig.test.dts.json': JSON.stringify({
@@ -1764,27 +1768,31 @@ describe('runProofCheck dts config semantics', () => {
     });
 
     try {
-      await expect(
-        runProofCheck({
-          ...fixture.config,
-          config: {
-            ...fixture.config.config,
-            checkers: {
-              ...(typeof fixture.config.config?.checkers === 'object'
-                ? fixture.config.config.checkers
-                : {}),
-              typescript: {
-                include: ['tsconfig.json'],
-                preset: 'tsc',
-              },
-              vue: {
-                include: ['packages/pkg/tsconfig.json'],
-                preset: 'vue-tsc',
-              },
+      const config: ResolvedLiminaConfig = {
+        ...fixture.config,
+        config: {
+          ...fixture.config.config,
+          checkers: {
+            tsc: {
+              include: ['tsconfig.json'],
+            },
+            'vue-tsc': {
+              include: ['packages/pkg/tsconfig.json'],
             },
           },
-        }),
-      ).rejects.toThrow('Duplicate Limina checker ownership');
+        },
+      };
+      const graph = await prepareAndMaterializeGeneratedTsconfigGraph(config);
+      const packageConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/pkg/tsconfig.test.json'),
+      );
+
+      expect(graph.governedSources.get('tsc')?.has(packageConfigPath)).toBe(
+        false,
+      );
+      expect(graph.governedSources.get('vue-tsc')?.has(packageConfigPath)).toBe(
+        true,
+      );
     } finally {
       await fixture.cleanup();
     }
@@ -1803,9 +1811,8 @@ describe('runProofCheck dts config semantics', () => {
               ...(typeof fixture.config.config?.checkers === 'object'
                 ? fixture.config.config.checkers
                 : {}),
-              vue: {
+              'vue-tsc': {
                 include: ['packages/pkg/tsconfig.missing.json'],
-                preset: 'vue-tsc',
               },
             },
           },
@@ -1834,7 +1841,7 @@ describe('runProofCheck dts config semantics', () => {
       expect(finding).toMatchObject({
         code: LIMINA_CHECK_ISSUE_CODES.proofUncoveredSourceFile,
         facts: {
-          candidateCheckerNames: ['typescript'],
+          candidateCheckerNames: ['tsc'],
           candidateProjectPaths: expect.any(Array),
           configuredSourceExcludes: [],
           configuredSourceIncludes: ['...'],
@@ -2868,14 +2875,12 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              typescript: {
+              tsc: {
                 exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
                 include: ['packages/pkg/tsconfig.json'],
-                preset: 'tsc',
               },
-              vue: {
+              'vue-tsc': {
                 include: ['tools/tsconfig.json'],
-                preset: 'vue-tsc',
               },
             },
           },
@@ -2919,14 +2924,12 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              typescript: {
+              tsc: {
                 exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
                 include: ['packages/pkg/tsconfig.json'],
-                preset: 'tsc',
               },
-              vue: {
+              'vue-tsc': {
                 include: ['tools/tsconfig.json'],
-                preset: 'vue-tsc',
               },
             },
           },
@@ -2962,14 +2965,12 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              typescript: {
+              tsc: {
                 exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
                 include: ['packages/pkg/tsconfig.json'],
-                preset: 'tsc',
               },
-              vue: {
+              'vue-tsc': {
                 include: ['tools/tsconfig.json'],
-                preset: 'vue-tsc',
               },
             },
             source: {
@@ -2989,6 +2990,8 @@ describe('runProofCheck dts config semantics', () => {
       .mockImplementation(() => {});
     const fixture = await createFixture(
       createPassingFiles({
+        ...svelteCheckerPeerFiles,
+        'tools/anchor.ts': 'export {};\n',
         'tools/covered.svelte': '<script>const value = 1;</script>\n',
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
@@ -2998,7 +3001,7 @@ describe('runProofCheck dts config semantics', () => {
             target: 'ES2023',
             types: [],
           },
-          include: ['covered.svelte'],
+          include: ['anchor.ts', 'covered.svelte'],
         }),
       }),
     );
@@ -3010,14 +3013,12 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              typescript: {
+              tsc: {
                 exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
-                include: ['packages/pkg/tsconfig.json'],
-                preset: 'tsc',
+                include: ['packages/pkg/tsconfig.json', 'tools/tsconfig.json'],
               },
-              svelte: {
+              'svelte-check': {
                 include: ['tools/tsconfig.json'],
-                preset: 'svelte-check',
               },
             },
           },
@@ -3038,6 +3039,8 @@ describe('runProofCheck dts config semantics', () => {
   it('accepts Svelte source files when source include expands defaults and Svelte glob', async () => {
     const fixture = await createFixture(
       createPassingFiles({
+        ...svelteCheckerPeerFiles,
+        'tools/anchor.ts': 'export {};\n',
         'tools/covered.svelte': '<script>const value = 1;</script>\n',
         'tools/tsconfig.json': JSON.stringify({
           compilerOptions: {
@@ -3047,7 +3050,7 @@ describe('runProofCheck dts config semantics', () => {
             target: 'ES2023',
             types: [],
           },
-          include: ['covered.svelte'],
+          include: ['anchor.ts', 'covered.svelte'],
         }),
       }),
     );
@@ -3059,67 +3062,16 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              typescript: {
+              tsc: {
                 exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
-                include: ['packages/pkg/tsconfig.json'],
-                preset: 'tsc',
+                include: ['packages/pkg/tsconfig.json', 'tools/tsconfig.json'],
               },
-              svelte: {
+              'svelte-check': {
                 include: ['tools/tsconfig.json'],
-                preset: 'svelte-check',
               },
             },
             source: {
               include: ['...', '**/*.svelte'],
-            },
-          },
-        }),
-      ).resolves.toBe(true);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
-
-  it('accepts TypeScript source covered by a vue-tsgo checker entry', async () => {
-    const fixture = await createFixture(
-      createPassingFiles({
-        'tools/covered.vue':
-          '<script setup lang="ts">import "./helper";</script>\n',
-        'tools/helper.ts': 'export const helper = 1;\n',
-        'tools/widget.tsx': 'export const widget = <div />;\n',
-        'tools/tsconfig.json': JSON.stringify({
-          compilerOptions: {
-            jsx: 'preserve',
-            module: 'ESNext',
-            moduleResolution: 'bundler',
-            strict: true,
-            target: 'ES2023',
-            types: [],
-          },
-          include: ['covered.vue', 'helper.ts', 'widget.tsx'],
-        }),
-      }),
-    );
-
-    try {
-      await expect(
-        runProofCheck({
-          ...fixture.config,
-          config: {
-            ...fixture.config.config,
-            checkers: {
-              typescript: {
-                exclude: ['**/tsconfig*.dts.json', '**/tsconfig*.build.json'],
-                include: ['packages/pkg/tsconfig.json'],
-                preset: 'tsc',
-              },
-              vue: {
-                include: ['tools/tsconfig.json'],
-                preset: 'vue-tsgo',
-              },
-            },
-            source: {
-              include: ['...', '**/*.vue'],
             },
           },
         }),
@@ -3365,9 +3317,8 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              typescript: {
+              tsc: {
                 include: ['packages/pkg/tsconfig.json'],
-                preset: 'tsc',
               },
             },
           },
@@ -3388,8 +3339,7 @@ describe('runProofCheck dts config semantics', () => {
           config: {
             ...fixture.config.config,
             checkers: {
-              typescript: {
-                preset: 'tsc',
+              tsc: {
                 include: ['packages/pkg/tsconfig.json'],
               },
             },

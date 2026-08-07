@@ -28,7 +28,7 @@ describe('type evidence generation cache', () => {
       program: {} as ts.Program,
     }));
     const key = createTypeEvidenceProviderCacheKey({
-      checkerName: 'typescript',
+      checkerName: 'tsc',
       configPath: path.join(process.cwd(), 'tsconfig.json'),
       generation: 3,
       preset: 'tsc',
@@ -54,7 +54,7 @@ describe('type evidence generation cache', () => {
     const providerDispose = vi.fn();
     const programDispose = vi.fn();
     const key = createTypeEvidenceProviderCacheKey({
-      checkerName: 'vue',
+      checkerName: 'vue-tsc',
       configPath: path.join(process.cwd(), 'tsconfig.vue.json'),
       generation: 2,
       preset: 'vue-tsc',
@@ -109,7 +109,7 @@ describe('type evidence generation cache', () => {
 describe('type evidence cache locator identities', () => {
   it('keeps locator and cache identities stable across platform path separators', () => {
     const providerIdentity = {
-      checkerName: 'typescript',
+      checkerName: 'tsc',
       generation: 4,
       preset: 'tsc',
     };
@@ -162,7 +162,7 @@ describe('type evidence cache generation disposal', () => {
     const oldProviderDispose = vi.fn();
     const oldProgramDispose = vi.fn();
     const key = createTypeEvidenceProviderCacheKey({
-      checkerName: 'typescript',
+      checkerName: 'tsc',
       configPath: path.join(process.cwd(), 'tsconfig.json'),
       generation: 0,
       preset: 'tsc',
@@ -184,7 +184,7 @@ describe('type evidence cache generation disposal', () => {
     const nextProviderDispose = vi.fn();
     manager.providers.typeEvidence.cache.getOrCreateProvider(
       createTypeEvidenceProviderCacheKey({
-        checkerName: 'typescript',
+        checkerName: 'tsc',
         configPath: path.join(process.cwd(), 'tsconfig.json'),
         generation: 1,
         preset: 'tsc',

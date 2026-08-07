@@ -52,7 +52,7 @@ export async function finalizeGeneratedGraph(options: {
       manifestPath,
     }),
     projectsByChecker: options.state.projectsByChecker,
-    providerEdges: options.state.providerEdges,
+    dependencyEdges: options.state.dependencyEdges,
     rootDir: options.config.rootDir,
     sourceToBuildByChecker: options.state.sourceToBuildByChecker,
   });

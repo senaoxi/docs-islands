@@ -3,7 +3,7 @@ import type { ResolvedLiminaConfig } from '#config/runner';
 import { compareCodeUnits } from '#utils/collections';
 import { toRelativePath } from '#utils/path';
 import { getFileExtension } from './generated/file-extensions';
-import type { GeneratedProviderEdge, SourceProject } from './types';
+import type { GeneratedDependencyEdge, SourceProject } from './types';
 
 interface UnsupportedCrossCheckerProviderFile {
   extension: string;
@@ -151,7 +151,7 @@ function collectUnsupportedCrossCheckerProviderFiles(options: {
 function formatUnsupportedCrossCheckerProviderProblem(options: {
   config: ResolvedLiminaConfig;
   consumerProject: SourceProject;
-  edge: GeneratedProviderEdge;
+  edge: GeneratedDependencyEdge;
   providerProject: SourceProject;
   unsupportedFiles: UnsupportedCrossCheckerProviderFile[];
 }): string {
@@ -182,7 +182,7 @@ function formatUnsupportedCrossCheckerProviderProblem(options: {
 }
 
 function getProviderProjectPair(options: {
-  edge: GeneratedProviderEdge;
+  edge: GeneratedDependencyEdge;
   projectBySourceKey: Map<string, SourceProject>;
 }): { consumerProject: SourceProject; providerProject: SourceProject } | null {
   const consumerProject = options.projectBySourceKey.get(
@@ -200,9 +200,9 @@ function getProviderProjectPair(options: {
   return { consumerProject, providerProject };
 }
 
-function addProviderEdgeCompatibilityProblem(options: {
+function addDependencyEdgeCompatibilityProblem(options: {
   config: ResolvedLiminaConfig;
-  edge: GeneratedProviderEdge;
+  edge: GeneratedDependencyEdge;
   problems: string[];
   projectByDtsConfigPath: Map<string, SourceProject>;
   projectBySourceKey: Map<string, SourceProject>;
@@ -231,11 +231,17 @@ function addProviderEdgeCompatibilityProblem(options: {
   );
 }
 
+function isCrossCheckerDeclarationEdge(edge: GeneratedDependencyEdge): boolean {
+  return (
+    edge.kind === 'declaration-provider' && edge.fromChecker !== edge.toChecker
+  );
+}
+
 export function addCrossCheckerProviderCompatibilityProblems(options: {
   config: ResolvedLiminaConfig;
   problems: string[];
   projects: SourceProject[];
-  providerEdges: GeneratedProviderEdge[];
+  dependencyEdges: GeneratedDependencyEdge[];
 }): void {
   const projectBySourceKey = new Map(
     options.projects.map((project) => [
@@ -246,8 +252,11 @@ export function addCrossCheckerProviderCompatibilityProblems(options: {
   const projectByDtsConfigPath = new Map(
     options.projects.map((project) => [project.dtsConfigPath, project]),
   );
-  for (const edge of options.providerEdges) {
-    addProviderEdgeCompatibilityProblem({
+  const crossCheckerEdges = options.dependencyEdges.filter(
+    isCrossCheckerDeclarationEdge,
+  );
+  for (const edge of crossCheckerEdges) {
+    addDependencyEdgeCompatibilityProblem({
       config: options.config,
       edge,
       problems: options.problems,

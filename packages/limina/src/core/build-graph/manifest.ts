@@ -1,6 +1,7 @@
 import type { ResolvedCheckerConfig } from '#config/runner';
 import { compareCodeUnits } from '#utils/collections';
 import { toPosixPath, toRelativePath } from '#utils/path';
+import { compareDependencyEdges } from './dependency-edge-order';
 import type {
   GeneratedKnipPackageConfig,
   GeneratedKnipPackageDiagnostic,
@@ -9,7 +10,7 @@ import { generatedGraphManifestVersion } from './manifest-version';
 import type {
   GeneratedBuildModule,
   GeneratedBuildModuleManifest,
-  GeneratedProviderEdge,
+  GeneratedDependencyEdge,
   GeneratedTsconfigGraphManifest,
   GovernedSourceUnit,
   SourceProject,
@@ -115,8 +116,8 @@ function createCheckerManifest(options: {
       }),
       rootDir: options.rootDir,
     }),
-    preset: options.checker.preset,
     entry: toManifestPath(options.rootDir, entryPath),
+    name: options.checker.name,
     roots: getCheckerValues(
       options.governedSourcesByChecker,
       options.checker.name,
@@ -162,19 +163,23 @@ function createManifestCheckers(options: {
   return manifestCheckers;
 }
 
-function createProviderEdgeManifest(
-  edge: GeneratedProviderEdge,
+function createDependencyEdgeManifest(
+  edge: GeneratedDependencyEdge,
   rootDir: string,
-): GeneratedTsconfigGraphManifest['providerEdges'][number] {
-  return {
+): GeneratedTsconfigGraphManifest['dependencyEdges'][number] {
+  const base = {
     file: edge.file,
     fromChecker: edge.fromChecker,
     fromConfig: toManifestPath(rootDir, edge.fromConfigPath),
     importedSpecifier: edge.importedSpecifier,
+    kind: edge.kind,
     resolvedFile: toManifestPath(rootDir, edge.resolvedFilePath),
     toChecker: edge.toChecker,
     toConfig: toManifestPath(rootDir, edge.toConfigPath),
   };
+  return edge.kind === 'declaration-provider'
+    ? { ...base, cacheReuse: edge.cacheReuse, kind: edge.kind }
+    : { ...base, kind: edge.kind };
 }
 
 function optionalString(value: string | null | undefined): string {
@@ -248,21 +253,6 @@ function compareKnipDiagnostics(
   ]);
 }
 
-function compareProviderEdges(
-  left: GeneratedProviderEdge,
-  right: GeneratedProviderEdge,
-): number {
-  return firstNonZero([
-    compareCodeUnits(left.fromChecker, right.fromChecker),
-    compareCodeUnits(left.fromConfigPath, right.fromConfigPath),
-    compareCodeUnits(left.toChecker, right.toChecker),
-    compareCodeUnits(left.toConfigPath, right.toConfigPath),
-    compareCodeUnits(left.file, right.file),
-    compareCodeUnits(left.importedSpecifier, right.importedSpecifier),
-    compareCodeUnits(left.resolvedFilePath, right.resolvedFilePath),
-  ]);
-}
-
 export function createManifest(options: {
   checkerEntries: Map<string, string>;
   checkers: ResolvedCheckerConfig[];
@@ -272,7 +262,7 @@ export function createManifest(options: {
   governedSourcesByChecker: Map<string, GovernedSourceUnit[]>;
   ownedArtifacts: string[];
   projectsByChecker: Map<string, SourceProject[]>;
-  providerEdges: GeneratedProviderEdge[];
+  dependencyEdges: GeneratedDependencyEdge[];
   rootDir: string;
   sourceToBuildByChecker: Map<string, Map<string, GeneratedBuildModule>>;
 }): GeneratedTsconfigGraphManifest {
@@ -289,8 +279,8 @@ export function createManifest(options: {
         .sort(compareKnipPackageConfigs),
     },
     ownedArtifacts: [...options.ownedArtifacts].sort(compareCodeUnits),
-    providerEdges: [...options.providerEdges]
-      .sort(compareProviderEdges)
-      .map((edge) => createProviderEdgeManifest(edge, options.rootDir)),
+    dependencyEdges: [...options.dependencyEdges]
+      .sort(compareDependencyEdges)
+      .map((edge) => createDependencyEdgeManifest(edge, options.rootDir)),
   };
 }

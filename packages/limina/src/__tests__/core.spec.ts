@@ -103,9 +103,8 @@ async function createCoreFixture(): Promise<{
   const config: ResolvedLiminaConfig = {
     config: {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/a/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     },
@@ -136,7 +135,7 @@ async function createCoreFixture(): Promise<{
     path.join(rootDir, 'packages/a/node_modules/svelte/package.json'),
     stringifyJson({
       exports: { './compiler': './compiler.cjs' },
-      name: 'svelte',
+      name: 'svelte-check',
       type: 'commonjs',
       version: '5.1.0',
     }),
@@ -325,9 +324,7 @@ describe('AnalysisProviderSet', () => {
 
       try {
         const graph = await fixture.core.buildGraph.getGraph();
-        const unit = graph.governedSources
-          .get('typescript')
-          ?.get(sourceConfigPath);
+        const unit = graph.governedSources.get('tsc')?.get(sourceConfigPath);
         const projection = unit?.buildProjection;
         const projectedConfigPath =
           projection === undefined
@@ -371,7 +368,7 @@ describe('AnalysisProviderSet', () => {
         ).toEqual([sourceFilePath]);
         expect(coverage.get(sourceFilePath)).toMatchObject([
           {
-            checkerName: 'typescript',
+            checkerName: 'tsc',
             projectPath: sourceConfigPath,
             type: 'graph',
           },

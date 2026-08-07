@@ -1,5 +1,4 @@
 import type {
-  CheckerBuildEngine,
   CheckerProjectConfigCache,
   CheckerProjectParseContext,
 } from '#checkers';
@@ -25,15 +24,15 @@ import type {
 
 interface GeneratedCheckerManifest {
   configToOutputBuild: Record<string, GeneratedBuildModuleManifest>;
-  preset: string;
   entry: string;
+  name: string;
   roots: string[];
   sourceToBuild: Record<string, GeneratedBuildModuleManifest>;
   sourceToDts: Record<string, string>;
   dtsToSource: Record<string, string>;
 }
 
-interface GeneratedProviderEdgeManifest {
+interface GeneratedDependencyEdgeManifestBase {
   file: string;
   fromChecker: string;
   fromConfig: string;
@@ -43,7 +42,22 @@ interface GeneratedProviderEdgeManifest {
   toConfig: string;
 }
 
-export interface GeneratedProviderEdge {
+interface DeclarationProviderEdgeManifest
+  extends GeneratedDependencyEdgeManifestBase {
+  cacheReuse: 'non-reusable' | 'reusable';
+  kind: 'declaration-provider';
+}
+
+interface FrameworkScheduleEdgeManifest
+  extends GeneratedDependencyEdgeManifestBase {
+  kind: 'framework-schedule';
+}
+
+type GeneratedDependencyEdgeManifest =
+  | DeclarationProviderEdgeManifest
+  | FrameworkScheduleEdgeManifest;
+
+interface GeneratedDependencyEdgeBase {
   file: string;
   fromChecker: string;
   fromConfigPath: string;
@@ -52,6 +66,19 @@ export interface GeneratedProviderEdge {
   toChecker: string;
   toConfigPath: string;
 }
+
+export interface DeclarationProviderEdge extends GeneratedDependencyEdgeBase {
+  cacheReuse: 'non-reusable' | 'reusable';
+  kind: 'declaration-provider';
+}
+
+export interface FrameworkScheduleEdge extends GeneratedDependencyEdgeBase {
+  kind: 'framework-schedule';
+}
+
+export type GeneratedDependencyEdge =
+  | DeclarationProviderEdge
+  | FrameworkScheduleEdge;
 
 export type GeneratedBuildModuleKind = 'project' | 'solution';
 
@@ -73,7 +100,7 @@ export interface GeneratedOutputDeclarationCopyContext {
 }
 
 export interface GeneratedTsconfigGraphManifest {
-  version: 3;
+  version: 4;
   generatedBy: 'limina';
   checkers: Record<string, GeneratedCheckerManifest>;
   knip: {
@@ -81,7 +108,7 @@ export interface GeneratedTsconfigGraphManifest {
     packages: GeneratedKnipPackageConfig[];
   };
   ownedArtifacts: string[];
-  providerEdges: GeneratedProviderEdgeManifest[];
+  dependencyEdges: GeneratedDependencyEdgeManifest[];
 }
 
 export interface GeneratedTsconfigGraphResult {
@@ -101,7 +128,7 @@ export interface GeneratedTsconfigGraphResult {
   generatedKnipConfigs: GeneratedKnipPackageConfig[];
   generatedKnipDiagnostics: GeneratedKnipPackageDiagnostic[];
   governedSources: Map<string, Map<string, GovernedSourceUnit>>;
-  providerEdges: GeneratedProviderEdge[];
+  dependencyEdges: GeneratedDependencyEdge[];
   manifest: GeneratedTsconfigGraphManifest;
   generatedFiles: ReadonlyMap<string, string>;
 }
@@ -157,11 +184,9 @@ export interface GovernedSourceUnit {
   declarationFileNames: string[];
   declarationReferences: Set<string>;
   frameworkCapabilities: FrameworkCapabilityDescriptor[];
-  frameworkSchedulingReferences: Set<string>;
   ownedFileNames: string[];
   packageRootDir: string;
-  primaryCheckerName: string;
-  primaryCheckerPreset: ResolvedCheckerConfig['preset'];
+  primaryCheckerName: ResolvedCheckerConfig['name'];
 }
 
 export interface SolutionProject {
@@ -187,7 +212,14 @@ export interface CheckerSourceConfigCollection {
   packageRootBySourcePath: Map<string, string>;
   rootConfigPaths: string[];
   solutionConfigPaths: Set<string>;
+  crossCheckerReferences: CrossCheckerSourceReference[];
   solutionReferencesBySourcePath: Map<string, string[]>;
+}
+
+export interface CrossCheckerSourceReference {
+  fromConfigPath: string;
+  toChecker: ResolvedCheckerConfig['name'];
+  toConfigPath: string;
 }
 
 export interface GeneratedGraphWriteContext {
@@ -203,6 +235,7 @@ export interface PreparedCheckerGraph {
   collection: CheckerSourceConfigCollection;
   entryPath: string;
   governedSources: GovernedSourceUnit[];
+  dependencyEdges: GeneratedDependencyEdge[];
   primaryProjects: SourceProject[];
   projects: SourceProject[];
   rootBuildPaths: string[];
@@ -223,7 +256,7 @@ export interface CheckerOutputGraph {
 
 export interface InferredProjectReferenceCollection {
   problems: string[];
-  providerEdges: GeneratedProviderEdge[];
+  dependencyEdges: GeneratedDependencyEdge[];
 }
 
 export type ProviderSelectionResult =
@@ -248,8 +281,6 @@ export type ProviderSelectionResult =
       reason: string;
     };
 
-export type AutoCheckerPreset = 'tsc' | 'vue-tsc';
-
 export interface AutoScopeProject {
   configPath: string;
   context: CheckerProjectParseContext;
@@ -265,9 +296,4 @@ export interface AutoScope {
   entryConfigPath: string;
   frameworkEvidence: AutoFrameworkEvidence[];
   projects: AutoScopeProject[];
-}
-
-export interface ProviderEngineGroup {
-  engine: CheckerBuildEngine;
-  projects: SourceProject[];
 }

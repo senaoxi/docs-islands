@@ -18,7 +18,7 @@ import {
 } from './reference-imports';
 import type {
   GeneratedBuildModule,
-  GeneratedProviderEdge,
+  GeneratedDependencyEdge,
   GovernedSourceUnit,
   InferredProjectReferenceCollection,
   PrepareGeneratedTsconfigGraphOptions,
@@ -83,9 +83,9 @@ function getGovernedBuildModule(options: {
     ?.get(options.unit.configPath);
 }
 
-function compareProviderEdges(
-  left: GeneratedProviderEdge,
-  right: GeneratedProviderEdge,
+function compareDependencyEdges(
+  left: GeneratedDependencyEdge,
+  right: GeneratedDependencyEdge,
 ): number {
   const comparisons = [
     compareCodeUnits(left.fromChecker, right.fromChecker),
@@ -141,7 +141,7 @@ export function inferProjectReferences(options: {
   const ownerGovernedSources =
     options.ownerGovernedSources ?? options.governedSources;
   const problems: string[] = [];
-  const providerEdgesByKey = new Map<string, GeneratedProviderEdge>();
+  const dependencyEdgesByKey = new Map<string, GeneratedDependencyEdge>();
   const localDtsProjectsBySourcePath = createDtsProjectsBySourcePath(
     options.projects,
   );
@@ -161,7 +161,7 @@ export function inferProjectReferences(options: {
       createManagedOutputProjectContexts(ownerProjects),
     ),
     problems,
-    providerEdgesByKey,
+    dependencyEdgesByKey,
   };
   processReferenceImports({ context, projects: options.projects });
   processFrameworkSchedulingReferences({
@@ -177,6 +177,8 @@ export function inferProjectReferences(options: {
   });
   return {
     problems,
-    providerEdges: [...providerEdgesByKey.values()].sort(compareProviderEdges),
+    dependencyEdges: [...dependencyEdgesByKey.values()].sort(
+      compareDependencyEdges,
+    ),
   };
 }

@@ -16,14 +16,15 @@ interface ManagedOutputOptions {
   project: ProjectInfo;
 }
 
-function isMatchingProviderEdge(options: {
+function isMatchingDependencyEdge(options: {
   attribution: ManagedOutputDeclarationProvider;
-  edge: ExpectedReferenceCollectionContext['generatedGraph']['providerEdges'][number];
+  edge: ExpectedReferenceCollectionContext['generatedGraph']['dependencyEdges'][number];
   importingCheckerName: string;
   importRecord: ImportRecord;
   project: ProjectInfo;
 }): boolean {
   return [
+    options.edge.kind === 'declaration-provider',
     options.edge.fromChecker === options.importingCheckerName,
     options.edge.fromConfigPath === options.project.resolverConfigPath,
     options.edge.importedSpecifier === options.importRecord.specifier,
@@ -34,7 +35,7 @@ function isMatchingProviderEdge(options: {
 
 function getProviderTargetPath(options: {
   context: ExpectedReferenceCollectionContext;
-  edge: ExpectedReferenceCollectionContext['generatedGraph']['providerEdges'][number];
+  edge: ExpectedReferenceCollectionContext['generatedGraph']['dependencyEdges'][number];
 }): string | null {
   return (
     options.context.generatedGraph.sourceToDts
@@ -46,12 +47,12 @@ function getProviderTargetPath(options: {
 function getCrossCheckerTargetForEdge(options: {
   attribution: ManagedOutputDeclarationProvider;
   context: ExpectedReferenceCollectionContext;
-  edge: ExpectedReferenceCollectionContext['generatedGraph']['providerEdges'][number];
+  edge: ExpectedReferenceCollectionContext['generatedGraph']['dependencyEdges'][number];
   importingCheckerName: string;
   importRecord: ImportRecord;
   project: ProjectInfo;
 }): string | null {
-  if (!isMatchingProviderEdge(options)) {
+  if (!isMatchingDependencyEdge(options)) {
     return null;
   }
 
@@ -65,7 +66,7 @@ function findCrossCheckerTargetProjectPath(options: {
   importRecord: ImportRecord;
   project: ProjectInfo;
 }): string | null {
-  for (const edge of options.context.generatedGraph.providerEdges) {
+  for (const edge of options.context.generatedGraph.dependencyEdges) {
     const targetPath = getCrossCheckerTargetForEdge({ ...options, edge });
     if (targetPath) {
       return targetPath;

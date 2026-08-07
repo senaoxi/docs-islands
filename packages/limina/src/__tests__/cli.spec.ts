@@ -168,9 +168,8 @@ async function createCliBuildFixture(): Promise<CliBuildFixture> {
       {
         config: {
           checkers: {
-            typescript: {
+            tsc: {
               include: ['packages/pkg/tsconfig.json'],
-              preset: 'tsc',
             },
           },
         },
@@ -192,7 +191,7 @@ async function createCliBuildFixture(): Promise<CliBuildFixture> {
   await writeText(
     path.join(rootDir, 'node_modules/typescript/package.json'),
     stringifyConfig({
-      name: 'typescript',
+      name: 'tsc',
       version: '0.0.0-test',
     }),
   );
@@ -518,7 +517,7 @@ describe('limina CLI', () => {
       expect(result.stdout).toContain('limina checker build');
       expect(result.stdout).toContain('limina checker passed');
       expect(tscArgs).toContain(
-        '.limina/tsconfig/checkers/typescript/projects/packages/pkg/tsconfig.lib.dts.json',
+        '.limina/tsconfig/checkers/tsc/projects/packages/pkg/tsconfig.lib.dts.json',
       );
     });
   });
@@ -530,16 +529,11 @@ describe('limina CLI', () => {
       await writeText(
         tsConfigPath,
         `
-enum Preset {
-  Tsc = 'tsc',
-}
-
 export default {
   config: {
     checkers: {
-      typescript: {
+      tsc: {
         include: ['packages/pkg/tsconfig.json'],
-        preset: Preset.Tsc,
       },
     },
   },
@@ -573,7 +567,7 @@ export default {
       );
 
       expect(tscArgs).toContain(
-        '.limina/tsconfig/checkers/typescript/tsconfig.build.json',
+        '.limina/tsconfig/checkers/tsc/tsconfig.build.json',
       );
     });
   });
@@ -604,7 +598,7 @@ export default {
       );
 
       expect(globalTscArgs).toContain(
-        '.limina/tsconfig/checkers/typescript/tsconfig.build.json',
+        '.limina/tsconfig/checkers/tsc/tsconfig.build.json',
       );
     });
   });
@@ -642,7 +636,7 @@ export default {
               },
             ],
             status: 'completed',
-            version: 7,
+            version: 8,
           }),
         );
         const seedSnapshot = await readFile(lastRunPath, 'utf8');
@@ -663,9 +657,8 @@ export default {
             {
               config: {
                 checkers: {
-                  typescript: {
+                  tsc: {
                     include: ['packages/**/tsconfig.json'],
-                    preset: 'tsc',
                   },
                 },
               },
@@ -998,7 +991,7 @@ export default {
             },
           ],
           status: 'completed',
-          version: 7,
+          version: 8,
         }),
       );
       const completedCheck = await readFile(lastRunPath, 'utf8');
@@ -1108,9 +1101,8 @@ export default {
           {
             config: {
               checkers: {
-                typescript: {
+                tsc: {
                   include: ['packages/*/tsconfig.json'],
-                  preset: 'tsc',
                 },
               },
             },
@@ -1152,7 +1144,7 @@ export default {
           createdAt: '2026-07-17T00:00:00.000Z',
           issues: [],
           status: 'completed',
-          version: 7,
+          version: 8,
         }),
       );
       const seedSnapshot = await readFile(lastRunPath, 'utf8');
@@ -1383,7 +1375,7 @@ export default {
       expect(result.stdout).toContain('limina build');
       expect(result.stdout).toContain('limina build passed');
       expect(tscArgs).toContain(
-        '.limina/tsconfig/checkers/typescript/outputs/projects/packages/pkg/tsconfig.lib.output.json',
+        '.limina/tsconfig/checkers/tsc/outputs/projects/packages/pkg/tsconfig.lib.output.json',
       );
     });
   });
@@ -1972,9 +1964,8 @@ export default {
           {
             config: {
               checkers: {
-                typescript: {
+                tsc: {
                   include: ['app/tsconfig.json'],
-                  preset: 'tsc',
                 },
               },
             },
@@ -2221,9 +2212,8 @@ export default {
           {
             config: {
               checkers: {
-                typescript: {
+                tsc: {
                   include: ['app/tsconfig.json'],
-                  preset: 'tsc',
                 },
               },
             },
@@ -2609,7 +2599,7 @@ export default {
             title: 'Unused source module',
           })),
           status: 'completed',
-          version: 7,
+          version: 8,
         }),
       );
       const invocationId = '00000000-0000-4000-8000-000000000000';
@@ -2860,7 +2850,7 @@ export default {
             ],
           },
           status: 'completed',
-          version: 7,
+          version: 8,
         }),
       );
 
@@ -2988,7 +2978,7 @@ export default {
           createdAt: '2026-06-21T00:00:00.000Z',
           issues: [
             {
-              checkerName: 'typescript',
+              checkerName: 'tsc',
               code: 'LIMINA_CHECKER_BUILD_FAILED',
               packageName: '@example/app',
               reason: 'Checker build failed.',
@@ -2997,7 +2987,7 @@ export default {
             },
           ],
           status: 'completed',
-          version: 7,
+          version: 8,
         }),
       );
 
@@ -3105,7 +3095,7 @@ export default {
       const checkerHelpPlainStdout = stripAnsi(checkerHelpResult.stdout);
       expect(checkerHelpResult.stdout).toContain(`${ANSI_ESCAPE}[`);
       expect(checkerHelpPlainStdout).toContain('Check issue checkers:');
-      expect(checkerHelpPlainStdout).toContain('- typescript  1 issue');
+      expect(checkerHelpPlainStdout).toContain('- tsc  1 issue');
 
       await expect(
         execFileAsync(process.execPath, [cliPath, 'check', 'demo', '--issues']),
@@ -3407,9 +3397,8 @@ export default {
           {
             config: {
               checkers: {
-                typescript: {
+                tsc: {
                   include: ['packages/**/tsconfig.json'],
-                  preset: 'tsc',
                 },
               },
             },
@@ -3545,9 +3534,8 @@ export default {
           {
             config: {
               checkers: {
-                typescript: {
+                tsc: {
                   include: ['packages/**/tsconfig.json'],
-                  preset: 'tsc',
                 },
               },
             },
@@ -3694,9 +3682,8 @@ export default {
           {
             config: {
               checkers: {
-                typescript: {
+                tsc: {
                   include: ['app/tsconfig.json'],
-                  preset: 'tsc',
                 },
               },
             },
@@ -3766,7 +3753,7 @@ export default {
         await readFile(
           path.join(
             rootDir,
-            '.limina/tsconfig/checkers/typescript/projects/app/tsconfig.runtime.dts.json',
+            '.limina/tsconfig/checkers/tsc/projects/app/tsconfig.runtime.dts.json',
           ),
           'utf8',
         ),
@@ -3805,9 +3792,8 @@ export default {
           {
             config: {
               checkers: {
-                typescript: {
+                tsc: {
                   include: ['packages/**/tsconfig.json'],
-                  preset: 'tsc',
                 },
               },
             },

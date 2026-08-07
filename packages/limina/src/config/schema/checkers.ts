@@ -1,4 +1,3 @@
-import { getCheckerAdapter } from '#checkers';
 import { z } from 'zod';
 import { validateImports } from './imports';
 import {
@@ -7,22 +6,25 @@ import {
   type ConfigValidationContext,
   isAbsolutePublicSelector,
   isNonEmptyString,
-  isPathSafeIdentifier,
   isPlainConfigRecord,
 } from './shared';
 import { validateSourceBoundary } from './source-boundary';
 
-export const unsupportedCheckerPresetReason =
-  'configured checkers require a built-in checker adapter.';
+export const unsupportedCheckerNameReason =
+  'config.checkers keys must be one of: tsc, tsgo, vue-tsc, svelte-check, astro.';
 export const autoCheckerMixedConfigReason =
   'auto checker config must not be mixed with named checker entries.';
+export const missingBuildCheckerReason =
+  'explicit checker config requires at least one build checker: tsc, tsgo, or vue-tsc.';
 
 const checkerConfigReason =
   'config.checkers must be an object auto config or an object keyed by checker name.';
 const autoCheckerModeConfigReason =
   'auto checker config requires mode: "auto".';
-const checkerConfigKeys = new Set(['exclude', 'include', 'preset']);
-const autoCheckerKeys = new Set(['exclude', 'mode']);
+const checkerConfigKeys = new Set(['exclude', 'include']);
+const autoCheckerKeys = new Set(['exclude', 'mode', 'useTsgo']);
+const buildCheckerNames = new Set(['tsc', 'tsgo', 'vue-tsc']);
+const checkerNames = new Set([...buildCheckerNames, 'svelte-check', 'astro']);
 
 function addCheckerIssue(
   ctx: ConfigValidationContext,
@@ -30,22 +32,6 @@ function addCheckerIssue(
   message: string,
 ): void {
   addConfigIssue(ctx, path, message);
-}
-
-function validateCheckerPreset(
-  checker: Record<string, unknown>,
-  ctx: ConfigValidationContext,
-): void {
-  if (!isNonEmptyString(checker.preset)) {
-    addCheckerIssue(
-      ctx,
-      ['preset'],
-      'checker preset must be a non-empty string.',
-    );
-    return;
-  }
-  if (getCheckerAdapter(checker.preset) !== null) return;
-  addCheckerIssue(ctx, ['preset'], unsupportedCheckerPresetReason);
 }
 
 function validateCheckerSelectorEntry(options: {
@@ -145,7 +131,6 @@ export const checkerConfigShapeSchema: z.ZodType<Record<string, unknown>> = z
       path: [],
       value: checker,
     });
-    validateCheckerPreset(checker, ctx);
     validateCheckerSelectorArray({
       checker,
       ctx,
@@ -207,6 +192,19 @@ function validateAutoExclude(
   }
 }
 
+function validateAutoUseTsgo(
+  checkers: Record<string, unknown>,
+  ctx: ConfigValidationContext,
+): void {
+  if (checkers.useTsgo === undefined) return;
+  if (typeof checkers.useTsgo === 'boolean') return;
+  addCheckerIssue(
+    ctx,
+    ['checkers', 'useTsgo'],
+    'auto checker useTsgo must be a boolean when configured.',
+  );
+}
+
 function validateAutoCheckers(
   checkers: Record<string, unknown>,
   ctx: ConfigValidationContext,
@@ -215,6 +213,7 @@ function validateAutoCheckers(
     addCheckerIssue(ctx, ['checkers', 'mode'], autoCheckerModeConfigReason);
   }
   validateAutoExclude(checkers, ctx);
+  validateAutoUseTsgo(checkers, ctx);
   addUnknownFieldIssues({
     allowed: autoCheckerKeys,
     ctx,
@@ -240,20 +239,35 @@ function addNamedCheckerIssues(options: {
   }
 }
 
+function validateNamedChecker(options: {
+  checker: unknown;
+  checkerName: string;
+  ctx: ConfigValidationContext;
+}): void {
+  if (checkerNames.has(options.checkerName)) {
+    addNamedCheckerIssues(options);
+    return;
+  }
+  addCheckerIssue(
+    options.ctx,
+    ['checkers', options.checkerName],
+    unsupportedCheckerNameReason,
+  );
+}
+
+function hasNamedBuildChecker(checkers: Record<string, unknown>): boolean {
+  return Object.keys(checkers).some((name) => buildCheckerNames.has(name));
+}
+
 function validateNamedCheckers(
   checkers: Record<string, unknown>,
   ctx: ConfigValidationContext,
 ): void {
   for (const [checkerName, checker] of Object.entries(checkers)) {
-    if (!isPathSafeIdentifier(checkerName)) {
-      addCheckerIssue(
-        ctx,
-        ['checkers', checkerName],
-        'checker names must be non-empty path-safe identifiers without slash segments.',
-      );
-      continue;
-    }
-    addNamedCheckerIssues({ checker, checkerName, ctx });
+    validateNamedChecker({ checker, checkerName, ctx });
+  }
+  if (!hasNamedBuildChecker(checkers)) {
+    addCheckerIssue(ctx, ['checkers'], missingBuildCheckerReason);
   }
 }
 

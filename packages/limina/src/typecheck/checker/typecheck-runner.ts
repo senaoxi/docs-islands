@@ -30,7 +30,6 @@ import {
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from '../targets';
-import { VueTsgoCacheBatchCoordinator } from '../vue-tsgo-cache';
 import { collectTypecheckPeerFailure } from './typecheck-preflight';
 import {
   createNoTypecheckCheckerResult,
@@ -76,6 +75,7 @@ function createTypecheckTargets(options: {
 }): TypecheckTarget[] {
   const configuredTargets = createConfiguredTypecheckTargets(options);
   const frameworkTargets = createFrameworkCheckerTargets({
+    config: options.context.options.config,
     generatedGraph: options.generatedGraph,
     workspaceRootDir: options.context.projectRootDir,
   });
@@ -190,9 +190,6 @@ async function executeTypecheckTargets(options: {
     }),
   );
   const runner = resolveTypecheckRunner(options.context.options);
-  const cacheCoordinator = await VueTsgoCacheBatchCoordinator.prepare(
-    options.targets,
-  );
   return runPool<TypecheckTarget, TypecheckTargetResult>({
     concurrency: resolveCheckerTypecheckConcurrency({
       config: options.context.options.config,
@@ -202,7 +199,6 @@ async function executeTypecheckTargets(options: {
     onError: normalizeTargetError,
     onResult: (target, result) => completeTargetTask({ result, target, tasks }),
     run: async (target) => {
-      await cacheCoordinator.beforeTargetRun(target);
       startTargetTask({ context: options.context, target, tasks });
       return runTargetWithMeasuredDuration(
         runner,
@@ -233,9 +229,18 @@ async function runConfiguredTypecheck(
   context: CheckerTypecheckContext,
   preflight: ReturnType<typeof resolvePreflight>,
 ): Promise<RunCheckerTypecheckResult> {
-  const generated = await preflight.ensureGeneratedArtifactsMaterialized();
+  const graph = await preflight.ensureGeneratedGraph();
+  const targets = createTypecheckTargets({ context, generatedGraph: graph });
+  if (targets.length === 0) {
+    return createNoTypecheckCheckerResult({
+      flowDepth: context.flowDepth,
+      projectRootDir: context.projectRootDir,
+      request: context.options,
+    });
+  }
+  await preflight.ensureGeneratedArtifactsMaterialized();
   return withGeneratedArtifactReadLease(preflight.artifactNamespace, () =>
-    runMaterializedTypecheck(context, generated.graph),
+    runMaterializedTypecheck(context, targets),
   );
 }
 
@@ -247,16 +252,8 @@ function getTypecheckImports(
 
 async function runMaterializedTypecheck(
   context: CheckerTypecheckContext,
-  generatedGraph: GeneratedTsconfigGraphResult,
+  targets: TypecheckTarget[],
 ): Promise<RunCheckerTypecheckResult> {
-  const targets = createTypecheckTargets({ context, generatedGraph });
-  if (targets.length === 0) {
-    return createNoTypecheckCheckerResult({
-      flowDepth: context.flowDepth,
-      projectRootDir: context.projectRootDir,
-      request: context.options,
-    });
-  }
   const peerFailure = collectTypecheckPeerFailure({
     checkerPackageResolver: context.options.checkerPackageResolver,
     checkers: context.checkers,
@@ -277,6 +274,7 @@ async function runMaterializedTypecheck(
     targetCount: targets.length,
   });
   return {
+    disabled: false,
     failedTargets: collectFailedCheckerTargets(targets, failedResults),
     passed: failedResults.length === 0,
     projectRootDir: context.projectRootDir,

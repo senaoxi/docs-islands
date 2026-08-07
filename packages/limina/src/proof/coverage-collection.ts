@@ -108,7 +108,7 @@ function createGovernedCoverageEntries(options: {
             options.generatedGraph.checkerEntries.get(checkerName) ??
             unit.configPath,
           checkerName,
-          checkerPreset: unit.primaryCheckerPreset,
+          checkerPreset: unit.primaryCheckerName,
           label: toRelativePath(options.config.rootDir, unit.configPath),
           projectPath: unit.configPath,
           type: 'graph',
@@ -145,7 +145,7 @@ function createCheckerProjectCoverageEntries(options: {
     config: options.config,
     configPath: options.configPath,
     extensions: options.target.checker.extensions,
-    preset: options.target.checker.preset,
+    preset: options.target.checker.name,
     virtualFiles: options.virtualFiles,
   });
   const source: CoverageSource = {

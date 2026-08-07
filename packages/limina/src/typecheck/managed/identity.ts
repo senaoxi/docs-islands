@@ -258,10 +258,10 @@ export function getCheckerImplementationFingerprint(options: {
   projectRootDir: string;
   target: TypecheckTarget;
 }): string {
-  const adapter = getCheckerAdapter(options.checker.preset);
+  const adapter = getCheckerAdapter(options.checker.name);
   if (adapter === null) {
     throw new ManagedCheckerEmitBoundaryError(
-      `Unable to identify checker implementation for ${options.checker.preset}.`,
+      `Unable to identify checker implementation for ${options.checker.name}.`,
     );
   }
   const packageNames = [
@@ -276,7 +276,7 @@ export function getCheckerImplementationFingerprint(options: {
         projectRootDir: options.projectRootDir,
       }),
     ),
-    preset: options.checker.preset,
+    preset: options.checker.name,
     projectionCompiler: getCompilerIdentity(),
     projectionCompilerVersion: ts.version,
   });

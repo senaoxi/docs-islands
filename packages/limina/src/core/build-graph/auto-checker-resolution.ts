@@ -11,10 +11,10 @@ import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
 import { collectAutoScopeDependencies } from './auto-checker-dependencies';
 import { promoteAutoScopes } from './auto-checker-promotion';
 import { classifyAutoScope, collectAutoScope } from './auto-checker-scope';
+import type { AutoCheckerPreset } from './auto-checker-types';
 import { prewarmAutoFrameworkImports } from './framework-import-prewarm';
 import { resolveBuildGraphImportAnalysis } from './import-analysis-context';
 import type {
-  AutoCheckerPreset,
   AutoScope,
   PrepareGeneratedTsconfigGraphOptions,
   ResolvedCheckerEntrySelection,
@@ -34,22 +34,30 @@ function getAutoCheckerExclude(config: ResolvedLiminaConfig): string[] {
   return checkers.exclude || [];
 }
 
+function getAutoTypeScriptChecker(
+  config: ResolvedLiminaConfig,
+): Extract<AutoCheckerPreset, 'tsc' | 'tsgo'> {
+  const checkers = getConfiguredCheckers(config);
+  return isAutoCheckerConfigMode(checkers) && checkers.useTsgo === true
+    ? 'tsgo'
+    : 'tsc';
+}
+
 function createResolvedChecker(options: {
   exclude?: string[];
   include: string[];
-  name: string;
   preset: AutoCheckerPreset;
   rootDir: string;
 }): ResolvedCheckerConfig {
   return {
     exclude: options.exclude ?? [],
     extensions: getCheckerExtensions(
-      { include: options.include, preset: options.preset },
+      options.preset,
+      { include: options.include },
       { projectRootDir: options.rootDir },
     ),
     include: options.include,
-    name: options.name,
-    preset: options.preset,
+    name: options.preset,
   };
 }
 
@@ -86,7 +94,6 @@ function createAutoSelection(options: {
   config: ResolvedLiminaConfig;
   entries: string[];
   exclude: string[];
-  name: string;
   preset: AutoCheckerPreset;
 }): ResolvedCheckerEntrySelection | null {
   if (options.entries.length === 0) {
@@ -99,7 +106,6 @@ function createAutoSelection(options: {
     checker: createResolvedChecker({
       exclude: options.exclude,
       include,
-      name: options.name,
       preset: options.preset,
       rootDir: options.config.rootDir,
     }),
@@ -110,6 +116,13 @@ function createAutoSelection(options: {
   };
 }
 
+function getPresetEntries(
+  entriesByPreset: ReadonlyMap<AutoCheckerPreset, string[]>,
+  preset: AutoCheckerPreset,
+): string[] {
+  return entriesByPreset.get(preset) ?? [];
+}
+
 function createAutoSelections(options: {
   autoExclude: string[];
   config: ResolvedLiminaConfig;
@@ -118,16 +131,20 @@ function createAutoSelections(options: {
   const selections = [
     createAutoSelection({
       config: options.config,
-      entries: options.entriesByPreset.get('tsc') ?? [],
+      entries: getPresetEntries(options.entriesByPreset, 'tsc'),
       exclude: options.autoExclude,
-      name: 'typescript',
       preset: 'tsc',
     }),
     createAutoSelection({
       config: options.config,
-      entries: options.entriesByPreset.get('vue-tsc') ?? [],
+      entries: getPresetEntries(options.entriesByPreset, 'tsgo'),
       exclude: options.autoExclude,
-      name: 'vue',
+      preset: 'tsgo',
+    }),
+    createAutoSelection({
+      config: options.config,
+      entries: getPresetEntries(options.entriesByPreset, 'vue-tsc'),
+      exclude: options.autoExclude,
       preset: 'vue-tsc',
     }),
   ];
@@ -150,9 +167,16 @@ function collectAutoScopes(options: {
 
 function classifyAutoScopes(
   scopes: readonly AutoScope[],
+  ordinaryChecker: Extract<AutoCheckerPreset, 'tsc' | 'tsgo'>,
 ): Map<string, AutoCheckerPreset> {
   return new Map(
-    scopes.map((scope) => [scope.entryConfigPath, classifyAutoScope(scope)]),
+    scopes.map((scope) => {
+      const classified = classifyAutoScope(scope);
+      return [
+        scope.entryConfigPath,
+        classified === 'tsc' ? ordinaryChecker : classified,
+      ];
+    }),
   );
 }
 
@@ -181,7 +205,10 @@ export async function resolveAutoCheckerSelections(options: {
     entryConfigPaths: selection.effectiveEntryPaths,
     projectConfigCache: options.projectConfigCache,
   });
-  const kindsByEntry = classifyAutoScopes(scopes);
+  const kindsByEntry = classifyAutoScopes(
+    scopes,
+    getAutoTypeScriptChecker(options.config),
+  );
   const importAnalysis = resolveBuildGraphImportAnalysis(options);
   await prewarmAutoFrameworkImports({
     config: options.config,

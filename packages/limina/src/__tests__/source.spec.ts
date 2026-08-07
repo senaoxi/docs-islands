@@ -110,8 +110,7 @@ async function createFixture(
     config: {
       config: {
         checkers: {
-          typescript: {
-            preset: 'tsc',
+          tsc: {
             include: ['tsconfig.json', '**/tsconfig.json'],
           },
         },
@@ -455,10 +454,10 @@ describe('runSourceCheck package authority', () => {
       );
       expect(resourceIssues).toHaveLength(1);
       expect(resourceIssues[0]).toMatchObject({
-        checkerName: 'typescript',
+        checkerName: 'tsc',
         code: LIMINA_CHECK_ISSUE_CODES.sourceResourceModuleNotFound,
         facts: {
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           importerPath: normalizeAbsolutePath(
             path.join(fixture.rootDir, 'app/src/index.ts'),
           ),
@@ -595,10 +594,10 @@ describe('runSourceCheck package authority', () => {
       expect(
         sourceIssues.find((issue) => issue.code.includes('RESOURCE_MODULE')),
       ).toMatchObject({
-        checkerName: 'typescript',
+        checkerName: 'tsc',
         code: LIMINA_CHECK_ISSUE_CODES.sourceResourceModuleTypeUndeclared,
         facts: {
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           kind: 'resource-module-type-undeclared',
           runtimeFilePath: normalizeAbsolutePath(
             path.join(fixture.rootDir, 'app/src/style.css'),
@@ -1054,9 +1053,8 @@ describe('runSourceCheck package authority', () => {
       );
       fixture.config.config = {
         checkers: {
-          typescript: {
+          tsc: {
             include: [`${externalSelector}/tsconfig.json`],
-            preset: 'tsc',
           },
         },
       };
@@ -4727,9 +4725,8 @@ packages:
       );
       fixture.config.config = {
         checkers: {
-          typescript: {
+          tsc: {
             include: [`${externalSelector}/tsconfig.json`],
-            preset: 'tsc',
           },
         },
       };

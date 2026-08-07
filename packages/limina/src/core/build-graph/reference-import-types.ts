@@ -6,7 +6,7 @@ import type {
 import type { DeclarationProviderResolution } from '../import-graph/declaration-provider';
 import type { ManagedOutputDeclarationLookup } from '../import-graph/managed-output-provider';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
-import type { GeneratedProviderEdge, SourceProject } from './types';
+import type { GeneratedDependencyEdge, SourceProject } from './types';
 
 export type ResolvedProvider = Extract<
   DeclarationProviderResolution,
@@ -21,7 +21,7 @@ export interface ReferenceImportContext {
   importAnalysis: ImportAnalysisContext;
   managedOutputLookup: ManagedOutputDeclarationLookup;
   problems: string[];
-  providerEdgesByKey: Map<string, GeneratedProviderEdge>;
+  dependencyEdgesByKey: Map<string, GeneratedDependencyEdge>;
 }
 
 export interface ReferenceImportOptions {

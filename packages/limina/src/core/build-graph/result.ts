@@ -123,19 +123,24 @@ function createResultMaps(options: {
   return maps;
 }
 
-function createProviderEdges(options: {
+function createDependencyEdges(options: {
   manifest: GeneratedTsconfigGraphManifest;
   rootDir: string;
-}): GeneratedTsconfigGraphResult['providerEdges'] {
-  return options.manifest.providerEdges.map((edge) => ({
-    file: edge.file,
-    fromChecker: edge.fromChecker,
-    fromConfigPath: toAbsolutePath(options.rootDir, edge.fromConfig),
-    importedSpecifier: edge.importedSpecifier,
-    resolvedFilePath: toAbsolutePath(options.rootDir, edge.resolvedFile),
-    toChecker: edge.toChecker,
-    toConfigPath: toAbsolutePath(options.rootDir, edge.toConfig),
-  }));
+}): GeneratedTsconfigGraphResult['dependencyEdges'] {
+  return options.manifest.dependencyEdges.map((edge) => {
+    const base = {
+      file: edge.file,
+      fromChecker: edge.fromChecker,
+      fromConfigPath: toAbsolutePath(options.rootDir, edge.fromConfig),
+      importedSpecifier: edge.importedSpecifier,
+      resolvedFilePath: toAbsolutePath(options.rootDir, edge.resolvedFile),
+      toChecker: edge.toChecker,
+      toConfigPath: toAbsolutePath(options.rootDir, edge.toConfig),
+    };
+    return edge.kind === 'declaration-provider'
+      ? { ...base, cacheReuse: edge.cacheReuse, kind: edge.kind }
+      : { ...base, kind: edge.kind };
+  });
 }
 
 function cloneOutputDeclarationCopies(
@@ -170,7 +175,6 @@ function cloneGovernedSource(unit: GovernedSourceUnit): GovernedSourceUnit {
     frameworkCapabilities: unit.frameworkCapabilities.map((capability) => ({
       ...capability,
     })),
-    frameworkSchedulingReferences: new Set(unit.frameworkSchedulingReferences),
     ownedFileNames: [...unit.ownedFileNames],
   };
 }
@@ -225,7 +229,7 @@ export function createResult(options: {
       rootDir: options.rootDir,
     }),
     governedSources: createGovernedSourceMap(options.governedSourcesByChecker),
-    providerEdges: createProviderEdges(options),
+    dependencyEdges: createDependencyEdges(options),
     manifest: options.manifest,
     generatedFiles: new Map(options.generatedFiles),
   };

@@ -109,6 +109,7 @@ function collectUnsupportedFiles(options: {
     extensions: capabilityDiscoveryExtensions,
   };
   const neutralParsed = parseCheckerProjectConfigForContext({
+    allowNoInputDiagnostics: true,
     cache: options.projectConfigCache,
     configPath: options.sourceConfigPath,
     context: neutralContext,

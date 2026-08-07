@@ -137,13 +137,13 @@ function projectGovernedUnits(options: {
       ...capabilityDiscoveryExtensions,
       ...resolveCheckerProjectExtensions({
         configPath: unit.configPath,
-        preset: unit.primaryCheckerPreset,
+        preset: unit.primaryCheckerName,
         projectRootDir: options.config.rootDir,
         virtualFiles: options.generatedFiles,
       }),
     ]);
     mergeProjectContext({
-      checkerPreset: unit.primaryCheckerPreset,
+      checkerPreset: unit.primaryCheckerName,
       projectPath: getGovernedProjectPath(unit),
       routeExtensions: extensions,
       state: options.state,

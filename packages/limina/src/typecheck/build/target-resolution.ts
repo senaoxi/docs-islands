@@ -56,7 +56,7 @@ export type ResolvedBuildTarget =
     };
 
 function isBuildCapable(descriptor: BuildTargetDescriptor): boolean {
-  return getCheckerAdapter(descriptor.checker.preset)?.execution === 'build';
+  return getCheckerAdapter(descriptor.checker.name)?.execution === 'build';
 }
 
 function selectCheckerTargets(options: {
@@ -65,7 +65,7 @@ function selectCheckerTargets(options: {
 }): BuildTargetDescriptor[] {
   if (options.checker === undefined) return [...options.targets];
   return options.targets.filter(
-    ({ checker }) => checker.preset === options.checker,
+    ({ checker }) => checker.name === options.checker,
   );
 }
 
@@ -211,7 +211,7 @@ async function resolveManagedBuildTarget(options: {
   return {
     allCheckers,
     availableCheckers: uniqueSortedStrings(
-      selectableTargets.map(({ checker }) => checker.preset),
+      selectableTargets.map(({ checker }) => checker.name),
     ),
     checkerTargets,
     generatedGraph,

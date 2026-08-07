@@ -75,7 +75,7 @@ export function collectGovernedSourceEntries(
 }
 
 export function isPrimaryBuildEntry(entry: GovernedSourceEntry): boolean {
-  return isBuildCapablePreset(entry.unit.primaryCheckerPreset);
+  return isBuildCapablePreset(entry.unit.primaryCheckerName);
 }
 
 export function getExpectedBuildProjectionKind(

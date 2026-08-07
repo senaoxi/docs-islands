@@ -2,9 +2,9 @@ import type { ResolvedCheckerConfig } from '#config/runner';
 import type {
   CheckerSourceConfigCollection,
   GeneratedBuildModule,
+  GeneratedDependencyEdge,
   GeneratedGraphWriteContext,
   GeneratedOutputDeclarationCopyContext,
-  GeneratedProviderEdge,
   GovernedSourceUnit,
   OutputSolutionProject,
   PreparedCheckerGraph,
@@ -26,7 +26,7 @@ export interface GeneratedGraphPreparationState {
   primaryProjectsByChecker: Map<string, SourceProject[]>;
   projectsByChecker: Map<string, SourceProject[]>;
   governedSourcesByChecker: Map<string, GovernedSourceUnit[]>;
-  providerEdges: GeneratedProviderEdge[];
+  dependencyEdges: GeneratedDependencyEdge[];
   rootBuildPathsByChecker: Map<string, string[]>;
   solutionsByChecker: Map<string, SolutionProject[]>;
   sourceToBuildByChecker: Map<string, Map<string, GeneratedBuildModule>>;
@@ -47,7 +47,7 @@ export function createGeneratedGraphPreparationState(
     primaryProjectsByChecker: new Map(),
     projectsByChecker: new Map(),
     governedSourcesByChecker: new Map(),
-    providerEdges: [],
+    dependencyEdges: [],
     rootBuildPathsByChecker: new Map(),
     solutionsByChecker: new Map(),
     sourceToBuildByChecker: new Map(),
@@ -66,6 +66,9 @@ export function registerPreparedChecker(options: {
   state: GeneratedGraphPreparationState;
 }): void {
   const checkerName = options.preparedChecker.checker.name;
+  options.state.dependencyEdges.push(
+    ...options.preparedChecker.dependencyEdges,
+  );
   options.state.checkerCollectionsByName.set(
     checkerName,
     options.preparedChecker.collection,

@@ -16,13 +16,14 @@ export type { IssueSeverity } from './domain/validation/contracts';
 
 export type {
   AutoCheckerConfig,
-  BuildCheckerPreset,
-  BuiltinCheckerPreset,
+  BuildCheckerName,
   BuiltinTaskName,
   CheckerConfig,
   CheckerConfigMode,
   CheckerExecutionKind,
-  CheckerPreset,
+  CheckerName,
+  CheckerScope,
+  FrameworkCheckerName,
   GraphConditionDomain,
   GraphConfig,
   GraphRule,

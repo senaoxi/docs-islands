@@ -58,12 +58,7 @@ function requiresFrameworkProjection(options: {
 }
 
 function createDeclarationFileNames(project: SourceProject): string[] {
-  if (!isBuildCapablePreset(project.context.checkerPresets[0]!)) {
-    return [...project.fileNames];
-  }
-  return project.fileNames.filter(
-    (fileName) => !fileName.endsWith('.astro') && !fileName.endsWith('.svelte'),
-  );
+  return [...project.fileNames];
 }
 
 function createFrameworkCapabilities(options: {
@@ -120,6 +115,7 @@ export function createGovernedSourceUnit(options: {
     }),
   ]);
   const parsed = parseCheckerProjectConfigForContext({
+    allowNoInputDiagnostics: true,
     cache: options.projectConfigCache,
     configPath: options.project.configPath,
     context: {
@@ -153,10 +149,9 @@ export function createGovernedSourceUnit(options: {
     declarationFileNames,
     declarationReferences: options.project.references,
     frameworkCapabilities,
-    frameworkSchedulingReferences: new Set(),
     ownedFileNames,
     packageRootDir: options.project.packageRootDir,
-    primaryCheckerName: options.project.checkerName,
-    primaryCheckerPreset: options.project.context.checkerPresets[0]!,
+    primaryCheckerName: options.project
+      .checkerName as GovernedSourceUnit['primaryCheckerName'],
   };
 }

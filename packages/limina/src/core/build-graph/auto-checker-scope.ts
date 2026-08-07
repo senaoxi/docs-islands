@@ -1,61 +1,20 @@
-import {
-  type CheckerProjectConfigCache,
-  type CheckerProjectParseContext,
-  parseCheckerProjectConfigForContext,
-} from '#checkers';
+import type { CheckerProjectConfigCache } from '#checkers';
 import type { ResolvedLiminaConfig } from '#config/runner';
 import { compareCodeUnits } from '#utils/collections';
-import { normalizeAbsolutePath } from '#utils/path';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
+import { createAutoScopeProject } from './auto-checker-project';
+import type { AutoCheckerPreset } from './auto-checker-types';
 import { inspectFrameworkIntent } from './framework-intent';
 import { capabilityDiscoveryExtensions } from './generated/file-extensions';
 import { createGeneratedGraphStructuredError } from './problems';
 import {
   createAutoFrameworkEvidence,
   type FrameworkIntentHint,
-  partitionSourceFiles,
 } from './source-capabilities';
-import {
-  collectCheckerSourceConfigModules,
-  createEmptySourceConfigCollection,
-} from './source-config-collection';
+import { collectCheckerSourceConfigModules } from './source-config-collection';
 import type { CollectAutoSourceConfigModulesOptions } from './source-config-collection-types';
-import type { AutoCheckerPreset, AutoScope, AutoScopeProject } from './types';
-
-function createAutoScopeProject(options: {
-  activatedRegions: WorkspaceRegionPathIndex;
-  config: ResolvedLiminaConfig;
-  configPath: string;
-  packageRootDir: string;
-  projectConfigCache?: CheckerProjectConfigCache;
-}): AutoScopeProject {
-  const context: CheckerProjectParseContext = {
-    checkerPresets: ['tsc'],
-    extensions: capabilityDiscoveryExtensions,
-  };
-  const parsed = parseCheckerProjectConfigForContext({
-    cache: options.projectConfigCache,
-    configPath: options.configPath,
-    context,
-    projectRootDir: options.config.rootDir,
-  });
-  const fileNames = parsed.fileNames.map(normalizeAbsolutePath).sort();
-  return {
-    configPath: options.configPath,
-    context,
-    fileNames,
-    filePartition: partitionSourceFiles(fileNames),
-    options: parsed.options,
-    packageRootByFileName: new Map(
-      fileNames.map((fileName) => [
-        fileName,
-        options.activatedRegions.findPackageForPath(fileName)?.directory ??
-          options.packageRootDir,
-      ]),
-    ),
-    packageRootDir: options.packageRootDir,
-  };
-}
+import { createEmptySourceConfigCollection } from './source-config-root-collection';
+import type { AutoScope } from './types';
 
 function setAutoRootConfigPaths(scope: AutoScope): void {
   scope.collection.rootConfigPaths =
@@ -69,7 +28,7 @@ function collectAutoSourceConfigModules(
 ): void {
   collectCheckerSourceConfigModules({
     activatedRegions: options.activatedRegions,
-    checkerName: '__auto__',
+    checkerName: 'tsc',
     checkerPreset: 'tsc',
     collection: options.collection,
     config: options.config,
@@ -130,6 +89,7 @@ function createAutoScope(options: {
         activatedRegions: options.activatedRegions,
         config: options.config,
         configPath,
+        intentHints: intentHintsByConfigPath.get(configPath) ?? [],
         packageRootDir,
         projectConfigCache: options.projectConfigCache,
       });
@@ -145,7 +105,7 @@ function createAutoScope(options: {
       .map(([configPath, intentHints]) =>
         createAutoFrameworkEvidence({
           configPath,
-          fileNames: projectByConfigPath.get(configPath)?.fileNames,
+          filePartition: projectByConfigPath.get(configPath)?.filePartition,
           intentHints,
         }),
       ),

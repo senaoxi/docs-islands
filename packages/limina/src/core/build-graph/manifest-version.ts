@@ -1,4 +1,4 @@
-export const generatedGraphManifestVersion = 3 as const;
+export const generatedGraphManifestVersion = 4 as const;
 
 export function isOwnedArtifactLedgerVersion(value: unknown): value is number {
   if (typeof value !== 'number') return false;

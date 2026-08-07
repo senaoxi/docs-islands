@@ -144,7 +144,7 @@ async function writeSvelteCompiler(options: {
     'node_modules/svelte/package.json',
     JSON.stringify({
       exports: { './compiler': './compiler.cjs' },
-      name: 'svelte',
+      name: 'svelte-check',
       type: 'commonjs',
       version: options.version,
     }),

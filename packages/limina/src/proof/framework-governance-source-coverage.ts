@@ -138,7 +138,7 @@ function addPrimaryOwnerGroupFinding(
   const owners = entries
     .map((entry) => ({
       checkerName: entry.unit.primaryCheckerName,
-      preset: entry.unit.primaryCheckerPreset,
+      preset: entry.unit.primaryCheckerName,
     }))
     .sort(
       (left, right) =>

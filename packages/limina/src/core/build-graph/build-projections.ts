@@ -43,10 +43,9 @@ function synchronizeProjectionSolution(
   const unit = unitByBuildPath.get(solution.buildConfigPath);
   if (unit === undefined) return;
   const projection = unit.buildProjection;
-  solution.references = new Set([
-    ...('dtsConfigPath' in projection ? [projection.dtsConfigPath] : []),
-    ...unit.frameworkSchedulingReferences,
-  ]);
+  solution.references = new Set(
+    'dtsConfigPath' in projection ? [projection.dtsConfigPath] : [],
+  );
 }
 
 export function synchronizeProjectionSolutionReferences(options: {

@@ -93,10 +93,12 @@ export function collectConfirmedFrameworkCapabilities(
 
 export function createAutoFrameworkEvidence(options: {
   configPath: string;
+  filePartition?: SourceFilePartition;
   fileNames?: readonly string[];
   intentHints: FrameworkIntentHint[];
 }): AutoFrameworkEvidence {
-  const filePartition = partitionSourceFiles(options.fileNames ?? []);
+  const filePartition =
+    options.filePartition ?? partitionSourceFiles(options.fileNames ?? []);
   return {
     configPath: normalizeAbsolutePath(options.configPath),
     confirmedCapabilities: collectConfirmedFrameworkCapabilities(filePartition),

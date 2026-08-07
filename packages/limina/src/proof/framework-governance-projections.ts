@@ -169,7 +169,7 @@ function addBuildProjectionEntryFinding(
   options: ProjectionOptions,
   entry: GovernedSourceEntry,
 ): void {
-  if (!isBuildCapablePreset(entry.unit.primaryCheckerPreset)) return;
+  if (!isBuildCapablePreset(entry.unit.primaryCheckerName)) return;
   const violation = findProjectionViolation({
     entry,
     generatedGraph: options.generatedGraph,
@@ -188,7 +188,7 @@ function getBuildCheckerNames(
 ): Set<string> {
   return new Set(
     generatedGraph.checkers
-      .filter((checker) => isBuildCapablePreset(checker.preset))
+      .filter((checker) => isBuildCapablePreset(checker.name))
       .map((checker) => checker.name),
   );
 }

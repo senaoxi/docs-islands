@@ -10,11 +10,16 @@ import type { CheckerSourceConfigCollection } from './types';
 
 export interface CollectionContext {
   activatedRegions: WorkspaceRegionPathIndex;
-  checkerName: string;
-  checkerPreset: ResolvedCheckerConfig['preset'];
+  checkerName: ResolvedCheckerConfig['name'];
+  checkerPreset: ResolvedCheckerConfig['name'];
   collection: CheckerSourceConfigCollection;
   config: ResolvedLiminaConfig;
   discoveryExtensions?: string[];
+  explicitOwnerByConfigPath?: ReadonlyMap<
+    string,
+    ResolvedCheckerConfig['name']
+  >;
+  inheritedOwnerByConfigPath?: Map<string, ResolvedCheckerConfig['name']>;
   problems: string[];
   projectConfigCache?: CheckerProjectConfigCache;
   seenConfigs: Set<string>;
@@ -39,11 +44,16 @@ export interface SourceConfigAnalysis {
 
 export interface CollectCheckerSourceConfigsOptions {
   activatedRegions: WorkspaceRegionPathIndex;
-  checkerName: string;
-  checkerPreset: ResolvedCheckerConfig['preset'];
+  checkerName: ResolvedCheckerConfig['name'];
+  checkerPreset: ResolvedCheckerConfig['name'];
   config: ResolvedLiminaConfig;
   discoveryExtensions?: string[];
   entryConfigPaths: readonly string[];
+  explicitOwnerByConfigPath?: ReadonlyMap<
+    string,
+    ResolvedCheckerConfig['name']
+  >;
+  inheritedOwnerByConfigPath?: Map<string, ResolvedCheckerConfig['name']>;
   projectConfigCache?: CheckerProjectConfigCache;
 }
 

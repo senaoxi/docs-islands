@@ -1,5 +1,5 @@
 import type {
-  BuiltinCheckerPreset,
+  BuildCheckerName,
   CheckerExecutionKind,
   CheckerPreset,
   ResolvedCheckerConfig,
@@ -78,7 +78,7 @@ export interface CheckerAdapter {
   parseProjectConfig: (
     options: CheckerProjectConfigParseOptions,
   ) => ParsedCheckerProjectConfig;
-  preset: BuiltinCheckerPreset;
+  name: BuildCheckerName;
   resolveModuleName: (options: CheckerModuleResolveOptions) => string | null;
   sourceGraph: boolean;
 }

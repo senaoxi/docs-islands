@@ -125,7 +125,7 @@ These two commands read the already-built `outDir`. They do not build artifacts 
 | Run internal declaration graph build for a specific config         | `limina checker build <config>`            | Accepts only Limina-managed source configs or aggregator configs; does not perform `raw build`                                            |
 | Build user-consumable artifacts                                    | `limina build <config>`                    | Accepts only Limina-managed source leaves or aggregator configs that declare `liminaOptions.outputs`                                      |
 | Build a user-maintained `tsconfig` directly                        | `limina build <config> --raw --preset tsc` | Does not read Limina output config and does not use the generated graph                                                                   |
-| Run non-build checker entries                                      | `limina checker typecheck`                 | For entries such as `vue-tsgo` or `svelte-check` that only type-check                                                                     |
+| Run supplemental framework targets                                 | `limina checker typecheck`                 | Runs discovered Astro and Svelte targets; succeeds as disabled when no target exists                                                      |
 | Check built package artifacts                                      | `limina package check`                     | Requires `package.entries[].outDir`; checks package manifest, `publint`, `ATTW`, or artifact import boundaries                            |
 | Check pre-release artifact consistency                             | `limina release check`                     | Requires built artifacts and checks local dependency declarations, private packages, `tarball` results, or configured release consistency |
 
@@ -160,7 +160,7 @@ Migration selection follows the same package-island visibility and checker selec
 
 Migration reads each target's effective TypeScript config, including inherited options, before it plans any write. A direct `compilerOptions.declarationDir` is removed when it is equivalent to the planned managed output root; when it is the only output setting, its relative value becomes `liminaOptions.outputs.outDir`, so JavaScript and declarations share one artifact directory after migration. Split JavaScript/declaration output, an effective `outFile`, a mixed solution aggregator, an invalid declaration directory, or an absolute declaration directory without an existing equivalent managed root fails before any target is written. Inherited `declarationDir` stays in its base config and is not copied into leaves. Migration does not delete existing user output files.
 
-Migration does not install Astro or Svelte dependencies, run `astro sync`, or rewrite framework source. The next generated-graph materialization derives framework capabilities from the migrated source configs and actual files. If an older supported `.limina/manifest.json` exists, Limina uses it only as an owned-artifact ledger to delete stale generated paths, then replaces it with the current version 3 manifest; framework capability descriptors remain live graph facts rather than persisted manifest data.
+Migration does not install Astro or Svelte dependencies, run `astro sync`, or rewrite framework source. The next generated-graph materialization derives framework capabilities from the migrated source configs and actual files. If a version 1 through 3 `.limina/manifest.json` exists, Limina uses it only as an owned-artifact ledger to delete stale generated paths, then replaces it with the current version 4 manifest; framework capability descriptors remain live graph facts rather than persisted manifest data.
 
 ### limina check [pipeline]
 
@@ -303,7 +303,7 @@ After a successful non-watch managed build, Limina supplements TypeScript emit b
 
 ### limina checker build [config]
 
-`checker build` only builds Limina's internal declaration graph. Supported presets are `tsc`, `tsgo`, and `vue-tsc`.
+`checker build` only builds Limina's internal declaration graph. Supported build checker identities are `tsc`, `tsgo`, and `vue-tsc`; the command-line selector remains named `--preset`.
 
 ```sh
 pnpm exec limina checker build
@@ -327,11 +327,11 @@ pnpm exec limina checker typecheck
 pnpm exec limina checker typecheck --verbose
 ```
 
-Built-in explicit non-build checkers in the source include `vue-tsgo` and `svelte-check`. `vue-tsgo` entries can still participate in the source graph and coverage proof. A standalone `svelte-check` entry participates in coverage proof and typecheck execution, but it is not currently a source graph provider. Neither is a build-mode execution entry for `checker build`.
+The command runs supplemental Astro and Svelte targets discovered from actual framework modules. Optional `astro` and `svelte-check` configuration scopes can filter those targets but cannot create capability or declaration ownership.
 
 Auto-detected Astro targets run `astro check --noSync --root <leaf> --tsconfig <source-config>` and require leaf-local `astro`, `@astrojs/check`, `typescript`, and `.astro/types.d.ts`. Auto-detected Svelte targets run `svelte-check --workspace <leaf> --tsconfig <source-config>` and require leaf-local `svelte-check`, `svelte`, and `typescript`. Limina does not run Astro sync or enable Svelte incremental cache behavior.
 
-`checker typecheck` does not accept a config path, `--preset`, or `--watch`. Watch is explicitly unsupported for these framework targets; rerun the command after source config, parser package, generated type, or framework source changes. If neither non-build entries nor supplemental framework capabilities exist, the command succeeds with no runnable entries.
+`checker typecheck` does not accept a config path, `--preset`, or `--watch`. Watch is explicitly unsupported for these framework targets; rerun the command after source config, parser package, generated type, or framework source changes. If no supplemental framework target exists, the runner records the task as disabled, skips peer preflight and generated-artifact materialization, and exits successfully.
 
 ### limina package check
 
@@ -374,7 +374,7 @@ It also selects artifact directories based on `package.entries`, and requires th
 | `checker build --preset requires a config argument`                                                   | `--preset` can only choose the build checker for a specific config                                          | Use `limina checker build <config> --preset tsc`                                                                                |
 | `checker build --watch requires a config argument`                                                    | Watch mode only supports a specified config                                                                 | Use `limina checker build <config> --watch`                                                                                     |
 | `limina build --raw requires --preset`                                                                | Raw mode did not specify a checker preset                                                                   | Use `limina build <config> --raw --preset tsc`                                                                                  |
-| `checker typecheck does not accept --preset` or `--watch`                                             | Typecheck runs the complete secondary target set; per-target framework watch is unsupported                 | Rerun `checker typecheck` after source config, parser package, generated type, or framework source changes                      |
+| `checker typecheck does not accept --preset` or `--watch`                                             | Typecheck runs the complete supplemental target set; per-target framework watch is unsupported              | Rerun `checker typecheck` after source config, parser package, generated type, or framework source changes                      |
 | `No package checks are enabled`                                                                       | The selected package entries do not enable any package checks                                               | Check `package.entries[].checks`, or remove the unneeded package check task                                                     |
 | `outDir package.json not found`                                                                       | Package artifacts have not been built, or `outDir` is incorrect                                             | Run the project build first, then check `package.entries[].outDir`                                                              |
 | `Missing peer dependency ...` or `Missing framework checker dependencies`                             | A configured checker, leaf framework target, or enabled release integration is not installed                | Install the reported packages in the reported root; framework targets require their Astro or Svelte packages in the owning leaf |

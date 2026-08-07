@@ -1,14 +1,15 @@
-import type { BuiltinCheckerPreset, CheckerPreset } from '#config/runner';
+import type {
+  BuildCheckerName,
+  CheckerName,
+  CheckerPreset,
+} from '#config/runner';
 import {
-  createSvelteCheckCommandTarget,
   createTscCommandTarget,
   createTsgoCommandTarget,
   createVueTscCommandTarget,
-  createVueTsgoCommandTarget,
 } from './command-targets';
 import {
   getNativeTypeScriptProjectExtensions,
-  getSvelteCheckerExtensions,
   getTypeScriptCheckerExtensions,
   normalizeExtensions,
   resolveExtensionsForChecker,
@@ -24,38 +25,6 @@ import type {
   CheckerCapabilityFamily,
 } from './types';
 import { resolveTypeScriptModuleName } from './typescript-resolution';
-
-function resolveSvelteExtensions(
-  options: Parameters<CheckerAdapter['extensions']>[0],
-): string[] {
-  const extensions = getSvelteCheckerExtensions();
-  return resolveExtensionsForChecker(options, extensions);
-}
-
-function parseSvelteProjectConfig(
-  options: Parameters<CheckerAdapter['parseProjectConfig']>[0],
-): ReturnType<CheckerAdapter['parseProjectConfig']> {
-  const extensions = getSvelteCheckerExtensions();
-  return parseProjectConfigWithExtensions(options, extensions);
-}
-
-function createSvelteAdapter(): CheckerAdapter {
-  return {
-    createCommandTarget: createSvelteCheckCommandTarget,
-    dependencies: {
-      analysisRuntimePackages: ['svelte'],
-      checkerBinaryPackages: ['svelte-check'],
-      checkerRuntimePeerPackages: ['svelte', 'typescript'],
-    },
-    extensions: resolveSvelteExtensions,
-    execution: 'typecheck',
-    emitProjection: 'typescript',
-    parseProjectConfig: parseSvelteProjectConfig,
-    preset: 'svelte-check',
-    resolveModuleName: resolveTypeScriptModuleName,
-    sourceGraph: false,
-  };
-}
 
 function getTypeScriptCommandTarget(
   preset: 'tsc' | 'tsgo',
@@ -93,35 +62,27 @@ function createTypeScriptAdapter(options: {
     execution: 'build',
     emitProjection: 'typescript',
     parseProjectConfig: parseTypeScriptProjectConfig,
-    preset: options.preset,
+    name: options.preset,
     resolveModuleName: resolveTypeScriptModuleName,
     sourceGraph: true,
   };
 }
 
-function getVueCommandTarget(
-  preset: 'vue-tsc' | 'vue-tsgo',
-): CheckerAdapter['createCommandTarget'] {
-  return preset === 'vue-tsc'
-    ? createVueTscCommandTarget
-    : createVueTsgoCommandTarget;
-}
-
 function createVueExtensionsResolver(
-  preset: 'vue-tsc' | 'vue-tsgo',
+  preset: 'vue-tsc',
 ): CheckerAdapter['extensions'] {
   return (parseOptions) =>
     resolveVueProjectExtensionsForChecker(parseOptions, preset);
 }
 
 function createVueProjectParser(
-  preset: 'vue-tsc' | 'vue-tsgo',
+  preset: 'vue-tsc',
 ): CheckerAdapter['parseProjectConfig'] {
   return (parseOptions) => parseVueProjectConfig(parseOptions, preset);
 }
 
 function createVueResolvers(
-  preset: 'vue-tsc' | 'vue-tsgo',
+  preset: 'vue-tsc',
 ): Pick<CheckerAdapter, 'extensions' | 'parseProjectConfig'> {
   return {
     extensions: createVueExtensionsResolver(preset),
@@ -130,14 +91,14 @@ function createVueResolvers(
 }
 
 function createVueAdapterBehavior(
-  preset: 'vue-tsc' | 'vue-tsgo',
+  preset: 'vue-tsc',
 ): Pick<
   CheckerAdapter,
   'createCommandTarget' | 'extensions' | 'parseProjectConfig'
 > {
   const resolvers = createVueResolvers(preset);
   return {
-    createCommandTarget: getVueCommandTarget(preset),
+    createCommandTarget: createVueTscCommandTarget,
     extensions: resolvers.extensions,
     parseProjectConfig: resolvers.parseProjectConfig,
   };
@@ -146,7 +107,7 @@ function createVueAdapterBehavior(
 function createVueAdapter(options: {
   execution: 'build' | 'typecheck';
   packageNames: string[];
-  preset: 'vue-tsc' | 'vue-tsgo';
+  preset: 'vue-tsc';
 }): CheckerAdapter {
   const behavior = createVueAdapterBehavior(options.preset);
   return {
@@ -158,14 +119,13 @@ function createVueAdapter(options: {
     },
     execution: options.execution,
     emitProjection: 'vue-bounded',
-    preset: options.preset,
+    name: options.preset,
     resolveModuleName: resolveTypeScriptModuleName,
     sourceGraph: true,
   };
 }
 
 const builtinCheckerAdapters = {
-  'svelte-check': createSvelteAdapter(),
   tsc: createTypeScriptAdapter({ packageName: 'typescript', preset: 'tsc' }),
   tsgo: createTypeScriptAdapter({
     packageName: '@typescript/native-preview',
@@ -176,42 +136,35 @@ const builtinCheckerAdapters = {
     packageNames: ['vue-tsc'],
     preset: 'vue-tsc',
   }),
-  'vue-tsgo': createVueAdapter({
-    execution: 'typecheck',
-    packageNames: ['vue-tsgo', '@typescript/native-preview'],
-    preset: 'vue-tsgo',
-  }),
-} satisfies Record<BuiltinCheckerPreset, CheckerAdapter>;
+} satisfies Record<BuildCheckerName, CheckerAdapter>;
 
-function isBuiltinCheckerPreset(value: string): value is BuiltinCheckerPreset {
+function isBuildCheckerName(value: string): value is BuildCheckerName {
   return Object.hasOwn(builtinCheckerAdapters, value);
 }
 
 export function getCheckerAdapter(preset: string): CheckerAdapter | null {
-  if (!isBuiltinCheckerPreset(preset)) return null;
+  if (!isBuildCheckerName(preset)) return null;
   return builtinCheckerAdapters[preset];
 }
 
 const checkerBuildEngines = {
-  'svelte-check': 'typecheck-only',
   tsc: 'tsc',
   tsgo: 'tsgo',
   'vue-tsc': 'vue-tsc',
-  'vue-tsgo': 'typecheck-only',
-} satisfies Record<BuiltinCheckerPreset, CheckerBuildEngine>;
+} satisfies Record<BuildCheckerName, CheckerBuildEngine>;
 
 const checkerCapabilityFamilies = {
+  astro: 'unknown',
   'svelte-check': 'svelte',
   tsc: 'typescript-native',
   tsgo: 'typescript-native',
   'vue-tsc': 'vue',
-  'vue-tsgo': 'vue',
-} satisfies Record<BuiltinCheckerPreset, CheckerCapabilityFamily>;
+} satisfies Record<CheckerName, CheckerCapabilityFamily>;
 
 function getKnownBuildEngine(
   preset: CheckerPreset,
 ): CheckerBuildEngine | undefined {
-  if (!isBuiltinCheckerPreset(preset)) return undefined;
+  if (!isBuildCheckerName(preset)) return undefined;
   return checkerBuildEngines[preset];
 }
 
@@ -225,8 +178,8 @@ export function getCheckerBuildEngine(
 function getKnownCapabilityFamily(
   preset: CheckerPreset,
 ): CheckerCapabilityFamily | undefined {
-  if (!isBuiltinCheckerPreset(preset)) return undefined;
-  return checkerCapabilityFamilies[preset];
+  if (!Object.hasOwn(checkerCapabilityFamilies, preset)) return undefined;
+  return checkerCapabilityFamilies[preset as CheckerName];
 }
 
 export function getCheckerCapabilityFamily(
@@ -270,4 +223,12 @@ export function getBuildCheckerSupportedExtensions(
 ): string[] {
   const adapter = getBuildAdapter(preset);
   return getSupportedBuildExtensions(preset, adapter);
+}
+
+export function isCheckerCacheReusable(options: {
+  consumer: string;
+  provider: string;
+}): boolean {
+  if (options.consumer === options.provider) return true;
+  return options.consumer === 'vue-tsc' && options.provider === 'tsc';
 }

@@ -1,3 +1,4 @@
+import { isBuildCapablePreset } from '#checkers';
 import {
   getActiveCheckers,
   isAutoCheckerConfigMode,
@@ -32,16 +33,18 @@ async function resolveExplicitCheckerSelections(options: {
   sourceConfigPaths: readonly string[];
 }): Promise<ResolvedCheckerEntrySelection[]> {
   return Promise.all(
-    getActiveCheckers(options.config).map(async (checker) => ({
-      checker,
-      selection: await resolveCheckerEntrySelection(
-        {
-          config: options.config,
-          sourceConfigPaths: options.sourceConfigPaths,
-        },
-        createCheckerEntrySelectionOptions(checker),
-      ),
-    })),
+    getActiveCheckers(options.config)
+      .filter((checker) => isBuildCapablePreset(checker.name))
+      .map(async (checker) => ({
+        checker,
+        selection: await resolveCheckerEntrySelection(
+          {
+            config: options.config,
+            sourceConfigPaths: options.sourceConfigPaths,
+          },
+          createCheckerEntrySelectionOptions(checker),
+        ),
+      })),
   );
 }
 

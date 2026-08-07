@@ -14,7 +14,7 @@ import { reportUnresolvedFrameworkImport } from './framework-import-problems';
 import type { ReferenceImportContext } from './reference-import-types';
 import type {
   GeneratedBuildModule,
-  GeneratedProviderEdge,
+  GeneratedDependencyEdge,
   GovernedSourceUnit,
   SourceProject,
 } from './types';
@@ -88,14 +88,14 @@ function selectOwnedResolution(options: {
   );
 }
 
-function createProviderEdge(options: {
+function createDependencyEdge(options: {
   context: ReferenceImportContext;
   importRecord: FrameworkImportRecord;
   resolvedFilePath: string;
   source: GovernedSourceUnit;
   targetCheckerName: string;
   targetConfigPath: string;
-}): GeneratedProviderEdge {
+}): GeneratedDependencyEdge {
   return {
     file: formatImportRecordLocation(
       options.context.config.rootDir,
@@ -104,15 +104,16 @@ function createProviderEdge(options: {
     fromChecker: options.source.primaryCheckerName,
     fromConfigPath: options.source.configPath,
     importedSpecifier: options.importRecord.specifier,
+    kind: 'framework-schedule',
     resolvedFilePath: options.resolvedFilePath,
     toChecker: options.targetCheckerName,
     toConfigPath: options.targetConfigPath,
   };
 }
 
-function recordProviderEdge(
+function recordDependencyEdge(
   context: ReferenceImportContext,
-  edge: GeneratedProviderEdge,
+  edge: GeneratedDependencyEdge,
 ): void {
   const key = JSON.stringify([
     edge.fromChecker,
@@ -123,7 +124,7 @@ function recordProviderEdge(
     edge.importedSpecifier,
     edge.resolvedFilePath,
   ]);
-  context.providerEdgesByKey.set(key, edge);
+  context.dependencyEdgesByKey.set(key, edge);
 }
 
 function addMissingBuildOwnerProblem(options: {
@@ -200,12 +201,9 @@ function processFrameworkImport(options: FrameworkImportOptions): void {
     addMissingBuildOwnerProblem({ ...options, targetConfigPath });
     return;
   }
-  options.source.frameworkSchedulingReferences.add(
-    targetOwner.buildModule.path,
-  );
-  recordProviderEdge(
+  recordDependencyEdge(
     options.context,
-    createProviderEdge({
+    createDependencyEdge({
       ...options,
       resolvedFilePath: resolution.filePath,
       targetCheckerName: targetOwner.checkerName,

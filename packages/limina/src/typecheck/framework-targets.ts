@@ -1,7 +1,10 @@
+import type { CheckerDependencyRequirement } from '#checkers';
 import {
-  type CheckerDependencyRequirement,
-  getCheckerCapabilityFamily,
-} from '#checkers';
+  type CheckerConfigMode,
+  type FrameworkCheckerName,
+  isAutoCheckerConfigMode,
+  type ResolvedLiminaConfig,
+} from '#config/runner';
 import type {
   FrameworkCapabilityDescriptor,
   GeneratedTsconfigGraphResult,
@@ -12,6 +15,7 @@ import {
   normalizeSlashes,
   toRelativePath,
 } from '#utils/path';
+import { matchesCheckerScope } from '../core/checkers/entry-selection';
 import { createCheckerTargetId, type TypecheckTarget } from './target-types';
 
 type FrameworkFamily = FrameworkCapabilityDescriptor['family'];
@@ -32,8 +36,8 @@ const frameworkRequirements = {
   readonly CheckerDependencyRequirement[]
 >;
 
-function frameworkCheckerName(family: FrameworkFamily): string {
-  return `${family}-check`;
+function frameworkCheckerName(family: FrameworkFamily): FrameworkCheckerName {
+  return family === 'svelte' ? 'svelte-check' : 'astro';
 }
 
 function descriptorKey(
@@ -112,42 +116,48 @@ export function collectFrameworkCapabilityDescriptors(
   return [...descriptorsByKey.values()].sort(compareDescriptors);
 }
 
-function collectExplicitFrameworkCoverage(
-  generatedGraph: GeneratedTsconfigGraphResult,
-): Set<string> {
-  const coveredDescriptors = new Set<string>();
-  for (const checker of generatedGraph.checkers) {
-    for (const key of collectCheckerFrameworkCoverage(
-      generatedGraph,
-      checker,
-    )) {
-      coveredDescriptors.add(key);
-    }
-  }
-  return coveredDescriptors;
-}
-
-function collectCheckerFrameworkCoverage(
-  generatedGraph: GeneratedTsconfigGraphResult,
-  checker: GeneratedTsconfigGraphResult['checkers'][number],
-): string[] {
-  if (getCheckerCapabilityFamily(checker.preset) !== 'svelte') return [];
-  const governedSources = generatedGraph.governedSources.get(checker.name);
-  if (governedSources === undefined) return [];
-  return [...governedSources.values()].flatMap((source) =>
-    source.frameworkCapabilities
-      .filter((capability) => capability.family === 'svelte')
-      .map(descriptorKey),
-  );
-}
-
 export function collectFrameworkSupplementalCapabilityDescriptors(
   generatedGraph: GeneratedTsconfigGraphResult,
 ): FrameworkCapabilityDescriptor[] {
-  const explicitCoverage = collectExplicitFrameworkCoverage(generatedGraph);
-  return collectFrameworkCapabilityDescriptors(generatedGraph).filter(
-    (descriptor) => !explicitCoverage.has(descriptorKey(descriptor)),
-  );
+  return collectFrameworkCapabilityDescriptors(generatedGraph);
+}
+
+function getConfiguredCheckers(
+  config: ResolvedLiminaConfig | undefined,
+): CheckerConfigMode | undefined {
+  if (config === undefined) return undefined;
+  if (config.config === undefined) return undefined;
+  return config.config.checkers;
+}
+
+function matchesExplicitFrameworkScope(options: {
+  checkers: CheckerConfigMode;
+  config: ResolvedLiminaConfig;
+  descriptor: FrameworkCapabilityDescriptor;
+}): boolean {
+  if (isAutoCheckerConfigMode(options.checkers)) return true;
+  const checkerName = frameworkCheckerName(options.descriptor.family);
+  const scope = options.checkers[checkerName];
+  if (scope === undefined) return true;
+  return matchesCheckerScope({
+    config: options.config,
+    configPath: options.descriptor.sourceConfigPath,
+    scope,
+  });
+}
+
+function isDescriptorEnabled(options: {
+  config: ResolvedLiminaConfig | undefined;
+  descriptor: FrameworkCapabilityDescriptor;
+}): boolean {
+  const checkers = getConfiguredCheckers(options.config);
+  if (checkers === undefined) return true;
+  if (options.config === undefined) return true;
+  return matchesExplicitFrameworkScope({
+    checkers,
+    config: options.config,
+    descriptor: options.descriptor,
+  });
 }
 
 function createFrameworkCommandTarget(
@@ -223,15 +233,20 @@ export function createFrameworkCheckerTarget(options: {
 }
 
 export function createFrameworkCheckerTargets(options: {
+  config?: ResolvedLiminaConfig;
   generatedGraph: GeneratedTsconfigGraphResult;
   workspaceRootDir: string;
 }): TypecheckTarget[] {
   return collectFrameworkSupplementalCapabilityDescriptors(
     options.generatedGraph,
-  ).map((descriptor) =>
-    createFrameworkCheckerTarget({
-      descriptor,
-      workspaceRootDir: options.workspaceRootDir,
-    }),
-  );
+  )
+    .filter((descriptor) =>
+      isDescriptorEnabled({ config: options.config, descriptor }),
+    )
+    .map((descriptor) =>
+      createFrameworkCheckerTarget({
+        descriptor,
+        workspaceRootDir: options.workspaceRootDir,
+      }),
+    );
 }

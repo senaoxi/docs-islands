@@ -107,7 +107,7 @@ describe('TypeScript resource type evidence', () => {
       }).collectImportsFromFile(indexPath, fixture.rootDir);
       const evidence = imports.map((importRecord) =>
         core.resolveImportEvidence({
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           importRecord,
           project,
         }),
@@ -165,7 +165,7 @@ describe('TypeScript resource type evidence', () => {
 
       expect(
         core.resolveImportEvidence({
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           importRecord: importRecord!,
           project,
         }).type,
@@ -204,7 +204,7 @@ describe('TypeScript resource type evidence', () => {
 
       expect(
         core.resolveImportEvidence({
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           importRecord: importRecord!,
           project,
         }).type,
@@ -241,7 +241,7 @@ describe('TypeScript resource type evidence', () => {
           projectRootDir: fixture.rootDir,
         }).collectImportsFromFile(indexPath, fixture.rootDir);
         const evidence = core.resolveImportEvidence({
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           importRecord: importRecord!,
           project,
         });
@@ -288,7 +288,7 @@ describe('TypeScript resource type evidence', () => {
       }).collectImportsFromFile(indexPath, fixture.rootDir);
       const evidence = imports.map((importRecord) =>
         core.resolveImportEvidence({
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           importRecord,
           project,
         }),
@@ -328,7 +328,7 @@ describe('TypeScript resource type evidence', () => {
 
       expect(
         core.resolveImportEvidence({
-          checkerName: 'typescript',
+          checkerName: 'tsc',
           importRecord: importRecord!,
           project,
         }).type,

@@ -51,7 +51,7 @@ function collectCheckerOwnership(options: {
       sourceConfigPath,
     ).owners.push({
       checkerName: options.checker.name,
-      preset: options.checker.preset,
+      preset: options.checker.name,
     });
   }
 }
@@ -60,7 +60,7 @@ function getPrimaryCheckerCollection(options: {
   checker: ResolvedCheckerConfig;
   collection: CheckerSourceConfigCollectionLike | undefined;
 }): CheckerSourceConfigCollectionLike | undefined {
-  return isBuildCapablePreset(options.checker.preset)
+  return isBuildCapablePreset(options.checker.name)
     ? options.collection
     : undefined;
 }

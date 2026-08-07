@@ -31,6 +31,7 @@ export {
   getCheckerBuildEngine,
   getCheckerCapabilityFamily,
   isBuildCapablePreset,
+  isCheckerCacheReusable,
 } from './checker/registry';
 export type {
   CheckerAdapter,

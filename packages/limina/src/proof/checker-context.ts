@@ -38,7 +38,7 @@ export function getActiveCheckerContext(
   const checkers = resolveActiveCheckers(config, generatedGraph);
 
   return {
-    checkerPresets: uniqueValues(checkers.map((checker) => checker.preset)),
+    checkerPresets: uniqueValues(checkers.map((checker) => checker.name)),
     extensions: normalizeExtensions(
       checkers.flatMap((checker) => checker.extensions),
     ),
@@ -49,7 +49,7 @@ export function createCheckerProjectContext(options: {
   config: ResolvedLiminaConfig;
   configPath: string;
   extensions: string[];
-  preset: ResolvedCheckerConfig['preset'];
+  preset: ResolvedCheckerConfig['name'];
   virtualFiles?: ReadonlyMap<string, string>;
 }): CheckerProjectParseContext {
   const adapterExtensions = resolveCheckerProjectExtensions({

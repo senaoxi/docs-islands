@@ -1,4 +1,5 @@
 import type { ResolvedCheckerConfig } from '#config/runner';
+import type { GeneratedDependencyEdge } from '#core/build-graph/runner';
 import { uniqueSortedStrings } from '#utils/collections';
 import { toRelativePath } from '#utils/path';
 import type { CheckIssueReportOptions } from '../../check-reporting/human';
@@ -63,7 +64,7 @@ function getWarningGroups(options: {
   return [...groupEntriesByGeneratedConfig(options.entries).entries()]
     .filter(([, entries]) =>
       shouldWarnForBuildCheckerPresetCombination(
-        entries.map((entry) => entry.checker.preset),
+        entries.map((entry) => entry.checker.name),
       ),
     )
     .sort(([left], [right]) =>
@@ -72,7 +73,7 @@ function getWarningGroups(options: {
 }
 
 function getCheckerKey(checker: ResolvedCheckerConfig): string {
-  return `${checker.name}\0${checker.preset}`;
+  return `${checker.name}\0${checker.name}`;
 }
 
 interface CheckerEntryGroup {
@@ -98,7 +99,7 @@ function compareCheckerGroups(
 ): number {
   const nameOrder = left.checker.name.localeCompare(right.checker.name);
   if (nameOrder !== 0) return nameOrder;
-  return left.checker.preset.localeCompare(right.checker.preset);
+  return left.checker.name.localeCompare(right.checker.name);
 }
 
 function formatEntryConfigPaths(options: {
@@ -132,7 +133,7 @@ function formatBuildCheckerCombinationReachability(options: {
   projectRootDir: string;
 }): string[] {
   return groupEntriesByChecker(options.entries).flatMap((group) => [
-    `    - config.checkers.${group.checker.name} (${group.checker.preset})`,
+    `    - config.checkers.${group.checker.name} (${group.checker.name})`,
     '      entry tsconfigs:',
     ...formatEntryConfigPaths({
       entryConfigPaths: group.entryConfigPaths,
@@ -209,6 +210,48 @@ export function reportBuildCheckerCombinationWarning(options: {
   report?: CheckIssueReportOptions;
 }): void {
   const warning = formatBuildCheckerCombinationWarning(options);
+  if (warning === null) return;
+  emitFlowWarning({
+    flow: options.flow,
+    flowDepth: options.flowDepth,
+    warning,
+  });
+  if (shouldLogWarning(options)) TypecheckLogger.warn(warning);
+}
+
+function formatCacheReuseWarning(options: {
+  edges: readonly GeneratedDependencyEdge[];
+  projectRootDir: string;
+}): string | null {
+  const edges = options.edges.filter(
+    (edge) =>
+      edge.kind === 'declaration-provider' &&
+      edge.cacheReuse === 'non-reusable' &&
+      edge.fromChecker !== edge.toChecker,
+  );
+  if (edges.length === 0) return null;
+  return [
+    'Build checker cache cannot be reused across declaration providers:',
+    '  reason: Limina can preserve dependency order, but these checker identities use different build caches.',
+    '  impact: the consumer may rebuild declarations or cause cache churn.',
+    ...edges.flatMap((edge) => [
+      `  - consumer: ${edge.fromChecker} (${toRelativePath(options.projectRootDir, edge.fromConfigPath)})`,
+      `    provider: ${edge.toChecker} (${toRelativePath(options.projectRootDir, edge.toConfigPath)})`,
+    ]),
+  ].join('\n');
+}
+
+export function reportBuildCheckerCacheWarnings(options: {
+  dependencyEdges: readonly GeneratedDependencyEdge[];
+  flow?: LiminaFlowReporter;
+  flowDepth: number;
+  projectRootDir: string;
+  report?: CheckIssueReportOptions;
+}): void {
+  const warning = formatCacheReuseWarning({
+    edges: options.dependencyEdges,
+    projectRootDir: options.projectRootDir,
+  });
   if (warning === null) return;
   emitFlowWarning({
     flow: options.flow,

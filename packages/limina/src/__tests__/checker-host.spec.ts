@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { GeneratedDependencyEdge } from '../core/build-graph/runner';
 import { runBuildTargets } from '../typecheck/build/plan';
 import {
   disposeCheckerProcessHostForTesting,
@@ -326,15 +327,31 @@ describe('runBuildTargets provider blocking', () => {
     };
   }
 
-  function edge(from: string, to: string) {
+  function edge(from: string, to: string): GeneratedDependencyEdge {
     return {
+      cacheReuse: 'non-reusable',
       file: `/virtual/${from}/src.ts`,
       fromChecker: from,
       fromConfigPath: `/virtual/${from}/source.json`,
       importedSpecifier: to,
+      kind: 'declaration-provider',
       resolvedFilePath: `/virtual/${to}/dist.d.ts`,
       toChecker: to,
       toConfigPath: `/virtual/${to}/source.json`,
+    };
+  }
+
+  function schedulingEdge(from: string, to: string): GeneratedDependencyEdge {
+    const declarationEdge = edge(from, to);
+    return {
+      file: declarationEdge.file,
+      fromChecker: declarationEdge.fromChecker,
+      fromConfigPath: declarationEdge.fromConfigPath,
+      importedSpecifier: declarationEdge.importedSpecifier,
+      kind: 'framework-schedule',
+      resolvedFilePath: declarationEdge.resolvedFilePath,
+      toChecker: declarationEdge.toChecker,
+      toConfigPath: declarationEdge.toConfigPath,
     };
   }
 
@@ -392,7 +409,7 @@ describe('runBuildTargets provider blocking', () => {
     const calls: string[] = [];
     const results = await runBuildTargets(
       [first, second],
-      [edge('first', 'second'), edge('second', 'first')],
+      [schedulingEdge('first', 'second'), schedulingEdge('second', 'first')],
       async (target) => {
         calls.push(target.id);
         return {
@@ -418,7 +435,7 @@ describe('runBuildTargets provider blocking', () => {
 
     await runBuildTargets(
       [first, second],
-      [edge('first', 'second'), edge('second', 'first')],
+      [schedulingEdge('first', 'second'), schedulingEdge('second', 'first')],
       async (target) => {
         calls.push(target.id);
         return {
@@ -439,8 +456,8 @@ describe('runBuildTargets provider blocking', () => {
     const results = await runBuildTargets(
       [first, second, consumer],
       [
-        edge('first', 'second'),
-        edge('second', 'first'),
+        schedulingEdge('first', 'second'),
+        schedulingEdge('second', 'first'),
         edge('consumer', 'first'),
       ],
       async (target) => ({
@@ -463,8 +480,8 @@ describe('runBuildTargets provider blocking', () => {
     const results = await runBuildTargets(
       [first, second, consumer],
       [
-        edge('first', 'second'),
-        edge('second', 'first'),
+        schedulingEdge('first', 'second'),
+        schedulingEdge('second', 'first'),
         edge('consumer', 'first'),
       ],
       async (target) => ({

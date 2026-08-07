@@ -204,7 +204,7 @@ import { helper } from '@acme/core';
 
 ## checker:build：调用构建类检查器
 
-`checker:build` 会调用构建类检查器。源码中内置的构建类 `preset` 包括：
+`checker:build` 会调用已配置的构建检查器 identity：
 
 - `tsc`
 - `tsgo`
@@ -218,18 +218,13 @@ import { helper } from '@acme/core';
 
 运行前，Limina 会检查已配置检查器需要的 `peer dependency` 是否可解析。缺失依赖时会在执行检查器前失败，并给出安装提示。
 
-## checker:typecheck：调用只检查不产出的检查器
+## checker:typecheck：调用补充框架检查器
 
-`checker:typecheck` 会执行显式配置的只检查入口，以及从主要构建源码配置中发现的补充框架目标。内置的显式只检查预设包括：
-
-- `vue-tsgo`
-- `svelte-check`
-
-它们通过各自命令运行，例如 `vue-tsgo --project` 或 `svelte-check --tsconfig`。自动发现的 Astro 和 Svelte 能力会为每个源码配置添加一个目标：`astro check --noSync --root <leaf> --tsconfig <config>` 或 `svelte-check --workspace <leaf> --tsconfig <config>`。`vue-tsgo` 的入口仍可参与源码图和覆盖证明；`svelte-check` 参与覆盖证明和类型检查执行，但当前不作为源码图提供者。这些目标都不会产出声明文件。
+`checker:typecheck` 会运行从实际框架模块发现、并通过可选 `astro` 与 `svelte-check` scope 过滤的补充 target。每个被发现的源码配置可以增加 `astro check --noSync --root <leaf> --tsconfig <config>`、`svelte-check --workspace <leaf> --tsconfig <config>`，或同时增加两者。这些任务补充框架诊断，但不会产出声明文件。
 
 框架目标会从所属叶子包解析依赖。Astro 要求 `astro`、`@astrojs/check`、`typescript` 和已存在的 `.astro/types.d.ts`；Svelte 要求 `svelte-check`、`svelte` 和 `typescript`。Limina 绝不运行 `astro sync`，不会启用 Svelte 检查器缓存，并且这个命令不接受 `--watch`。源码配置、解析器依赖、框架生成类型或框架源码变化后，需要重新运行完整命令。
 
-如果项目只配置了构建类检查器，并且没有拥有 Astro 或 Svelte 文件，`checker:typecheck` 可能没有实际检查目标。此时它不应被理解为遗漏了 `TypeScript` 检查；类型构建已经由 `checker:build` 负责。
+如果受治理源码配置中没有 Astro 或 Svelte 模块，`checker:typecheck` 会记录为 disabled，跳过 peer preflight 和 artifact materialization，并正常退出。这不表示遗漏了 TypeScript 检查；声明构建已经由 `checker:build` 负责。
 
 ## graph:prepare 和 graph export
 

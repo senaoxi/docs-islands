@@ -41,12 +41,6 @@ export {
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from './target-types';
-export {
-  collectVueTsgoConfigPaths,
-  createVueTsgoCachePaths,
-  findNearestPackageDir,
-  isVueTsgoCommand,
-} from './vue-tsgo-targets';
 
 type CheckerProcessStdio = 'ignore' | 'inherit';
 
@@ -62,7 +56,7 @@ function createCheckerDependencyRequirements(
 ): NonNullable<TypecheckTarget['dependencyRequirements']> {
   if (adapter.dependencies === undefined) {
     throw new Error(
-      `Checker adapter "${adapter.preset}" has no dependency classification.`,
+      `Checker adapter "${adapter.name}" has no dependency classification.`,
     );
   }
   return [
@@ -88,11 +82,11 @@ export function createCheckerTarget(options: {
   sourceConfigPath?: string;
   watch?: boolean;
 }): TypecheckTarget {
-  const adapter = getCheckerAdapter(options.checker.preset);
+  const adapter = getCheckerAdapter(options.checker.name);
 
   if (adapter === null) {
     throw new Error(
-      `Checker "${options.checker.name}" uses unsupported preset "${options.checker.preset}".`,
+      `Checker "${options.checker.name}" uses unsupported preset "${options.checker.name}".`,
     );
   }
 
@@ -128,7 +122,7 @@ export function createCheckerTarget(options: {
     id: createCheckerTargetId([
       'checker-target',
       options.executionKind,
-      options.checker.preset,
+      options.checker.name,
       options.checker.name,
       portableSourceConfigPath,
       portableConfigPath,

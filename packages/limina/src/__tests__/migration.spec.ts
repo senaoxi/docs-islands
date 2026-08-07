@@ -166,9 +166,8 @@ async function createMultipleWorktreeFixture(
     cleanup: () => removeFixtureDirectory(parentDir),
     config: createResolvedConfig(rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json', '../external/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     }),
@@ -195,9 +194,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/pkg/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -232,9 +230,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/pkg/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -380,9 +377,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/*/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -418,9 +414,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/pkg/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -464,9 +459,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/*/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -512,12 +506,11 @@ describe('runMigration', () => {
     );
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: [
             'packages/symlink/tsconfig.json',
             'packages/hardlink/tsconfig.json',
           ],
-          preset: 'tsc',
         },
       },
     });
@@ -569,9 +562,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -653,9 +645,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -712,9 +703,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -763,9 +753,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -803,9 +792,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/*/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -843,9 +831,8 @@ describe('runMigration', () => {
       });
       const config = createResolvedConfig(fixture.rootDir, {
         checkers: {
-          typescript: {
+          tsc: {
             include: ['tsconfig.json'],
-            preset: 'tsc',
           },
         },
       });
@@ -885,9 +872,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -928,9 +914,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -975,9 +960,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1007,9 +991,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1046,9 +1029,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1083,9 +1065,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1117,9 +1098,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1160,9 +1140,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1196,9 +1175,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1228,9 +1206,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1263,9 +1240,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/app/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1311,9 +1287,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/app/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1366,9 +1341,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/app/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1418,9 +1392,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/app/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1461,9 +1434,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1561,10 +1533,9 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           exclude: ['packages/ignored/**'],
           include: ['packages/*/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1664,9 +1635,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/app/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1724,9 +1694,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/app/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1770,9 +1739,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/app/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });
@@ -1824,9 +1792,8 @@ describe('runMigration', () => {
     });
     const config = createResolvedConfig(fixture.rootDir, {
       checkers: {
-        typescript: {
+        tsc: {
           include: ['packages/app/tsconfig.json'],
-          preset: 'tsc',
         },
       },
     });

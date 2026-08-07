@@ -73,23 +73,19 @@ A check run creates one preflight context, an execution plan, structured issue c
 
 `config.checkers` supports automatic and explicit modes.
 
-When the field is omitted, or when its mode is `auto`, generated-graph preparation discovers source configuration scopes from the validated workspace context. Each scope has one primary declaration-build owner: `vue-tsc` when any governed project owns `.vue` files, otherwise `tsc`. Dependency promotion can move a TypeScript consumer into the Vue-owned scope. Independently, each build-primary source config receives a live Astro capability, Svelte capability, or both when its resolved file set owns those extensions.
+Checker identity is fixed by the configuration key. Build checkers are `tsc`, `tsgo`, and `vue-tsc`; supplemental checkers are `svelte-check` and `astro`. The public checker configuration has no separate `preset` or user-defined alias. An explicit configuration must name at least one build checker, and each checker scope has a non-empty `include` plus optional `exclude`.
 
-Astro and Svelte capabilities do not make those files declaration inputs. A mixed source config projects a wrapper solution over its declaration-compatible files and its framework scheduling references; a framework-only source config projects a transparent solution. No fake framework declarations are generated. Two build-capable checkers cannot own the same expanded source config, one supplemental family cannot occur twice for the same config, and Astro plus Svelte is a valid supplemental combination.
+When the field is omitted, or when its mode is `auto`, generated-graph preparation discovers source configuration scopes from the validated workspace context. Ordinary TypeScript initially belongs to `tsc`, or to `tsgo` when `useTsgo: true`; Vue belongs to `vue-tsc`. Dependency promotion can move a TypeScript consumer into the Vue-owned scope. Vue custom extensions are discovered in two stages: configuration and traversal evidence select a Vue parser candidate, but only the Vue parser's actual file set confirms capability. A Vue hint without a matching module does not switch ownership.
 
-Explicit checker configuration uses named entries with `preset`, `include`, and optional `exclude` fields.
+Explicit ownership is assigned before project references expand. A directly matched source config cannot have two build owners. When traversal reaches a config explicitly owned by another checker, ownership handoff stops inheritance but preserves the reference and adds a cross-checker dependency. An unassigned referenced config inherits its caller's checker; conflicting inheritance paths fail closed and require an explicit assignment. Entry `exclude` never cuts an established reference closure.
 
-The built-in checker adapters currently have two execution classes:
+Astro and Svelte capabilities come only from actual `.astro` and `.svelte` modules. Their explicit scopes filter discovered targets by source-config path but cannot create capability, own declarations, or participate in project-reference traversal. If a supplemental key is absent, discovered targets of that family remain enabled. A mixed source config projects a wrapper over the build adapter's declaration-compatible files; a framework-only source config projects a transparent solution. No fake framework declarations are generated.
 
-| Preset         | Execution | Participates in source graph |
-| -------------- | --------- | ---------------------------: |
-| `tsc`          | build     |                          yes |
-| `tsgo`         | build     |                          yes |
-| `vue-tsc`      | build     |                          yes |
-| `vue-tsgo`     | typecheck |                          yes |
-| `svelte-check` | typecheck |                           no |
+The generated graph uses typed dependency edges. `declaration-provider` edges represent compiler declaration relationships and carry the directional cache-reuse result. `framework-schedule` edges only order execution and never become generated `tsconfig` references. Pure scheduling cycles form executable SCCs; a cycle containing declaration edges fails. Cache reuse is allowed for the same checker identity and for `vue-tsc` consumers of `tsc` providers. Other cross-identity declaration edges warn before any build target starts when source capabilities are compatible, and fail during preparation when the consumer cannot parse the provider's full declaration closure.
 
-`checker:build` runs build-capable adapters. `checker:typecheck` runs explicit typecheck-only adapters plus the live per-leaf Astro and Svelte targets attached to build-primary source configs. Astro targets use `astro check --noSync --root <leaf> --tsconfig <config>` and require leaf-local `astro`, `@astrojs/check`, `typescript`, and `.astro/types.d.ts`; Svelte targets use `svelte-check --workspace <leaf> --tsconfig <config>` and require leaf-local `svelte-check`, `svelte`, and `typescript`. Limina does not run Astro sync or SvelteKit sync, enable Svelte incremental/cache paths, or provide framework watch mode. Target IDs are deterministic over the framework family and workspace-relative source config, so full reruns preserve identity without claiming incremental invalidation. A checker being available as a preset does not mean it is active in the current repository configuration.
+`checker:build` runs the three build adapters. `checker:typecheck` runs live per-leaf Astro and Svelte targets attached to governed source configs. Astro targets use `astro check --noSync --root <leaf> --tsconfig <config>` and require leaf-local `astro`, `@astrojs/check`, `typescript`, and `.astro/types.d.ts`; Svelte targets use `svelte-check --workspace <leaf> --tsconfig <config>` and require leaf-local `svelte-check`, `svelte`, and `typescript`. Limina does not run Astro sync or SvelteKit sync, enable Svelte incremental/cache paths, or provide framework watch mode. When no actual target exists, the runner records `checker:typecheck` as disabled, skips dependency preflight and artifact materialization, and leaves the overall run passed.
+
+Generated manifest schema version 4 stores stable sorted `dependencyEdges`. Versions 1 through 3 are accepted only as owned-artifact ledgers for safe cleanup.
 
 The repository's `limina:typecheck` Nx target preserves this global checker-build meaning. Its task graph declares build dependencies for the workspace projects whose published artifacts are consumed by that global checker graph, so a fresh invocation does not depend on ignored `dist` state.
 
@@ -110,7 +106,7 @@ Generated declaration references currently come from two explicit evidence paths
 
 Oxc resolution is used for runtime-like import analysis, but an Oxc-only resolution does not establish a TypeScript declaration provider. When Oxc resolves a specifier and TypeScript does not, generated declaration-reference preparation reports the mismatch instead of using the Oxc result as the type graph.
 
-Cross-checker provider edges are permitted only when the implementation can select a compatible declaration provider. Generated references that cross incompatible checker build engines are rejected.
+Cross-checker declaration-provider edges are preserved when the consumer supports the provider's complete declaration closure. Cache-incompatible identities retain their dependency ordering and report a pre-build warning; source-capability incompatibility fails graph preparation.
 
 Migration plans JSONC changes as parser-derived local text edits. It reads each target's effective TypeScript config, including `extends`, before planning writes. It scans the complete reachable closure from the selected default entries, recursively expands every TypeScript solution, and aggregates all reachable named solutions with unsupported basenames before checking the worktree or writing a plan. A direct `compilerOptions.declarationDir` is removed only when it is equivalent to the planned single managed artifact root; a declarationDir-only leaf moves its relative path to `liminaOptions.outputs.outDir`, while split output, effective `outFile`, invalid direct values, and an internal solution-role invariant fail closed. Inherited declarationDir remains in its base config. It updates only Limina-governed schema, compiler, output, and source-reference fields while leaving unrelated comments, trailing commas, compact structures, and whitespace outside those fields intact; the existing transaction layer still owns drift checks, atomic replacement, rollback, and recovery.
 
@@ -239,7 +235,7 @@ The current implementation does not answer these longer-term questions:
 - Is automatic checker selection intended to remain the default onboarding contract?
 - Are workspace regions permanently governance boundaries only, or could they become orchestration units?
 - Is `limina build --raw` intended to remain a supported escape path?
-- Will Limina expose a general third-party checker, rule, or plugin contract beyond the current built-in presets and configuration surfaces?
+- Will Limina expose a general third-party checker, rule, or plugin contract beyond the current fixed checker identities and configuration surfaces?
 - Is the current domain/application/internal module separation a durable architecture boundary or an implementation detail?
 
 ## Evidence anchors

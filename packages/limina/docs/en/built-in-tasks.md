@@ -204,7 +204,7 @@ For framework source, proof also checks that each source config has one primary 
 
 ## checker:build: Call Build-Capable Checkers
 
-`checker:build` calls build-capable checkers. Built-in build-capable `preset`s in the source include:
+`checker:build` calls the configured build checker identities:
 
 - `tsc`
 - `tsgo`
@@ -218,18 +218,13 @@ This is important: Limina does not replace `TypeScript`, `Vue` checkers, or nati
 
 Before running, Limina checks whether `peer dependency` packages required by configured checkers are resolvable. Missing dependencies fail before checker execution and include installation guidance.
 
-## checker:typecheck: Call Check-Only Checkers
+## checker:typecheck: Call Supplemental Framework Checkers
 
-`checker:typecheck` runs configured check-only entries and supplemental framework targets discovered from build-primary source configs. Built-in explicit presets of the check-only kind include:
-
-- `vue-tsgo`
-- `svelte-check`
-
-They run through their own commands, such as `vue-tsgo --project` or `svelte-check --tsconfig`. Auto-detected Astro and Svelte capabilities add one target per source config: `astro check --noSync --root <leaf> --tsconfig <config>` or `svelte-check --workspace <leaf> --tsconfig <config>`. These tasks supplement diagnostics for framework files or secondary checkers, but do not emit declaration files.
+`checker:typecheck` runs supplemental Astro and Svelte targets discovered from actual framework modules and allowed by the optional `astro` and `svelte-check` scopes. Each discovered source config can add `astro check --noSync --root <leaf> --tsconfig <config>`, `svelte-check --workspace <leaf> --tsconfig <config>`, or both. These tasks supplement framework diagnostics but do not emit declaration files.
 
 Framework targets resolve their dependencies from the leaf package. Astro requires `astro`, `@astrojs/check`, `typescript`, and an existing `.astro/types.d.ts`; Svelte requires `svelte-check`, `svelte`, and `typescript`. Limina never runs `astro sync`, never enables a Svelte checker cache, and does not accept `--watch` for this command. Rerun the whole command after source config, parser dependency, generated type, or framework source changes.
 
-If a project configures only build-capable checkers and owns no Astro or Svelte files, `checker:typecheck` may have no real target. That should not be interpreted as missing `TypeScript` checking; type builds are handled by `checker:build`.
+If no governed source config owns an Astro or Svelte module, `checker:typecheck` is recorded as disabled, skips peer preflight and artifact materialization, and exits successfully. That does not mean TypeScript checking is missing; declaration builds are handled by `checker:build`.
 
 ## graph:prepare and graph export
 

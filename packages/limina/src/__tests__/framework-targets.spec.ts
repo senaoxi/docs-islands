@@ -102,11 +102,9 @@ function createGovernedSource(options: {
     declarationFileNames: [],
     declarationReferences: new Set(),
     frameworkCapabilities: options.capabilities,
-    frameworkSchedulingReferences: new Set(),
     ownedFileNames: [],
     packageRootDir: options.packageRootDir,
-    primaryCheckerName: 'typescript',
-    primaryCheckerPreset: 'tsc',
+    primaryCheckerName: 'tsc',
   };
 }
 
@@ -271,7 +269,7 @@ describe('framework checker targets', () => {
         2,
       );
       expect(targets.map((target) => target.checkerName)).toEqual([
-        'astro-check',
+        'astro',
         'svelte-check',
       ]);
     } finally {
@@ -279,7 +277,72 @@ describe('framework checker targets', () => {
     }
   });
 
-  it('suppresses supplemental Svelte targets already covered by an explicit checker', async () => {
+  it('filters discovered framework targets without creating capabilities from policy', async () => {
+    const fixture = await createFixture();
+    try {
+      const aConfig = fixture.path('packages', 'a', 'tsconfig.json');
+      const bConfig = fixture.path('packages', 'b', 'tsconfig.json');
+      const graph = createGraph({
+        descriptorsByChecker: {
+          tsc: [
+            descriptor({
+              family: 'svelte',
+              packageRootDir: fixture.path('packages', 'a'),
+              sourceConfigPath: aConfig,
+            }),
+            descriptor({
+              family: 'astro',
+              packageRootDir: fixture.path('packages', 'b'),
+              sourceConfigPath: bConfig,
+            }),
+            descriptor({
+              family: 'svelte',
+              packageRootDir: fixture.path('packages', 'b'),
+              sourceConfigPath: bConfig,
+            }),
+          ],
+        },
+        rootDir: fixture.rootDir,
+      });
+      const config: ResolvedLiminaConfig = {
+        ...fixture.config,
+        config: {
+          checkers: {
+            astro: { include: ['packages/a/tsconfig.json'] },
+            'svelte-check': {
+              exclude: ['packages/b/tsconfig.json'],
+              include: ['packages/**/tsconfig.json'],
+            },
+            tsc: { include: ['packages/**/tsconfig.json'] },
+          },
+        },
+      };
+
+      expect(
+        createFrameworkCheckerTargets({
+          config,
+          generatedGraph: graph,
+          workspaceRootDir: fixture.rootDir,
+        }).map((target) => target.checkerName),
+      ).toEqual(['svelte-check']);
+
+      const emptyGraph = createGraph({
+        descriptorsByChecker: { tsc: [] },
+        rootDir: fixture.rootDir,
+      });
+      expect(
+        createFrameworkCheckerTargets({
+          config,
+          generatedGraph: emptyGraph,
+          workspaceRootDir: fixture.rootDir,
+        }),
+      ).toEqual([]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps supplemental targets outside the build checker registry', async () => {
     const fixture = await createFixture();
     try {
       const packageRootDir = fixture.path('packages', 'a');
@@ -295,15 +358,7 @@ describe('framework checker targets', () => {
         sourceConfigPath,
       });
       const graph = createGraph({
-        checkers: [
-          {
-            exclude: [],
-            extensions: ['.svelte'],
-            include: ['packages/a/tsconfig.json'],
-            name: 'svelte',
-            preset: 'svelte-check',
-          },
-        ],
+        checkers: [],
         descriptorsByChecker: {
           svelte: [svelte],
           typescript: [astro, svelte],
@@ -320,7 +375,7 @@ describe('framework checker targets', () => {
           generatedGraph: graph,
           workspaceRootDir: fixture.rootDir,
         }).map((target) => target.checkerFamily),
-      ).toEqual(['astro']);
+      ).toEqual(['astro', 'svelte']);
     } finally {
       await fixture.cleanup();
     }
