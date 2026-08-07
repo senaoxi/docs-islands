@@ -42,10 +42,14 @@ function parseSvelteProjectConfig(
 function createSvelteAdapter(): CheckerAdapter {
   return {
     createCommandTarget: createSvelteCheckCommandTarget,
+    dependencies: {
+      analysisRuntimePackages: ['svelte'],
+      checkerBinaryPackages: ['svelte-check'],
+      checkerRuntimePeerPackages: ['svelte', 'typescript'],
+    },
     extensions: resolveSvelteExtensions,
     execution: 'typecheck',
     emitProjection: 'typescript',
-    packageNames: ['svelte-check'],
     parseProjectConfig: parseSvelteProjectConfig,
     preset: 'svelte-check',
     resolveModuleName: resolveTypeScriptModuleName,
@@ -80,10 +84,14 @@ function createTypeScriptAdapter(options: {
   const createCommandTarget = getTypeScriptCommandTarget(options.preset);
   return {
     createCommandTarget,
+    dependencies: {
+      analysisRuntimePackages: [],
+      checkerBinaryPackages: [options.packageName],
+      checkerRuntimePeerPackages: [],
+    },
     extensions: resolveTypeScriptExtensions,
     execution: 'build',
     emitProjection: 'typescript',
-    packageNames: [options.packageName],
     parseProjectConfig: parseTypeScriptProjectConfig,
     preset: options.preset,
     resolveModuleName: resolveTypeScriptModuleName,
@@ -143,9 +151,13 @@ function createVueAdapter(options: {
   const behavior = createVueAdapterBehavior(options.preset);
   return {
     ...behavior,
+    dependencies: {
+      analysisRuntimePackages: [],
+      checkerBinaryPackages: options.packageNames,
+      checkerRuntimePeerPackages: [],
+    },
     execution: options.execution,
     emitProjection: 'vue-bounded',
-    packageNames: options.packageNames,
     preset: options.preset,
     resolveModuleName: resolveTypeScriptModuleName,
     sourceGraph: true,

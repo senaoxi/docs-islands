@@ -79,6 +79,7 @@
     "boxen": "catalog:dev",
     "logaria": "workspace:*",
     "@publint/pack": "catalog:lint",
+    "astro-v7-min": "catalog:dev",
     "cac": "catalog:dev",
     "es-module-lexer": "catalog:dev",
     "pathe": "catalog:dev",
@@ -99,6 +100,8 @@
     "shescape": "catalog:dev",
     "ssri": "catalog:dev",
     "string-width": "catalog:dev",
+    "svelte-check-v4-min": "catalog:dev",
+    "svelte-v4-min": "catalog:dev",
     "typescript": "catalog:dev",
     "vite": "catalog:dev",
     "vitest": "catalog:test"

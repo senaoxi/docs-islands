@@ -1,5 +1,4 @@
-import { formatMissingCheckerPeerDependencies } from '#checkers';
-import { getActiveCheckers } from '#config/runner';
+import { getActiveCheckers, type ImportAnalysisConfig } from '#config/runner';
 import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
 import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import path from 'pathe';
@@ -24,17 +23,17 @@ import type {
 } from '../runner-types';
 import {
   type CheckerTargetId,
-  collectCheckerPeerDependencyDetails,
   createCheckerTarget,
+  createFrameworkCheckerTargets,
   getExecutionCheckers,
   runTargetWithMeasuredDuration,
   type TypecheckTarget,
   type TypecheckTargetResult,
 } from '../targets';
 import { VueTsgoCacheBatchCoordinator } from '../vue-tsgo-cache';
+import { collectTypecheckPeerFailure } from './typecheck-preflight';
 import {
   createNoTypecheckCheckerResult,
-  createTypecheckPeerFailure,
   reportTypecheckResult,
 } from './typecheck-reporting';
 
@@ -51,7 +50,7 @@ interface CheckerTypecheckContext {
   rootConfigPaths: string[];
 }
 
-function createTypecheckTargets(options: {
+function createConfiguredTypecheckTargets(options: {
   context: CheckerTypecheckContext;
   generatedGraph: GeneratedTsconfigGraphResult;
 }): TypecheckTarget[] {
@@ -69,6 +68,23 @@ function createTypecheckTargets(options: {
       projectRootDir: options.context.projectRootDir,
     });
   });
+}
+
+function createTypecheckTargets(options: {
+  context: CheckerTypecheckContext;
+  generatedGraph: GeneratedTsconfigGraphResult;
+}): TypecheckTarget[] {
+  const configuredTargets = createConfiguredTypecheckTargets(options);
+  const frameworkTargets = createFrameworkCheckerTargets({
+    generatedGraph: options.generatedGraph,
+    workspaceRootDir: options.context.projectRootDir,
+  });
+  const rootConfigPaths = new Set(options.context.rootConfigPaths);
+  for (const target of frameworkTargets) {
+    rootConfigPaths.add(target.sourceConfigPath!);
+  }
+  options.context.rootConfigPaths = [...rootConfigPaths];
+  return [...configuredTargets, ...frameworkTargets];
 }
 
 function logTypecheckStart(options: {
@@ -188,7 +204,11 @@ async function executeTypecheckTargets(options: {
     run: async (target) => {
       await cacheCoordinator.beforeTargetRun(target);
       startTargetTask({ context: options.context, target, tasks });
-      return runTargetWithMeasuredDuration(runner, target);
+      return runTargetWithMeasuredDuration(
+        runner,
+        target,
+        options.context.options.signal,
+      );
     },
   });
 }
@@ -209,61 +229,60 @@ function createContext(
   };
 }
 
-function collectTypecheckPeerFailure(
-  context: CheckerTypecheckContext,
-): RunCheckerTypecheckResult | undefined {
-  const peerDependencies = collectCheckerPeerDependencyDetails({
-    checkers: context.checkers,
-    imports: context.options.config.config?.imports,
-    projectRootDir: context.projectRootDir,
-    resolvePackage: context.options.checkerPackageResolver,
-  });
-  if (peerDependencies.length === 0) return undefined;
-  return createTypecheckPeerFailure({
-    checkerNames: [
-      ...new Set(
-        peerDependencies.flatMap((dependency) => dependency.checkerNames),
-      ),
-    ].sort(),
-    flowDepth: context.flowDepth,
-    problems: [formatMissingCheckerPeerDependencies(peerDependencies)],
-    projectRootDir: context.projectRootDir,
-    request: context.options,
-  });
-}
-
 async function runConfiguredTypecheck(
   context: CheckerTypecheckContext,
   preflight: ReturnType<typeof resolvePreflight>,
 ): Promise<RunCheckerTypecheckResult> {
-  const peerFailure = collectTypecheckPeerFailure(context);
-  if (peerFailure !== undefined) return peerFailure;
   const generated = await preflight.ensureGeneratedArtifactsMaterialized();
-  return withGeneratedArtifactReadLease(
-    preflight.artifactNamespace,
-    async () => {
-      const targets = createTypecheckTargets({
-        context,
-        generatedGraph: generated.graph,
-      });
-      logTypecheckStart({ context, targets });
-      const results = await executeTypecheckTargets({ context, targets });
-      const failedResults = results.filter((result) => result.status !== 0);
-      reportTypecheckResult({
-        failedResults,
-        projectRootDir: context.projectRootDir,
-        request: context.options,
-        targetCount: targets.length,
-      });
-      return {
-        failedTargets: collectFailedCheckerTargets(targets, failedResults),
-        passed: failedResults.length === 0,
-        projectRootDir: context.projectRootDir,
-        rootConfigPaths: context.rootConfigPaths,
-        targetResults: results,
-      };
-    },
+  return withGeneratedArtifactReadLease(preflight.artifactNamespace, () =>
+    runMaterializedTypecheck(context, generated.graph),
   );
+}
+
+function getTypecheckImports(
+  context: CheckerTypecheckContext,
+): ImportAnalysisConfig | undefined {
+  return context.options.config.config?.imports;
+}
+
+async function runMaterializedTypecheck(
+  context: CheckerTypecheckContext,
+  generatedGraph: GeneratedTsconfigGraphResult,
+): Promise<RunCheckerTypecheckResult> {
+  const targets = createTypecheckTargets({ context, generatedGraph });
+  if (targets.length === 0) {
+    return createNoTypecheckCheckerResult({
+      flowDepth: context.flowDepth,
+      projectRootDir: context.projectRootDir,
+      request: context.options,
+    });
+  }
+  const peerFailure = collectTypecheckPeerFailure({
+    checkerPackageResolver: context.options.checkerPackageResolver,
+    checkers: context.checkers,
+    flowDepth: context.flowDepth,
+    imports: getTypecheckImports(context),
+    projectRootDir: context.projectRootDir,
+    request: context.options,
+    targets,
+  });
+  if (peerFailure !== undefined) return peerFailure;
+  logTypecheckStart({ context, targets });
+  const results = await executeTypecheckTargets({ context, targets });
+  const failedResults = results.filter((result) => result.status !== 0);
+  reportTypecheckResult({
+    failedResults,
+    projectRootDir: context.projectRootDir,
+    request: context.options,
+    targetCount: targets.length,
+  });
+  return {
+    failedTargets: collectFailedCheckerTargets(targets, failedResults),
+    passed: failedResults.length === 0,
+    projectRootDir: context.projectRootDir,
+    rootConfigPaths: context.rootConfigPaths,
+    targetResults: results,
+  };
 }
 
 export async function runCheckerTypecheckImpl(
@@ -272,12 +291,5 @@ export async function runCheckerTypecheckImpl(
   const preflight = resolvePreflight(options.config, options);
   await preflight.ensureWorkspaceValidated();
   const context = createContext(options);
-  if (context.checkers.length === 0) {
-    return createNoTypecheckCheckerResult({
-      flowDepth: context.flowDepth,
-      projectRootDir: context.projectRootDir,
-      request: context.options,
-    });
-  }
   return runConfiguredTypecheck(context, preflight);
 }

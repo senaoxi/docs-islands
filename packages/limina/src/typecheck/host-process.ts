@@ -13,6 +13,7 @@ const PARENT_LIVENESS_TIMEOUT_MS = 30_000;
 const PARENT_LIVENESS_CHECK_INTERVAL_MS = 5000;
 
 const liveCheckerChildren = new Set<ChildProcess>();
+const checkerChildrenByRequestId = new Map<number, ChildProcess>();
 let pendingSpawnCount = 0;
 let lastParentSignalAt = Date.now();
 
@@ -45,14 +46,17 @@ function send(message: CheckerHostResponse): void {
   }
 }
 
-process.on('message', (request: CheckerHostRequest) => {
-  lastParentSignalAt = Date.now();
+type CancelRequest = Extract<CheckerHostRequest, { type: 'cancel' }>;
+type SpawnRequest = Extract<CheckerHostRequest, { type: 'spawn' }>;
 
-  if (request.type !== 'spawn') {
-    return;
-  }
+function cancelChecker(request: CancelRequest): void {
+  const child = checkerChildrenByRequestId.get(request.id);
+  if (child !== undefined && isRunningChild(child)) child.kill();
+}
 
+function spawnChecker(request: SpawnRequest): void {
   if (process.env.LIMINA_CHECKER_HOST_TEST_CRASH === '1') {
+    // eslint-disable-next-line unicorn/no-process-exit -- Dedicated host test hook intentionally simulates an abrupt host crash.
     process.exit(1);
   }
 
@@ -60,8 +64,10 @@ process.on('message', (request: CheckerHostRequest) => {
   spawnAndMeasure(request, {
     onChild: (child) => {
       liveCheckerChildren.add(child);
+      checkerChildrenByRequestId.set(request.id, child);
       child.on('close', () => {
         liveCheckerChildren.delete(child);
+        checkerChildrenByRequestId.delete(request.id);
       });
     },
   }).then((measurement) => {
@@ -74,6 +80,19 @@ process.on('message', (request: CheckerHostRequest) => {
       type: 'result',
     });
   });
+}
+
+function handleHostRequest(request: CheckerHostRequest): void {
+  lastParentSignalAt = Date.now();
+  if (request.type === 'spawn') {
+    spawnChecker(request);
+    return;
+  }
+  if (request.type === 'cancel') cancelChecker(request);
+}
+
+process.on('message', (request: CheckerHostRequest) => {
+  handleHostRequest(request);
 });
 
 process.on('disconnect', () => {

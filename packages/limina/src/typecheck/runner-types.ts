@@ -98,6 +98,7 @@ export interface RunCheckerTypecheckOptions {
   preflight?: LiminaPreflightManager;
   progress?: TaskProgressReporter;
   report?: CheckIssueReportOptions;
+  signal?: AbortSignal;
   checkerPackageResolver?: CheckerPackageResolver;
   runner?: TypecheckRunner;
   tscCommand?: string;

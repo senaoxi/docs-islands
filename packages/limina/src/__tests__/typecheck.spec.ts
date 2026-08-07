@@ -3575,11 +3575,8 @@ describe('runCheckerTypecheck', () => {
     }
   });
 
-  it('skips graph preparation and build-only peer checks when no second-class checkers are configured', async () => {
+  it('discovers supplemental targets without checking build-only peers', async () => {
     const calls: TypecheckTarget[] = [];
-    const generatedGraphProvider = vi.fn(async () => {
-      throw new Error('generated graph should not be read');
-    });
     const fixture = await createFixture({
       'tsconfig.build.json': tsconfig({ files: [] }),
       'tsconfig.vue.build.json': tsconfig({ files: [] }),
@@ -3605,14 +3602,12 @@ describe('runCheckerTypecheck', () => {
         },
         checkerPackageResolver: (): string | undefined => undefined,
         cwd: fixture.rootDir,
-        generatedGraphProvider,
         runner: passingRunner(calls),
       });
 
       expect(result.passed).toBe(true);
       expect(calls).toHaveLength(0);
-      expect(generatedGraphProvider).not.toHaveBeenCalled();
-      expect(existsSync(path.join(fixture.rootDir, '.limina'))).toBe(false);
+      expect(existsSync(path.join(fixture.rootDir, '.limina'))).toBe(true);
     } finally {
       await fixture.cleanup();
     }

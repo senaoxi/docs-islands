@@ -264,9 +264,13 @@ export function getCheckerImplementationFingerprint(options: {
       `Unable to identify checker implementation for ${options.checker.preset}.`,
     );
   }
+  const packageNames = [
+    ...adapter.dependencies.checkerBinaryPackages,
+    ...adapter.dependencies.checkerRuntimePeerPackages,
+  ];
   return hashValue({
     commandIdentity: getCommandIdentity(options),
-    packageIdentities: adapter.packageNames.map((packageName) =>
+    packageIdentities: packageNames.map((packageName) =>
       getPackageIdentity({
         packageName,
         projectRootDir: options.projectRootDir,

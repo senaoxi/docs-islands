@@ -160,6 +160,25 @@ describe('createDefaultRunner duration measurement', () => {
     expect(result.durationMs).toBeDefined();
   });
 
+  it('cancels an active checker child through the shared host', async () => {
+    const controller = new AbortController();
+    const runner = createDefaultRunner({ stdio: 'ignore' });
+    const startedAt = performance.now();
+    const resultPromise = Promise.resolve(
+      runner(createSleepTarget(5000, 'cancelled'), {
+        signal: controller.signal,
+      }),
+    );
+
+    await waitForMacrotasks(100);
+    controller.abort(new Error('cancel checker target'));
+    const result = await resultPromise;
+
+    expect(result.status).toBe(1);
+    expect(result.error?.message).toBe('cancel checker target');
+    expect(performance.now() - startedAt).toBeLessThan(3000);
+  });
+
   it('runs inline with a single degradation notice when LIMINA_CHECKER_HOST=off', async () => {
     process.env.LIMINA_CHECKER_HOST = 'off';
 
