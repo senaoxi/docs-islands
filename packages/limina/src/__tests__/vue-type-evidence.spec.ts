@@ -202,7 +202,7 @@ describe('Vue resource type evidence', () => {
       });
       const evidence = imports.map((importRecord) =>
         core!.resolveImportEvidence({
-          checkerName: 'vue',
+          checkerName: 'vue-tsc',
           importRecord,
           project,
         }),
@@ -268,7 +268,7 @@ describe('Vue resource type evidence', () => {
 
       expect(
         core.resolveImportEvidence({
-          checkerName: 'vue',
+          checkerName: 'vue-tsc',
           importRecord: importRecord!,
           project,
         }).type.kind,
@@ -309,7 +309,7 @@ describe('Vue resource type evidence', () => {
 
       expect(
         core.resolveImportEvidence({
-          checkerName: 'vue',
+          checkerName: 'vue-tsc',
           importRecord: importRecord!,
           project,
         }).type.kind,
@@ -343,7 +343,7 @@ describe('Vue resource type evidence', () => {
 
     try {
       const evidence = core.resolveImportEvidence({
-        checkerName: 'vue',
+        checkerName: 'vue-tsc',
         importRecord: importRecord!,
         project: {
           checkerPresets: ['vue-tsc'],

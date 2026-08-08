@@ -3,7 +3,12 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import ts from 'typescript';
 import { collectSourceTextImports } from './oxc-imports';
-import { buildLineStarts, getLine, type ImportRecord } from './records';
+import {
+  buildLineStarts,
+  getLine,
+  type ImportRecord,
+  setImportRecordDomain,
+} from './records';
 import type { VueCompilerSfc, VueCompilerSfcBlock } from './types';
 
 const scriptExtractorRE =
@@ -119,7 +124,7 @@ function createMissingCompilerError(projectRootDir: string): Error {
   );
 }
 
-function resolveVueCompilerSfc(projectRootDir: string): VueCompilerSfc {
+export function resolveVueCompilerSfc(projectRootDir: string): VueCompilerSfc {
   const requireFromRoot = createRequire(
     path.join(projectRootDir, 'package.json'),
   );
@@ -280,8 +285,9 @@ export function collectVueImports(options: {
   projectRootDir: string;
   sourceText: string;
 }): ImportRecord[] {
-  if (options.parser === 'compiler-sfc') {
-    return collectVueImportsWithCompiler(options);
-  }
-  return collectVueImportsWithRegex(options);
+  const imports =
+    options.parser === 'compiler-sfc'
+      ? collectVueImportsWithCompiler(options)
+      : collectVueImportsWithRegex(options);
+  return setImportRecordDomain(imports, 'vue-script');
 }

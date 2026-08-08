@@ -8,7 +8,7 @@ It does not replace `TypeScript`, framework checkers, bundlers, test frameworks,
 
 A [checker entry](./config/checkers.md) tells Limina which source `tsconfig.json` files should be handled by which checker.
 
-When `config.checkers` is omitted, Limina uses the default `auto` mode. Auto mode discovers ordinary `tsconfig.json` files and chooses an appropriate checker between `tsc` and `vue-tsc` based on source-file capability. Switch to explicit checker configuration when you need `tsgo`, `vue-tsgo`, `svelte-check`, or precise control over the entry range.
+When `config.checkers` is omitted, Limina uses the default `auto` mode. Auto mode discovers ordinary `tsconfig.json` files, chooses `tsc` or `vue-tsc` as the single declaration-build owner, and supplements it with per-config Astro or Svelte checks when those framework files are present. Set `useTsgo: true` to use `tsgo` for ordinary TypeScript, or switch to explicit checker configuration for precise ownership ranges.
 
 ```js
 import { defineConfig } from 'limina';
@@ -16,13 +16,11 @@ import { defineConfig } from 'limina';
 export default defineConfig({
   config: {
     checkers: {
-      typescript: {
-        preset: 'tsc',
+      tsc: {
         include: ['tsconfig.json', 'packages/**/tsconfig.json'],
         exclude: ['**/docs/**'],
       },
-      vue: {
-        preset: 'vue-tsc',
+      'vue-tsc': {
         include: ['packages/app/tsconfig.json'],
       },
     },
@@ -32,13 +30,12 @@ export default defineConfig({
 
 Entry selection is region-scoped: Limina first limits discovery to activated workspace package regions, applies `include`, and then subtracts `exclude`. Paths below an excluded or inaccessible region are therefore outside `include` by construction and do not need a duplicate checker exclusion. Do not list `tsconfig.lib.json`, `tsconfig.test.json`, `tsconfig.build.json`, or generated configs under `.limina` directly in `checker.include`. These non-entry source configs enter Limina's managed scope only when they are reached through `references` from a selected `tsconfig.json` entry. References are not filtered by checker `exclude`; an existing ordinary source config reached outside the activated regions is reported as a cross-region reference.
 
-Checker presets have different capabilities:
+Fixed checker identities have different roles:
 
-- `tsc`, `tsgo`, and `vue-tsc` are build-capable presets that can execute Limina's generated declaration build entries;
-- `vue-tsgo` is used as a `Vue` type-check executor. Selected source configs can still participate in Limina graph checks and coverage proof, but it is not run as an incremental declaration build preset;
-- `svelte-check` is primarily a type-check executor and does not provide `TypeScript` project-reference-style declaration build semantics.
+- `tsc`, `tsgo`, and `vue-tsc` own source configs and execute generated declaration build entries;
+- `svelte-check` and `astro` filter supplemental targets discovered from actual framework modules and never own declarations.
 
-This distinction affects later commands. `limina checker build` can only use build-capable presets. Source configs covered only by check-only presets cannot be used as declaration build targets.
+This distinction affects later commands. `limina checker build` runs build checker identities, while `limina checker typecheck` runs discovered supplemental targets.
 
 ## Source Config
 
@@ -74,7 +71,7 @@ The `path` of an `implicitRefs` entry must point to an ordinary source `tsconfig
 
 ## Aggregator Config
 
-An aggregator is a `tsconfig` that contains only `files: []` and `references`. It owns no source files and only groups several source configs into one entry.
+Limina treats a config as a TypeScript solution when the checker-resolved file set is empty and the config directly declares `references`. The resolved file set is computed with the active checker, so `extends`, framework extensions such as `.vue`, and other TypeScript project rules are included in this decision. `files: []` is the clearest way to make that intent explicit, but it is not the only accepted spelling.
 
 ```jsonc
 {
@@ -83,7 +80,9 @@ An aggregator is a `tsconfig` that contains only `files: []` and `references`. I
 }
 ```
 
-Limina allows the default entry `tsconfig.json` to act as an aggregator. When `limina graph prepare` runs, Limina starts from checker entries, follows these `references` to expand source configs, and generates the build graph actually consumed by checkers under `.limina/`.
+Only a solution at a path named exactly `tsconfig.json` is a Limina-managed aggregator. A default `tsconfig.json` that resolves any source file is an ordinary source leaf; if it also declares `references`, Limina reports the source-reference violation instead of treating it as an aggregator. A named config such as `tsconfig.solution.json` can still be a TypeScript solution according to the compiler, but it is not a supported Limina solution entry and must not be used as one.
+
+When `limina graph prepare` runs, Limina starts from checker entries, follows valid `references` from the supported `tsconfig.json` solutions, and generates the build graph consumed by checkers.
 
 Do not treat an aggregator as a source owner. When different runtime environments, test scopes, or build targets need to be separated, let the aggregator reference multiple source leaf configs instead of making one config both aggregate projects and own source files.
 

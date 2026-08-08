@@ -50,7 +50,7 @@ function checkerMatchesScript(
   checker: ResolvedCheckerConfig,
   script: PackageBuildScript,
 ): boolean {
-  return script.checker === undefined || checker.preset === script.checker;
+  return script.checker === undefined || checker.name === script.checker;
 }
 
 function getOutputModulePath(options: {

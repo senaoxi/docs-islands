@@ -27,6 +27,7 @@ export function createImportAnalysisContext(
   return {
     clearOxcResolverCaches: () => clearOxcResolverCaches(caches),
     collectImportsFromFile: source.collectImportsFromFile,
+    prewarmImportsFromFile: source.prewarmImportsFromFile,
     ...resolution,
   };
 }

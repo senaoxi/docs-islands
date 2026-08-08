@@ -3,7 +3,13 @@ import { validateUserMaintainedLiminaTsconfigMetadata } from '#core/tsconfig/act
 import { createElapsedTimer } from 'logaria/helper';
 import { formatErrorMessage, MigrationLogger } from '../../logger';
 import { type LiminaPreflightManager, resolvePreflight } from '../../preflight';
-import { assertCleanGitWorkspace, collectMigrationWorktreeRoots } from './git';
+import {
+  collectMigrationWorktreeRoots,
+  createDirtyWorkspaceDeclinedError,
+  createDirtyWorkspacePrompt,
+  inspectGitWorkspace,
+} from './git';
+import { confirmDirtyWorkspace } from './prompts';
 import { collectMigrationTargets } from './targets';
 import {
   executeMigrationWritePlan,
@@ -16,9 +22,29 @@ import type {
   RunMigrationResult,
 } from './types';
 
+function resolveDirtyWorkspaceConfirmation(options: RunMigrationOptions) {
+  return options.confirmDirtyWorkspace ?? confirmDirtyWorkspace;
+}
+
+async function confirmDirtyWorkspaceChanges(
+  roots: readonly string[],
+  options: RunMigrationOptions,
+): Promise<void> {
+  const workspaces = (
+    await Promise.all(roots.map((rootDir) => inspectGitWorkspace(rootDir)))
+  ).filter((workspace) => workspace !== undefined);
+  if (workspaces.length === 0) return;
+
+  const confirm = resolveDirtyWorkspaceConfirmation(options);
+  if (await confirm(createDirtyWorkspacePrompt(workspaces))) return;
+
+  throw createDirtyWorkspaceDeclinedError(workspaces);
+}
+
 async function runMigrationImpl(
   config: ResolvedLiminaConfig,
   preflight: LiminaPreflightManager,
+  options: RunMigrationOptions,
 ): Promise<RunMigrationImplResult> {
   const context = await preflight.ensureWorkspaceValidated();
   const collection = await collectMigrationTargets(config, context);
@@ -31,7 +57,7 @@ async function runMigrationImpl(
   }
 
   const roots = await collectMigrationWorktreeRoots(collection.targets);
-  await Promise.all(roots.map(assertCleanGitWorkspace));
+  await confirmDirtyWorkspaceChanges(roots, options);
   const plan = collection.targets.map((target) =>
     createMigrationWritePlanItem({ config, target }),
   );
@@ -133,6 +159,7 @@ async function executeMigrationCommand(options: {
     const execution = await runMigrationImpl(
       options.config,
       resolvePreflight(options.config, options.runOptions),
+      options.runOptions,
     );
     return reportMigrationSuccess({
       elapsed: options.elapsed,

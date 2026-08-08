@@ -1,5 +1,5 @@
 import type {
-  BuiltinCheckerPreset,
+  BuildCheckerName,
   CheckerExecutionKind,
   CheckerPreset,
   ResolvedCheckerConfig,
@@ -74,13 +74,29 @@ export interface CheckerAdapter {
   extensions: (options: CheckerProjectConfigParseOptions) => string[];
   execution: CheckerExecutionKind;
   emitProjection: 'typescript' | 'vue-bounded';
-  packageNames: string[];
+  dependencies: CheckerDependencies;
   parseProjectConfig: (
     options: CheckerProjectConfigParseOptions,
   ) => ParsedCheckerProjectConfig;
-  preset: BuiltinCheckerPreset;
+  name: BuildCheckerName;
   resolveModuleName: (options: CheckerModuleResolveOptions) => string | null;
   sourceGraph: boolean;
+}
+
+export interface CheckerDependencies {
+  analysisRuntimePackages: string[];
+  checkerBinaryPackages: string[];
+  checkerRuntimePeerPackages: string[];
+}
+
+export type CheckerDependencyCategory =
+  | 'analysis-runtime'
+  | 'checker-binary'
+  | 'checker-runtime-peer';
+
+export interface CheckerDependencyRequirement {
+  category: CheckerDependencyCategory;
+  packageName: string;
 }
 
 export interface MissingCheckerPeerDependency {

@@ -1,4 +1,4 @@
-import type { AutoCheckerPreset } from './types';
+import type { AutoCheckerPreset } from './auto-checker-types';
 
 function shouldPromoteAutoScope(options: {
   dependencies: ReadonlySet<string>;

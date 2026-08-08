@@ -4,11 +4,7 @@ import path from 'pathe';
 import { withGeneratedArtifactReadLease } from '../../core/build-graph/materializer';
 import { TypecheckLogger } from '../../logger';
 import { resolvePreflight } from '../../preflight';
-import {
-  collectBuildGraphCombinationEntries,
-  collectCheckerBuildCombinationRoots,
-  reportBuildCheckerCombinationWarning,
-} from '../build/combination-warning';
+import { reportBuildCheckerCacheWarnings } from '../build/combination-warning';
 import { shouldLogCheckReport } from '../runner-shared';
 import type {
   RunCheckerBuildOptions,
@@ -143,6 +139,7 @@ async function runSelectedCheckerBuild(
     watch: context.options.watch,
   });
   const rootConfigPaths = targets.map((target) => target.configPath);
+  reportCombinationWarning(context);
   reportSelectedTargetCount(context, targets.length);
   const execution = await executeCheckerBuildTargets({
     allCheckers: context.allCheckers,
@@ -169,17 +166,8 @@ async function runSelectedCheckerBuild(
 }
 
 function reportCombinationWarning(context: CheckerBuildContext): void {
-  const roots = collectCheckerBuildCombinationRoots({
-    checkers: context.buildCheckers,
-    generatedGraph: context.generatedGraph,
-    projectRootDir: context.projectRootDir,
-  });
-  reportBuildCheckerCombinationWarning({
-    entries: collectBuildGraphCombinationEntries({
-      generatedGraph: context.generatedGraph,
-      projectRootDir: context.projectRootDir,
-      roots,
-    }),
+  reportBuildCheckerCacheWarnings({
+    dependencyEdges: context.generatedGraph.dependencyEdges,
     flow: context.options.flow,
     flowDepth: context.flowDepth,
     projectRootDir: context.projectRootDir,
@@ -208,6 +196,7 @@ async function runGeneratedCheckerBuild(
     projectRootDir: context.projectRootDir,
   });
   const rootConfigPaths = targets.map((target) => target.configPath);
+  reportCombinationWarning(context);
   logGeneratedBuildStart({
     context,
     rootConfigPaths,
@@ -226,7 +215,6 @@ async function runGeneratedCheckerBuild(
     watch: undefined,
     workspaceContext: context.workspaceContext,
   });
-  reportCombinationWarning(context);
   reportCheckerBuildExecution({
     execution,
     projectRootDir: context.projectRootDir,

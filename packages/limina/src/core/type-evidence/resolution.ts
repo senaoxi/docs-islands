@@ -141,7 +141,7 @@ function getEffectivePresets(
 }
 
 function isVuePreset(preset: string): boolean {
-  return preset === 'vue-tsc' || preset === 'vue-tsgo';
+  return preset === 'vue-tsc';
 }
 
 function isTypeScriptPreset(preset: string): boolean {

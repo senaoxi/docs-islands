@@ -2,9 +2,10 @@ import type { ResolvedCheckerConfig } from '#config/runner';
 import type {
   CheckerSourceConfigCollection,
   GeneratedBuildModule,
+  GeneratedDependencyEdge,
   GeneratedGraphWriteContext,
   GeneratedOutputDeclarationCopyContext,
-  GeneratedProviderEdge,
+  GovernedSourceUnit,
   OutputSolutionProject,
   PreparedCheckerGraph,
   SolutionProject,
@@ -22,8 +23,10 @@ export interface GeneratedGraphPreparationState {
   outputProjectsByChecker: Map<string, SourceProject[]>;
   outputSolutionsByChecker: Map<string, OutputSolutionProject[]>;
   problems: string[];
+  primaryProjectsByChecker: Map<string, SourceProject[]>;
   projectsByChecker: Map<string, SourceProject[]>;
-  providerEdges: GeneratedProviderEdge[];
+  governedSourcesByChecker: Map<string, GovernedSourceUnit[]>;
+  dependencyEdges: GeneratedDependencyEdge[];
   rootBuildPathsByChecker: Map<string, string[]>;
   solutionsByChecker: Map<string, SolutionProject[]>;
   sourceToBuildByChecker: Map<string, Map<string, GeneratedBuildModule>>;
@@ -41,8 +44,10 @@ export function createGeneratedGraphPreparationState(
     outputProjectsByChecker: new Map(),
     outputSolutionsByChecker: new Map(),
     problems: [],
+    primaryProjectsByChecker: new Map(),
     projectsByChecker: new Map(),
-    providerEdges: [],
+    governedSourcesByChecker: new Map(),
+    dependencyEdges: [],
     rootBuildPathsByChecker: new Map(),
     solutionsByChecker: new Map(),
     sourceToBuildByChecker: new Map(),
@@ -61,6 +66,9 @@ export function registerPreparedChecker(options: {
   state: GeneratedGraphPreparationState;
 }): void {
   const checkerName = options.preparedChecker.checker.name;
+  options.state.dependencyEdges.push(
+    ...options.preparedChecker.dependencyEdges,
+  );
   options.state.checkerCollectionsByName.set(
     checkerName,
     options.preparedChecker.collection,
@@ -68,6 +76,14 @@ export function registerPreparedChecker(options: {
   options.state.projectsByChecker.set(
     checkerName,
     options.preparedChecker.projects,
+  );
+  options.state.primaryProjectsByChecker.set(
+    checkerName,
+    options.preparedChecker.primaryProjects,
+  );
+  options.state.governedSourcesByChecker.set(
+    checkerName,
+    options.preparedChecker.governedSources,
   );
   options.state.solutionsByChecker.set(
     checkerName,

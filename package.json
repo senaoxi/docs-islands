@@ -78,7 +78,6 @@
     "lint-staged": "catalog:dev",
     "nx": "catalog:dev",
     "vue-tsc": "catalog:dev",
-    "vue-tsgo": "catalog:dev",
     "tsx": "catalog:dev",
     "cac": "catalog:dev",
     "prompts": "catalog:dev",

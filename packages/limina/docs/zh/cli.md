@@ -125,7 +125,7 @@ pnpm exec limina release check --package @scope/pkg
 | 对指定配置运行内部声明图构建         | `limina checker build <config>`            | 只接受 Limina 管理的源码配置或聚合配置，不执行 `raw build`                          |
 | 构建用户可消费产物                   | `limina build <config>`                    | 只接受 Limina 管理且声明了 `liminaOptions.outputs` 的源码叶子或聚合配置             |
 | 直接构建用户维护的 `tsconfig`        | `limina build <config> --raw --preset tsc` | 不读取 Limina 输出配置，不使用生成图                                                |
-| 运行非构建型检查器入口               | `limina checker typecheck`                 | 例如配置了 `vue-tsgo` 或 `svelte-check` 这类仅类型检查入口                          |
+| 运行补充框架 target                  | `limina checker typecheck`                 | 运行已发现的 Astro 与 Svelte target；没有 target 时以 disabled 状态通过             |
 | 检查已构建包产物                     | `limina package check`                     | 已有 `package.entries[].outDir`，需要检查清单文件、`publint`、`ATTW` 或产物导入边界 |
 | 检查发布前产物一致性                 | `limina release check`                     | 已构建产物，且需要检查本地依赖声明、私有包、打包结果或配置的发布一致性              |
 
@@ -154,11 +154,25 @@ pnpm exec limina init --yes
 pnpm exec limina migration
 ```
 
-外部激活包也受支持，包括目标分布在多个 Git worktree 的迁移。任何写入开始前，Limina 会解析每个目标的规范 Git worktree 根目录，并要求所有涉及的 worktree 都是 clean 状态；随后以这些规范根目录作为完整写入 allowlist 执行一次事务。外部 worktree 只要有未提交变更，就会阻止全部写入；每个目标都必须属于一个 Git worktree。
+#### Git 工作区确认
+
+每个迁移目标都必须位于 Git worktree 中。外部激活包也受支持，因此一次迁移的目标可以分布在多个 worktree。写入前，Limina 会解析所有目标所属的 worktree，并检查其中的 Git 状态；已跟踪文件的变更和未跟踪文件都会进入检查结果。
+
+- 所有相关 worktree 都是 clean 状态时，迁移直接继续，不显示确认提示。
+- 任一 worktree 存在变更时，Limina 会汇总所有存在变更的 worktree，并只询问一次。确认提示默认选择“否”。
+- 选择继续后，Limina 才会创建并执行本次 `tsconfig*.json` 写入计划。这个确认不会 commit、stash、删除或还原已有变更。
+- 拒绝或取消确认时，迁移停止且不会写入任何目标，并提示先保持 Git 工作区干净。
+- 非交互环境无法显示确认提示，因此发现变更时会停止且不会写入。请先整理所有相关 worktree，再重新运行迁移。
+
+确认继续后，迁移仍只会在目标所属的规范 worktree 根目录内写入计划中的配置文件。确认脏工作区不会扩大迁移目标或写入范围。
+
+#### 迁移范围与输出字段
 
 迁移选择与图准备使用相同的 package-island 可见性和 checker selector。即使祖先模式可以匹配，迁移也不会读取或修改 owner-local 边界后的配置。
 
 迁移会在规划写入前读取每个目标的 TypeScript 有效配置（包括继承的选项）。如果直接声明的 `compilerOptions.declarationDir` 与计划的受管输出根等价，迁移会删除这个字段；如果它是唯一的输出设置，迁移会把它的相对路径写入 `liminaOptions.outputs.outDir`，因此迁移后 JavaScript 与声明文件共置于一个产物目录。JavaScript 与声明分离输出、有效的 `outFile`、混合型 solution 聚合器、非法 `declarationDir`，或没有既有等价受管根的绝对 `declarationDir`，都会在写入任何目标前失败。继承的 `declarationDir` 会保留在 base 配置中，不会复制到叶子。迁移不会删除已有的用户输出文件。
+
+迁移不会安装 Astro 或 Svelte 依赖，不会运行 `astro sync`，也不会改写框架源码。下一次物化生成图时，Limina 会根据迁移后的源码配置和实际文件推导框架能力。如果存在 version 1 到 3 的 `.limina/manifest.json`，Limina 只把它当作产物归属 ledger，用它删除旧生成路径，再替换为当前的 version 4 manifest；框架能力 descriptor 始终是实时图事实，不会持久化进 manifest。
 
 ### limina check [pipeline]
 
@@ -278,7 +292,7 @@ pnpm exec limina proof check
 pnpm exec limina proof check --verbose
 ```
 
-它基于生成工程图、检查器入口、项目路由、源码边界和 `proof.allowlist`，检查源码文件是否被工程图或检查器覆盖，并报告检查器覆盖目标、默认 `tsconfig`、声明配置、本地配套配置或白名单相关的问题。
+它基于生成工程图、检查器入口、项目路由、源码边界和 `proof.allowlist`，检查源码文件是否被工程图或检查器覆盖，并报告检查器覆盖目标、默认 `tsconfig`、声明配置、本地配套配置或白名单相关的问题。对 Astro 和 Svelte，它还会验证实际文件覆盖、唯一的主要和补充归属、叶子包内的目标可执行性、声明与 solution 投影、生成目标预检，以及生成构建配置中不存在框架扩展名。
 
 这个命令不表示“完整类型安全证明”。更准确地说，它检查 Limina 当前能够治理的源码集合是否能被已生成的项目图或检查器入口解释，避免源码落在治理范围之外而不被注意。
 
@@ -301,7 +315,7 @@ pnpm exec limina build packages/app/tsconfig.raw.json --raw --preset vue-tsc
 
 ### limina checker build [config]
 
-`checker build` 只构建 Limina 内部声明图。支持的构建型预设是 `tsc`、`tsgo` 和 `vue-tsc`。
+`checker build` 只构建 Limina 内部声明图。支持的构建检查器 identity 是 `tsc`、`tsgo` 和 `vue-tsc`；命令行 selector 仍名为 `--preset`。
 
 ```sh
 pnpm exec limina checker build
@@ -318,16 +332,18 @@ pnpm exec limina checker build packages/app/tsconfig.json --preset vue-tsc --wat
 
 ### limina checker typecheck
 
-`checker typecheck` 运行非构建型检查器入口。
+`checker typecheck` 运行非构建型检查器入口，以及从主要构建源码配置派生的 Astro 或 Svelte 补充目标。
 
 ```sh
 pnpm exec limina checker typecheck
 pnpm exec limina checker typecheck --verbose
 ```
 
-源码中内置的非构建型检查器包括 `vue-tsgo` 和 `svelte-check`。`vue-tsgo` 的入口仍可参与源码图和覆盖证明；`svelte-check` 作为检查器入口参与覆盖证明和类型检查执行，但当前不作为源码图提供者。二者都不作为 `checker build` 的构建型执行入口。
+该命令运行从实际框架模块发现的 Astro 与 Svelte 补充 target。可选 `astro` 与 `svelte-check` 配置 scope 可以过滤 target，但不能创建 capability 或声明归属。
 
-`checker typecheck` 不接受配置路径、`--preset` 或 `--watch`。如果没有配置任何非构建型检查器入口，该命令会以无可运行入口的状态通过。
+自动发现的 Astro 目标执行 `astro check --noSync --root <leaf> --tsconfig <source-config>`，要求叶子包内存在 `astro`、`@astrojs/check`、`typescript` 和 `.astro/types.d.ts`。自动发现的 Svelte 目标执行 `svelte-check --workspace <leaf> --tsconfig <source-config>`，要求叶子包安装 `svelte-check`、`svelte` 和 `typescript`。Limina 不会运行 Astro sync，也不会启用 Svelte 增量缓存行为。
+
+`checker typecheck` 不接受配置路径、`--preset` 或 `--watch`。这些框架 target 明确不支持 watch；源码配置、解析器 package、框架生成类型或框架源码变化后，需要重新运行命令。如果没有补充框架 target，runner 会把任务记录为 disabled，跳过 peer preflight 和生成产物物化，并正常退出。
 
 ### limina package check
 
@@ -362,22 +378,23 @@ pnpm exec limina release check --package @scope/pkg --verbose
 
 ## 排障
 
-| 症状或错误信息                                                                          | 可能原因                                                   | 处理方式                                                                                                                      |
-| --------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `no pnpm-workspace.yaml was found`                                                      | 当前目录不在 `pnpm` 工作区内                               | 在工作区内运行命令，或先创建 `pnpm-workspace.yaml`                                                                            |
-| `Unable to find limina config`                                                          | 未找到支持的 Limina 配置文件                               | 运行 `limina init`，或用 `--config` 指定配置路径                                                                              |
-| `config file must be inside the governed pnpm workspace`                                | `--config` 指向工作区外文件                                | 把配置文件放到当前 `pnpm` 工作区内                                                                                            |
-| `checker build --preset requires a config argument`                                     | `--preset` 只能选择某个配置的构建型检查器                  | 改为 `limina checker build <config> --preset tsc`                                                                             |
-| `checker build --watch requires a config argument`                                      | 监听模式只支持指定配置                                     | 改为 `limina checker build <config> --watch`                                                                                  |
-| `limina build --raw requires --preset`                                                  | 原始模式没有指定检查器预设                                 | 改为 `limina build <config> --raw --preset tsc`                                                                               |
-| `checker typecheck does not accept --preset` 或 `--watch`                               | `checker typecheck` 只运行非构建型检查器入口               | 对单个配置使用 `checker build <config>`                                                                                       |
-| `No package checks are enabled`                                                         | 选中的包条目没有启用任何包检查                             | 检查 `package.entries[].checks`，或移除不需要的包检查任务                                                                     |
-| `outDir package.json not found`                                                         | 包产物尚未构建，或 `outDir` 配置不正确                     | 先运行项目构建，再检查 `package.entries[].outDir`                                                                             |
-| `Missing peer dependency ...`                                                           | 已配置的检查器或已启用的发布集成未安装                     | 按报告提示安装对应依赖，例如 `typescript`、`vue-tsc`、`@typescript/native-preview`、`svelte-check` 或 `npm-package-json-lint` |
-| `publint` 或 `@arethetypeswrong/core` is not installed; skipping check                  | 已启用的可选发布 analyzer 未安装                           | CI 要求这类覆盖时应安装对应 analyzer；单独发生 skip 不会让命令以非零状态退出                                                  |
-| `source.knip` is enabled but `knip` is not installed                                    | 已明确启用的 Knip 源码使用功能缺少对等依赖                 | 安装 `knip`，或将 `source.knip` 设为 `false`/省略以关闭该功能                                                                 |
-| `limina check --task, --checker, --format, --invocation, and --limit require --issues.` | 把 snapshot 查询选项用于重新检查命令                       | 添加 `--issues`，或移除这些查询选项                                                                                           |
-| `limina check --issues does not accept a pipeline name.`                                | `--issues` 读取最近快照，不运行流水线                      | 使用 `limina check --issues`，不要加流水线名                                                                                  |
-| `Invalid check --issues --limit ...`                                                    | limit 为零、负数、小数、指数写法、非数字或超出安全整数范围 | 使用十进制正整数或 `all`                                                                                                      |
-| `limina check --issues --limit is only available with --format human.`                  | human 卡片上限与 JSON 或 NDJSON 同时使用                   | 移除 `--limit`，或使用 human 输出                                                                                             |
-| `Invalid graph export --view`                                                           | `--view` 取值不在支持范围内                                | 使用 `all`、`source` 或 `artifact`                                                                                            |
+| 症状或错误信息                                                                          | 可能原因                                                         | 处理方式                                                                             |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `no pnpm-workspace.yaml was found`                                                      | 当前目录不在 `pnpm` 工作区内                                     | 在工作区内运行命令，或先创建 `pnpm-workspace.yaml`                                   |
+| `Unable to find limina config`                                                          | 未找到支持的 Limina 配置文件                                     | 运行 `limina init`，或用 `--config` 指定配置路径                                     |
+| `config file must be inside the governed pnpm workspace`                                | `--config` 指向工作区外文件                                      | 把配置文件放到当前 `pnpm` 工作区内                                                   |
+| `checker build --preset requires a config argument`                                     | `--preset` 只能选择某个配置的构建型检查器                        | 改为 `limina checker build <config> --preset tsc`                                    |
+| `checker build --watch requires a config argument`                                      | 监听模式只支持指定配置                                           | 改为 `limina checker build <config> --watch`                                         |
+| `limina build --raw requires --preset`                                                  | 原始模式没有指定检查器预设                                       | 改为 `limina build <config> --raw --preset tsc`                                      |
+| `checker typecheck does not accept --preset` 或 `--watch`                               | typecheck 会运行完整的补充 target 集合，不支持逐 target 框架监听 | 源码配置、解析器 package、框架生成类型或框架源码变化后，重新运行 `checker typecheck` |
+| `No package checks are enabled`                                                         | 选中的包条目没有启用任何包检查                                   | 检查 `package.entries[].checks`，或移除不需要的包检查任务                            |
+| `outDir package.json not found`                                                         | 包产物尚未构建，或 `outDir` 配置不正确                           | 先运行项目构建，再检查 `package.entries[].outDir`                                    |
+| `Missing peer dependency ...` 或 `Missing framework checker dependencies`               | 已配置检查器、叶子框架目标或发布集成缺少依赖                     | 在报告指定的根目录安装提示包；框架目标要求所属叶子包拥有相应 Astro 或 Svelte 依赖    |
+| `Astro generated types are missing`                                                     | 叶子包尚未生成 `.astro/types.d.ts`                               | 运行 `pnpm --dir <leaf> exec astro sync`；Limina 绝不会自动执行该命令                |
+| `publint` 或 `@arethetypeswrong/core` is not installed; skipping check                  | 已启用的可选发布 analyzer 未安装                                 | CI 要求这类覆盖时应安装对应 analyzer；单独发生 skip 不会让命令以非零状态退出         |
+| `source.knip` is enabled but `knip` is not installed                                    | 已明确启用的 Knip 源码使用功能缺少对等依赖                       | 安装 `knip`，或将 `source.knip` 设为 `false`/省略以关闭该功能                        |
+| `limina check --task, --checker, --format, --invocation, and --limit require --issues.` | 把 snapshot 查询选项用于重新检查命令                             | 添加 `--issues`，或移除这些查询选项                                                  |
+| `limina check --issues does not accept a pipeline name.`                                | `--issues` 读取最近快照，不运行流水线                            | 使用 `limina check --issues`，不要加流水线名                                         |
+| `Invalid check --issues --limit ...`                                                    | limit 为零、负数、小数、指数写法、非数字或超出安全整数范围       | 使用十进制正整数或 `all`                                                             |
+| `limina check --issues --limit is only available with --format human.`                  | human 卡片上限与 JSON 或 NDJSON 同时使用                         | 移除 `--limit`，或使用 human 输出                                                    |
+| `Invalid graph export --view`                                                           | `--view` 取值不在支持范围内                                      | 使用 `all`、`source` 或 `artifact`                                                   |

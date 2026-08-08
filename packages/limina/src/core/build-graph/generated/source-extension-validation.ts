@@ -23,6 +23,8 @@ const checkerPresetSuggestionsByExtension = new Map<string, string[]>([
   ['.vue', ['vue-tsc']],
 ]);
 
+const supplementalGovernanceExtensions = new Set(['.astro', '.svelte']);
+
 function createProjectsBySourcePath(
   projects: readonly SourceProjectLike[],
 ): Map<string, SourceProjectLike[]> {
@@ -61,7 +63,11 @@ function isUnsupportedExtension(
   extension: string,
   supportedExtensions: ReadonlySet<string>,
 ): boolean {
-  return extension.length > 0 && !supportedExtensions.has(extension);
+  return (
+    extension.length > 0 &&
+    !supplementalGovernanceExtensions.has(extension) &&
+    !supportedExtensions.has(extension)
+  );
 }
 
 function getFilesForExtension(
@@ -103,6 +109,7 @@ function collectUnsupportedFiles(options: {
     extensions: capabilityDiscoveryExtensions,
   };
   const neutralParsed = parseCheckerProjectConfigForContext({
+    allowNoInputDiagnostics: true,
     cache: options.projectConfigCache,
     configPath: options.sourceConfigPath,
     context: neutralContext,

@@ -12,6 +12,14 @@ export type ImportRecordKind =
   | 'jsx-import-source'
   | 'environment-pragma';
 
+export type ImportDomain =
+  | 'typescript'
+  | 'vue-script'
+  | 'svelte-instance-script'
+  | 'svelte-module-script'
+  | 'astro-frontmatter'
+  | 'astro-client-script';
+
 export interface ImportLocator {
   occurrence: number;
   sourceEnd: number;
@@ -19,6 +27,7 @@ export interface ImportLocator {
 }
 
 export interface ImportRecord {
+  domain: ImportDomain;
   filePath: string;
   kind: ImportRecordKind;
   line: number;
@@ -48,6 +57,7 @@ export function finalizeImportRecords(
       occurrenceByIdentity.set(identity, occurrence + 1);
 
       return {
+        domain: record.domain,
         filePath: record.filePath,
         kind: record.kind,
         line: record.line,
@@ -90,6 +100,7 @@ export function getLine(lineStarts: readonly number[], pos: number): number {
 }
 
 export function createImportRecord(options: {
+  domain?: ImportDomain;
   end?: number;
   filePath: string;
   kind: ImportRecordKind;
@@ -100,6 +111,7 @@ export function createImportRecord(options: {
   specifier: string;
 }): CollectedImportRecord {
   return {
+    domain: options.domain ?? 'typescript',
     filePath: options.filePath,
     kind: options.kind,
     line: options.lineOffset + getLine(options.lineStarts, options.pos),
@@ -113,4 +125,11 @@ export function createImportRecord(options: {
     pos: options.sourceOffset + options.pos,
     specifier: options.specifier,
   };
+}
+
+export function setImportRecordDomain(
+  records: readonly ImportRecord[],
+  domain: ImportDomain,
+): ImportRecord[] {
+  return records.map((record) => ({ ...record, domain }));
 }

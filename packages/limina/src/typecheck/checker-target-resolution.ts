@@ -19,7 +19,7 @@ export function getExecutionCheckers(options: {
   executionKind: CheckerExecutionKind;
 }): ResolvedCheckerConfig[] {
   return options.checkers.filter((checker) => {
-    const adapter = getCheckerAdapter(checker.preset);
+    const adapter = getCheckerAdapter(checker.name);
     return adapter?.execution === options.executionKind;
   });
 }
@@ -73,9 +73,7 @@ function collectVueCompilerSfcCheckers(options: {
     return [];
   }
 
-  return options.checkers.filter(
-    (checker) => checker.preset === 'vue-tsc' || checker.preset === 'vue-tsgo',
-  );
+  return options.checkers.filter((checker) => checker.name === 'vue-tsc');
 }
 
 function appendVueCompilerSfcDependency(options: {

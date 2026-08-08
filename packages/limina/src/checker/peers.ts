@@ -48,8 +48,13 @@ function getPackageResolver(
 }
 
 function getPackageNames(checker: ResolvedCheckerConfig): string[] {
-  const adapter = getCheckerAdapter(checker.preset);
-  return adapter === null ? [] : adapter.packageNames;
+  const adapter = getCheckerAdapter(checker.name);
+  return adapter === null
+    ? []
+    : [
+        ...adapter.dependencies.checkerBinaryPackages,
+        ...adapter.dependencies.checkerRuntimePeerPackages,
+      ];
 }
 
 function getOrCreateCheckerNames(

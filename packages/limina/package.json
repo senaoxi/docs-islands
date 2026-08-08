@@ -64,6 +64,8 @@
     "oxc-resolver": "catalog:prod"
   },
   "devDependencies": {
+    "@astrojs/compiler": "catalog:dev",
+    "@astrojs/compiler-v2": "catalog:dev",
     "@types/picomatch": "catalog:dev",
     "@types/semver": "catalog:dev",
     "@types/ssri": "catalog:dev",
@@ -77,6 +79,7 @@
     "boxen": "catalog:dev",
     "logaria": "workspace:*",
     "@publint/pack": "catalog:lint",
+    "astro-v7-min": "catalog:dev",
     "cac": "catalog:dev",
     "es-module-lexer": "catalog:dev",
     "pathe": "catalog:dev",
@@ -97,12 +100,15 @@
     "shescape": "catalog:dev",
     "ssri": "catalog:dev",
     "string-width": "catalog:dev",
+    "svelte-check-v4-min": "catalog:dev",
+    "svelte-v4-min": "catalog:dev",
     "typescript": "catalog:dev",
     "vite": "catalog:dev",
     "vitest": "catalog:test"
   },
   "peerDependencies": {
     "@arethetypeswrong/core": "^0.18.0",
+    "@astrojs/compiler": ">=2.0.0 <5.0.0",
     "@typescript/native-preview": ">=7.0.0-dev.20260421.2 <7.0.0",
     "@vue/compiler-sfc": ">=3.0.0 <4.0.0",
     "knip": ">=6.0.0 <7.0.0",
@@ -111,11 +117,13 @@
     "svelte-check": ">=4.0.0 <5.0.0",
     "tsx": "^4.9.0",
     "typescript": "^5.4.0 || ^6.0.0",
-    "vue-tsc": "^2.1.2 || ^3.0.0",
-    "vue-tsgo": "*"
+    "vue-tsc": "^2.1.2 || ^3.0.0"
   },
   "peerDependenciesMeta": {
     "@arethetypeswrong/core": {
+      "optional": true
+    },
+    "@astrojs/compiler": {
       "optional": true
     },
     "@typescript/native-preview": {
@@ -140,9 +148,6 @@
       "optional": true
     },
     "vue-tsc": {
-      "optional": true
-    },
-    "vue-tsgo": {
       "optional": true
     }
   },

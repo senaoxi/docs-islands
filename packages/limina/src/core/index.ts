@@ -95,7 +95,6 @@ export class AnalysisProviderSet {
     this.buildGraph = buildGraph;
     this.packages = new PackageDomainCore({
       buildGraph: this.buildGraph,
-      tsconfig: this.tsconfig,
       workspace: this.workspace,
     });
   }

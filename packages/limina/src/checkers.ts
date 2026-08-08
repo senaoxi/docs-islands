@@ -31,6 +31,7 @@ export {
   getCheckerBuildEngine,
   getCheckerCapabilityFamily,
   isBuildCapablePreset,
+  isCheckerCacheReusable,
 } from './checker/registry';
 export type {
   CheckerAdapter,
@@ -38,6 +39,9 @@ export type {
   CheckerCapabilityFamily,
   CheckerCommandTarget,
   CheckerCommandTargetOptions,
+  CheckerDependencies,
+  CheckerDependencyCategory,
+  CheckerDependencyRequirement,
   CheckerModuleResolutionMetricsRecorder,
   CheckerModuleResolveOptions,
   CheckerPackageResolver,

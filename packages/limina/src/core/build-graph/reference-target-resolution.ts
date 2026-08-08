@@ -1,9 +1,12 @@
 import { compareCodeUnits } from '#utils/collections';
+import { isRelativeSpecifier } from '#utils/module-specifier';
+import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import path from 'pathe';
 import {
   type DeclarationProviderResolution,
   resolveDeclarationProvider,
 } from '../import-graph/declaration-provider';
+import { getDtsProjectsForSourcePath } from './project-indexes';
 import { formatOxcOnlyDeclarationProviderProblem } from './provider-problems';
 import { formatReferenceBoundaryProblem } from './reference-boundary';
 import type {
@@ -70,6 +73,61 @@ function chooseSourceOwner(options: {
         compareCodeUnits(left, right),
     );
   return candidates[0] ?? null;
+}
+
+function resolveExplicitSpecifierPath(
+  options: ReferenceImportOptions,
+): string | null {
+  const specifier = options.importRecord.specifier.split(/[?#]/u)[0]!;
+  if (!isRelativeSpecifier(specifier)) return null;
+  return normalizeAbsolutePath(
+    path.resolve(path.dirname(options.fileName), specifier),
+  );
+}
+
+function getOwnedConfigPaths(
+  context: ReferenceImportOptions['context'],
+  filePath: string,
+): string[] {
+  return context.fileOwnerLookup.get(filePath) ?? [];
+}
+
+function resolveExplicitOwnedSource(options: ReferenceImportOptions): {
+  resolvedFilePath: string;
+  targetSourceConfigPath: string;
+} | null {
+  const resolvedFilePath = resolveExplicitSpecifierPath(options);
+  if (resolvedFilePath === null) return null;
+  const targetSourceConfigPath = chooseSourceOwner({
+    ownerProjectPaths: getOwnedConfigPaths(options.context, resolvedFilePath),
+    projectConfigPath: options.project.configPath,
+  });
+  return targetSourceConfigPath === null
+    ? null
+    : { resolvedFilePath, targetSourceConfigPath };
+}
+
+export function addMissingOwnedDeclarationProviderProblem(
+  options: ReferenceImportOptions,
+): void {
+  const target = resolveExplicitOwnedSource(options);
+  if (target === null) return;
+  const providers = getDtsProjectsForSourcePath({
+    dtsProjectsBySourcePath: options.context.dtsProjectsBySourcePath,
+    sourceConfigPath: target.targetSourceConfigPath,
+  });
+  if (providers.length > 0) return;
+  options.context.problems.push(
+    [
+      'Unable to map generated graph import to a declaration provider:',
+      `  importing config: ${toRelativePath(options.context.config.rootDir, options.project.configPath)}`,
+      `  file: ${toRelativePath(options.context.config.rootDir, options.fileName)}`,
+      `  imported specifier: ${options.importRecord.specifier}`,
+      `  resolved file: ${toRelativePath(options.context.config.rootDir, target.resolvedFilePath)}`,
+      `  target config: ${toRelativePath(options.context.config.rootDir, target.targetSourceConfigPath)}`,
+      '  reason: the imported governed source has no declaration provider; generated solution projections are scheduling-only.',
+    ].join('\n'),
+  );
 }
 
 function resolveDeclarationTarget(options: {

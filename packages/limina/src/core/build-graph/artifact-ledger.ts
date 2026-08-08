@@ -4,6 +4,7 @@ import {
   resolveArtifactNamespaceRelativePath,
   toArtifactNamespaceRelativePath,
 } from '../../domain/artifacts/namespace';
+import { isOwnedArtifactLedgerVersion } from './manifest-version';
 import type { GeneratedGraphWriteContext } from './types';
 
 function isMissingFileError(error: unknown): boolean {
@@ -33,7 +34,10 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function hasManifestIdentity(value: Record<string, unknown>): boolean {
-  return value.version === 3 && value.generatedBy === 'limina';
+  return [
+    isOwnedArtifactLedgerVersion(value.version),
+    value.generatedBy === 'limina',
+  ].every(Boolean);
 }
 
 function getOwnedArtifactValue(value: unknown): unknown {

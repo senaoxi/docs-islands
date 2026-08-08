@@ -50,6 +50,7 @@ export function createSourceProject(options: {
     extensions,
   };
   const parsed = parseCheckerProjectConfigForContext({
+    allowNoInputDiagnostics: true,
     cache: options.projectConfigCache,
     configPath: options.sourceConfigPath,
     context,

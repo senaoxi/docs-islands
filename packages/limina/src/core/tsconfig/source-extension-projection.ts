@@ -4,8 +4,12 @@ import {
   resolveCheckerProjectExtensions,
 } from '#checkers';
 import type { ResolvedLiminaConfig } from '#config/runner';
-import type { GeneratedTsconfigGraphResult } from '#core/build-graph/runner';
+import type {
+  GeneratedTsconfigGraphResult,
+  GovernedSourceUnit,
+} from '#core/build-graph/runner';
 import { uniqueValues } from '#utils/collections';
+import { capabilityDiscoveryExtensions } from '../build-graph/generated/file-extensions';
 import type {
   CheckerRouteSnapshot,
   CheckerRouteSnapshotCollection,
@@ -19,6 +23,18 @@ import { isDtsConfigPath } from './config-paths';
 interface SourceExtensionState {
   projectContextsByPath: Map<string, CheckerProjectParseContext>;
   projectExtensionsByPath: Map<string, string[]>;
+}
+
+function hasGovernedSources(
+  generatedGraph: GeneratedTsconfigGraphResult | undefined,
+): generatedGraph is GeneratedTsconfigGraphResult {
+  return (
+    generatedGraph !== undefined &&
+    generatedGraph.governedSources instanceof Map &&
+    [...generatedGraph.governedSources.values()].some(
+      (governedSources) => governedSources.size > 0,
+    )
+  );
 }
 
 function recordSourceExtensionProjection(
@@ -83,9 +99,62 @@ function projectRouteExtensions(options: {
   }
 }
 
+function projectGovernedSourceExtensions(options: {
+  config: ResolvedLiminaConfig;
+  generatedGraph: GeneratedTsconfigGraphResult;
+  routes: CollectCheckerGraphProjectRoutesResult['routes'];
+  state: SourceExtensionState;
+}): void {
+  const routedCheckerNames = new Set(
+    options.routes.map((route) => route.checkerName),
+  );
+  for (const [checkerName, governedSources] of options.generatedGraph
+    .governedSources) {
+    if (!routedCheckerNames.has(checkerName)) continue;
+    projectGovernedUnits({
+      config: options.config,
+      generatedFiles: options.generatedGraph.generatedFiles,
+      governedSources,
+      state: options.state,
+    });
+  }
+}
+
+function getGovernedProjectPath(unit: GovernedSourceUnit): string {
+  return 'buildConfigPath' in unit.buildProjection
+    ? unit.buildProjection.buildConfigPath
+    : unit.buildProjection.dtsConfigPath;
+}
+
+function projectGovernedUnits(options: {
+  config: ResolvedLiminaConfig;
+  generatedFiles: ReadonlyMap<string, string>;
+  governedSources: ReadonlyMap<string, GovernedSourceUnit>;
+  state: SourceExtensionState;
+}): void {
+  for (const unit of options.governedSources.values()) {
+    const extensions = normalizeExtensions([
+      ...capabilityDiscoveryExtensions,
+      ...resolveCheckerProjectExtensions({
+        configPath: unit.configPath,
+        preset: unit.primaryCheckerName,
+        projectRootDir: options.config.rootDir,
+        virtualFiles: options.generatedFiles,
+      }),
+    ]);
+    mergeProjectContext({
+      checkerPreset: unit.primaryCheckerName,
+      projectPath: getGovernedProjectPath(unit),
+      routeExtensions: extensions,
+      state: options.state,
+    });
+  }
+}
+
 export function projectSourceGraphProjectExtensions(
   config: ResolvedLiminaConfig,
   snapshot: CheckerRouteSnapshotCollection,
+  generatedGraph?: GeneratedTsconfigGraphResult,
 ): CollectSourceGraphProjectExtensionsResult {
   recordSourceExtensionProjection(snapshot);
   const routeCollection = projectCheckerRoutesForProjection(
@@ -97,8 +166,17 @@ export function projectSourceGraphProjectExtensions(
     projectContextsByPath: new Map(),
     projectExtensionsByPath: new Map(),
   };
-  for (const route of routeCollection.routes) {
-    projectRouteExtensions({ config, route, snapshot, state });
+  if (hasGovernedSources(generatedGraph)) {
+    projectGovernedSourceExtensions({
+      config,
+      generatedGraph,
+      routes: routeCollection.routes,
+      state,
+    });
+  } else {
+    for (const route of routeCollection.routes) {
+      projectRouteExtensions({ config, route, snapshot, state });
+    }
   }
   return {
     diagnostics: routeCollection.diagnostics,
@@ -115,5 +193,6 @@ export function collectSourceGraphProjectExtensions(
   return projectSourceGraphProjectExtensions(
     config,
     collectCheckerRouteSnapshot(config, generatedGraph),
+    generatedGraph,
   );
 }

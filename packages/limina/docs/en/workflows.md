@@ -69,7 +69,8 @@ jobs:
 
 ::: tip
 
-- Keep source `tsconfig.json` aggregators pure with `files: []` and `references`.
+- Keep a source `tsconfig.json` aggregator's checker-resolved file set empty and declare its `references` directly; `files: []` is the clearest spelling.
+- Keep solution configs at the exact `tsconfig.json` entry path. A named `tsconfig.*.json` that resolves no files and declares `references` is a TypeScript solution, but it is an unsupported Limina solution name.
 - Keep source tsconfig file sets intentional, and let Limina own the declaration build configs under `.limina/`.
 - Keep workspace package exports intentional: source entries need references from real imports or `implicitRefs`, and artifact entries appear in `limina graph export --view artifact` as scoped artifact dependencies.
 - Source, package, and release checks cover different layers; release-related checks should run after artifacts are built.
@@ -79,9 +80,13 @@ jobs:
 
 ## FAQ
 
+### How does Limina recognize a solution config?
+
+Limina uses the active checker to parse each reachable config. A config is a TypeScript solution when its effective file list is empty and it directly declares `references`; this can include configs that use `extends` or checker-supported framework files. Limina expands that role only when the path basename is exactly `tsconfig.json`. During migration, every reachable named solution is reported together before any worktree or file changes are made. Rename it to `tsconfig.json`, merge its references into the directory's existing default entry, or turn it into a source leaf with an explicit source boundary.
+
 ### How do `limina checker build` and `checker typecheck` choose targets?
 
-`checker build` runs presets that support build mode from configured entries: `tsc -b`, `tsgo -b`, and `vue-tsc -b`. `tsgo` is backed by `Microsoft`'s `@typescript/native-preview` package. `checker typecheck` runs check-only presets, currently `vue-tsgo --project <entry>` and `svelte-check --tsconfig <entry>`. Limina intentionally keeps `vue-tsgo` out of `checker build` because current `vue-tsgo --build` does not preserve `TypeScript` project-reference boundaries or provide incremental build semantics; its configured `tsconfig` entry still participates in Limina graph and coverage checks. Prefer `vue-tsc` for `Vue` build checks.
+`checker build` runs configured build checker identities: `tsc -b`, `tsgo -b`, and `vue-tsc -b`. `tsgo` is backed by Microsoft's `@typescript/native-preview` package. `checker typecheck` runs the supplemental Astro and Svelte targets discovered from actual framework modules. Supplemental scopes filter those targets but do not own declarations.
 
 ### Why do package checks require a build first?
 
@@ -95,7 +100,7 @@ Yes. Workspace package exports may point to source entries or built artifacts. L
 
 ### Should `Vue` or `Svelte` files be placed in the TypeScript graph?
 
-Framework files should be covered by their framework checker entry. Limina can prove coverage through `vue-tsc`, `vue-tsgo`, or `svelte-check` without pretending those files are ordinary `tsc -b` declaration leaves.
+Vue files are covered by `vue-tsc`; actual Astro and Svelte modules receive their corresponding supplemental targets. Limina does not pretend `.astro` or `.svelte` files are ordinary `tsc -b` declaration leaves.
 
 ### What is `--mode` for?
 

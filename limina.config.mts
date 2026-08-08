@@ -16,13 +16,11 @@ export default defineConfig({
   // Shared checker source config coverage used by graph, proof, paths, and typecheck checks.
   config: {
     checkers: {
-      typescript: {
-        preset: 'tsgo',
+      tsgo: {
         include: ['packages/**/tsconfig.json'],
         exclude: overlapConfig,
       },
-      vue: {
-        preset: 'vue-tsc',
+      'vue-tsc': {
         include: ['utils/**/tsconfig.json', ...overlapConfig],
       },
     },
@@ -243,7 +241,7 @@ export default defineConfig({
         command: 'tsgo',
         args: [
           '-b',
-          '.limina/tsconfig/checkers/typescript/tsconfig.build.json',
+          '.limina/tsconfig/checkers/tsgo/tsconfig.build.json',
           '--pretty',
           'false',
         ],
@@ -264,8 +262,6 @@ export default defineConfig({
       },
     ],
     // Source-owned Vue SFC checks that are intentionally outside native tsc -b.
-    // Prefer vue-tsc here: current vue-tsgo --build does not preserve
-    // TypeScript project-reference boundaries or support incremental builds.
     vue: [
       'graph:prepare',
       {
@@ -273,7 +269,7 @@ export default defineConfig({
         command: 'vue-tsc',
         args: [
           '-b',
-          '.limina/tsconfig/checkers/vue/tsconfig.build.json',
+          '.limina/tsconfig/checkers/vue-tsc/tsconfig.build.json',
           '--pretty',
           'false',
         ],

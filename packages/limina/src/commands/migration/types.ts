@@ -5,6 +5,7 @@ import type { PreflightCapableOptions } from '../../preflight';
 import type { MigrationCleanupWarning } from './transaction';
 
 export interface RunMigrationOptions extends PreflightCapableOptions {
+  confirmDirtyWorkspace?: (message: string) => Promise<boolean>;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
 }
@@ -39,7 +40,8 @@ export interface MigrationTarget {
   configObject: JsonObject;
   configPath: string;
   effectiveConfig: MigrationEffectiveConfig;
-  isSolutionStyle: boolean;
+  isLiminaSolution: boolean;
+  isTypeScriptSolution: boolean;
   originalBytes: Buffer;
   originalContent: string;
 }

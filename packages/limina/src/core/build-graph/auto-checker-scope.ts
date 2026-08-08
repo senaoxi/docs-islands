@@ -1,52 +1,44 @@
-import {
-  type CheckerProjectConfigCache,
-  type CheckerProjectParseContext,
-  getBuildCheckerSupportedExtensions,
-  parseCheckerProjectConfigForContext,
-} from '#checkers';
+import type { CheckerProjectConfigCache } from '#checkers';
 import type { ResolvedLiminaConfig } from '#config/runner';
 import { compareCodeUnits } from '#utils/collections';
-import { normalizeAbsolutePath, toRelativePath } from '#utils/path';
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
-import {
-  capabilityDiscoveryExtensions,
-  getFileExtension,
-} from './generated/file-extensions';
+import { createAutoScopeProject } from './auto-checker-project';
+import type { AutoCheckerPreset } from './auto-checker-types';
+import { inspectFrameworkIntent } from './framework-intent';
+import { capabilityDiscoveryExtensions } from './generated/file-extensions';
 import { createGeneratedGraphStructuredError } from './problems';
 import {
-  collectAutoSourceConfigModules,
-  createEmptySourceConfigCollection,
-} from './source-config-collection';
-import type { AutoCheckerPreset, AutoScope, AutoScopeProject } from './types';
-
-function createAutoScopeProject(options: {
-  config: ResolvedLiminaConfig;
-  configPath: string;
-  projectConfigCache?: CheckerProjectConfigCache;
-}): AutoScopeProject {
-  const context: CheckerProjectParseContext = {
-    checkerPresets: ['tsc'],
-    extensions: capabilityDiscoveryExtensions,
-  };
-  const parsed = parseCheckerProjectConfigForContext({
-    cache: options.projectConfigCache,
-    configPath: options.configPath,
-    context,
-    projectRootDir: options.config.rootDir,
-  });
-  return {
-    configPath: options.configPath,
-    context,
-    fileNames: parsed.fileNames.map(normalizeAbsolutePath).sort(),
-    options: parsed.options,
-  };
-}
+  createAutoFrameworkEvidence,
+  type FrameworkIntentHint,
+} from './source-capabilities';
+import { collectCheckerSourceConfigModules } from './source-config-collection';
+import type { CollectAutoSourceConfigModulesOptions } from './source-config-collection-types';
+import { createEmptySourceConfigCollection } from './source-config-root-collection';
+import type { AutoScope } from './types';
 
 function setAutoRootConfigPaths(scope: AutoScope): void {
   scope.collection.rootConfigPaths =
     scope.collection.buildModulesBySourcePath.has(scope.entryConfigPath)
       ? [scope.entryConfigPath]
       : [];
+}
+
+function collectAutoSourceConfigModules(
+  options: CollectAutoSourceConfigModulesOptions,
+): void {
+  collectCheckerSourceConfigModules({
+    activatedRegions: options.activatedRegions,
+    checkerName: 'tsc',
+    checkerPreset: 'tsc',
+    collection: options.collection,
+    config: options.config,
+    discoveryExtensions: options.discoveryExtensions,
+    problems: options.problems,
+    projectConfigCache: options.projectConfigCache,
+    seenConfigs: new Set(),
+    sourceConfigPath: options.entryConfigPath,
+    sourceConfigInspector: options.sourceConfigInspector,
+  });
 }
 
 function createAutoScope(options: {
@@ -59,13 +51,24 @@ function createAutoScope(options: {
     options.entryConfigPath,
   ]);
   const problems: string[] = [];
+  const intentHintsByConfigPath = new Map<string, FrameworkIntentHint[]>();
   collectAutoSourceConfigModules({
     activatedRegions: options.activatedRegions,
     collection,
     config: options.config,
+    discoveryExtensions: capabilityDiscoveryExtensions,
     entryConfigPath: options.entryConfigPath,
     problems,
     projectConfigCache: options.projectConfigCache,
+    sourceConfigInspector: ({ configObject, sourceConfigPath }) => {
+      const inspection = inspectFrameworkIntent({
+        config: options.config,
+        configObject,
+        configPath: sourceConfigPath,
+      });
+      intentHintsByConfigPath.set(sourceConfigPath, inspection.intentHints);
+      problems.push(...inspection.problems);
+    },
   });
   if (problems.length > 0) {
     throw createGeneratedGraphStructuredError({
@@ -75,18 +78,38 @@ function createAutoScope(options: {
     });
   }
 
+  const projects = [...collection.projectConfigPaths]
+    .sort(compareCodeUnits)
+    .map((configPath) => {
+      const packageRootDir = collection.packageRootBySourcePath.get(configPath);
+      if (packageRootDir === undefined) {
+        throw new Error(`Missing auto checker package root for ${configPath}.`);
+      }
+      return createAutoScopeProject({
+        activatedRegions: options.activatedRegions,
+        config: options.config,
+        configPath,
+        intentHints: intentHintsByConfigPath.get(configPath) ?? [],
+        packageRootDir,
+        projectConfigCache: options.projectConfigCache,
+      });
+    });
+  const projectByConfigPath = new Map(
+    projects.map((project) => [project.configPath, project]),
+  );
   const scope: AutoScope = {
     collection,
     entryConfigPath: options.entryConfigPath,
-    projects: [...collection.projectConfigPaths]
-      .sort(compareCodeUnits)
-      .map((configPath) =>
-        createAutoScopeProject({
-          config: options.config,
+    frameworkEvidence: [...intentHintsByConfigPath.entries()]
+      .sort(([left], [right]) => compareCodeUnits(left, right))
+      .map(([configPath, intentHints]) =>
+        createAutoFrameworkEvidence({
           configPath,
-          projectConfigCache: options.projectConfigCache,
+          filePartition: projectByConfigPath.get(configPath)?.filePartition,
+          intentHints,
         }),
       ),
+    projects,
   };
   setAutoRootConfigPaths(scope);
   return scope;
@@ -102,74 +125,9 @@ export function collectAutoScope(options: {
   return scope.collection.projectConfigPaths.size > 0 ? scope : null;
 }
 
-function createUnsupportedExtensionProblem(options: {
-  config: ResolvedLiminaConfig;
-  entryConfigPath: string;
-  extension: string;
-  fileName: string;
-}): string {
-  return [
-    'Unsupported auto checker source file extension:',
-    `  scope: ${toRelativePath(options.config.rootDir, options.entryConfigPath)}`,
-    `  extension: ${options.extension}`,
-    `  example: ${toRelativePath(options.config.rootDir, options.fileName)}`,
-    '  reason: auto checker mode can only route TypeScript, JavaScript, JSON, and Vue source scopes.',
-    '  fix: move this file to an explicit checker scope or configure config.checkers manually.',
-  ].join('\n');
-}
-
-function classifyAutoFile(options: {
-  config: ResolvedLiminaConfig;
-  entryConfigPath: string;
-  fileName: string;
-  typescriptExtensions: ReadonlySet<string>;
-  vueExtensions: ReadonlySet<string>;
-}): boolean {
-  const extension = getFileExtension(options.fileName);
-  if (!extension) {
-    return false;
-  }
-  if (!options.vueExtensions.has(extension)) {
-    throw new Error(
-      createUnsupportedExtensionProblem({
-        config: options.config,
-        entryConfigPath: options.entryConfigPath,
-        extension,
-        fileName: options.fileName,
-      }),
-    );
-  }
-  return !options.typescriptExtensions.has(extension);
-}
-
-function projectNeedsVue(options: {
-  config: ResolvedLiminaConfig;
-  entryConfigPath: string;
-  project: AutoScopeProject;
-  typescriptExtensions: ReadonlySet<string>;
-  vueExtensions: ReadonlySet<string>;
-}): boolean {
-  return options.project.fileNames.some((fileName) =>
-    classifyAutoFile({ ...options, fileName }),
-  );
-}
-
-export function classifyAutoScope(options: {
-  config: ResolvedLiminaConfig;
-  scope: AutoScope;
-}): AutoCheckerPreset {
-  const typescriptExtensions = new Set(
-    getBuildCheckerSupportedExtensions('tsc'),
-  );
-  const vueExtensions = new Set(getBuildCheckerSupportedExtensions('vue-tsc'));
-  const needsVue = options.scope.projects.some((project) =>
-    projectNeedsVue({
-      config: options.config,
-      entryConfigPath: options.scope.entryConfigPath,
-      project,
-      typescriptExtensions,
-      vueExtensions,
-    }),
+export function classifyAutoScope(scope: AutoScope): AutoCheckerPreset {
+  const needsVue = scope.projects.some(
+    (project) => project.filePartition.vueFiles.length > 0,
   );
   return needsVue ? 'vue-tsc' : 'tsc';
 }

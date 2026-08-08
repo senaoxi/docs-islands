@@ -47,6 +47,115 @@ async function linkCompilerSfc(rootDir: string): Promise<void> {
   );
 }
 
+async function linkAstroCompiler(
+  rootDir: string,
+  packageName = '@astrojs/compiler',
+): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    `${packageName}/package.json`,
+  );
+  const nodeModulesDir = path.join(rootDir, 'node_modules', '@astrojs');
+
+  await mkdir(nodeModulesDir, { recursive: true });
+  await symlink(
+    path.dirname(compilerPackagePath),
+    path.join(nodeModulesDir, 'compiler'),
+    'junction',
+  );
+}
+
+async function linkSvelteCompiler(
+  rootDir: string,
+  packageName = 'svelte-v4-min',
+): Promise<void> {
+  const compilerPackagePath = requireFromTest.resolve(
+    `${packageName}/package.json`,
+  );
+  const nodeModulesDir = path.join(rootDir, 'node_modules');
+  await mkdir(nodeModulesDir, { recursive: true });
+  await symlink(
+    path.dirname(compilerPackagePath),
+    path.join(nodeModulesDir, 'svelte'),
+    'junction',
+  );
+}
+
+async function prewarmImportsFromFile(options: {
+  context: ReturnType<typeof createImportAnalysisContext>;
+  filePath: string;
+  packageRootDir: string;
+}): Promise<void> {
+  const prewarm = options.context.prewarmImportsFromFile;
+  if (prewarm === undefined)
+    throw new Error('Expected import prewarm support.');
+  await prewarm(options.filePath, options.packageRootDir);
+}
+
+function createSvelteCompilerSource(options: {
+  failMessage?: string;
+  version: string;
+}): string {
+  return [
+    `'use strict';`,
+    `exports.VERSION = ${JSON.stringify(options.version)};`,
+    'exports.preprocess = async function preprocess(source, preprocessor) {',
+    '  const replacements = [];',
+    '  const pattern = /<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/giu;',
+    '  for (const match of source.matchAll(pattern)) {',
+    '    const content = match[2] || "";',
+    '    const start = (match.index || 0) + match[0].indexOf(content);',
+    '    const processed = await preprocessor.script({ content });',
+    '    replacements.push({ start, end: start + content.length, code: processed.code });',
+    '  }',
+    '  let code = source;',
+    '  for (const replacement of replacements.reverse()) {',
+    '    code = code.slice(0, replacement.start) + replacement.code + code.slice(replacement.end);',
+    '  }',
+    '  return { code };',
+    '};',
+    'exports.parse = function parse(source) {',
+    ...(options.failMessage === undefined
+      ? []
+      : [`  throw new SyntaxError(${JSON.stringify(options.failMessage)});`]),
+    '  if (source.includes("<syntax-error>")) throw new SyntaxError("fixture syntax error");',
+    '  const root = { instance: null, module: null };',
+    '  const pattern = /<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/giu;',
+    '  for (const match of source.matchAll(pattern)) {',
+    '    const content = match[2] || "";',
+    '    const start = (match.index || 0) + match[0].indexOf(content);',
+    '    const script = { content: { start, end: start + content.length } };',
+    '    const attrs = match[1] || "";',
+    '    const isModule = /(?:^|\\s)module(?:\\s|=|$)/u.test(attrs) || /context\\s*=\\s*["\']module["\']/u.test(attrs);',
+    '    root[isModule ? "module" : "instance"] = script;',
+    '  }',
+    '  return root;',
+    '};',
+    '',
+  ].join('\n');
+}
+
+async function writeSvelteCompiler(options: {
+  failMessage?: string;
+  packageRootDir: string;
+  version: string;
+}): Promise<void> {
+  await writeText(
+    options.packageRootDir,
+    'node_modules/svelte/package.json',
+    JSON.stringify({
+      exports: { './compiler': './compiler.cjs' },
+      name: 'svelte-check',
+      type: 'commonjs',
+      version: options.version,
+    }),
+  );
+  await writeText(
+    options.packageRootDir,
+    'node_modules/svelte/compiler.cjs',
+    createSvelteCompilerSource(options),
+  );
+}
+
 describe('import analysis', () => {
   it('keeps full UTF-16 string-token locators and duplicate occurrences stable', async () => {
     const rootDir = await createTempDir();
@@ -481,6 +590,646 @@ describe('import analysis', () => {
 
       expect(() => collectImportsFromFile(filePath, rootDir, context)).toThrow(
         /Unable to parse Vue SFC for import analysis/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('prewarms actual Astro imports with domains and UTF-16 source locations', async () => {
+    const rootDir = await createTempDir();
+    const sourceText = [
+      '---',
+      "const label = '資料😀';",
+      "import Page from './Page.astro';",
+      "export { server } from './server';",
+      "void import('./lazy');",
+      "import { getCollection } from 'astro:content';",
+      "import './theme.css?inline';",
+      "import hero from './hero.png?url';",
+      'void [Page, label, getCollection, hero];',
+      '---',
+      '<Page />',
+      '<script type="application/json">{"source":"import \'./ignored\'"}</script>',
+      '<script is:inline>import "./inline-ignored";</script>',
+      '<script type="module">import "./typed-ignored";</script>',
+      '<script>',
+      "import { client } from './client';",
+      "void import('./client-lazy');",
+      'void client;',
+      '</script>',
+      '',
+    ].join('\r\n');
+
+    try {
+      await linkAstroCompiler(rootDir);
+      const filePath = await writeText(rootDir, 'src/Page.astro', sourceText);
+      const metrics = createProfilingMetricsRecorder();
+      const context = createImportAnalysisContext({ metrics });
+
+      expect(() => context.collectImportsFromFile(filePath, rootDir)).toThrow(
+        /Framework import analysis was not asynchronously prepared/u,
+      );
+      await Promise.all([
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+      ]);
+
+      expect(
+        context.collectImportsFromFile(filePath, rootDir).map((record) => ({
+          domain: record.domain,
+          kind: record.kind,
+          line: record.line,
+          specifier: record.specifier,
+          token: sourceText.slice(
+            record.locator.sourceStart,
+            record.locator.sourceEnd,
+          ),
+        })),
+      ).toEqual([
+        {
+          domain: 'astro-frontmatter',
+          kind: 'static',
+          line: 3,
+          specifier: './Page.astro',
+          token: "'./Page.astro'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'export',
+          line: 4,
+          specifier: './server',
+          token: "'./server'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'dynamic',
+          line: 5,
+          specifier: './lazy',
+          token: "'./lazy'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'static',
+          line: 6,
+          specifier: 'astro:content',
+          token: "'astro:content'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'static',
+          line: 7,
+          specifier: './theme.css?inline',
+          token: "'./theme.css?inline'",
+        },
+        {
+          domain: 'astro-frontmatter',
+          kind: 'static',
+          line: 8,
+          specifier: './hero.png?url',
+          token: "'./hero.png?url'",
+        },
+        {
+          domain: 'astro-client-script',
+          kind: 'static',
+          line: 16,
+          specifier: './client',
+          token: "'./client'",
+        },
+        {
+          domain: 'astro-client-script',
+          kind: 'dynamic',
+          line: 17,
+          specifier: './client-lazy',
+          token: "'./client-lazy'",
+        },
+      ]);
+      expect(
+        metrics
+          .snapshot()
+          .find(
+            (metric) =>
+              metric.name === 'source-parse' && metric.kind === '.astro',
+          )?.count,
+      ).toBe(1);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('resolves the actual Astro compiler from the supplied leaf root', async () => {
+    const rootDir = await createTempDir();
+    const leafRootDir = path.join(rootDir, 'packages/leaf');
+
+    try {
+      await writeText(
+        rootDir,
+        'node_modules/@astrojs/compiler/package.json',
+        JSON.stringify({
+          main: './index.cjs',
+          name: '@astrojs/compiler',
+          version: '1.0.0',
+        }),
+      );
+      await writeText(
+        rootDir,
+        'node_modules/@astrojs/compiler/index.cjs',
+        'throw new Error("wrong compiler scope");\n',
+      );
+      await linkAstroCompiler(leafRootDir);
+      const filePath = await writeText(
+        rootDir,
+        'packages/leaf/src/Page.astro',
+        '---\nimport value from "./value";\n---\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: leafRootDir,
+      });
+      expect(
+        context
+          .collectImportsFromFile(filePath, leafRootDir)
+          .map((record) => record.specifier),
+      ).toEqual(['./value']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('parses imports with the selected minimum actual Astro compiler', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await linkAstroCompiler(rootDir, '@astrojs/compiler-v2');
+      const filePath = await writeText(
+        rootDir,
+        'src/Page.astro',
+        '---\nimport value from "./value";\n---\n<h1>Astro 2</h1>\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: rootDir,
+      });
+      expect(
+        context
+          .collectImportsFromFile(filePath, rootDir)
+          .map((record) => record.specifier),
+      ).toEqual(['./value']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('does not inherit an Astro compiler from an ancestor package root', async () => {
+    const rootDir = await createTempDir();
+    const leafRootDir = path.join(rootDir, 'packages/leaf');
+
+    try {
+      await linkAstroCompiler(rootDir);
+      await writeText(
+        rootDir,
+        'packages/leaf/package.json',
+        '{"name":"leaf","private":true}\n',
+      );
+      const filePath = await writeText(
+        rootDir,
+        'packages/leaf/src/Page.astro',
+        '---\nimport value from "./value";\n---\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await expect(
+        prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: leafRootDir,
+        }),
+      ).rejects.toThrow(
+        /Unable to load Astro compiler for import analysis:[\s\S]*leaf package root/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('isolates concurrent Astro import caches by leaf root and compiler version', async () => {
+    const rootDir = await createTempDir();
+    const currentLeaf = path.join(rootDir, 'packages/current');
+    const minimumLeaf = path.join(rootDir, 'packages/minimum');
+
+    try {
+      await Promise.all([
+        linkAstroCompiler(currentLeaf),
+        linkAstroCompiler(minimumLeaf, '@astrojs/compiler-v2'),
+      ]);
+      const filePath = await writeText(
+        rootDir,
+        'shared/Page.astro',
+        '---\nimport value from "./value";\n---\n',
+      );
+      const metrics = createProfilingMetricsRecorder();
+      const context = createImportAnalysisContext({ metrics });
+
+      await Promise.all([
+        prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: currentLeaf,
+        }),
+        prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: minimumLeaf,
+        }),
+      ]);
+      expect(
+        context.collectImportsFromFile(filePath, currentLeaf)[0]?.specifier,
+      ).toBe('./value');
+      expect(
+        context.collectImportsFromFile(filePath, minimumLeaf)[0]?.specifier,
+      ).toBe('./value');
+      expect(
+        metrics
+          .snapshot()
+          .find(
+            (metric) =>
+              metric.name === 'source-parse' && metric.kind === '.astro',
+          )?.count,
+      ).toBe(2);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('reports missing and unsupported Astro analysis runtimes', async () => {
+    const missingRootDir = await createTempDir();
+    const unsupportedRootDir = await createTempDir();
+
+    try {
+      const missingFilePath = await writeText(
+        missingRootDir,
+        'src/Page.astro',
+        '<h1>Missing</h1>\n',
+      );
+      const missingContext = createImportAnalysisContext();
+      await expect(
+        prewarmImportsFromFile({
+          context: missingContext,
+          filePath: missingFilePath,
+          packageRootDir: missingRootDir,
+        }),
+      ).rejects.toThrow(
+        /Unable to load Astro compiler for import analysis:[\s\S]*dependency category: analysis runtime/u,
+      );
+
+      await writeText(
+        unsupportedRootDir,
+        'node_modules/@astrojs/compiler/package.json',
+        JSON.stringify({
+          main: './index.cjs',
+          name: '@astrojs/compiler',
+          version: '1.0.0',
+        }),
+      );
+      await writeText(
+        unsupportedRootDir,
+        'node_modules/@astrojs/compiler/index.cjs',
+        'exports.parse = async () => ({ ast: { type: "root" } });\n',
+      );
+      const unsupportedFilePath = await writeText(
+        unsupportedRootDir,
+        'src/Page.astro',
+        '<h1>Unsupported</h1>\n',
+      );
+      const unsupportedContext = createImportAnalysisContext();
+      await expect(
+        prewarmImportsFromFile({
+          context: unsupportedContext,
+          filePath: unsupportedFilePath,
+          packageRootDir: unsupportedRootDir,
+        }),
+      ).rejects.toThrow(
+        /Unsupported Astro compiler for import analysis:[\s\S]*installed version: 1\.0\.0[\s\S]*supported range: >=2\.0\.0 <5\.0\.0/u,
+      );
+    } finally {
+      await Promise.all([
+        rm(missingRootDir, { force: true, recursive: true }),
+        rm(unsupportedRootDir, { force: true, recursive: true }),
+      ]);
+    }
+  });
+
+  it('reports actual Astro compiler parse diagnostics with the source file', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await linkAstroCompiler(rootDir);
+      const filePath = await writeText(
+        rootDir,
+        'src/Page.astro',
+        '<html>\n<body>\n{/*\n</body>\n</html>\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await expect(
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+      ).rejects.toThrow(
+        /Unable to parse Astro component for import analysis:[\s\S]*src\/Page\.astro[\s\S]*Unterminated comment/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it.each(['context="module"', 'module'])(
+    'collects Svelte instance and %s script imports with domains and source locations',
+    async (moduleAttribute) => {
+      const rootDir = await createTempDir();
+      const sourceText = [
+        `<script ${moduleAttribute}>`,
+        "export { server } from './server';",
+        '</script>',
+        '<h1>Component</h1>',
+        '<script lang="ts">',
+        "import value from './value';",
+        "import './theme.css?inline';",
+        "import { page } from '$app/state';",
+        "import { local } from '$lib/local';",
+        "void import('./lazy');",
+        'void [value, page, local];',
+        '</script>',
+        '',
+      ].join('\r\n');
+
+      try {
+        await writeSvelteCompiler({
+          packageRootDir: rootDir,
+          version: '5.1.0',
+        });
+        const filePath = await writeText(rootDir, 'src/App.svelte', sourceText);
+
+        const context = createImportAnalysisContext();
+        await prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: rootDir,
+        });
+        expect(
+          context.collectImportsFromFile(filePath, rootDir).map((record) => ({
+            domain: record.domain,
+            kind: record.kind,
+            line: record.line,
+            specifier: record.specifier,
+            token: sourceText.slice(
+              record.locator.sourceStart,
+              record.locator.sourceEnd,
+            ),
+          })),
+        ).toEqual([
+          {
+            domain: 'svelte-module-script',
+            kind: 'export',
+            line: 2,
+            specifier: './server',
+            token: "'./server'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'static',
+            line: 6,
+            specifier: './value',
+            token: "'./value'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'static',
+            line: 7,
+            specifier: './theme.css?inline',
+            token: "'./theme.css?inline'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'static',
+            line: 8,
+            specifier: '$app/state',
+            token: "'$app/state'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'static',
+            line: 9,
+            specifier: '$lib/local',
+            token: "'$lib/local'",
+          },
+          {
+            domain: 'svelte-instance-script',
+            kind: 'dynamic',
+            line: 10,
+            specifier: './lazy',
+            token: "'./lazy'",
+          },
+        ]);
+      } finally {
+        await rm(rootDir, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it('prewarms TypeScript scripts with the actual Svelte 4 compiler', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await linkSvelteCompiler(rootDir);
+      const filePath = await writeText(
+        rootDir,
+        'src/App.svelte',
+        '<script lang="ts">\nlet value: number = 1;\nimport dep from "./dep";\nvoid [value, dep];\n</script>\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: rootDir,
+      });
+      expect(
+        context
+          .collectImportsFromFile(filePath, rootDir)
+          .map((record) => record.specifier),
+      ).toEqual(['./dep']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('resolves the Svelte compiler from the supplied leaf package root', async () => {
+    const rootDir = await createTempDir();
+    const leafRootDir = path.join(rootDir, 'packages/leaf');
+
+    try {
+      await writeSvelteCompiler({
+        failMessage: 'wrong compiler scope',
+        packageRootDir: rootDir,
+        version: '5.0.0',
+      });
+      await writeSvelteCompiler({
+        packageRootDir: leafRootDir,
+        version: '5.2.0',
+      });
+      const filePath = await writeText(
+        rootDir,
+        'packages/leaf/src/App.svelte',
+        '<script>import value from "./value";</script>\n',
+      );
+
+      const context = createImportAnalysisContext();
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: leafRootDir,
+      });
+      expect(
+        context
+          .collectImportsFromFile(filePath, leafRootDir)
+          .map((record) => record.specifier),
+      ).toEqual(['./value']);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('does not inherit a Svelte compiler from an ancestor package root', async () => {
+    const rootDir = await createTempDir();
+    const leafRootDir = path.join(rootDir, 'packages/leaf');
+
+    try {
+      await writeSvelteCompiler({
+        packageRootDir: rootDir,
+        version: '5.1.0',
+      });
+      await writeText(
+        rootDir,
+        'packages/leaf/package.json',
+        '{"name":"leaf","private":true}\n',
+      );
+      const filePath = await writeText(
+        rootDir,
+        'packages/leaf/src/App.svelte',
+        '<script>import value from "./value";</script>\n',
+      );
+      const context = createImportAnalysisContext();
+
+      await expect(
+        prewarmImportsFromFile({
+          context,
+          filePath,
+          packageRootDir: leafRootDir,
+        }),
+      ).rejects.toThrow(
+        /Unable to load Svelte compiler for import analysis:[\s\S]*leaf package root/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('reports a structured Svelte analysis error when the parser is missing', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      const filePath = await writeText(
+        rootDir,
+        'src/App.svelte',
+        '<script>import value from "./value";</script>\n',
+      );
+
+      const context = createImportAnalysisContext();
+      await expect(
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+      ).rejects.toThrow(
+        /Unable to load Svelte compiler for import analysis:[\s\S]*dependency category: analysis runtime/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('reports Svelte parser syntax errors with the source file', async () => {
+    const rootDir = await createTempDir();
+
+    try {
+      await writeSvelteCompiler({ packageRootDir: rootDir, version: '5.1.0' });
+      const filePath = await writeText(
+        rootDir,
+        'src/App.svelte',
+        '<syntax-error>\n',
+      );
+
+      const context = createImportAnalysisContext();
+      await expect(
+        prewarmImportsFromFile({ context, filePath, packageRootDir: rootDir }),
+      ).rejects.toThrow(
+        /Unable to parse Svelte component for import analysis:[\s\S]*src\/App\.svelte[\s\S]*fixture syntax error/u,
+      );
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  it('isolates Svelte import caches by leaf root and parser identity', async () => {
+    const rootDir = await createTempDir();
+    const firstLeaf = path.join(rootDir, 'packages/first');
+    const secondLeaf = path.join(rootDir, 'packages/second');
+
+    try {
+      await writeSvelteCompiler({
+        packageRootDir: firstLeaf,
+        version: '5.1.0',
+      });
+      await writeSvelteCompiler({
+        packageRootDir: secondLeaf,
+        version: '5.2.0',
+      });
+      const filePath = await writeText(
+        rootDir,
+        'shared/App.svelte',
+        '<script>import value from "./value";</script>\n',
+      );
+      const metrics = createProfilingMetricsRecorder();
+      const context = createImportAnalysisContext({ metrics });
+
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: firstLeaf,
+      });
+      await prewarmImportsFromFile({
+        context,
+        filePath,
+        packageRootDir: secondLeaf,
+      });
+      context.collectImportsFromFile(filePath, firstLeaf);
+      context.collectImportsFromFile(filePath, secondLeaf);
+      context.collectImportsFromFile(filePath, firstLeaf);
+
+      const providerMetrics = metrics
+        .snapshot()
+        .filter(
+          (metric) =>
+            metric.kind === 'imports' &&
+            metric.name.startsWith('provider-cache-'),
+        );
+      expect(providerMetrics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ count: 2, name: 'provider-cache-miss' }),
+          expect.objectContaining({ count: 3, name: 'provider-cache-hit' }),
+        ]),
       );
     } finally {
       await rm(rootDir, { force: true, recursive: true });

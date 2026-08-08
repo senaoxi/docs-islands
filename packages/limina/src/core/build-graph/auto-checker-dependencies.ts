@@ -1,19 +1,20 @@
-import type { ResolvedLiminaConfig, VueImportParser } from '#config/runner';
+import type { ResolvedLiminaConfig } from '#config/runner';
 import {
   collectImportsFromFile,
-  createImportAnalysisContext,
   resolveInternalImport,
 } from '#core/import-graph/context';
 import { normalizeAbsolutePath } from '#utils/path';
 import path from 'pathe';
+import { getAutoScopeFilePackageRoot } from './auto-checker-file-roots';
 import { capabilityDiscoveryExtensions } from './generated/file-extensions';
+import { resolveBuildGraphImportAnalysis } from './import-analysis-context';
 import type {
   AutoScope,
   AutoScopeProject,
   PrepareGeneratedTsconfigGraphOptions,
 } from './types';
 
-type ImportAnalysis = ReturnType<typeof createImportAnalysisContext>;
+type ImportAnalysis = ReturnType<typeof resolveBuildGraphImportAnalysis>;
 
 function addFileScopeEntry(options: {
   entryConfigPath: string;
@@ -144,7 +145,7 @@ function addFileImportDependencies(options: {
 }): void {
   const importRecords = collectImportsFromFile(
     options.fileName,
-    options.config.rootDir,
+    getAutoScopeFilePackageRoot(options.project, options.fileName),
     options.importAnalysis,
   );
   for (const importRecord of importRecords) {
@@ -224,29 +225,6 @@ function addSolutionDependencies(options: {
   }
 }
 
-function getVueParser(
-  config: ResolvedLiminaConfig,
-): VueImportParser | undefined {
-  if (!config.config) {
-    return undefined;
-  }
-  const imports = config.config.imports;
-  return imports ? imports.vue : undefined;
-}
-
-function createImportAnalysis(options: {
-  config: ResolvedLiminaConfig;
-  importAnalysisContext?: PrepareGeneratedTsconfigGraphOptions['importAnalysisContext'];
-}): ImportAnalysis {
-  if (options.importAnalysisContext) {
-    return options.importAnalysisContext;
-  }
-  return createImportAnalysisContext({
-    projectRootDir: options.config.rootDir,
-    vueParser: getVueParser(options.config),
-  });
-}
-
 function collectScopeDependencies(options: {
   config: ResolvedLiminaConfig;
   dependencies: Set<string>;
@@ -280,7 +258,7 @@ export function collectAutoScopeDependencies(options: {
     options.scopes.map((scope) => scope.entryConfigPath),
   );
   const entryPathsByFileName = createEntryPathsByFileName(options.scopes);
-  const importAnalysis = createImportAnalysis(options);
+  const importAnalysis = resolveBuildGraphImportAnalysis(options);
   for (const scope of options.scopes) {
     collectScopeDependencies({
       config: options.config,

@@ -37,7 +37,14 @@ export type StandaloneInternalImportArguments = [
 
 export interface ImportAnalysisContext {
   clearOxcResolverCaches?: () => void;
-  collectImportsFromFile: (filePath: string, rootDir: string) => ImportRecord[];
+  collectImportsFromFile: (
+    filePath: string,
+    packageRootDir: string,
+  ) => ImportRecord[];
+  prewarmImportsFromFile?: (
+    filePath: string,
+    packageRootDir: string,
+  ) => Promise<void>;
   resolveInternalImport: (...args: ImportResolutionArguments) => string | null;
   resolveOxcImport: (...args: ImportResolutionArguments) => string | null;
   resolveModulePair: (
@@ -112,6 +119,7 @@ export interface NormalizedModuleResolutionRequest {
 
 export interface ImportAnalysisCaches {
   importsCache: Map<string, ImportRecord[]>;
+  importsPromiseCache: Map<string, Promise<ImportRecord[]>>;
   moduleResolutionIndex: Map<string, LazyModuleResolutionRecord>;
   moduleResolverIdentityCache: Map<string, number>;
   nextModuleResolverIdentity: number;
@@ -144,4 +152,28 @@ export interface VueCompilerSfc {
     };
     errors: unknown[];
   };
+  version?: string;
+}
+
+export interface FrameworkImportCollectionOptions {
+  filePath: string;
+  packageRootDir: string;
+  sourceText: string;
+}
+
+export interface FrameworkImportParserIdentity {
+  kind: string;
+  mode: string;
+  version: string;
+}
+
+export interface FrameworkImportProvider {
+  collectionMode: 'async' | 'sync';
+  collectImports(
+    options: FrameworkImportCollectionOptions,
+  ): ImportRecord[] | Promise<ImportRecord[]>;
+  extension: string;
+  getParserIdentity(options: {
+    packageRootDir: string;
+  }): FrameworkImportParserIdentity;
 }

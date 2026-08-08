@@ -29,12 +29,12 @@ export function createRawBuildChecker(options: {
   return {
     exclude: [],
     extensions: getCheckerExtensions(
-      { include: [], preset: options.preset },
+      options.preset,
+      { include: [] },
       { projectRootDir: options.projectRootDir },
     ),
     include: [],
     name: options.preset,
-    preset: options.preset,
   };
 }
 

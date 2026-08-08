@@ -8,7 +8,12 @@ import type {
 export type { ResolvedCheckerModuleName } from '#checkers';
 export { createImportAnalysisContext } from './context';
 export { resolveModuleNameWithOxc } from './oxc-resolution';
-export type { ImportLocator, ImportRecord, ImportRecordKind } from './records';
+export type {
+  ImportDomain,
+  ImportLocator,
+  ImportRecord,
+  ImportRecordKind,
+} from './records';
 export { createOxcResolverProfileIdentity } from './resolver-profile';
 export type {
   CreateImportAnalysisContextOptions,

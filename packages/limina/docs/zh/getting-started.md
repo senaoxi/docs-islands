@@ -95,7 +95,7 @@ export default defineConfig({
 });
 ```
 
-这里显式写出 `mode: 'auto'`，是为了让配置直接表达 Limina 的行为：在已激活工作区包区域内自动寻找源码用的 `tsconfig.json`，再按文件内容交给 `tsc` 或 `vue-tsc`。如果这些区域内的个别入口暂时不想交给 Limina，可以写到 `exclude` 中。整个被排除或不可访问的区域本来就不参与发现，不需要再重复写 exclude pattern。
+这里显式写出 `mode: 'auto'`，是为了让配置直接表达 Limina 的行为：在已激活工作区包区域内自动寻找源码用的 `tsconfig.json`，选择 `tsc` 或 `vue-tsc` 作为每个作用域的声明构建归属方，并在存在对应文件时为每个配置补充 Astro 或 Svelte 检查。如果这些区域内的个别入口暂时不想交给 Limina，可以写到 `exclude` 中。整个被排除或不可访问的区域本来就不参与发现，不需要再重复写 exclude pattern。
 
 ```js
 import { defineConfig } from 'limina';
@@ -169,15 +169,15 @@ pnpm exec limina check --issues --task checker:typecheck
 
 - `graph:check` 失败，通常说明源码导入关系与 Limina 生成或校验的 `TypeScript` 项目图没有对齐。优先检查由静态导入推导出的项目引用是否缺失或多余，跨工作区包引用是否有对应依赖声明，图规则或标签是否禁止了当前依赖边，以及工作区导入是否能稳定解析并映射到源码图。
 - `source:check` 失败，通常说明源码文件归属或源码导入授权没有通过。优先检查源码归属方、`tsconfig` 治理、相对导入是否越过最近的 `package.json` 包边界，`#...` 导入是否匹配当前源码归属方的 `package.json#imports`，裸包导入是否由依赖声明或 `source.importAuthority.allow` 授权，以及 `Knip` 发现的未使用源码或未使用依赖问题。
-- `proof:check` 失败，通常说明 Limina 无法证明实际源码已经被类型检查覆盖。优先检查检查器入口是否生成了对应 `tsconfig`，声明构建配置与配套类型检查配置是否一致，`config.source` 中的文件是否被检查器、图或 `proof.allowlist` 覆盖，以及是否存在同一源码文件被多个图或类型检查归属方覆盖的问题。
+- `proof:check` 失败，通常说明 Limina 无法证明实际源码已经被类型检查覆盖。优先检查检查器入口是否生成了对应 `tsconfig`，声明构建配置与配套类型检查配置是否一致，Astro 或 Svelte 能力是否拥有可执行的叶子目标，`config.source` 中的文件是否被检查器、图或 `proof.allowlist` 覆盖，以及是否存在重复的主要或补充归属方。
 - `checker:build`（检查器构建）失败，说明构建型检查器没有通过。常见原因包括 `tsc`、`tsgo`、`vue-tsc` 外部命令返回错误，缺少对应检查器依赖，或者 Limina 无法为当前目标选择有效的构建目标。先看 Limina 汇总中的检查器、配置路径和退出码，再进入对应检查器的原始日志。
-- `checker:typecheck`（检查器类型检查）失败，说明类型检查型检查器没有通过。常见原因包括 `vue-tsgo`、`svelte-check` 外部命令返回错误，缺少对应检查器依赖，或生成的检查器入口无法正常执行。先根据 Limina 汇总定位执行器和配置路径，再查看对应问题或原始日志。
+- `checker:typecheck`（检查器类型检查）失败，说明补充框架检查器没有通过。常见原因包括 `astro check` 或 `svelte-check` 返回错误、缺少叶子包内的检查器或解析器依赖，或缺少 Astro 生成类型。先根据 Limina 汇总定位执行器和配置路径，再查看对应问题或原始日志。
 
 推荐排查顺序是：先处理 `graph:check`、`source:check`、`proof:check` 这类结构性问题，再处理 `checker:build`（检查器构建）和 `checker:typecheck`（检查器类型检查）的执行器错误。前者决定 Limina 如何理解项目图、源码归属、导入授权和类型检查覆盖范围；后者通常是具体检查器对源码或框架类型约束给出的结果。默认检查会按上述任务顺序展示和记录问题，但任务本身可能在资源允许时并发执行，因此这个顺序是阅读和处理问题的建议顺序，不代表后续任务一定被前置任务阻塞。
 
-## 添加框架检查器
+## 配置检查器归属
 
-Limina 也可以运行框架感知检查器。当工作区某部分需要它时，可以增加一个检查器入口：
+工作区不同部分需要不同构建归属时，使用固定检查器 key：
 
 ```js
 import { defineConfig } from 'limina';
@@ -185,13 +185,11 @@ import { defineConfig } from 'limina';
 export default defineConfig({
   config: {
     checkers: {
-      typescript: {
-        preset: 'tsc',
+      tsc: {
         include: ['packages/**/tsconfig.json'],
         exclude: ['packages/web/tsconfig.json'],
       },
-      vue: {
-        preset: 'vue-tsc',
+      'vue-tsc': {
         include: ['packages/web/tsconfig.json'],
       },
     },
@@ -201,4 +199,4 @@ export default defineConfig({
 
 检查器入口始终是 `tsconfig.json`。如果包里还有 `tsconfig.lib.json` 或 `tsconfig.test.json`，应由这个包的 `tsconfig.json` 通过 `references` 配置声明项目引用；即使引用路径匹配 checker `exclude`，Limina 仍会继续跟随这些项目引用。所有被引用的普通源码配置都应位于已激活区域内。
 
-内置预设包括 `tsc`、`tsgo`、`vue-tsc`、`vue-tsgo`、`svelte-check`。启用某个检查器时，请安装对应包；`tsgo` 和 `vue-tsgo` 需要 `@typescript/native-preview`。Limina 默认用内置启发式规则解析 `Vue SFC` 的导入；只有显式启用 `config.imports.vue: 'compiler-sfc'` 时，才需要再安装 `@vue/compiler-sfc`。
+构建检查器 identity 是 `tsc`、`tsgo` 和 `vue-tsc`，补充检查器 identity 是 `astro` 和 `svelte-check`。启用检查器或发现 target 时，请安装对应 package；`tsgo` 需要 `@typescript/native-preview`。Astro 检查要求所属叶子包安装 `astro`、`@astrojs/check` 和 `typescript`；Svelte 检查要求安装 `svelte-check`、`svelte` 和 `typescript`。Astro import analysis 还需要叶子包内的 `@astrojs/compiler`。Limina 默认用内置启发式规则解析 `Vue SFC` 的 import；只有显式启用 `config.imports.vue: 'compiler-sfc'` 时，才需要再安装 `@vue/compiler-sfc`。

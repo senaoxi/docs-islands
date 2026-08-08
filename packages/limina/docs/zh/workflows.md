@@ -69,7 +69,8 @@ jobs:
 
 ::: tip
 
-- 保持源码 `tsconfig.json` 聚合器只包含 `files: []` 和 `references`。
+- 保持源码 `tsconfig.json` 聚合器经检查器解析后的文件集合为空，并直接声明 `references`；`files: []` 是最清楚的写法。
+- Solution 配置应放在名称恰好为 `tsconfig.json` 的入口。解析后无文件且声明 `references` 的 `tsconfig.*.json` 虽然是 TypeScript solution，但不是 Limina 支持的 solution 名称。
 - 保持源码 `tsconfig` 文件集合意图清晰，并让 Limina 管理 `.limina/` 下的声明构建配置。
 - 工作区包导出要保持意图明确：源码入口被消费时，需要由真实导入或 `implicitRefs` 补充出对应引用；产物入口被消费时，会作为限定架构事实出现在 `limina graph export --view artifact` 中。
 - 源码检查、包检查和发布检查覆盖不同层面；发布相关检查应放在产物构建之后运行。
@@ -79,9 +80,13 @@ jobs:
 
 ## 常见问题
 
+### Limina 如何识别 solution 配置？
+
+Limina 会使用当前检查器解析每个可达配置。解析后的有效文件列表为空、且配置直接声明 `references` 时，它就是 TypeScript solution；`extends` 或检查器支持的框架文件也会参与这个判断。只有路径 basename 恰好为 `tsconfig.json` 时，Limina 才会展开这个角色。迁移命令会先汇总所有可达的带名称 solution，再进行任何 worktree 或文件修改。可以把它重命名为 `tsconfig.json`，把引用合并到目录已有的默认入口，或移除 `references` 并把它改成具有明确源码边界的叶子配置。
+
 ### limina checker build 和 checker typecheck 如何选择目标？
 
-`checker build` 会运行支持构建模式的预设，也就是 `tsc -b`、`tsgo -b` 和 `vue-tsc -b`。`tsgo` 由 `Microsoft` 的 `@typescript/native-preview` 包提供。`checker typecheck` 会运行只做类型检查的预设，目前是 `vue-tsgo --project <entry>` 和 `svelte-check --tsconfig <entry>`。Limina 有意不让 `vue-tsgo` 进入 `checker build`：当前 `vue-tsgo --build` 不能保持 `TypeScript` 项目引用边界，也不具备增量构建语义；但它配置的 `tsconfig` 入口仍会参与 Limina 图检查和覆盖证明。`Vue` 的构建类检查优先使用 `vue-tsc`。
+`checker build` 会运行已配置的构建检查器 identity，也就是 `tsc -b`、`tsgo -b` 和 `vue-tsc -b`。`tsgo` 由 Microsoft 的 `@typescript/native-preview` package 提供。`checker typecheck` 会运行从实际框架模块发现的 Astro 与 Svelte 补充 target。补充 scope 只过滤 target，不拥有声明。
 
 ### 为什么包检查需要先构建？
 
@@ -95,7 +100,7 @@ jobs:
 
 ### Vue 或 Svelte 文件应该放进 TypeScript 图吗？
 
-框架文件应该由对应框架检查器入口覆盖。Limina 可以通过 `vue-tsc`、`vue-tsgo` 或 `svelte-check` 证明覆盖，不需要把这些文件假装成普通 `tsc -b` 声明构建项目。
+Vue 文件由 `vue-tsc` 覆盖；实际 Astro 与 Svelte 模块会获得对应的补充 target。Limina 不会把 `.astro` 或 `.svelte` 文件伪装成普通 `tsc -b` 声明构建 leaf。
 
 ### `--mode` 有什么用途？
 

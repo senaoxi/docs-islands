@@ -377,8 +377,7 @@ async function writeConsumerFiles(
 export default defineConfig({
   config: {
     checkers: {
-      typescript: {
-        preset: 'tsc',
+      tsc: {
         include: ['app/tsconfig.json'],
       },
     },

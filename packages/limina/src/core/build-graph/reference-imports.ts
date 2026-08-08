@@ -1,11 +1,13 @@
 import { collectImportsFromFile } from '#core/import-graph/context';
 import { shouldInferDeclarationReferenceFromImportRecord } from '../import-graph/declaration-reference-evidence';
+import { getFrameworkFilePackageRoot } from './framework-file-root';
 import type {
   ReferenceImportContext,
   ReferenceImportOptions,
 } from './reference-import-types';
 import { addMappedReference } from './reference-recording';
 import {
+  addMissingOwnedDeclarationProviderProblem,
   createReferenceTarget,
   isValidReferenceTarget,
   resolveUsableProvider,
@@ -14,9 +16,22 @@ import type { SourceProject } from './types';
 
 export type { ReferenceImportContext } from './reference-import-types';
 
-function processReferenceImport(options: ReferenceImportOptions): void {
+function addFallbackProviderProblem(options: {
+  initialProblemCount: number;
+  reference: ReferenceImportOptions;
+}): void {
+  if (options.reference.context.problems.length !== options.initialProblemCount)
+    return;
+  addMissingOwnedDeclarationProviderProblem(options.reference);
+}
+
+export function processDeclarationProviderImport(
+  options: ReferenceImportOptions,
+): void {
+  const initialProblemCount = options.context.problems.length;
   const provider = resolveUsableProvider(options);
   if (!provider) {
+    addFallbackProviderProblem({ initialProblemCount, reference: options });
     return;
   }
   const target = createReferenceTarget({ base: options, provider });
@@ -32,12 +47,16 @@ function processProjectFileImports(options: {
 }): void {
   const imports = collectImportsFromFile(
     options.fileName,
-    options.context.config.rootDir,
+    getFrameworkFilePackageRoot({
+      activatedRegions: options.context.activatedRegions,
+      fallbackPackageRootDir: options.project.packageRootDir,
+      fileName: options.fileName,
+    }),
     options.context.importAnalysis,
   );
   for (const importRecord of imports) {
     if (shouldInferDeclarationReferenceFromImportRecord(importRecord)) {
-      processReferenceImport({ ...options, importRecord });
+      processDeclarationProviderImport({ ...options, importRecord });
     }
   }
 }

@@ -125,7 +125,7 @@ These two commands read the already-built `outDir`. They do not build artifacts 
 | Run internal declaration graph build for a specific config         | `limina checker build <config>`            | Accepts only Limina-managed source configs or aggregator configs; does not perform `raw build`                                            |
 | Build user-consumable artifacts                                    | `limina build <config>`                    | Accepts only Limina-managed source leaves or aggregator configs that declare `liminaOptions.outputs`                                      |
 | Build a user-maintained `tsconfig` directly                        | `limina build <config> --raw --preset tsc` | Does not read Limina output config and does not use the generated graph                                                                   |
-| Run non-build checker entries                                      | `limina checker typecheck`                 | For entries such as `vue-tsgo` or `svelte-check` that only type-check                                                                     |
+| Run supplemental framework targets                                 | `limina checker typecheck`                 | Runs discovered Astro and Svelte targets; succeeds as disabled when no target exists                                                      |
 | Check built package artifacts                                      | `limina package check`                     | Requires `package.entries[].outDir`; checks package manifest, `publint`, `ATTW`, or artifact import boundaries                            |
 | Check pre-release artifact consistency                             | `limina release check`                     | Requires built artifacts and checks local dependency declarations, private packages, `tarball` results, or configured release consistency |
 
@@ -154,11 +154,25 @@ It searches upward from the current directory for `pnpm-workspace.yaml`, confirm
 pnpm exec limina migration
 ```
 
-External activated packages are supported, including a migration whose targets belong to several Git worktrees. Before writing anything, Limina resolves every target's canonical Git worktree root and requires every involved worktree to be clean. It then executes one transaction with those canonical roots as the complete write allowlist. A dirty external worktree blocks all writes; every target must belong to a Git worktree.
+#### Git working tree confirmation
+
+Every migration target must belong to a Git worktree. External activated packages are supported, so one migration can include targets from several worktrees. Before writing, Limina resolves every target's worktree and checks its Git status. Both changes to tracked files and untracked files are included.
+
+- If every involved worktree is clean, migration continues without a confirmation prompt.
+- If any worktree contains changes, Limina summarizes every worktree that has changes and asks once whether to continue. The prompt defaults to “no.”
+- If the user confirms, Limina then creates and executes the `tsconfig*.json` write plan. Confirmation does not commit, stash, remove, or restore existing changes.
+- Declining or canceling stops migration without writing any target and tells the user to keep the Git worktrees clean.
+- A non-interactive environment cannot display the prompt, so migration stops without writing when changes are present. Clean every involved worktree before rerunning the command.
+
+After confirmation, migration can still write only the planned config files inside the canonical roots of the target worktrees. Approving a dirty worktree does not expand the selected targets or write scope.
+
+#### Migration scope and output fields
 
 Migration selection follows the same package-island visibility and checker selectors as graph preparation. It never reads or edits a config behind an owner-local boundary merely because an ancestor pattern could match it.
 
 Migration reads each target's effective TypeScript config, including inherited options, before it plans any write. A direct `compilerOptions.declarationDir` is removed when it is equivalent to the planned managed output root; when it is the only output setting, its relative value becomes `liminaOptions.outputs.outDir`, so JavaScript and declarations share one artifact directory after migration. Split JavaScript/declaration output, an effective `outFile`, a mixed solution aggregator, an invalid declaration directory, or an absolute declaration directory without an existing equivalent managed root fails before any target is written. Inherited `declarationDir` stays in its base config and is not copied into leaves. Migration does not delete existing user output files.
+
+Migration does not install Astro or Svelte dependencies, run `astro sync`, or rewrite framework source. The next generated-graph materialization derives framework capabilities from the migrated source configs and actual files. If a version 1 through 3 `.limina/manifest.json` exists, Limina uses it only as an owned-artifact ledger to delete stale generated paths, then replaces it with the current version 4 manifest; framework capability descriptors remain live graph facts rather than persisted manifest data.
 
 ### limina check [pipeline]
 
@@ -278,7 +292,7 @@ pnpm exec limina proof check
 pnpm exec limina proof check --verbose
 ```
 
-Based on the generated graph, checker entries, project routes, source boundaries, and `proof.allowlist`, it checks whether source files are covered by the generated graph or checkers, and reports issues related to checker coverage targets, default `tsconfig` files, declaration configs, local paired configs, or allowlist entries.
+Based on the generated graph, checker entries, project routes, source boundaries, and `proof.allowlist`, it checks whether source files are covered by the generated graph or checkers, and reports issues related to checker coverage targets, default `tsconfig` files, declaration configs, local paired configs, or allowlist entries. For Astro and Svelte, it also validates actual-file coverage, unique primary and supplemental ownership, leaf-local target executability, declaration-versus-solution projections, generated target preflight, and the absence of framework extensions from generated build configs.
 
 This command does not mean “complete type-safety proof.” More precisely, it checks whether the source set currently managed by Limina can be explained by the generated project graph or checker entries, so source does not fall outside the managed scope unnoticed.
 
@@ -301,7 +315,7 @@ After a successful non-watch managed build, Limina supplements TypeScript emit b
 
 ### limina checker build [config]
 
-`checker build` only builds Limina's internal declaration graph. Supported presets are `tsc`, `tsgo`, and `vue-tsc`.
+`checker build` only builds Limina's internal declaration graph. Supported build checker identities are `tsc`, `tsgo`, and `vue-tsc`; the command-line selector remains named `--preset`.
 
 ```sh
 pnpm exec limina checker build
@@ -318,16 +332,18 @@ This command still depends on the corresponding checker packages. Missing `peer 
 
 ### limina checker typecheck
 
-`checker typecheck` runs non-build checker entries.
+`checker typecheck` runs non-build checker entries and supplemental Astro or Svelte targets derived from build-primary source configs.
 
 ```sh
 pnpm exec limina checker typecheck
 pnpm exec limina checker typecheck --verbose
 ```
 
-Built-in non-build checkers in the source include `vue-tsgo` and `svelte-check`. `vue-tsgo` entries can still participate in the source graph and coverage proof. `svelte-check` participates in coverage proof and typecheck execution, but it is not currently a source graph provider. Neither is a build-mode execution entry for `checker build`.
+The command runs supplemental Astro and Svelte targets discovered from actual framework modules. Optional `astro` and `svelte-check` configuration scopes can filter those targets but cannot create capability or declaration ownership.
 
-`checker typecheck` does not accept a config path, `--preset`, or `--watch`. If no non-build checker entries are configured, the command succeeds with no runnable entries.
+Auto-detected Astro targets run `astro check --noSync --root <leaf> --tsconfig <source-config>` and require leaf-local `astro`, `@astrojs/check`, `typescript`, and `.astro/types.d.ts`. Auto-detected Svelte targets run `svelte-check --workspace <leaf> --tsconfig <source-config>` and require leaf-local `svelte-check`, `svelte`, and `typescript`. Limina does not run Astro sync or enable Svelte incremental cache behavior.
+
+`checker typecheck` does not accept a config path, `--preset`, or `--watch`. Watch is explicitly unsupported for these framework targets; rerun the command after source config, parser package, generated type, or framework source changes. If no supplemental framework target exists, the runner records the task as disabled, skips peer preflight and generated-artifact materialization, and exits successfully.
 
 ### limina package check
 
@@ -362,22 +378,23 @@ It also selects artifact directories based on `package.entries`, and requires th
 
 ## Troubleshooting
 
-| Symptom or error message                                                                              | Likely cause                                                                                                | Action                                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `no pnpm-workspace.yaml was found`                                                                    | Current directory is not inside a `pnpm` workspace                                                          | Run the command inside a workspace, or create `pnpm-workspace.yaml` first                                                                       |
-| `Unable to find limina config`                                                                        | No supported Limina config file was found                                                                   | Run `limina init`, or pass a config path through `--config`                                                                                     |
-| `config file must be inside the governed pnpm workspace`                                              | `--config` points outside the workspace                                                                     | Put the config file inside the current `pnpm` workspace                                                                                         |
-| `checker build --preset requires a config argument`                                                   | `--preset` can only choose the build checker for a specific config                                          | Use `limina checker build <config> --preset tsc`                                                                                                |
-| `checker build --watch requires a config argument`                                                    | Watch mode only supports a specified config                                                                 | Use `limina checker build <config> --watch`                                                                                                     |
-| `limina build --raw requires --preset`                                                                | Raw mode did not specify a checker preset                                                                   | Use `limina build <config> --raw --preset tsc`                                                                                                  |
-| `checker typecheck does not accept --preset` or `--watch`                                             | `checker typecheck` only runs non-build checker entries                                                     | Use `checker build <config>` for a single config                                                                                                |
-| `No package checks are enabled`                                                                       | The selected package entries do not enable any package checks                                               | Check `package.entries[].checks`, or remove the unneeded package check task                                                                     |
-| `outDir package.json not found`                                                                       | Package artifacts have not been built, or `outDir` is incorrect                                             | Run the project build first, then check `package.entries[].outDir`                                                                              |
-| `Missing peer dependency ...`                                                                         | A configured checker or enabled release integration is not installed                                        | Install the reported peer dependency, such as `typescript`, `vue-tsc`, `@typescript/native-preview`, `svelte-check`, or `npm-package-json-lint` |
-| `publint` or `@arethetypeswrong/core` is not installed; skipping check                                | An enabled optional release analyzer is not installed                                                       | Install the analyzer when CI requires that coverage; a skipped release analyzer alone does not make the command exit non-zero                   |
-| `source.knip` is enabled but `knip` is not installed                                                  | The explicit Knip source-usage feature has no peer dependency                                               | Install `knip`, or set `source.knip` to `false`/omit it to disable the feature                                                                  |
-| `` `limina check --task`, `--checker`, `--format`, `--invocation`, and `--limit` require --issues. `` | Snapshot query options were used on the rerun-check command                                                 | Add `--issues`, or remove those query options                                                                                                   |
-| `` `limina check --issues` does not accept a pipeline name. ``                                        | `--issues` reads the latest snapshot and does not run a pipeline                                            | Use `limina check --issues`; do not add a pipeline name                                                                                         |
-| `Invalid check --issues --limit ...`                                                                  | The limit is zero, negative, fractional, exponential notation, non-numeric, or above the safe integer range | Use a positive decimal integer or `all`                                                                                                         |
-| `` `limina check --issues --limit` is only available with --format human. ``                          | A human card limit was combined with JSON or NDJSON                                                         | Remove `--limit`, or use human output                                                                                                           |
-| `Invalid graph export --view`                                                                         | `--view` is outside the supported range                                                                     | Use `all`, `source`, or `artifact`                                                                                                              |
+| Symptom or error message                                                                              | Likely cause                                                                                                | Action                                                                                                                          |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `no pnpm-workspace.yaml was found`                                                                    | Current directory is not inside a `pnpm` workspace                                                          | Run the command inside a workspace, or create `pnpm-workspace.yaml` first                                                       |
+| `Unable to find limina config`                                                                        | No supported Limina config file was found                                                                   | Run `limina init`, or pass a config path through `--config`                                                                     |
+| `config file must be inside the governed pnpm workspace`                                              | `--config` points outside the workspace                                                                     | Put the config file inside the current `pnpm` workspace                                                                         |
+| `checker build --preset requires a config argument`                                                   | `--preset` can only choose the build checker for a specific config                                          | Use `limina checker build <config> --preset tsc`                                                                                |
+| `checker build --watch requires a config argument`                                                    | Watch mode only supports a specified config                                                                 | Use `limina checker build <config> --watch`                                                                                     |
+| `limina build --raw requires --preset`                                                                | Raw mode did not specify a checker preset                                                                   | Use `limina build <config> --raw --preset tsc`                                                                                  |
+| `checker typecheck does not accept --preset` or `--watch`                                             | Typecheck runs the complete supplemental target set; per-target framework watch is unsupported              | Rerun `checker typecheck` after source config, parser package, generated type, or framework source changes                      |
+| `No package checks are enabled`                                                                       | The selected package entries do not enable any package checks                                               | Check `package.entries[].checks`, or remove the unneeded package check task                                                     |
+| `outDir package.json not found`                                                                       | Package artifacts have not been built, or `outDir` is incorrect                                             | Run the project build first, then check `package.entries[].outDir`                                                              |
+| `Missing peer dependency ...` or `Missing framework checker dependencies`                             | A configured checker, leaf framework target, or enabled release integration is not installed                | Install the reported packages in the reported root; framework targets require their Astro or Svelte packages in the owning leaf |
+| `Astro generated types are missing`                                                                   | The leaf package has not produced `.astro/types.d.ts`                                                       | Run `pnpm --dir <leaf> exec astro sync`; Limina never runs this command automatically                                           |
+| `publint` or `@arethetypeswrong/core` is not installed; skipping check                                | An enabled optional release analyzer is not installed                                                       | Install the analyzer when CI requires that coverage; a skipped release analyzer alone does not make the command exit non-zero   |
+| `source.knip` is enabled but `knip` is not installed                                                  | The explicit Knip source-usage feature has no peer dependency                                               | Install `knip`, or set `source.knip` to `false`/omit it to disable the feature                                                  |
+| `` `limina check --task`, `--checker`, `--format`, `--invocation`, and `--limit` require --issues. `` | Snapshot query options were used on the rerun-check command                                                 | Add `--issues`, or remove those query options                                                                                   |
+| `` `limina check --issues` does not accept a pipeline name. ``                                        | `--issues` reads the latest snapshot and does not run a pipeline                                            | Use `limina check --issues`; do not add a pipeline name                                                                         |
+| `Invalid check --issues --limit ...`                                                                  | The limit is zero, negative, fractional, exponential notation, non-numeric, or above the safe integer range | Use a positive decimal integer or `all`                                                                                         |
+| `` `limina check --issues --limit` is only available with --format human. ``                          | A human card limit was combined with JSON or NDJSON                                                         | Remove `--limit`, or use human output                                                                                           |
+| `Invalid graph export --view`                                                                         | `--view` is outside the supported range                                                                     | Use `all`, `source`, or `artifact`                                                                                              |
