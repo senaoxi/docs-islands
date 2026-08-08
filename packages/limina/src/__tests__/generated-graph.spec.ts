@@ -2235,11 +2235,12 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it('routes declaration and framework imports into separate reference sinks', async () => {
+  it('records framework imports of declaration providers while keeping pure framework imports scheduling-only', async () => {
     const fixture = await createFixture({
       'packages/a/src/App.astro': [
         '---',
         "import '../../c/src/index.ts';",
+        "import '../../d/src/Widget.astro';",
         "import { getCollection } from 'astro:content';",
         "import './theme.css?inline';",
         "import hero from './hero.png?url';",
@@ -2264,6 +2265,11 @@ describe('prepareGeneratedTsconfigGraph', () => {
         compilerOptions: managedOutputCompilerOptions(),
         include: ['src/**/*.ts'],
       }),
+      'packages/d/src/Widget.astro': '<h2>Widget</h2>\n',
+      'packages/d/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*'],
+      }),
     });
 
     try {
@@ -2277,20 +2283,37 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const cConfigPath = normalizeAbsolutePath(
         path.join(fixture.rootDir, 'packages/c/tsconfig.json'),
       );
+      const dConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/d/tsconfig.json'),
+      );
       const unit = result.governedSources.get('tsc')?.get(sourceConfigPath);
       const bDtsPath = result.sourceToDts.get('tsc')?.get(bConfigPath);
+      const cDtsPath = result.sourceToDts.get('tsc')?.get(cConfigPath);
 
       expect(unit?.buildProjection.kind).toBe('wrapped-project');
-      expect([...unit!.declarationReferences]).toEqual([bDtsPath]);
+      expect([...unit!.declarationReferences].sort()).toEqual(
+        [bDtsPath, cDtsPath].sort(),
+      );
       expect(result.dependencyEdges).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             fromConfigPath: sourceConfigPath,
-            kind: 'framework-schedule',
+            kind: 'declaration-provider',
             toConfigPath: cConfigPath,
+          }),
+          expect.objectContaining({
+            fromConfigPath: sourceConfigPath,
+            kind: 'framework-schedule',
+            toConfigPath: dConfigPath,
           }),
         ]),
       );
+      const importedSpecifiers = result.dependencyEdges.map(
+        ({ importedSpecifier }) => importedSpecifier,
+      );
+      expect(importedSpecifiers).not.toContain('astro:content');
+      expect(importedSpecifiers).not.toContain('./theme.css?inline');
+      expect(importedSpecifiers).not.toContain('./hero.png?url');
       if (unit?.buildProjection.kind !== 'wrapped-project') return;
       const projection = unit.buildProjection;
       const solution = JSON.parse(
@@ -2305,15 +2328,13 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const dts = JSON.parse(
         await readFile(projection.dtsConfigPath, 'utf8'),
       ) as { references: { path: string }[] };
-      expect(dts.references).toHaveLength(1);
       expect(
-        normalizeAbsolutePath(
-          path.resolve(
-            path.dirname(projection.dtsConfigPath),
-            dts.references[0]!.path,
+        dts.references.map(({ path: value }) =>
+          normalizeAbsolutePath(
+            path.resolve(path.dirname(projection.dtsConfigPath), value),
           ),
         ),
-      ).toBe(bDtsPath);
+      ).toEqual([bDtsPath, cDtsPath]);
     } finally {
       await fixture.cleanup();
     }
@@ -2351,25 +2372,39 @@ describe('prepareGeneratedTsconfigGraph', () => {
     }
   });
 
-  it('schedules a cross-package Svelte component import without treating resources or virtual modules as projects', async () => {
+  it('records Svelte imports of TypeScript providers and schedules component imports without treating resources or virtual modules as projects', async () => {
     const fixture = await createFixture({
       'packages/a/src/App.svelte': [
         '<script lang="ts">',
         "import Widget from '../../b/src/Widget.svelte';",
+        "import { value } from '../../c/src/index.ts';",
         "import '$app/environment';",
         "import './theme.css?inline';",
-        'void Widget;',
+        'void [Widget, value];',
         '</script>',
         '',
       ].join('\n'),
+      'packages/a/src/index.ts': 'export const app = true;\n',
       'packages/a/tsconfig.json': json({
         compilerOptions: managedOutputCompilerOptions(),
         include: ['src/**/*'],
       }),
-      'packages/b/src/Widget.svelte': '<h1>Widget</h1>\n',
+      'packages/b/src/Widget.svelte': [
+        '<script lang="ts">',
+        "import { value } from '../../c/src/index.ts';",
+        'void value;',
+        '</script>',
+        '<h1>Widget</h1>',
+        '',
+      ].join('\n'),
       'packages/b/tsconfig.json': json({
         compilerOptions: managedOutputCompilerOptions(),
         include: ['src/**/*'],
+      }),
+      'packages/c/src/index.ts': 'export const value = 1;\n',
+      'packages/c/tsconfig.json': json({
+        compilerOptions: managedOutputCompilerOptions(),
+        include: ['src/**/*.ts'],
       }),
     });
 
@@ -2381,18 +2416,47 @@ describe('prepareGeneratedTsconfigGraph', () => {
       const bConfigPath = normalizeAbsolutePath(
         path.join(fixture.rootDir, 'packages/b/tsconfig.json'),
       );
+      const cConfigPath = normalizeAbsolutePath(
+        path.join(fixture.rootDir, 'packages/c/tsconfig.json'),
+      );
       const source = result.governedSources.get('tsc')?.get(aConfigPath);
       const targetBuild = result.sourceToBuild.get('tsc')?.get(bConfigPath);
+      const cDtsPath = result.sourceToDts.get('tsc')?.get(cConfigPath);
 
       expect(targetBuild).toMatchObject({ kind: 'solution' });
-      expect(source).toBeDefined();
-      expect(result.dependencyEdges).toMatchObject([
-        {
-          importedSpecifier: '../../b/src/Widget.svelte',
-          kind: 'framework-schedule',
-          toConfigPath: bConfigPath,
-        },
-      ]);
+      expect(source?.buildProjection.kind).toBe('wrapped-project');
+      expect(result.dependencyEdges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            importedSpecifier: '../../c/src/index.ts',
+            kind: 'declaration-provider',
+            toConfigPath: cConfigPath,
+          }),
+          expect.objectContaining({
+            importedSpecifier: '../../b/src/Widget.svelte',
+            kind: 'framework-schedule',
+            toConfigPath: bConfigPath,
+          }),
+          expect.objectContaining({
+            fromConfigPath: bConfigPath,
+            importedSpecifier: '../../c/src/index.ts',
+            kind: 'framework-schedule',
+            toConfigPath: cConfigPath,
+          }),
+        ]),
+      );
+      if (source?.buildProjection.kind !== 'wrapped-project') return;
+      const dts = JSON.parse(
+        await readFile(source.buildProjection.dtsConfigPath, 'utf8'),
+      ) as { references: { path: string }[] };
+      expect(
+        normalizeAbsolutePath(
+          path.resolve(
+            path.dirname(source.buildProjection.dtsConfigPath),
+            dts.references[0]!.path,
+          ),
+        ),
+      ).toBe(cDtsPath);
     } finally {
       await fixture.cleanup();
     }

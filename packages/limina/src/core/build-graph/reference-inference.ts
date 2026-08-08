@@ -4,7 +4,7 @@ import { createManagedOutputDeclarationLookup } from '../import-graph/managed-ou
 import type { WorkspaceRegionPathIndex } from '../workspace/validated-context';
 import {
   type GovernedBuildOwner,
-  processFrameworkSchedulingReferences,
+  processFrameworkSourceReferences,
 } from './framework-reference-inference';
 import { addImplicitProjectReferences } from './implicit-references';
 import { resolveBuildGraphImportAnalysis } from './import-analysis-context';
@@ -164,7 +164,7 @@ export function inferProjectReferences(options: {
     dependencyEdgesByKey,
   };
   processReferenceImports({ context, projects: options.projects });
-  processFrameworkSchedulingReferences({
+  processFrameworkSourceReferences({
     buildOwnersByConfigPath: createGovernedBuildOwners({
       governedSources: ownerGovernedSources,
       sourceToBuildByChecker: options.sourceToBuildByChecker,

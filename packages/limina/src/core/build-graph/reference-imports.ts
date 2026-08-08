@@ -25,7 +25,9 @@ function addFallbackProviderProblem(options: {
   addMissingOwnedDeclarationProviderProblem(options.reference);
 }
 
-function processReferenceImport(options: ReferenceImportOptions): void {
+export function processDeclarationProviderImport(
+  options: ReferenceImportOptions,
+): void {
   const initialProblemCount = options.context.problems.length;
   const provider = resolveUsableProvider(options);
   if (!provider) {
@@ -54,7 +56,7 @@ function processProjectFileImports(options: {
   );
   for (const importRecord of imports) {
     if (shouldInferDeclarationReferenceFromImportRecord(importRecord)) {
-      processReferenceImport({ ...options, importRecord });
+      processDeclarationProviderImport({ ...options, importRecord });
     }
   }
 }

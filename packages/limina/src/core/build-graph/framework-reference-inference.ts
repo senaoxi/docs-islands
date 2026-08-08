@@ -12,6 +12,7 @@ import { classifyImportRuntimeEvidence } from '../import-analysis/evidence';
 import { getFrameworkFilePackageRoot } from './framework-file-root';
 import { reportUnresolvedFrameworkImport } from './framework-import-problems';
 import type { ReferenceImportContext } from './reference-import-types';
+import { processDeclarationProviderImport } from './reference-imports';
 import type {
   GeneratedBuildModule,
   GeneratedDependencyEdge,
@@ -38,6 +39,11 @@ interface FrameworkImportOptions {
 interface OwnedResolution {
   filePath: string;
   owners: string[];
+}
+
+interface FrameworkImportTarget {
+  resolution: OwnedResolution;
+  targetConfigPath: string;
 }
 
 function getResolvedFilePath(
@@ -182,7 +188,7 @@ function resolveFrameworkImportResolution(
 
 function resolveFrameworkImportTarget(
   options: FrameworkImportOptions,
-): { resolution: OwnedResolution; targetConfigPath: string } | null {
+): FrameworkImportTarget | null {
   const resolution = resolveFrameworkImportResolution(options);
   if (resolution === null) return null;
   const targetConfigPath = chooseTargetConfig({
@@ -192,24 +198,48 @@ function resolveFrameworkImportTarget(
   return targetConfigPath === null ? null : { resolution, targetConfigPath };
 }
 
-function processFrameworkImport(options: FrameworkImportOptions): void {
-  const target = resolveFrameworkImportTarget(options);
-  if (target === null) return;
-  const { resolution, targetConfigPath } = target;
-  const targetOwner = options.buildOwnersByConfigPath.get(targetConfigPath);
+function shouldRecordDeclarationProviderImport(
+  project: SourceProject,
+  resolution: OwnedResolution,
+): boolean {
+  return !isFrameworkFile(resolution.filePath) && project.fileNames.length > 0;
+}
+
+function recordFrameworkSchedulingDependency(
+  importOptions: FrameworkImportOptions,
+  target: FrameworkImportTarget,
+): void {
+  const targetOwner = importOptions.buildOwnersByConfigPath.get(
+    target.targetConfigPath,
+  );
   if (targetOwner === undefined) {
-    addMissingBuildOwnerProblem({ ...options, targetConfigPath });
+    addMissingBuildOwnerProblem({
+      ...importOptions,
+      targetConfigPath: target.targetConfigPath,
+    });
     return;
   }
   recordDependencyEdge(
-    options.context,
+    importOptions.context,
     createDependencyEdge({
-      ...options,
-      resolvedFilePath: resolution.filePath,
+      ...importOptions,
+      resolvedFilePath: target.resolution.filePath,
       targetCheckerName: targetOwner.checkerName,
-      targetConfigPath,
+      targetConfigPath: target.targetConfigPath,
     }),
   );
+}
+
+function processFrameworkImport(options: FrameworkImportOptions): void {
+  const target = resolveFrameworkImportTarget(options);
+  if (target === null) return;
+  if (
+    shouldRecordDeclarationProviderImport(options.project, target.resolution)
+  ) {
+    processDeclarationProviderImport(options);
+    return;
+  }
+  recordFrameworkSchedulingDependency(options, target);
 }
 
 function processFrameworkFile(
@@ -257,7 +287,7 @@ function processFrameworkSource(options: {
   }
 }
 
-export function processFrameworkSchedulingReferences(options: {
+export function processFrameworkSourceReferences(options: {
   buildOwnersByConfigPath: ReadonlyMap<string, GovernedBuildOwner>;
   context: ReferenceImportContext;
   governedSources: readonly GovernedSourceUnit[];
