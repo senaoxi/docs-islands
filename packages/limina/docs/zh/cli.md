@@ -154,7 +154,19 @@ pnpm exec limina init --yes
 pnpm exec limina migration
 ```
 
-外部激活包也受支持，包括目标分布在多个 Git worktree 的迁移。任何写入开始前，Limina 会解析每个目标的规范 Git worktree 根目录，并要求所有涉及的 worktree 都是 clean 状态；随后以这些规范根目录作为完整写入 allowlist 执行一次事务。外部 worktree 只要有未提交变更，就会阻止全部写入；每个目标都必须属于一个 Git worktree。
+#### Git 工作区确认
+
+每个迁移目标都必须位于 Git worktree 中。外部激活包也受支持，因此一次迁移的目标可以分布在多个 worktree。写入前，Limina 会解析所有目标所属的 worktree，并检查其中的 Git 状态；已跟踪文件的变更和未跟踪文件都会进入检查结果。
+
+- 所有相关 worktree 都是 clean 状态时，迁移直接继续，不显示确认提示。
+- 任一 worktree 存在变更时，Limina 会汇总所有存在变更的 worktree，并只询问一次。确认提示默认选择“否”。
+- 选择继续后，Limina 才会创建并执行本次 `tsconfig*.json` 写入计划。这个确认不会 commit、stash、删除或还原已有变更。
+- 拒绝或取消确认时，迁移停止且不会写入任何目标，并提示先保持 Git 工作区干净。
+- 非交互环境无法显示确认提示，因此发现变更时会停止且不会写入。请先整理所有相关 worktree，再重新运行迁移。
+
+确认继续后，迁移仍只会在目标所属的规范 worktree 根目录内写入计划中的配置文件。确认脏工作区不会扩大迁移目标或写入范围。
+
+#### 迁移范围与输出字段
 
 迁移选择与图准备使用相同的 package-island 可见性和 checker selector。即使祖先模式可以匹配，迁移也不会读取或修改 owner-local 边界后的配置。
 

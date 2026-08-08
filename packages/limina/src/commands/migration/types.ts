@@ -5,6 +5,7 @@ import type { PreflightCapableOptions } from '../../preflight';
 import type { MigrationCleanupWarning } from './transaction';
 
 export interface RunMigrationOptions extends PreflightCapableOptions {
+  confirmDirtyWorkspace?: (message: string) => Promise<boolean>;
   flow?: LiminaFlowReporter;
   flowDepth?: number;
 }

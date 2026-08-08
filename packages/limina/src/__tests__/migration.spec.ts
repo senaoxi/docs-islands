@@ -215,7 +215,7 @@ describe('runMigration', () => {
     }
   });
 
-  it('fails before writing when the git workspace is dirty', async () => {
+  it('stops without writing when a dirty git workspace is not approved', async () => {
     const fixture = await createFixture({
       'limina.config.mjs': 'export default {};\n',
       'packages/pkg/src/index.ts': 'export const value = 1;\n',
@@ -243,12 +243,77 @@ describe('runMigration', () => {
 
     try {
       await commitFixture(fixture.rootDir);
-      await writeText(path.join(fixture.rootDir, 'dirty.txt'), 'dirty\n');
-
-      await expect(runMigration(config)).rejects.toThrow(
-        /requires a clean git working tree/u,
+      await writeText(
+        path.join(fixture.rootDir, 'packages/pkg/src/index.ts'),
+        'export const value = 2;\n',
       );
+
+      const confirmationMessages: string[] = [];
+      await expect(
+        runMigration(config, {
+          confirmDirtyWorkspace: async (message) => {
+            confirmationMessages.push(message);
+            return false;
+          },
+        }),
+      ).rejects.toThrow(/Keep every involved Git working tree clean/u);
+      expect(confirmationMessages).toHaveLength(1);
+      expect(confirmationMessages[0]).toMatch(
+        /Continue and write the planned tsconfig\*\.json changes\?/u,
+      );
+      expect(confirmationMessages[0]).toContain(' M packages/pkg/src/index.ts');
       await expect(readFile(tsconfigPath, 'utf8')).resolves.toBe(before);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('writes the planned tsconfig changes when a dirty workspace is approved', async () => {
+    const fixture = await createFixture({
+      'limina.config.mjs': 'export default {};\n',
+      'packages/pkg/src/index.ts': 'export const value = 1;\n',
+      'packages/pkg/tsconfig.json': json({
+        compilerOptions: {
+          outDir: './dist',
+          rootDir: './src',
+          target: 'ES2023',
+        },
+        include: ['src/**/*.ts'],
+      }),
+    });
+    const config = createResolvedConfig(fixture.rootDir, {
+      checkers: {
+        tsc: {
+          include: ['packages/pkg/tsconfig.json'],
+        },
+      },
+    });
+    const tsconfigPath = fixture.path('packages/pkg/tsconfig.json');
+
+    try {
+      await commitFixture(fixture.rootDir);
+      await writeText(
+        fixture.path('packages/pkg/src/index.ts'),
+        'export const value = 2;\n',
+      );
+
+      await expect(
+        runMigration(config, {
+          confirmDirtyWorkspace: async () => true,
+        }),
+      ).resolves.toMatchObject({
+        modifiedFiles: toPortablePaths([tsconfigPath]),
+      });
+      await expect(
+        readJson<{ liminaOptions?: { outputs?: { outDir?: string } } }>(
+          tsconfigPath,
+        ),
+      ).resolves.toMatchObject({
+        liminaOptions: { outputs: { outDir: './dist' } },
+      });
+      await expect(
+        readFile(fixture.path('packages/pkg/src/index.ts'), 'utf8'),
+      ).resolves.toBe('export const value = 2;\n');
     } finally {
       await fixture.cleanup();
     }
@@ -282,20 +347,37 @@ describe('runMigration', () => {
     }
   });
 
-  it('checks every involved Git worktree for cleanliness before any write', async () => {
+  it('checks every involved Git worktree before asking once and writing nothing when declined', async () => {
     const fixture = await createMultipleWorktreeFixture();
     const rootBefore = await readFile(fixture.rootConfigPath, 'utf8');
     const externalBefore = await readFile(fixture.externalConfigPath, 'utf8');
 
     try {
       await writeText(
-        path.join(fixture.externalRootDir, 'dirty.txt'),
-        'dirty\n',
+        path.join(fixture.externalRootDir, 'src/index.ts'),
+        'export const value = 2;\n',
       );
 
-      await expect(runMigration(fixture.config)).rejects.toThrow(
-        /requires a clean git working tree/u,
+      await writeText(
+        path.join(fixture.rootDir, 'src/index.ts'),
+        'export const value = 2;\n',
       );
+      const confirmationMessages: string[] = [];
+      await expect(
+        runMigration(fixture.config, {
+          confirmDirtyWorkspace: async (message) => {
+            confirmationMessages.push(message);
+            return false;
+          },
+        }),
+      ).rejects.toThrow(/stopped without writing tsconfig files/u);
+      expect(confirmationMessages).toHaveLength(1);
+      const [rootDir, externalRootDir] = toPortablePaths([
+        fixture.rootDir,
+        fixture.externalRootDir,
+      ]);
+      expect(confirmationMessages[0]).toContain(rootDir);
+      expect(confirmationMessages[0]).toContain(externalRootDir);
       await expect(readFile(fixture.rootConfigPath, 'utf8')).resolves.toBe(
         rootBefore,
       );

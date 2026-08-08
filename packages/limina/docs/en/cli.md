@@ -154,7 +154,19 @@ It searches upward from the current directory for `pnpm-workspace.yaml`, confirm
 pnpm exec limina migration
 ```
 
-External activated packages are supported, including a migration whose targets belong to several Git worktrees. Before writing anything, Limina resolves every target's canonical Git worktree root and requires every involved worktree to be clean. It then executes one transaction with those canonical roots as the complete write allowlist. A dirty external worktree blocks all writes; every target must belong to a Git worktree.
+#### Git working tree confirmation
+
+Every migration target must belong to a Git worktree. External activated packages are supported, so one migration can include targets from several worktrees. Before writing, Limina resolves every target's worktree and checks its Git status. Both changes to tracked files and untracked files are included.
+
+- If every involved worktree is clean, migration continues without a confirmation prompt.
+- If any worktree contains changes, Limina summarizes every worktree that has changes and asks once whether to continue. The prompt defaults to “no.”
+- If the user confirms, Limina then creates and executes the `tsconfig*.json` write plan. Confirmation does not commit, stash, remove, or restore existing changes.
+- Declining or canceling stops migration without writing any target and tells the user to keep the Git worktrees clean.
+- A non-interactive environment cannot display the prompt, so migration stops without writing when changes are present. Clean every involved worktree before rerunning the command.
+
+After confirmation, migration can still write only the planned config files inside the canonical roots of the target worktrees. Approving a dirty worktree does not expand the selected targets or write scope.
+
+#### Migration scope and output fields
 
 Migration selection follows the same package-island visibility and checker selectors as graph preparation. It never reads or edits a config behind an owner-local boundary merely because an ancestor pattern could match it.
 
