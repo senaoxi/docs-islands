@@ -75,6 +75,11 @@ package.
 The VitePress playground keeps its shared VitePress development server and
 Chromium server in Vitest global setup. Each test receives an isolated page,
 and playground-local asynchronous matchers poll real Playwright locators.
+Those custom matchers use their own timeout options rather than Vitest's
+`expect.poll` timeout. A first `client:only` render can include a cold Vite and
+React transform, so browser tests wait for the component's complete markup
+inside its render container with a scoped timeout instead of treating the
+empty server-rendered container as client readiness.
 
 The VitePress consumer smoke suite uses Vitest fixtures: Chromium is scoped to
 the worker, while the consumer installation, development server, browser

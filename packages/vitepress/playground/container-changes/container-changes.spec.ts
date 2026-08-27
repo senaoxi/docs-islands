@@ -82,7 +82,8 @@ const registerClientOnlyContainerTests = () => {
       const componentSelector = '[data-testid="hello-world"]';
       const buttonSelector = '[data-testid="counter-button"]';
 
-      await page.waitForSelector(clientOnlyContainer, { state: 'attached' });
+      // The first client-only request can include a cold Vite/React transform on CI.
+      await waitForHelloWorldMarkup(clientOnlyContainer, 15_000);
 
       // Wait for component rendering to complete (whether client-side or server-side rendering).
       const helloWorldComponent = page.locator(componentSelector);
