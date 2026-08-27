@@ -75,7 +75,6 @@ catalogs:
     vue-json-pretty: ^2.6.0
     vue-router: 4.6.4
     vue-tsc: ~3.2.4
-    vue-tsgo: 0.2.2
     wait-on: ^9.0.10
     webpack: ^5.102.1
     '@pnpm/catalogs.types': 1100.0.0
@@ -145,12 +144,13 @@ managePackageManagerVersions: true
 minimumReleaseAge: 1440
 nodeVersion: 22.18.0
 overrides:
-  '@eslint/eslintrc>js-yaml': 4.3.0
+  astro@7.2.0>sharp: 0.35.3
+  js-yaml@^4.0.0: 4.3.1
   '@swc/core': 1.15.43
   '@types/node': 22.18.0
   browserslist: ^4.28.4
   form-data: 4.0.6
-  gray-matter>js-yaml: 3.15.0
+  gray-matter>js-yaml: 3.15.1
   lodash: 4.18.0
   markdown-it: ^14.2.0
   minimatch@^10.0.0: ^10.2.5
@@ -159,7 +159,7 @@ overrides:
   minimatch@^3.0.0>brace-expansion: 5.0.9
   nx@^23.1.0>brace-expansion: 5.0.9
   picomatch@^2.0.0: 2.3.2
-  picomatch@^4.0.0: 4.0.4
+  picomatch@^4.0.0: 4.0.5
   tmp: 0.2.7
   undici: 7.29.0
   undici-types: ^6.24.0
@@ -167,6 +167,7 @@ overrides:
   shell-quote: 1.9.0
   axios: 1.18.0
   postcss: ^8.5.23
+  less: ^4.9.0
 packageExtensions:
   '@pnpm/manifest-utils@*':
     dependencies:
