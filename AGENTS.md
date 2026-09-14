@@ -75,6 +75,14 @@ A task is complete only when:
 
 Do not claim that a command passed unless it was executed successfully in the current workspace.
 
+## Bilingual PCR maintenance
+
+- Publish English PCR records at `.agents/docs/<name>.md` and their complete Chinese counterparts at `.agents/docs/zh/<name>.md`. Use exactly the same filename in both directories, without a `.zh.md` suffix. Both editions must be tracked by Git; do not ignore either edition.
+- Every trigger to update PCR requires synchronous updates to both editions in the same change, including prose-only corrections. Add, edit, rename, move, or delete the pair together, and update both maps and affected cross-links.
+- Keep the two editions completely equivalent in meaning: all conclusions, rationale, examples, tables, diagrams, evidence, validation status, caveats, open questions, and provenance must correspond. Only language and location-dependent links may differ. Do not defer translation, omit content, or maintain a summary in place of a complete counterpart.
+- Treat the pair as one topic owner expressed in two languages. English is the public-facing edition; neither language may evolve as an independent source of truth. The rule covers the map and every PCR record, including future records.
+- Before completing a PCR change, ensure that the same-named counterpart exists, compare both editions section by section, and check their relative links and heading anchors. Preserve matching evidence dates and confidence levels; translation is not a new verification run and does not authorize a human vouch. See the [PCR map](.agents/docs/README.md#bilingual-publishing-and-maintenance) for the maintenance procedure.
+
 ## Managed sections
 
 The Nx, Limina, and PCR sections below are independently managed workflow components.

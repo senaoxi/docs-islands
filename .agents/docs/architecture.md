@@ -1,5 +1,7 @@
 # Architecture
 
+[English](./architecture.md) | [简体中文](./zh/architecture.md)
+
 ## Evidence boundary
 
 This record describes workspace units and boundaries established by manifests, source imports, public exports, build configuration, Limina configuration, and release scripts.
@@ -109,7 +111,7 @@ Limina is a development and release governance tool. It is not a frontend runtim
 
 A Limina failure indicates that a configured governance rule, package check, release check, proof, or checker did not pass. It requires investigation; the source does not define a universal defect classification for every failure.
 
-See [limina.md](./limina.md) for Limina's package-local architecture record. That record owns the current workspace authority, generated graph, checker, issue-reporting, and mutation-safety contracts; this repository architecture record only describes Limina's relationship to the other workspace units.
+Start at [limina.md](./limina.md) for Limina's package-local knowledge map. Its [system model](./limina-system-model.md) owns authority and relation definitions; its [lifecycle record](./limina-lifecycle.md) owns state, publication and mutation contracts. This repository architecture record only owns Limina's relationship to the other workspace units.
 
 ## Derived implementation consequences
 
