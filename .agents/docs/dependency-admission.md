@@ -1,5 +1,7 @@
 # Dependency admission
 
+[English](./dependency-admission.md) | [简体中文](./zh/dependency-admission.md)
+
 This record defines the repository-wide policy for considering a new third-party npm package or replacing an existing one. It governs candidate selection; it does not automatically declare every existing dependency compliant or non-compliant without a separate review.
 
 The policy separates hard admission gates from weighted comparison signals. A candidate that fails a hard gate must not be added. Weighted signals are used only to compare candidates that have already passed every gate.

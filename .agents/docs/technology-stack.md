@@ -1,5 +1,7 @@
 # Technology stack
 
+[English](./technology-stack.md) | [简体中文](./zh/technology-stack.md)
+
 ## Evidence boundary
 
 This record covers tools and constraints that are present in executable repository configuration, manifests, scripts, build inputs, and governance pipelines.
@@ -93,13 +95,7 @@ The repository uses Limina as a development-time architecture, source, package, 
 
 Root scripts invoke Limina for the default check and the named `graph`, `lib`, `vue`, and `consumer` pipelines. Package linting invokes `limina package check`.
 
-Limina's default check pipeline contains:
-
-- `graph:check`
-- `source:check`
-- `proof:check`
-- `checker:build`
-- `checker:typecheck`
+Limina's default task set and its execution prerequisites are defined in the [Limina system model](./limina-system-model.md#pipeline-and-phase-contracts), backed by `pipeline/steps.ts` and `pipeline/plan.ts`. The root repository's named pipelines are configuration choices and are not the default check plan.
 
 The root configuration also defines package and publish pipelines and lists the built outputs covered by package checks.
 

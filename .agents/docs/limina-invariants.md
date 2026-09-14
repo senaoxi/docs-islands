@@ -1,0 +1,167 @@
+# Limina Core Invariants
+
+[English](./limina-invariants.md) | [简体中文](./zh/limina-invariants.md)
+
+This page registers 12 properties that affect system correctness. They come from the current implementation and do not claim permanent design intent. `Confirmed` means direct support from production types/control flow; executed cases and uncovered conditions are recorded in the [audit](./limina-architecture-audit.md). Full definitions belong to the [system model](./limina-system-model.md), [semantic facts](./limina-semantics.md), and [lifecycle](./limina-lifecycle.md). This page owns invariant constraints, explanations, and the evidence matrix.
+
+**Enforcement strength**: Strongly executable means direct type or runtime guards within the stated scope, backed by counterexample tests. Partially executable means the main production path is protected but still depends on caller lifetime/input contracts. Prose-only means no mechanical guard. Test existence and successful execution during this task are recorded separately; line counts or test counts do not substitute for coverage assessment.
+
+## I01 — Governance authority comes from a validated workspace
+
+- **Statement / Applies when**: Graph/source/proof project authority from the workspace activated for the current run; raw package discovery is only input evidence. For activated packages, duplicate physical identity and invalid overlap/boundary must fail first.
+- **Problem**: If excluded packages or packages belonging to a nested workspace still participate in owner selection, imports or output writes may be authorized incorrectly.
+- **Root cause**: Package-manager discovery, logical directories, and governance scope are different sets; a symlink alias can also give one physical package two names.
+- **Enforcement / Why it works**: [Validated creation](../../packages/limina/src/core/workspace/validated/create.ts) checks exclusions, islands, overlap, package identities, and output authority before publishing the context. [package-identities](../../packages/limina/src/core/workspace/validated/package-identities.ts) rejects duplicate canonical directories. Downstream consumers need not repeatedly guess boundaries.
+- **Concrete example**: Package alias / nested boundary cases in `workspace-validation.spec.ts` challenge double activation of the same physical package. A separate nameless package may still own source; only graph export that depends on names requires a name.
+- **Protected property**: Unique governance ownership, scope isolation, and no expansion of output authority.
+- **Evidence / Strength / Confidence**: [Workspace tests](../../packages/limina/src/__tests__/workspace-validation.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: Canonical package validation does not prove that every config alias is physically merged. Name-based graphs and path-based source owners cannot be combined into one identity.
+
+## I02 — Final checker ownership does not rewrite semantic authority
+
+- **Statement / Applies when**: Semantic authority for a managed type config freezes after fact convergence; subsequent promotion/coloring/fallback/finalization cannot change it. Successful finalization assigns each leaf one execution owner.
+- **Problem**: Selecting a Vue checker to share a declaration build could incorrectly change native TS imports to Vue module semantics.
+- **Root cause**: Source interpretation and build scheduling use different authorities, both of which have been easy to call “owner.”
+- **Enforcement / Why it works**: [Ownership types](../../packages/limina/src/core/build-graph/checker-ownership-types.ts) use separate fields. [Semantic authority](../../packages/limina/src/core/build-graph/checker-semantic-authority.ts) restricts lock evidence, stores frozen values, and compares them after coloring/finalization. [Resolution](../../packages/limina/src/core/build-graph/checker-ownership-resolution.ts) collects all requirements before applying locks. Execution selection cannot masquerade as new semantic evidence.
+- **Concrete example**: In `generated-graph.spec.ts`, a TS app importing a Vue project's theme TS may be built by `vue-tsc` while its semantic/frozen authority remains TypeScript.
+- **Protected property**: Stable semantics, with import order unable to hide cross-framework conflicts.
+- **Evidence / Strength / Confidence**: [Generated graph tests](../../packages/limina/src/__tests__/generated-graph.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: Freeze is a snapshot-and-validation mechanism, not a deep freeze of every object. Explicit ownership constraints on named solutions already exist during discovery.
+
+## I03 — Importer roots, Program admission, and resolution stay separate
+
+- **Statement / Applies when**: Native dependency collection enumerates only effective importer roots and interprets them through a bounded Program. Resolving an ordinary workspace implementation does not automatically admit it into the Program.
+- **Problem**: Enumerating the transitive Program closure would treat a provider's imports as the consumer's imports; using only parsed files would omit relative `types` declaration roots.
+- **Root cause**: The environment a compiler loads to interpret a project is larger than the importer set the project actually governs.
+- **Enforcement / Why it works**: [effective-roots](../../packages/limina/src/core/typescript-semantic/effective-roots.ts) defines explicit inputs. [Admission](../../packages/limina/src/core/typescript-semantic/admission.ts) records inclusion reasons, the workspace boundary prevents ordinary external origins from exceeding their authority, and the provider iterates context.fileNames. A sufficient type environment can coexist with controlled importer enumeration.
+- **Concrete example**: `main.ts` imports `provider.ts`. When the latter is outside root/reference inputs, a resolved source-semantic fact may still exist while admission is excluded. Conversely, `env.d.ts` from inherited relative `types: ['./env']` becomes an importer root.
+- **Protected property**: Complete input ownership without spillover, and independent evidence for provider references.
+- **Evidence / Strength / Confidence**: [Native repair tests](../../packages/limina/src/__tests__/native-reference-repair.spec.ts), [bounded context tests](../../packages/limina/src/__tests__/typescript-semantic-context.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: Raw references, explicit path/types, libs, and valid external declaration closures may still be admitted. Full mode is not roots-only; snapshot root membership is not the old Program's complete membership.
+
+## I04 — Locked dependency facts preserve checker occurrences and provenance
+
+- **Statement / Applies when**: The locked project dependency path retains occurrence kind/locator, compiler channel/mode/redirect, checker target, and evidence. Generated facts require trustworthy source mapping and consistent target paths and semantic kinds; Oxc cannot turn a miss into a semantic target.
+- **Problem**: The same specifier can target different files under import/require conditions. Permissive source maps or fallbacks could pass off a valid physical file as a dependency the checker actually observed.
+- **Root cause**: A specifier/path is an incomplete identity, and runtime resolution differs from checker Program observations.
+- **Enforcement / Why it works**: [Identity](../../packages/limina/src/core/typescript-semantic/identity.ts), [checker-resolution-provider](../../packages/limina/src/core/import-analysis/checker-resolution-provider.ts), and [dependency-record](../../packages/limina/src/core/project-dependencies/dependency-record.ts) protect occurrence identity, locked resolver routes, and target/evidence consistency respectively. Framework strict-source-map checks accept only attributable segments.
+- **Concrete example**: Svelte conditional export cases use occurrence mode to select import/require branches. A prepared declaration target paired with checker-source evidence must fail; the original `.vue` extension cannot reconstruct another target.
+- **Protected property**: Checker fidelity, traceable provenance, and failures that do not expand authority.
+- **Evidence / Strength / Confidence**: [Project dependencies tests](../../packages/limina/src/__tests__/project-dependencies.spec.ts), [Svelte tests](../../packages/limina/src/__tests__/svelte-semantic.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: Pending physical candidate bootstrapping and runtime-like inspection have other Oxc routes. A TypeScript type requiring locked authority does not imply runtime authentication of arbitrary JS inputs.
+
+## I05 — TypeEvidence and referenceRequirement retain independent meaning
+
+- **Statement / Applies when**: Native facts record type provision and compiler relation requirements separately. Ambient must not be forcibly rewritten as checker-source, nor may ambient always eliminate a compiler-membership requirement.
+- **Problem**: Reclassifying ambient to create an edge misstates type provenance; stopping edge creation whenever ambient appears can omit necessary compiler membership.
+- **Root cause**: A symbol's type provision and the compiler's input relation to a source implementation are different propositions.
+- **Enforcement / Why it works**: [dependency-fact](../../packages/limina/src/core/typescript-semantic/dependency-fact.ts) computes two independent fields from resolution, the checker symbol, and existing root/reference/external state. [native-dependency](../../packages/limina/src/core/project-dependencies/native-dependency.ts) preserves the fact and treats it as a pure observation only when it is ambient and has no requirement.
+- **Concrete example**: An ambient module plus `paths` pointing at a local implementation outside compiler inputs produces ambient + compiler-membership. Adding that implementation explicitly to roots makes the requirement null. Module augmentation associated with a real source symbol remains checker-source.
+- **Protected property**: Accurate type interpretation and declaration graph construction together.
+- **Evidence / Strength / Confidence**: [Native repair](../../packages/limina/src/__tests__/native-reference-repair.spec.ts), [generated graph](../../packages/limina/src/__tests__/generated-graph.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: referenceRequirement is only an input to the next phase; a unique actual owner, deny checks, and relation classification are still needed. A resource observation need not contain TypeEvidence.
+
+## I06 — Declaration, scheduling, and artifact attribution do not promote one another
+
+- **Statement / Applies when**: A declaration-provider may produce generated TypeScript references; framework-schedule expresses only source execution dependencies. A concrete declaration target stops at the artifact boundary and does not imply a source reference backward.
+- **Problem**: Representing every “dependency” as one edge kind would invent declaration projects for Astro/Svelte or connect an already produced `.d.ts` back to source as a false dependency.
+- **Root cause**: Type provision, source compilation requirements, execution ordering, and output attribution need different consumers.
+- **Enforcement / Why it works**: [reference-recording](../../packages/limina/src/core/build-graph/reference-recording.ts) requires normalized requirements. [Framework inference](../../packages/limina/src/core/build-graph/framework-reference-inference.ts) accepts only eligible source implementations, and [framework edges](../../packages/limina/src/core/build-graph/framework-dependency-edge.ts) reject declaration paths. Edge types have distinct fields and projections.
+- **Concrete example**: When a consumer resolves to a managed output `.d.ts`, lookup may explain its output origin without adding a sourceToBuild reference. An Astro/Svelte source dependency may participate in scheduling without generating tsconfig references.
+- **Protected property**: Faithful declaration relations, distinct build responsibilities, and artifact consumption that does not reopen source boundaries.
+- **Evidence / Strength / Confidence**: [Generated graph](../../packages/limina/src/__tests__/generated-graph.spec.ts), [dependency graph tests](../../packages/limina/src/__tests__/dependency-graph.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: Raw references, solution closures, and `implicitRefs` each have independent evidence; not all graph edges must originate from imports. The exported dependency graph is also not the task graph.
+
+## I07 — Declaration components use exact checker identity
+
+- **Statement / Applies when**: The endpoints of a successful declaration-provider have the same exact checker identity and reusable `cacheReuse`. An SCC participating in execution cannot contain an internal declaration relation; a pure framework scheduling SCC may execute.
+- **Problem**: Intermediate declaration caches from different checkers cannot be treated as one build merely because their semantic families are similar. Conversely, banning all cycles would reject valid groups containing only framework ordering relations.
+- **Root cause**: Identity equality and execution dependency direction are different relations.
+- **Enforcement / Why it works**: [Build coloring](../../packages/limina/src/core/build-graph/checker-build-coloring.ts) forms undirected components from valid declaration/solution equality, propagates a single color, and rejects multiple colors. [graph-validation](../../packages/limina/src/core/build-graph/graph-validation.ts) then checks final edges. The dependency plan distinguishes the declaration subset before checking SCCs.
+- **Concrete example**: Two leaves explicitly assigned tsc and tsgo cannot mix colors through a declaration edge. An SCC made entirely of framework scheduling edges does not thereby produce a declaration cycle error.
+- **Protected property**: Compatible compiler caches and explainable execution plans.
+- **Evidence / Strength / Confidence**: [Generated graph](../../packages/limina/src/__tests__/generated-graph.spec.ts), [execution](../../packages/limina/src/__tests__/execution.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: A local registry cache compatibility helper may be broader than the final graph guard; quoting that helper alone cannot refute the final constraint. Deny and concrete declarations do not participate in this equality relation. The dependency plan filters same-target self-dependencies first; its SCC guard checks components with two or more members, not arbitrary graph self-loops.
+
+## I08 — Source ownership and checker coverage are proved separately
+
+- **Statement / Applies when**: Within the configured source boundary, proof collects expected source and actual checker coverage separately, then compares them. A package/config owner for a file does not prove that the selected checker covers it.
+- **Problem**: After explicitly selecting a checker that understands only Astro, an adjacent Svelte file may still belong to the package without entering that checker's effective roots.
+- **Root cause**: Source that governance intends to cover differs from a checker's observation capability.
+- **Enforcement / Why it works**: [source-files](../../packages/limina/src/proof/source-files.ts) collects expected source. [Coverage](../../packages/limina/src/proof/coverage-collection.ts), [source coverage findings](../../packages/limina/src/proof/source-coverage-findings.ts), and framework coverage compare set differences and conflicts. Earlier route/config failures do not fabricate a complete downstream proof.
+- **Concrete example**: An adjacent framework file within an explicit Astro scope that checker roots do not cover does not cause graph rejection merely because it exists. The applicable proof source boundary checks the coverage gap.
+- **Protected property**: Governance coverage claims stay within actual checker capabilities.
+- **Evidence / Strength / Confidence**: [Proof tests](../../packages/limina/src/__tests__/proof.spec.ts), [generated graph tests](../../packages/limina/src/__tests__/generated-graph.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: Configured include/exclude/allowlist determine proof scope. Passing source, graph, and proof does not establish that every external tool, package output, or release check passes.
+
+## I09 — Fact reuse and asynchronous results are bounded by provider lifetime
+
+- **Statement / Applies when**: Production preflight updates generations/providers/caches after command mutation; a materialization replan may update only provider generation. Receipts commit only to the current slot. A cache entry cannot count as a fresh fact beyond its validity period merely because the path is unchanged.
+- **Problem**: An old graph could be reused after a command edits source, or a late old materialization promise could overwrite a new receipt.
+- **Root cause**: Path identity is not a content version, and analysis generation does not always equal provider generation.
+- **Enforcement / Why it works**: The [manager](../../packages/limina/src/preflight/manager.ts) replaces the provider set; the [scheduler](../../packages/limina/src/execution/scheduler-loop.ts) waits for running tasks to finish before advancing; [materialization](../../packages/limina/src/preflight/materialization.ts) checks slot/promise identity. Fact snapshots preserve history while live contexts are disposed promptly.
+- **Concrete example**: After capturing `import './a.js'` and editing it to `b.js`, the old snapshot still represents the old observation; only a new context sees the new input. Namespace tokens also differ even when their numeric generations match.
+- **Protected property**: Consistency within an analysis, asynchronous results that do not cross generations, and attributable resource cleanup.
+- **Evidence / Strength / Confidence**: [Preflight tests](../../packages/limina/src/__tests__/preflight.spec.ts), [context tests](../../packages/limina/src/__tests__/typescript-semantic-context.spec.ts); **Partially executable / Confirmed**.
+- **Boundaries**: External cache reuse must respect lifecycle. Keys do not universally include file-content digests; manager ensure-after-dispose has no uniform guard. See the lifecycle page for Vue active slot sharing.
+
+## I10 — Mutation authority cannot be inferred from path strings
+
+- **Statement / Applies when**: Mutating managed artifacts/managed checker output requires the corresponding namespace/plan or output authority and validation of logical and physical bindings. Literal root/generation values cannot replace an authenticated token.
+- **Problem**: A path that appears to be under `.limina` or outDir may follow a symlink elsewhere; copying a structurally identical plan could reuse another generation's authority.
+- **Root cause**: String containment, filesystem identity, and object provenance are three distinct identities.
+- **Enforcement / Why it works**: [namespace-core](../../packages/limina/src/domain/artifacts/namespace-core.ts) and [plan](../../packages/limina/src/domain/artifacts/plan.ts) authenticate objects/tokens. [authority-create](../../packages/limina/src/utils/mutation/authority-create.ts) and [identity](../../packages/limina/src/utils/mutation/identity.ts) check the trusted base, scope, symlink chain, and binding drift.
+- **Concrete example**: A new namespace with the same root and generation=0 rejects a plan from the old namespace. A `link/result` path inside the trusted base cannot create implied write authority when it passes through a symlink.
+- **Protected property**: Controlled write scope, with no expansion of authority from similar names or stale objects.
+- **Evidence / Strength / Confidence**: [Mutation tests](../../packages/limina/src/__tests__/mutation-boundary.spec.ts), [materialization recovery](../../packages/limina/src/__tests__/materialization-recovery.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: Raw external builds, user export files, and migration have different writer contracts. Do not generalize this to every write using one namespace or to the absence of all OS races.
+
+## I11 — Failed artifact publication leaves recognizable incomplete state
+
+- **Statement / Applies when**: Production generated plans publish under a canonical writer lease, with bounded replanning on revision drift. A pre-write marker, manifest-last publication, desired tree verification, and reader recovery refusal together prevent partial output from being treated as success.
+- **Problem**: If a process exits midway, the manifest and generated files may come from different plans; another run that keeps reading would obtain a mixed graph.
+- **Root cause**: Updating multiple files is not one atomic rename.
+- **Enforcement / Why it works**: Under the lease, the [materializer](../../packages/limina/src/core/build-graph/materializer.ts) checks revision, writes a marker, publishes files and then the manifest, and removes the marker after verification. Failure retains the marker; the next writer performs complete recovery. Readers have an explicit unavailable state.
+- **Concrete example**: After `materialization-recovery.spec.ts` injects a write interruption, readers cannot return normal results. The next writer publishes a complete new plan, removes old owned paths, and restores availability after verification.
+- **Protected property**: Detectable publication integrity and bounded recovery scope.
+- **Evidence / Strength / Confidence**: [Recovery tests](../../packages/limina/src/__tests__/materialization-recovery.spec.ts), [preflight](../../packages/limina/src/__tests__/preflight.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: This protocol is not a multi-file atomic transaction. Internal unrevisioned plans and migration do not receive the same revision/lease guarantees; consumers have no second revision handshake.
+
+## I12 — Latest issue queries cannot impersonate new checks or revive old success
+
+- **Statement / Applies when**: A latest check issue query must match the freshness of the latest published attempt. Running, aborted, persistence-failed, corrupt/inconsistent, and similar states forbid returning an old completed inventory. Independent invocation queries use their own identities.
+- **Problem**: If the latest check fails or never finishes, showing the previous run's “zero issues” would mislead users about current source.
+- **Root cause**: An inventory's existence does not mean it represents the latest attempt; completion writes may also be only partially finished.
+- **Enforcement / Why it works**: [Attempt IO](../../packages/limina/src/source-check/snapshot/check-attempt-io.ts) maintains sequence, identity, and digest. [Attempt queries](../../packages/limina/src/source-check/snapshot/check-attempt-query.ts) validate freshness; CLI queries do not trigger execution. Human and machine formats report unavailability rather than empty success.
+- **Concrete example**: After a completed inventory exists, publishing an aborted attempt requires human/JSON/NDJSON queries to show aborted/unavailable and exit with failure. Corrupt latest metadata also prevents allocation of a new sequence.
+- **Protected property**: Fresh results, visible failure, and automation consumers that cannot mistake old success for current success.
+- **Evidence / Strength / Confidence**: [Check attempt](../../packages/limina/src/__tests__/check-attempt.spec.ts), [invocation snapshot](../../packages/limina/src/__tests__/invocation-snapshot.spec.ts), [execution](../../packages/limina/src/__tests__/execution.spec.ts); **Strongly executable / Confirmed**.
+- **Boundaries**: Config/plan validation may fail before attempt publication, so not every CLI error can be promised to publish a new attempt. Check/source/invocation have different schemas and cannot share a single version constant.
+
+## Evidence matrix and guard decisions
+
+The links above identify the precise production/test owners. The table describes what tests challenge and which observables reviewers should check after changes. Test names/paths are retrieval anchors only; actual results are in the audit.
+
+| Invariant | Main executable enforcement                                             | Counterexample opportunities / reviewer observations                           | Guard added in this task                                                                                   |
+| --------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| I01       | Validated context + canonical package conflict + workspace tests        | Whether aliases and nested/excluded packages enter authority                   | None: counterexample guards already exist                                                                  |
+| I02       | Authority state / freeze assertions / coloring tests                    | TS semantics + Vue final owner, dependency order and conflicts                 | None: retain semantic guards without freezing function counts                                              |
+| I03       | Effective roots / inclusion ledger / native compiler differential tests | Relative types, external closures, excluded but resolvable source              | None: production and independent cases already protect this                                                |
+| I04       | Occurrence identity / locked dispatch / prepared consistency assertions | Import/require conditions, mapping ambiguity, kind mismatches                  | None: target and provenance guards already exist                                                           |
+| I05       | NativeDependencyFact discriminated fields / symbol evidence tests       | Ambient+membership, included/external controls, augmentation                   | None: the current staged repair already added regressions; this task cannot claim them as new              |
+| I06       | Edge union / reference-recording requirement / declaration guards       | Concrete managed output, framework-only scheduling, implicit refs              | None: reuse typed edge tests                                                                               |
+| I07       | Equality coloring / final graph guard / SCC declaration guard           | Exact checker conflicts, pure scheduling cycles                                | None: explain the difference between local helpers and final guards without mistakenly changing the helper |
+| I08       | Proof phase, expected vs coverage set comparisons                       | Unobservable adjacent extensions, uncovered/duplicate source                   | None: configuration boundaries require human review; do not add blanket exclusions                         |
+| I09       | Scheduler generation, provider replacement, slot identity, disposal     | Stale promises, replans without task generation advance, external stale caches | None: ensure-after-dispose and external cache scope affect API contracts; record the risks first           |
+| I10       | Namespace/plan authentication, physical mutation guards                 | Forged/cross-token plans, symlink escapes, binding drift                       | None: exception and filesystem tests already exist                                                         |
+| I11       | Writer lease, revision, marker, verification, recovery tests            | Mid-write failure, concurrent revision drift, stale ownership ledgers          | None: existing semantic recovery guards are more robust                                                    |
+| I12       | Sequence/digest/freshness, query/invocation guards                      | Torn pairs, newer running attempts, corrupt latest state, old completion       | None: end-to-end CLI tests already exist                                                                   |
+
+All 12 have mechanical connections. Eleven are Strongly executable within their explicit scopes; I09 depends on additional lifecycle contracts and is Partially executable. Prose-only future wishes are not presented as established core invariants. Areas worth mechanizing but not implemented in this task: if a human decides on uniform disposed APIs or a long-lived cache contract, add corresponding state-rejection/version regressions. If expanding the syntax covered by static architecture guards, first add negative cases for dynamic/alias routes without requiring the entire directory to retain its current shape.
+
+## Supporting invariants and implementation details
+
+- [architecture-boundaries.spec.ts](../../packages/limina/src/__tests__/architecture-boundaries.spec.ts) protects selected production materializer/controller callers and relative runtime import SCCs. Its scan does not fully cover aliases, dynamic imports, namespace calls, or re-export tracing, and does not prove arbitrary implicit dependencies acyclic. This is a supporting module-boundary guard, not proof that all dependencies in the system are statically acyclic.
+- Portable `/` paths, code-unit sorting, snapshot schema versions, manifest legacy cleanup policy, and Svelte source maps avoiding repeated Windows drive rebasing are important supporting contracts. Their owners are the respective source/tests and the [lifecycle page](./limina-lifecycle.md).
+- Helper names, directory depth, active context slot counts, default timeouts, and adapter version tags are implementation details. They trigger architecture review only when a change affects the core properties above.
+- Product audiences, long-term plugin extension, compatibility promises, and reasons for choosing a toolchain are human judgments. Tests must not freeze direction that has not been decided.

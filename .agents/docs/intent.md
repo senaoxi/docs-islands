@@ -1,5 +1,7 @@
 # Implemented scope and unresolved direction
 
+[English](./intent.md) | [简体中文](./zh/intent.md)
+
 ## Evidence boundary
 
 This record describes the scope established by the current source, tests, manifests, configuration, build inputs, public exports, and command execution.
