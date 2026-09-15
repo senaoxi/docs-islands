@@ -11,10 +11,10 @@
 - **Statement / Applies when**：graph/source/proof 使用本次 activated workspace 投影 authority；raw package discovery 仅为输入证据。对已激活 package，重复 physical identity、非法 overlap/boundary 必须先失败。
 - **Problem**：被排除或另属 nested workspace 的包若仍参与 owner 选择，就可能错误授权 import 或写输出。
 - **Root cause**：package manager 发现范围、逻辑目录和治理范围是不同集合；symlink alias 又会使一个物理包有两个名字。
-- **Enforcement / Why it works**：[validated create](../../../packages/limina/src/core/workspace/validated/create.ts) 先校验 exclusions、islands、overlap、package identities 与 output authority，后发布 context；[package-identities](../../../packages/limina/src/core/workspace/validated/package-identities.ts) 拒绝重复 canonical directory。下游不必反复猜边界。
-- **Concrete example**：`workspace-validation.spec.ts` 的 package alias / nested boundary 用例挑战同一物理包被双重激活；另一个无 name 的包仍可拥有 source，只有依赖 name 的 graph export 要求名称。
+- **Enforcement / Why it works**：[validated create](../../../packages/limina/src/core/workspace/validated/create.ts) 先校验 exclusions、islands、overlap、package identities 与 output authority，后发布 context；[package-identities](../../../packages/limina/src/core/workspace/validated/package-identities.ts) 拒绝重复 canonical directory。下游运行时 package/owner/boundary 查询通过 WorkspaceRegionPathIndex / WorkspaceLookupIndex 使用 canonical Governance Trie；package/owner 数组不能通过 directory containment 重建该 authority。construction 与局部关系的边界见 [region index owner](./limina-system-model.md#validated-region-的内部查询索引)。
+- **Concrete example**：`workspace-validation.spec.ts` 的 package alias / nested boundary 用例挑战同一物理包被双重激活；另一个无 name 的包仍可拥有 source，只有依赖 name 的 graph export 要求名称。`workspace-directory-index.spec.ts` 中，A activation → B cut → C activation 必须经 path index 与 package/owner lookup facade 均返回 A / null+B / C，并覆盖 external packages。`workspace-package-scope.spec.ts` 中，无名称 activated package 的真实路径与子目录 alias 均不能获取包外祖先的名称；最近 manifest 的路径保留所选 package 的原有身份。
 - **Protected property**：治理归属唯一、范围隔离、输出授权不扩大。
-- **Evidence / Strength / Confidence**：[workspace tests](../../../packages/limina/src/__tests__/workspace-validation.spec.ts)；**Strongly executable / Confirmed**。
+- **Evidence / Strength / Confidence**：[workspace tests](../../../packages/limina/src/__tests__/workspace-validation.spec.ts)、[region/facade guards](../../../packages/limina/src/__tests__/workspace-directory-index.spec.ts)、[package-scope guards](../../../packages/limina/src/__tests__/workspace-package-scope.spec.ts)；**Strongly executable / Confirmed**。
 - **Boundaries**：canonical package 校验不能证明任意 config alias 都已物理合并；name-based graph 和 path-based source owner 不能合成一个 identity。
 
 ## I02 — semantic authority 不随 final checker owner 改写
@@ -144,7 +144,7 @@
 
 | Invariant | 主要 executable enforcement                                             | 反例机会 / reviewer 观察                                          | 本次新增 guard                                                            |
 | --------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| I01       | validated context + canonical package conflict + workspace tests        | alias、nested/excluded package 是否进入 authority                 | 无：现有反例 guard 已有                                                   |
+| I01       | validated context、canonical Governance Trie、workspace/facade guards   | cut、重入、external package 与 canonical identity                 | 增强现有重入 guard：package/owner facade 与 path index 一致               |
 | I02       | authority state / freeze assertions / coloring tests                    | TS semantic + Vue final owner、依赖顺序与冲突                     | 无：保持语义 guard，不冻结函数数量                                        |
 | I03       | effective roots / inclusion ledger / native compiler differential tests | relative types、external closure、source excluded 但可 resolution | 无：已有生产与独立样例保护                                                |
 | I04       | occurrence identity / locked dispatch / prepared consistency assertions | import/require condition、mapping ambiguity、kind mismatch        | 无：已有 target 与 provenance guard                                       |
