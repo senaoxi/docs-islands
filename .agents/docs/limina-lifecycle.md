@@ -43,6 +43,22 @@ Native scope-evidence cache contracts are semantic context v4, native dependency
 
 **Derived**: Current caches fit controlled run/provider lifetimes. An external caller that reuses the same cache/request generation across file edits may receive old results when source content is absent from the key. This is not evidence that the existing CLI is necessarily stale. Supporting a long-lived daemon requires a mutation/version contract before extending cache lifetime.
 
+## Provider-owned raw syntax reuse
+
+[SourceSyntaxFactsCache](../../packages/limina/src/core/typescript-semantic/syntax-cache.ts) belongs to one `AnalysisProviderSet`. Project dependency collection and native TypeEvidence borrow that instance; neither consumer owns its disposal. Provider replacement (including a provider-only replan at the same analysis generation) creates a fresh cache, and provider disposal clears the entries. There is no persistent cache or process-global syntax store.
+
+The bounded host captures [OwnedSyntaxInput](../../packages/limina/src/core/typescript-semantic/syntax-input.ts) only during a synchronous native Program creation. The recipe is currently audited for TypeScript **6.0.3**; other compiler versions/instances, foreign or framework ASTs, parse errors, unknown parser fields and calls outside that scope use the original collector. Expanding that recipe requires corresponding parser differential evidence. The descriptor contains lexical file name, compiler instance/version, collector version, language target/variant, script kind, implied format, JSDoc mode and native module-detection policy. A hit additionally requires exact text equality; no mtime or realpath substitution establishes equivalence.
+
+Only text and ordered plain import records are retained. Records are copied on both insertion and return, with no AST, Program, Symbol, resolved target, admission, TypeEvidence or graph decision in an entry. A cache hit still initializes the new AST's parent pointers; each context independently records triple-slash/lib admission and resolution. Both consumers retain their existing semantic identities and policy interpretation. Program counts are not reduced by this optimization.
+
+The initial LRU budget is 96 MiB of **estimated** text/string/object storage, with an 8 MiB entry limit. Oversized entries bypass; a descriptor retains only its latest text. Estimates are conservative bookkeeping rather than a heap/RSS guarantee. The cache reports hit/miss/bypass/eviction and current/peak estimated bytes; native Program construction and first TypeChecker request have distinct duration observations. Async phase wall time is not exclusive CPU time.
+
+Executable counterexamples are in [cache lifecycle](../../packages/limina/src/__tests__/source-syntax-cache.spec.ts), [syntax differential](../../packages/limina/src/__tests__/source-syntax-differential.spec.ts) and [provider replan](../../packages/limina/src/__tests__/preflight.spec.ts). These cover content changes, consumer mutation, lexical aliases, malformed/foreign inputs, eviction, disposal, same-generation replacement, 70 synthetic sources and 432 foreign parser recipes. Full performance claims require a frozen-workload comparison; passing these tests alone does not establish a speedup.
+
+## Source phase observations
+
+[Source phases](../../packages/limina/src/source-check/phases.ts) separate read-only preparation, Knip execution/cleanup, and read-only ownership/authority/reporting. The runner executes them sequentially under the **existing whole-task resource declaration**. The public task remains `source:check`, and the final source result is published once. Knip failures or cleanup errors still prevent later phases from publishing success. Phase wall observations do not authorize concurrent readers while temporary Knip entries are visible, nor weaken manifest, repository, generated-file or cross-process lease constraints.
+
 ## Namespaces, physical identity, and plans
 
 [namespace-core](../../packages/limina/src/domain/artifacts/namespace-core.ts) records the logical root, canonical root, and generation token, and authenticates through an internal WeakSet. An [artifact plan](../../packages/limina/src/domain/artifacts/plan.ts) is also authenticated and bound to the same token. Two freshly created namespaces with the same root and numeric generation cannot exchange plans. Production graph generation creates revisioned plans; an internal constructor for unrevisioned plans exists, so base-revision checking cannot be generalized to every API input.
