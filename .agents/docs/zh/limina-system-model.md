@@ -14,7 +14,7 @@
 
 | 实体                       | Identity / 创建处                                                                                                                                                                                                                   | 拥有什么，不能据此推导什么                                                                                                                                |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace / region         | loader 找到的 workspace root，validated region boundaries                                                                                                                                                                           | pnpm 发现范围不自动等于治理范围；嵌套 workspace、package scope 与 exclusions 参与边界选择                                                                 |
+| Workspace / region         | loader 找到的 workspace root，validated region boundaries                                                                                                                                                                           | package manager 发现范围不自动等于治理范围；嵌套 workspace、package scope 与 exclusions 参与边界选择                                                      |
 | WorkspacePackage           | 逻辑 package directory + [canonical identity](../../../packages/limina/src/core/workspace/validated/package-identities.ts)；name 可缺省                                                                                             | raw 与 activated packages 分开；同一物理 package 的重复 alias 被拒绝。name-dependent graph export 另要求 name                                             |
 | Source config              | normalized absolute config path；[config-paths](../../../packages/limina/src/core/tsconfig/config-paths.ts)                                                                                                                         | checker ownership 单位是 config。`normalizeAbsolutePath` 是 lexical portable path，不能宣称所有 tsconfig symlink alias 都已 realpath 合并                 |
 | Type / solution config     | [solution-role](../../../packages/limina/src/core/tsconfig/solution-role.ts) 与 ownership state                                                                                                                                     | 空 effective files 且 raw 存在 references 的 solution 管组织闭包；Limina 的受支持 solution basename 是 `tsconfig.json`；type leaf 才有语义与执行 owner    |
@@ -31,7 +31,7 @@
 
 | 维度                | 来源                                                                                                                                             | 拒绝的跨维度推导                                                  |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Workspace authority | [validated create](../../../packages/limina/src/core/workspace/validated/create.ts)：raw discovery → exclusions/overlap/islands/output authority | “pnpm 找到包”不能证明它在本次治理范围                             |
+| Workspace authority | [validated create](../../../packages/limina/src/core/workspace/validated/create.ts)：raw discovery → exclusions/overlap/islands/output authority | “manager adapter 找到包”不能证明它在本次治理范围                  |
 | Semantic authority  | explicit/config/root/dependency evidence 在 ownership 求解中锁定                                                                                 | “最后由 vue-tsc 构建”不能改写成 Vue 解析                          |
 | Execution ownership | explicit leaf closure、equality coloring、fallback、finalization                                                                                 | 构建身份不证明 runtime import 被 package 授权                     |
 | Source ownership    | 实际 root membership、validated package/source rules                                                                                             | 目录最接近、exports 名称、Oxc 找到文件都不能替代实际 owner        |
@@ -39,6 +39,20 @@
 | Mutation authority  | trusted base 的物理 identity、scope、generation、path/identity guards                                                                            | lexical containment 不充分；计划写某路径不能授权沿 symlink 改别处 |
 
 一个项目可以有 TypeScript semantic authority、`vue-tsc` final owner、source package owner 与独立 output authority；这是合法组合。[I01–I12](./limina-invariants.md) 说明哪些转换受保护。
+
+## 工作区发现 authority
+
+共享的 [root resolver](../../../packages/limina/src/utils/workspace-root.ts) 服务 config loading、package discovery、validated context、issue lookup 和 init。不同声明类型之间距离优先；`pnpm-workspace.yaml` 只在同一目录内优先。普通 manifest 不停止 ancestry search。语法错误和无法解释的显式 identity 均 fail closed。没有单包 fallback。
+
+pnpm 的 workspace authority 来自 YAML，显式声明其他 manager 会产生冲突。对于 `package.json#workspaces`，自有 `packageManager` 提供 identity；只有缺少该字段时才使用同目录 lockfile。lockfile 按 manager 去重，先判断 ambiguity 再判断 pnpm descriptor 缺失，不读取祖先 lockfile。resolver 识别 identity，不校验 semver 合法性或可安装性。声明解析归 [manager adapters](../../../packages/limina/src/core/workspace/selection-policy.ts)：pnpm 只消费 `packages`，npm 接受数组，Yarn/Bun 接受数组或包含 packages 数组的对象。无关 catalogs 和 manager 配置不属于 Limina discovery schema。
+
+各 adapter 提供不同的 traversal hard ignore：pnpm 排除 `node_modules` 和 `bower_components`；npm 排除 `node_modules`；Yarn 排除 `node_modules`、`.git` 和 `.yarn`；Bun 排除 `node_modules`、`.git` 和 `CMakeFiles`。`test/tests` 不属于私有排除项。[共享 expansion](../../../packages/limina/src/core/workspace/expand-package-globs.ts) 枚举目录，然后由 discovery 读取 manifest，并在根 manifest 存在时独立合并。缺少 manifest 的目录跳过，JSON 非法则失败，无名包仍然有效。named-first 排序不变。filesystem adapter 保留 directory-link alias，包括指向祖先的目录本身，只在循环处停止递归。循环状态仅属于一次 expansion group。物理去重归 validation，alias 在 workspace-overlap 检查之后必须产生 identity conflict。
+
+共享遍历不意味着 manager glob 语义相同。[Selection patterns](../../../packages/limina/src/core/workspace/selection-patterns.ts) 承载 npm 撤销早期匹配排除项的行为，以及 Bun 的顺序选择和 trailing-globstar 行为。pnpm/npm/Bun 的精确包排除只过滤选中的目录，不剪掉未匹配的后代；manager hard ignore 仍在遍历阶段剪枝。这些是有范围的兼容规则，不承诺所有 manager 版本完全等价。即使 npm 自身接受 object form，Limina 支持的 npm 投影仍明确拒绝它。要求的 Yarn/Bun hard-ignore 策略也始终作用于显式 metadata-directory pattern，即使 Yarn 4.18.0 或 Bun 1.3.13 会接受这些输入。Bun 动态 pattern 遵循其 hidden-directory 行为；显式目录声明可以命名 `.yarn`，不会借用 Yarn 的策略。
+
+嵌套 YAML descriptor 或自有 `package.json#workspaces` 会形成 `workspace-root` boundary，即使 nested manager 无法判定。它不是可配置的 `package-scope` candidate，`extendNestedPackageScopes` 也不能穿透。same-root overlap 使用真实 descriptor path。`ValidatedWorkspaceContext.workspaceRoot` 保留 manager 和 descriptor metadata；`workspaceRootDir` 暂时作为兼容字段。init package metadata reader 中 pnpm-only 的 catalog lookup 描述的是 Limina 自身开发包，不是用户 workspace authority。
+
+可执行 guards：[workspace discovery](../../../packages/limina/src/__tests__/workspace-discovery.spec.ts)、[workspace validation](../../../packages/limina/src/__tests__/workspace-validation.spec.ts)、[config](../../../packages/limina/src/__tests__/config.spec.ts) 和 [init](../../../packages/limina/src/__tests__/init.spec.ts)。2026-09-21 differential 范围使用 macOS 上的 pnpm 11.9.0、npm 12.0.2、Yarn 4.18.0 和 Bun 1.3.13；其他版本和平台仍未验证。不据此添加 human vouch。
 
 ## Validated region 的内部查询索引
 

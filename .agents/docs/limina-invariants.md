@@ -17,6 +17,8 @@ This page registers 12 properties that affect system correctness. They come from
 - **Evidence / Strength / Confidence**: [Workspace tests](../../packages/limina/src/__tests__/workspace-validation.spec.ts), [region/facade guards](../../packages/limina/src/__tests__/workspace-directory-index.spec.ts), [package-scope guards](../../packages/limina/src/__tests__/workspace-package-scope.spec.ts); **Strongly executable / Confirmed**.
 - **Boundaries**: Canonical package validation does not prove that every config alias is physically merged. Name-based graphs and path-based source owners cannot be combined into one identity.
 
+- **Discovery guard**: Nearest descriptor authority, explicit manager precedence, root-local fallback, consumed declaration projection, manager-specific selection, and lexical alias preservation are guarded in `workspace-discovery.spec.ts`. Nested workspace declarations remain hard cuts with missing manager identity and with nameless-scope extension enabled. See [discovery authority](./limina-system-model.md#workspace-discovery-authority) for compatibility boundaries.
+
 ## I02 — Final checker ownership does not rewrite semantic authority
 
 - **Statement / Applies when**: Semantic authority for a managed type config freezes after fact convergence; subsequent promotion/coloring/fallback/finalization cannot change it. Successful finalization assigns each leaf one execution owner.

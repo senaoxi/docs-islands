@@ -811,9 +811,6 @@ importers:
       '@jridgewell/trace-mapping':
         specifier: catalog:dev
         version: 0.3.31
-      '@pnpm/workspace.read-manifest':
-        specifier: catalog:dev
-        version: 1000.3.1
       '@publint/pack':
         specifier: catalog:lint
         version: 0.1.4

@@ -17,6 +17,8 @@
 - **Evidence / Strength / Confidence**：[workspace tests](../../../packages/limina/src/__tests__/workspace-validation.spec.ts)、[region/facade guards](../../../packages/limina/src/__tests__/workspace-directory-index.spec.ts)、[package-scope guards](../../../packages/limina/src/__tests__/workspace-package-scope.spec.ts)；**Strongly executable / Confirmed**。
 - **Boundaries**：canonical package 校验不能证明任意 config alias 都已物理合并；name-based graph 和 path-based source owner 不能合成一个 identity。
 
+- **Discovery guard**：`workspace-discovery.spec.ts` 保护最近声明 authority、显式 manager 优先、同根 fallback、所消费声明投影、manager-specific selection 和 lexical alias 保留。即使 manager identity 缺失或开启 nameless-scope extension，嵌套 workspace 声明仍是 hard cut。兼容边界见[发现 authority](./limina-system-model.md#工作区发现-authority)。
+
 ## I02 — semantic authority 不随 final checker owner 改写
 
 - **Statement / Applies when**：managed type config 的 semantic authority 在 facts convergence 后 freeze；后续 promotion/coloring/fallback/finalization 不能改变它。成功 finalization 为 leaf 确定唯一执行 owner。
