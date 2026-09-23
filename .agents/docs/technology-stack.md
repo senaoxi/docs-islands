@@ -36,6 +36,10 @@ Shared dependency and development dependency versions are primarily referenced t
 
 Peer dependency compatibility ranges remain in individual package manifests. Some dependency values also use workspace protocols or package-local values. The implementation does not place every version exclusively in catalogs.
 
+## Release version ordering
+
+Root release planning and changelog tag selection share the catalogued `semver` comparator. Numeric prerelease identifiers are ordered numerically (`beta.10` follows `beta.9`); stable releases follow their prereleases. Existing version input parsing and package/legacy tag selection rules remain in [shared release helpers](../../scripts/release/shared.ts). [Regression tests](../../scripts/release/shared.spec.ts) exercise the planning guard and tag consumer, including reversed comparisons and hierarchy. The root declares `semver` and `@types/semver` as development dependencies using the existing catalog; they support release scripts rather than adding a shipped runtime dependency.
+
 ## Task orchestration
 
 Nx provides dependency-graph-aware orchestration and caching for the configured `build` and `docs:build` targets. The root `build` script invokes `nx run-many`, and release scripts invoke package build targets through `pnpm nx run`.
@@ -66,6 +70,10 @@ Build tools differ by package:
 - `@docs-islands/eslint-config`, `@docs-islands/utils`, and `@docs-islands/plugin-license` build through Limina commands rather than the same Rolldown configuration pattern.
 
 The repository does not use one build tool uniformly for every package.
+
+## CI status aggregation
+
+The [CI status gate](../../.github/workflows/ci.yml) waits for all validation jobs, including the exact Vue semantic matrix. It fails if any declared dependency fails or is cancelled; jobs skipped by existing change filters remain allowed. One expression over `needs.*.result` avoids a second hand-maintained list of results. [Workflow regression coverage](../../packages/limina/src/__tests__/ci-workflow.spec.ts) keeps the dependency set and aggregation contract aligned. Local YAML and shell scenarios exercise result aggregation; only a remote Actions run can establish scheduling and branch-protection behavior.
 
 ## Browser testing
 

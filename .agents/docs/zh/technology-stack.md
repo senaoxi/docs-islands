@@ -36,6 +36,10 @@
 
 Peer dependency 兼容范围保留在各包 manifest 中。部分依赖值还使用 workspace protocols 或包内局部值。实现没有将所有版本都限定在 catalogs 中。
 
+## 发布版本排序
+
+根发布规划与 changelog 标签选择共用 catalog 中的 `semver` 比较器。预发布的数字标识按数值排序（`beta.10` 晚于 `beta.9`）；稳定版排在对应预发布之后。既有版本输入解析、包标签与旧标签选择规则仍由[共享发布辅助代码](../../../scripts/release/shared.ts)负责。[回归测试](../../../scripts/release/shared.spec.ts)覆盖规划守卫与标签消费者，包括反向比较与层级。根项目通过既有 catalog 声明 `semver` 和 `@types/semver` 开发依赖；它们用于发布脚本，不增加已交付包的运行时依赖。
+
 ## 任务编排
 
 Nx 为已配置的 `build` 和 `docs:build` targets 提供理解依赖图的编排与缓存。根 `build` 脚本调用 `nx run-many`，发布脚本通过 `pnpm nx run` 调用包的 build targets。
@@ -66,6 +70,10 @@ TypeScript 是已检查包中的主要源码语言与类型系统。
 - `@docs-islands/eslint-config`、`@docs-islands/utils` 和 `@docs-islands/plugin-license` 通过 Limina 命令构建，不使用同一套 Rolldown 配置模式。
 
 仓库没有对所有包统一使用一种构建工具。
+
+## CI 状态汇总
+
+[CI 状态门禁](../../../.github/workflows/ci.yml)等待所有验证任务，包括精确 Vue 语义矩阵。任一已声明依赖失败或被取消都会使门禁失败；既有变更过滤器跳过的任务仍可接受。统一遍历 `needs.*.result` 的表达式避免再手工维护一份结果清单。[工作流回归覆盖](../../../packages/limina/src/__tests__/ci-workflow.spec.ts)约束依赖集合与汇总契约保持一致。本地 YAML 与 shell 场景覆盖结果汇总；只有远端 Actions 执行才能确立调度与分支保护行为。
 
 ## 浏览器测试
 
