@@ -451,6 +451,7 @@ jobs:
       [
         build-artifacts,
         quality,
+        limina-vue-semantic-matrix,
         test,
         limina-atomic-writer-windows,
         limina-platform-build-smoke,
@@ -460,14 +461,10 @@ jobs:
     if: always()
     steps:
       - name: Check Status
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: |
-          if [[ "${{ needs.build-artifacts.result }}" == "failure" || \
-                "${{ needs.quality.result }}" == "failure" || \
-                "${{ needs.test.result }}" == "failure" || \
-                "${{ needs.limina-atomic-writer-windows.result }}" == "failure" || \
-                "${{ needs.limina-platform-build-smoke.result }}" == "failure" || \
-                "${{ needs.smoke.result }}" == "failure" || \
-                "${{ needs.build.result }}" == "failure" ]]; then
+          if [[ "$FAILED" == "true" ]]; then
             echo "❌ CI Failed"
             exit 1
           else

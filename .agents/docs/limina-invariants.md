@@ -52,6 +52,8 @@ This page registers 12 properties that affect system correctness. They come from
 - **Evidence / Strength / Confidence**: [Project dependencies tests](../../packages/limina/src/__tests__/project-dependencies.spec.ts), [Svelte tests](../../packages/limina/src/__tests__/svelte-semantic.spec.ts); **Strongly executable / Confirmed**.
 - **Boundaries**: Pending physical candidate bootstrapping and runtime-like inspection have other Oxc routes, but neither reinterprets a specifier that carries a query or fragment; that syntax is part of the occurrence identity and only the checker may give it meaning. Runtime filesystem checks and missing-provider fallbacks also stop before path normalization, which could erase a query/fragment segment followed by `..`. A TypeScript type requiring locked authority does not imply runtime authentication of arbitrary JS inputs.
 
+- **Static-block boundary**: A class static block is its own var scope while retaining its lexical parent. Local var/let/function bindings cannot hide an outer require or immutable createRequire alias in a sibling block or after the class. [Import analysis regressions](../../packages/limina/src/__tests__/import-analysis.spec.ts) cover these boundaries and require.resolve.
+
 ## I05 — TypeEvidence and referenceRequirement retain independent meaning
 
 - **Statement / Applies when**: Native facts record type provision and compiler relation requirements separately. Evidence describes an actual provider in the bounded scope, including missing; requirements describe candidate compiler relations. The complete truth table belongs to [semantic facts](./limina-semantics.md#occurrences-evidence-and-graph-requirements).

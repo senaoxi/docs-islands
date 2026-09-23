@@ -7,6 +7,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import prompts from 'prompts';
+import semver from 'semver';
 
 const loggerInstance = createLogger({
   main: 'docs-islands-monorepo',
@@ -450,28 +451,9 @@ export function isReleaseType(value: string): value is ReleaseType {
 }
 
 export function compareVersions(a: string, b: string): number {
-  const left = parseVersion(a);
-  const right = parseVersion(b);
-
-  if (left.major !== right.major) {
-    return left.major - right.major;
-  }
-  if (left.minor !== right.minor) {
-    return left.minor - right.minor;
-  }
-  if (left.patch !== right.patch) {
-    return left.patch - right.patch;
-  }
-  if (!left.prerelease && !right.prerelease) {
-    return 0;
-  }
-  if (!left.prerelease) {
-    return 1;
-  }
-  if (!right.prerelease) {
-    return -1;
-  }
-  return left.prerelease.localeCompare(right.prerelease);
+  parseVersion(a);
+  parseVersion(b);
+  return semver.compare(a, b);
 }
 
 export function incrementVersion(

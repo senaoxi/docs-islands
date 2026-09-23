@@ -65,6 +65,7 @@
   "devDependencies": {
     "@types/node": "catalog:dev",
     "@types/prompts": "catalog:dev",
+    "@types/semver": "catalog:dev",
     "@typescript/native-preview": "catalog:dev",
     "@vue/compiler-sfc": "catalog:dev",
     "eslint": "catalog:lint",
@@ -81,6 +82,7 @@
     "tsx": "catalog:dev",
     "cac": "catalog:dev",
     "prompts": "catalog:dev",
+    "semver": "catalog:dev",
     "del-cli": "catalog:dev",
     "husky": "catalog:dev",
     "concurrently": "catalog:dev",

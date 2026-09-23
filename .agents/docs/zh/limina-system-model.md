@@ -27,6 +27,8 @@
 | Namespace / plan / receipt | [namespace](../../../packages/limina/src/domain/artifacts/namespace-core.ts)、[plan](../../../packages/limina/src/domain/artifacts/plan.ts)、[preflight materialization](../../../packages/limina/src/preflight/materialization.ts) | namespace token、plan authenticity、revision 与 receipt slot 各防不同 stale/forged 状态；generation 数字相等不足以授权                                    |
 | Finding / issue / attempt  | 各域 finding → issue projector；[attempt IO](../../../packages/limina/src/source-check/snapshot/check-attempt-io.ts)                                                                                                                | issue identity 做稳定去重；attempt ID + sequence + completion digest 证明查询 freshness。domain GovernanceIssue 不能无条件当成 persisted LiminaCheckIssue |
 
+检查器入口选择与 leaf 可达性是两件事。`checker.include` 选择默认 `tsconfig.json` 入口；命名终端配置通过其有效 references 闭包进入。嵌套 solution 同样要求默认文件名。直接选择命名 leaf 不能修复缺失的提供者引用。[CLI 选择测试](../../../packages/limina/integration/tests/named-leaf-selection.spec.ts)覆盖直接选择器拒绝、默认嵌套/直接引用成功，以及命名中间 solution 拒绝。
+
 ## Authority 的六个维度
 
 | 维度                | 来源                                                                                                                                             | 拒绝的跨维度推导                                                  |
@@ -48,9 +50,11 @@ pnpm 的 workspace authority 来自 YAML，显式声明其他 manager 会产生�
 
 各 adapter 提供不同的 traversal hard ignore：pnpm 排除 `node_modules` 和 `bower_components`；npm 排除 `node_modules`；Yarn 排除 `node_modules`、`.git` 和 `.yarn`；Bun 排除 `node_modules`、`.git` 和 `CMakeFiles`。`test/tests` 不属于私有排除项。[共享 expansion](../../../packages/limina/src/core/workspace/expand-package-globs.ts) 枚举目录，然后由 discovery 读取 manifest，并在根 manifest 存在时独立合并。缺少 manifest 的目录跳过，JSON 非法则失败，无名包仍然有效。named-first 排序不变。filesystem adapter 保留 directory-link alias，包括指向祖先的目录本身，只在循环处停止递归。循环状态仅属于一次 expansion group。物理去重归 validation，alias 在 workspace-overlap 检查之后必须产生 identity conflict。
 
-共享遍历不意味着 manager glob 语义相同。[Selection patterns](../../../packages/limina/src/core/workspace/selection-patterns.ts) 承载 npm 撤销早期匹配排除项的行为，以及 Bun 的顺序选择和 trailing-globstar 行为。pnpm/npm/Bun 的精确包排除只过滤选中的目录，不剪掉未匹配的后代；manager hard ignore 仍在遍历阶段剪枝。这些是有范围的兼容规则，不承诺所有 manager 版本完全等价。即使 npm 自身接受 object form，Limina 支持的 npm 投影仍明确拒绝它。要求的 Yarn/Bun hard-ignore 策略也始终作用于显式 metadata-directory pattern，即使 Yarn 4.18.0 或 Bun 1.3.13 会接受这些输入。Bun 动态 pattern 遵循其 hidden-directory 行为；显式目录声明可以命名 `.yarn`，不会借用 Yarn 的策略。
+共享遍历不意味着 manager glob 语义相同。[Selection patterns](../../../packages/limina/src/core/workspace/selection-patterns.ts) 承载 npm 撤销早期匹配排除项的行为，以及 Bun 的顺序选择和 trailing-globstar 行为。pnpm/npm/Bun 的精确包排除只过滤选中的目录，不剪掉未匹配的后代；manager hard ignore 仍在遍历阶段剪枝。这些是有范围的兼容规则，不承诺所有 manager 版本完全等价。显式 `packageManager` 虽按 `manager@version` 形式解析，但 `ResolvedWorkspaceRoot` 只保留 manager identity，discovery adapter 也不会按声明版本分支。因此，Limina 为每种 manager 应用一套文档化的 discovery projection，而不是模拟历史版本 profile。上游后来明确归类并以 fix 修正的历史 discovery 行为不属于这份兼容契约；项目声明受影响的旧版本也不会重新启用这种行为。即使 npm 自身接受 object form，Limina 支持的 npm 投影仍明确拒绝它。要求的 Yarn/Bun hard-ignore 策略也始终作用于显式 metadata-directory pattern，即使 Yarn 4.18.0 或 Bun 1.3.13 会接受这些输入。Bun 动态 pattern 遵循其 hidden-directory 行为；显式目录声明可以命名 `.yarn`，不会借用 Yarn 的策略。
 
 嵌套 YAML descriptor 或自有 `package.json#workspaces` 会形成 `workspace-root` boundary，即使 nested manager 无法判定。它不是可配置的 `package-scope` candidate，`extendNestedPackageScopes` 也不能穿透。same-root overlap 使用真实 descriptor path。`ValidatedWorkspaceContext.workspaceRoot` 保留 manager 和 descriptor metadata；`workspaceRootDir` 暂时作为兼容字段。init package metadata reader 中 pnpm-only 的 catalog lookup 描述的是 Limina 自身开发包，不是用户 workspace authority。
+
+package-island walk 仅对 descriptor 文件（`package.json` 与 `pnpm-workspace.yaml`）跟随 symlink。它们的 lexical location 确立 boundary，canonical identity 另行记录目标。目标缺失或不是普通文件时 discovery 失败，不能静默接纳所在子树。该规则不增加对 directory symlink 的递归遍历，也不授予链接 tsconfig 文件 source-config admission。
 
 可执行 guards：[workspace discovery](../../../packages/limina/src/__tests__/workspace-discovery.spec.ts)、[workspace validation](../../../packages/limina/src/__tests__/workspace-validation.spec.ts)、[config](../../../packages/limina/src/__tests__/config.spec.ts) 和 [init](../../../packages/limina/src/__tests__/init.spec.ts)。2026-09-21 differential 范围使用 macOS 上的 pnpm 11.9.0、npm 12.0.2、Yarn 4.18.0 和 Bun 1.3.13；其他版本和平台仍未验证。不据此添加 human vouch。
 
@@ -123,6 +127,8 @@ flowchart TB
 | configured governance rule   | graph labels/rules、source package/import/ambient policy、proof boundaries                                      | 可以判定观察到的关系违法；不能创造缺失的 compiler fact                                       |
 | exported dependency edge     | [dependency-graph](../../../packages/limina/src/dependency-graph/) 的 package source/artifact evidence          | 用于架构观察；export schema 没有完整 task/resource/cache model，不是 execution plan          |
 
+生成引用的包依赖与 deny-dependency 检查通过两端项目原始的 `resolverConfigPath` 查找包。生成的 `.limina` 路径保留图与诊断身份，但不提供 package/importer 身份。此规则也覆盖没有源码 import 的 `implicitRefs`，并保留无名包检查。[Graph 回归测试](../../../packages/limina/src/__tests__/graph.spec.ts)覆盖已声明、未声明、禁止依赖与无名端点，并包含激活根包的控制组。
+
 声明目标 `.d.ts/.d.mts/.d.cts` 是 artifact 终点；存在 source 文件也不够，必须有合法 requirement。执行依赖计划同时看到声明边与调度边；dependency plan 先过滤相同 target 的自依赖；两个及以上 target 的 SCC 中含 declaration relation 被拒绝，纯 framework SCC 可以执行。准确 guard 见 [graph-validation](../../../packages/limina/src/core/build-graph/graph-validation.ts) 与 [declaration-cycle](../../../packages/limina/src/typecheck/build/declaration-cycle.ts)。
 
 ## Failure semantics 与投影边界
@@ -131,6 +137,22 @@ flowchart TB
 
 graph runner 验证关系、rules、condition/export 约束；source runner 验证 ownership、package import/dependency/ambient 规则并可结合 Knip；proof runner 比较 expected source 与 checker coverage；package runner检查配置 outputs；release runner检查发布一致性。可选工具与配置决定覆盖面，单个域通过不证明其他域通过。入口证据：[graph](../../../packages/limina/src/graph-check/runner.ts)、[source](../../../packages/limina/src/source-check/runner.ts)、[proof](../../../packages/limina/src/proof/runner.ts)、[package](../../../packages/limina/src/package-check/runner.ts)。
 
-source resource 检查分别问物理文件是否存在、类型是否声明、package import 是否授权；[resource-module-findings](../../../packages/limina/src/source-check/resource-module-findings.ts) 按原样检查 module specifier：`package.json#imports` key 保留其中的 `?`/`#`，普通 specifier 也不会在 query 或 fragment 处拆分去检查另一条物理路径，因此带 query 的导入不会仅凭后缀产生 resource finding。写 issue 时路径规范化。proof allowlist 带 reason 并接受范围/已有coverage校验；它是明确配置的例外，不代表 checker 实际读取了文件。package 检查配置 entries 的 Publint/ATTW/boundary 结果，不自动覆盖所有 raw workspace packages。
+source resource 检查分别问物理文件是否存在、类型是否声明、package import 是否授权；[resource-module-findings](../../../packages/limina/src/source-check/resource-module-findings.ts) 按原样检查 module specifier：`package.json#imports` key 保留其中的 `?`/`#`，普通 specifier 也不会在 query 或 fragment 处拆分去检查另一条物理路径，因此带 query 的导入不会仅凭后缀产生 resource finding。写 issue 时路径规范化。proof allowlist 带 reason 并接受范围/已有coverage校验；它是明确配置的例外，不代表 checker 实际读取了文件。package 检查配置 entries 的 Publint/ATTW/boundary 结果，不自动覆盖所有 raw workspace packages。 resource observation 保留 occurrence 的解析模式，包括原生 ambient observation 与经过映射的框架事实。包资源的物理查找使用专用 Oxc 解析器，只启用该 occurrence 对应的 import 或 require 条件以及自定义条件；缓存身份包含用途、模式、条件和符号链接策略，并在 source 检查结束后释放。该解析器不提供 TypeEvidence 或 compiler reference。含 `?` 或 `#` 的完整 package-import key 使用相同模式和条件下的 Node 解析，因为 Oxc 的 query 解析可能重新解释这些 key。含 null 目标的映射也使用 Node，因为当前 Oxc 版本可能从活动的 null 分支继续落到 default；该兼容探针只解析，不加载模块。虚拟或不支持的资源仍在物理查找前完成分类。[条件资源测试](../../../packages/limina/src/__tests__/resource-resolution-conditions.spec.ts) 覆盖两种模式、缓存复用、自定义条件以及 null/缺失分支。
 
 executor 区分 passed、failed、disabled、blocked、skipped 等 task outcome，stop policy、前提依赖与基础设施异常另有处理。issue presentation 和 completed inventory 不能把“未运行”“数据不可用”变成“零问题”。精确状态以 [tasks](../../../packages/limina/src/execution/tasks.ts)、[execution-results](../../../packages/limina/src/execution/execution-results.ts) 和 [snapshot types](../../../packages/limina/src/source-check/snapshot/types.ts) 为准。
+
+工作区 exports 预检在检查源码 occurrence 前，按活动检查器配置校验已声明入口的解析。未被导入但缺失的运行时或类型入口可能失败；可解析的纯运行时 JavaScript 入口可在没有稳定类型证据时通过，直到受治理源码导入它。occurrence 检查随后要求稳定类型或 checker-source 解析。预检和运行时命中都不建立编译器引用。[公开 CLI 回归](../../../packages/limina/integration/tests/workspace-exports.spec.ts)覆盖无 import 的缺失入口及有效源码、运行时对照。
+
+export 模式发现枚举包文件，再把目标解释为具有星号替换的字面字符串：一次捕获可以跨目录，目标中的每个星号都使用同一捕获值。目标中的 glob 特殊字符保持字面含义。发现阶段只产生候选项；原始 exports 条件树、null 分支和键优先级仍由解析器决定。[Node 对照测试](../../../packages/limina/src/__tests__/workspace-export-patterns.spec.ts) 覆盖嵌套捕获、重复星号、字面方括号与空捕获拒绝。
+
+稳定的 export 类型入口必须来自成功的原生 TypeScript 解析，或该 profile 对应 Vue、Astro、Svelte 语义适配器的成功解析调用。旧的物理 checker-source 候选项，以及遍历扁平化 export 目标后找到的文件，都不充分。内部结果保留原生、框架和未解析三种来源；公开索引与快照 schema 保持不变。索引构建完成或失败后都会释放框架解析上下文。该预检探针既不创建源码 occurrence，也不提供 TypeEvidence 或构建归属。[解析证据测试](../../../packages/limina/src/__tests__/workspace-export-resolution.spec.ts) 在不活动/null/自定义条件、非法目标与不支持的后缀下，将原生结果与 TypeScript 对照。 条件行为遵循选中的工具链版本；对于 null types 分支后跟 default 入口的情况，较旧的 Vue/TypeScript 组合可能与 TypeScript 6 不同。
+
+导出的依赖边优先依据实际源码归属，而不是目录拼写。只有位于工作区已验证输出根内的目标才归为 artifact 边；这些根与工作区路径索引使用相同的规范路径。导出器不把 `dist` 视为证据，也不从产物归因推断 compiler relation。[图投影测试](../../../packages/limina/src/__tests__/dependency-graph.spec.ts) 覆盖自定义/嵌套输出、`dist` 内源码、未声明的输出候选项以及三个视图。
+
+Release 内容策略按 importer/dependency 边求值。[依赖遍历](../../../packages/limina/src/package-check/release/workspace/dependencies.ts)只用包级访问记录限制递归；原始 registry metadata 可以复用，但前一个 importer 的 baseline/ignore 结论不能授权另一条边。[策略回归测试](../../../packages/limina/src/__tests__/release-workspace-policy.spec.ts)覆盖菱形、顺序反转、直接与传递依赖重叠及环。
+
+Release tarball 卫生检查从 TypeScript JavaScript 解析树取得注释位置，不再依赖独立 scanner。[注释检查](../../../packages/limina/src/package-check/release/source-map-comments.ts)明确拒绝解析失败；模板与正则文本不能代替真实注释。[回归样例](../../../packages/limina/src/__tests__/source-map-comments.spec.ts)覆盖插值、嵌套模板、表达式中的真实注释与字面量反例。解析器只提供注释分类，不保证 Node 会消费每种块注释形式的 map 指令。
+
+可选分析器缺失与已安装工具失败是不同结果。[Peer 加载](../../../packages/limina/src/package-check/peer-tools.ts)在加载出错后，从相同 ESM 模块来源与条件探测包元数据；元数据子路径未导出也能证明包存在。只有找不到包才进入现有可选跳过结果。初始化、语法、入口缺失与传递依赖失败会保留原错误，并使包检查失败。[隔离加载测试](../../../packages/limina/src/__tests__/package-peer-loading.spec.ts)使用真实夹具包，覆盖 Publint、ATTW 及 import/require 条件。
+
+打包后的发布依赖范围采用 semver 默认的预发布准入语义。[Manifest 校验](../../../packages/limina/src/package-check/release/packed/manifest.ts)不会全局启用 `includePrerelease`；显式预发布比较项只准入 semver 定义的对应系列。[范围回归测试](../../../packages/limina/src/__tests__/release-prerelease-ranges.spec.ts)覆盖三类发布依赖、稳定版本、显式选择与不同预发布系列。

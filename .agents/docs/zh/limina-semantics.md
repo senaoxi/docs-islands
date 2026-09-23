@@ -65,6 +65,8 @@ flowchart TB
 
 普通 runtime-like import inspection 另有 TypeScript syntax pass 和 Oxc resolver 路径。这些 API 不共享 locked checker 的全部限制。带 query 或 fragment 的 specifier 不会交给 Oxc：它的 full-path 结果内建了 Limina 不采用的 bundler query 语义，因此除非 checker 提供框架源码目标，否则运行时解释保持 unsupported。即使把完整字符串传给文件系统路径归一化也不安全：`./absent.ts?x/../style.css` 会被折叠成 `./style.css`。因此 runtime inspection 与 missing-provider diagnostics 会在这类请求进入路径归一化之前停止；checker 实际产生的 source/declaration 结果和 compiler relation 仍然保留。原生 CommonJS 识别进行词法 binding 判断；shadowed `require` 排除，`createRequire(import.meta.url)` 只接受直接 immutable binding，mutable/indirect/computed 等形式不自动解释为 loader。证据见 [typescript-imports](../../../packages/limina/src/core/import-analysis/typescript-imports.ts) 及其测试。
 
+Package resource resolution 保留 occurrence mode 与 custom conditions。null target、精确 package-import key 和 Node 拥有的 `module-sync` / `node-addons` conditions 使用只解析不加载的 Node probe；无法解析 package metadata 时也回退到该 probe。probe 继承进程中启用或禁用这些默认 conditions 的开关，不跨 Node 版本硬编码。其结果仅为物理 runtime evidence，不能成为 TypeEvidence 或 compiler relation。[Condition 守卫](../../../packages/limina/src/__tests__/resource-resolution-conditions.spec.ts)将 imports 和 exports 与当前运行 Node 的 resolver 对照。
+
 ## Locked resolution 与 framework preparation
 
 [checker-resolution-provider](../../../packages/limina/src/core/import-analysis/checker-resolution-provider.ts) 的 locked routes 将 Oxc 设为 null。checker miss 保留 miss；runtime/resource 分类不能补一个 semantic target。此限制适用于该调用链，不能扩张成“Oxc 在 Limina 的所有分析中都不产生 evidence”。Astro pre-semantic eligibility 只跳过已知 virtual specifier、纯粹的显式非源码扩展名和 Oxc 识别出的 resource 目标；query 或 fragment 语法不是 skip authority，完整 specifier 会到达 Astro adapter，其结果照单接受。
@@ -86,9 +88,17 @@ Toolchain 来源、accepted versions 和 capability checks 以 [checker](../../.
 
 Svelte [source-mapping](../../../packages/limina/src/core/svelte-semantic/source-mapping.ts) 要求 generated dependency 每个 UTF-16 offset 被明确 segments 连续、单调映射到当前 source；部分覆盖、cross-source 或非连续映射产生 mismatch，完全未映射保留 unmapped observation。[generated-script](../../../packages/limina/src/core/svelte-semantic/generated-script.ts) 构造 TraceMap 不加 map URL，避免 absolute Windows source drive 被再次 rebasing。Vue/Astro 则通过自身 mapping 算法处理 full-token/inner-content、ambiguity 与 mismatch，不能把一种框架的 map 条件套给全部框架。
 
+Package framework-export preflight 在 package self-name location 使用明确的 SourceFile format，分别探测 import 和 require。实际 framework host 必须返回有类型的源码或 declaration；无关 JavaScript 分支不能遮蔽可用的有类型分支。此 index 记录 package capability，不是 occurrence TypeEvidence：实际消费者仍保留自身的 mode、provider 和 reference requirement。inactive condition 和 null target 仍被拒绝。[Vue export 守卫](../../../packages/limina/src/__tests__/vue-semantic.spec.ts)覆盖 NodeNext/Node16 import、require-only export、混合分支及 null target。
+
+Vue 语义上下文中的原生文件使用同一套 Vue 所属 TypeScript 实例、语言服务 host 和编译选项计算模块格式。因此，懒加载的 SourceFile 对 .mts、.cts 和受包作用域影响的 .ts 文件选择与最终 Program 一致的 import/require 条件，无须仅为确定格式而构造 Program。[Vue 语义回归](../../../packages/limina/src/__tests__/vue-semantic.spec.ts) 将懒加载解析与实际 checker 的类型提供者比较，并断言 Program 仍保持懒加载。
+
+默认原生 `tsc` 执行使用 Node 调用从 Limina 安装位置解析的 `typescript/bin/tsc`，与运行时依赖预检和原生语义分析保持同源。执行目录的 `.bin` 和环境 PATH 不能选择另一版 TypeScript。显式内部 runner 命令覆盖保留所请求的命令及参数契约。[命令来源测试](../../../packages/limina/src/__tests__/checker-command-origin.spec.ts)在没有 PATH 的情况下检查实际编译器版本，并保留 build/watch 与覆盖命令参数。
+
 ## 配置投影的边界
 
-[compiler-overrides](../../../packages/limina/src/core/build-graph/compiler-overrides.ts) 与 [generated readers](../../../packages/limina/src/core/build-graph/generated/) 从 source effective config 投影 generated roots/options。相对 `types` 已纳入明确 roots 时，要删除会在 generated 目录重新解释的相对配置；`extends` 也必须使用 effective 值。source checker authority 不能从 generated compiler options 倒推。
+输出 target 的继承保留 TypeScript 数组顺序，即使同级分支共享祖先也一样。继承解析、环诊断和有效选项由 TypeScript 配置解析器负责。框架意图读取实际解析得到的配置闭包，包括包的 `tsconfig` 入口、带点文件名和无后缀文件；解析失败不能静默回退为默认 target。[Compiler target 回归测试](../../../packages/limina/src/__tests__/compiler-target.spec.ts) 将菱形、深层、重复、反向顺序和自身覆盖情形与 TypeScript parser 对照。
+
+[compiler-overrides](../../../packages/limina/src/core/build-graph/compiler-overrides.ts) 与 [generated readers](../../../packages/limina/src/core/build-graph/generated/) 从 source effective config 投影 generated roots/options。相对 `types` 已纳入明确 roots 时，要删除会在 generated 目录重新解释的相对配置；`extends` 也必须使用 effective 值。声明和输出投影使用各自的生成配置路径应用相同的 roots/types 覆盖。显式 types 先由源项目所属 TypeScript 实例按原始选项（包括 typeRoots 和配置目录）枚举。这会在生成配置的回退根将普通 node_modules 包枚举为环境类型之前，固定 TypeScript 6 通配符展开结果。Vue 使用自己所属的编译器，因此不会静默升级旧编译器的通配符行为。命名条目可与通配符共存，随后移除已经纳入明确 roots 的相对条目。显式继承的 typeRoots 保持不变；自动发现的 typeRoots 相对于各自投影计算，而不是统一相对于声明配置。source checker authority 不能从 generated compiler options 倒推。
 
 治理层的 source type leaf 不允许手写 `references`；[config reader](../../../packages/limina/src/core/build-graph/generated/config-reader-basics.ts) 拒绝该形状，solution 负责聚合，`implicitRefs` 记录明确动态/虚拟关系。底层 semantic context 支持 raw references，不等于治理层放宽 leaf shape。[generated-configs](../../../packages/limina/src/core/build-graph/generated-configs.ts) 将 declaration outDir/declarationDir 指向同一 managed dts root，防继承输出改写；`rewriteRelativeImportExtensions` 仅在 effective source 启用时覆盖，避免无条件引入旧 compiler 不认识的 option。支持的 solution 不带 outputs。
 

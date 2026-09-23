@@ -52,6 +52,8 @@
 - **Evidence / Strength / Confidence**：[project dependencies tests](../../../packages/limina/src/__tests__/project-dependencies.spec.ts)、[Svelte tests](../../../packages/limina/src/__tests__/svelte-semantic.spec.ts)；**Strongly executable / Confirmed**。
 - **Boundaries**：pending physical candidate bootstrap 和 runtime-like inspection 有别的 Oxc 路径，但两者都不重新解释带 query 或 fragment 的 specifier；该语法属于 occurrence identity，只有 checker 能赋予其含义。runtime filesystem check 与 missing-provider fallback 也会在路径归一化前停止，因为后接 `..` 的 query/fragment 片段可能在归一化中被消去。TypeScript 类型要求 locked 不等于任意 JS 输入均有 runtime authentication。
 
+- **静态块边界**：类静态块具有独立的 var 作用域，同时保留词法父级。块内 var/let/function 绑定不能遮蔽兄弟静态块或类之后的外部 require 与不可变 createRequire 别名。[导入分析回归](../../../packages/limina/src/__tests__/import-analysis.spec.ts) 覆盖这些边界及 require.resolve。
+
 ## I05 — TypeEvidence 与 referenceRequirement 独立保真
 
 - **Statement / Applies when**：原生事实分别记录类型供给与 compiler relation 需求；evidence 表达 bounded scope 中实际 provider（包括 missing），requirement 表达候选 compiler relation。完整真值表归[语义事实](./limina-semantics.md#occurrence证据与建图需求)。

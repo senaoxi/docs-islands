@@ -438,6 +438,9 @@ importers:
       '@types/prompts':
         specifier: catalog:dev
         version: 2.4.9
+      '@types/semver':
+        specifier: catalog:dev
+        version: 7.7.1
       '@typescript/native-preview':
         specifier: catalog:dev
         version: 7.0.0-dev.20260704.1
@@ -480,6 +483,9 @@ importers:
       prompts:
         specifier: catalog:dev
         version: 2.4.2
+      semver:
+        specifier: catalog:dev
+        version: 7.8.1
       tsx:
         specifier: catalog:dev
         version: 4.22.4
@@ -12234,14 +12240,6 @@ packages:
       }
     hasBin: true
 
-  semver@7.7.3:
-    resolution:
-      {
-        integrity: sha512-SdsKMrI9TdgjdweUSR9MweHA4EJ8YxHn8DFaDisvhVlUOe4BF1tLD7GAj0lIqWVl+dPb/rExr0Btby5loQm20Q==,
-      }
-    engines: { node: '>=10' }
-    hasBin: true
-
   semver@7.8.1:
     resolution:
       {
@@ -14429,7 +14427,7 @@ snapshots:
       cjs-module-lexer: 1.4.3
       fflate: 0.8.3
       lru-cache: 11.2.6
-      semver: 7.8.1
+      semver: 7.8.5
       typescript: 6.0.3
       validate-npm-package-name: 5.0.1
 
@@ -18438,7 +18436,7 @@ snapshots:
       globals: 15.15.0
       globrex: 0.1.2
       ignore: 5.3.2
-      semver: 7.7.3
+      semver: 7.8.5
       ts-declaration-location: 1.0.7(typescript@6.0.3)
     transitivePeerDependencies:
       - typescript
@@ -18527,7 +18525,7 @@ snapshots:
       pluralize: 8.0.0
       regexp-tree: 0.1.27
       regjsparser: 0.13.0
-      semver: 7.7.3
+      semver: 7.8.5
       strip-indent: 4.1.1
 
   eslint-plugin-vue@10.5.1(@typescript-eslint/parser@8.62.1(eslint@9.39.2(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.2(jiti@2.7.0))(vue-eslint-parser@10.2.0(eslint@9.39.2(jiti@2.7.0))(supports-color@7.2.0)(typescript@6.0.3)):
@@ -19467,7 +19465,7 @@ snapshots:
       acorn: 8.15.0
       eslint-visitor-keys: 3.4.3
       espree: 9.6.1
-      semver: 7.7.3
+      semver: 7.8.5
 
   jsonc-eslint-parser@3.1.0:
     dependencies:
@@ -20265,7 +20263,7 @@ snapshots:
       log-symbols: 4.1.0
       meow: 9.0.0
       plur: 4.0.0
-      semver: 7.8.1
+      semver: 7.8.5
       slash: 3.0.0
       strip-json-comments: 3.1.1
       type-fest: 5.6.0
@@ -21265,8 +21263,6 @@ snapshots:
   semver@5.7.2: {}
 
   semver@6.3.1: {}
-
-  semver@7.7.3: {}
 
   semver@7.8.1: {}
 
@@ -22323,7 +22319,7 @@ snapshots:
       eslint-visitor-keys: 4.2.1
       espree: 10.4.0
       esquery: 1.6.0
-      semver: 7.7.3
+      semver: 7.8.5
     transitivePeerDependencies:
       - supports-color
       - typescript
