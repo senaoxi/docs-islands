@@ -8,7 +8,7 @@
 
 ## I01 — 治理 authority 来自 validated workspace
 
-- **Statement / Applies when**：graph/source/proof 使用本次 activated workspace 投影 authority；raw package discovery 仅为输入证据。对已激活 package，重复 physical identity、非法 overlap/boundary 必须先失败。
+- **Statement / Applies when**：所选配置最近的 package.json 固定治理根及配置解析 generation 中已验证的 manifest fact，只有同根 workspace 语义决定成员分类。graph/source/proof 使用该根激活的包投影 authority；raw package discovery 仅为输入证据。对已激活 package，重复 physical identity、非法 overlap/boundary 必须先失败。
 - **Problem**：被排除或另属 nested workspace 的包若仍参与 owner 选择，就可能错误授权 import 或写输出。
 - **Root cause**：package manager 发现范围、逻辑目录和治理范围是不同集合；symlink alias 又会使一个物理包有两个名字。
 - **Enforcement / Why it works**：[validated create](../../../packages/limina/src/core/workspace/validated/create.ts) 先校验 exclusions、islands、overlap、package identities 与 output authority，后发布 context；[package-identities](../../../packages/limina/src/core/workspace/validated/package-identities.ts) 拒绝重复 canonical directory。下游运行时 package/owner/boundary 查询通过 WorkspaceRegionPathIndex / WorkspaceLookupIndex 使用 canonical Governance Trie；package/owner 数组不能通过 directory containment 重建该 authority。construction 与局部关系的边界见 [region index owner](./limina-system-model.md#validated-region-的内部查询索引)。
@@ -17,7 +17,7 @@
 - **Evidence / Strength / Confidence**：[workspace tests](../../../packages/limina/src/__tests__/workspace-validation.spec.ts)、[region/facade guards](../../../packages/limina/src/__tests__/workspace-directory-index.spec.ts)、[package-scope guards](../../../packages/limina/src/__tests__/workspace-package-scope.spec.ts)；**Strongly executable / Confirmed**。
 - **Boundaries**：canonical package 校验不能证明任意 config alias 都已物理合并；name-based graph 和 path-based source owner 不能合成一个 identity。
 
-- **Discovery guard**：`workspace-discovery.spec.ts` 保护最近声明 authority、显式 manager 优先、同根 fallback、所消费声明投影、manager-specific selection 和 lexical alias 保留。即使 manager identity 缺失或开启 nameless-scope extension，嵌套 workspace 声明仍是 hard cut。兼容边界见[发现 authority](./limina-system-model.md#工作区发现-authority)。
+- **Discovery guard**：`governance-root.spec.ts` 挑战配置选择、最近 manifest fail-fast、祖先独立性、共享根 manifest 内容、workspace manager 必需与 single manager 可选。`workspace-discovery.spec.ts` 保留同根 descriptor 优先级、显式 manager 优先、所消费声明投影、manager-specific selection 和 lexical alias。`single-package-knip.spec.ts` 将 validated canonical identity 贯通无名称 dependency/owner 匹配，并拒绝重复物理根。即使 manager identity 缺失或开启 nameless-scope extension，嵌套 workspace 声明仍是 hard cut。兼容边界见[发现 authority](./limina-system-model.md#工作区发现-authority)。
 
 ## I02 — semantic authority 不随 final checker owner 改写
 
@@ -136,7 +136,7 @@
 - **Statement / Applies when**：latest check issue query 必须与最新 published attempt 的 freshness 一致；running、aborted、persistence-failed、corrupt/inconsistent 等状态禁止返回旧 completed inventory。独立 invocation query 使用其独立身份。
 - **Problem**：最新检查失败或根本没跑完时，用户仍看到上轮“零问题”，会据此误判当前 source。
 - **Root cause**：inventory 的存在不等于它代表最新 attempt；完成写入也可能只完成了一半。
-- **Enforcement / Why it works**：[attempt IO](../../../packages/limina/src/source-check/snapshot/check-attempt-io.ts) 维护 sequence、identity 与 digest；[attempt query](../../../packages/limina/src/source-check/snapshot/check-attempt-query.ts) 校验 freshness；CLI query 不触发新执行。人类和机器格式均报告 unavailable，而不是空成功。
+- **Enforcement / Why it works**：[attempt IO](../../../packages/limina/src/source-check/snapshot/check-attempt-io.ts) 维护 sequence、identity 与 digest；[attempt query](../../../packages/limina/src/source-check/snapshot/check-attempt-query.ts) 校验 freshness；CLI query 使用独立 config anchor：显式配置缺失是合法状态，最近 manifest 仍须验证，并且不运行 loader、manager adapter 或 preflight。`single-package-cli.spec.ts` 删除配置后实际回放绝对命令，对比持久化状态与配置 import 观测。人类和机器格式均报告 unavailable，而不是空成功。
 - **Concrete example**：先有 completed inventory，再发布一个 aborted attempt，human/JSON/NDJSON 查询必须显示 aborted/unavailable 并退出失败；corrupt latest metadata 也不允许分配新 sequence。
 - **Protected property**：结果新鲜度、失败可见性、自动化消费者不会误用旧成功。
 - **Evidence / Strength / Confidence**：[check attempt](../../../packages/limina/src/__tests__/check-attempt.spec.ts)、[invocation snapshot](../../../packages/limina/src/__tests__/invocation-snapshot.spec.ts)、[execution](../../../packages/limina/src/__tests__/execution.spec.ts)；**Strongly executable / Confirmed**。

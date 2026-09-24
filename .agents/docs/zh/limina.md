@@ -2,21 +2,23 @@
 
 [English](../limina.md) | [简体中文](./limina.md)
 
-Limina 把 workspace 的治理范围、checker 的语义事实、声明构建关系和文件写入权限连接起来。一次成功的治理运行，要分别回答“谁有权解释源码”“哪些关系需要检查或构建”“这次结果是否仍然有效”。这些答案共享输入，但拥有不同的 authority，不能从一个字段推导出全部结论。
+Limina 把配置选定的 package 治理范围、checker 的语义事实、声明构建关系和文件写入权限连接起来。一次成功的治理运行，要分别回答“谁有权解释源码”“哪些关系需要检查或构建”“这次结果是否仍然有效”。这些答案共享输入，但拥有不同的 authority，不能从一个字段推导出全部结论。
 
 本记录集重建于 **2026-09-11 当前 working tree**。生产代码、类型、schema、配置和可执行调用链是事实来源；测试用于寻找反例。旧 PCR 仅用来发现待核对的问题。所有文字均未获 human vouch；`Confirmed` 表示有直接实现依据，不表示长期产品承诺或全部环境已实测。实测范围单列在[本次审计](./limina-architecture-audit.md)。
 
 ## 从问题进入记录
 
-| 要回答的问题                                                                 | 唯一 prose owner                                                            |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| 实体如何识别、authority 从哪里来、实际运行顺序是什么、哪些关系可以建边？     | [系统模型](./limina-system-model.md)                                        |
-| validated region 如何索引 canonical package、owner cut 与重入？              | [Region 查询索引](./limina-system-model.md#validated-region-的内部查询索引) |
-| TypeScript / Vue / Astro / Svelte 如何取得可信的 dependency facts？          | [语义事实](./limina-semantics.md)                                           |
-| generation、cache、dispose、artifact、mutation 和 issue freshness 如何衔接？ | [生命周期与发布](./limina-lifecycle.md)                                     |
-| 哪些性质不可在普通重构中意外改变，为什么，如何反证？                         | [12 条 Core Invariants 与 evidence matrix](./limina-invariants.md)          |
-| PR 如何做 impact analysis，如何同步代码、guard、PCR？                        | [Review 与维护 workflow](./limina-architecture-workflow.md)                 |
-| 旧 PCR 修了什么、四轮 review 和实际命令结果是什么？                          | [本次审计](./limina-architecture-audit.md)                                  |
+| 要回答的问题                                                                 | 唯一 prose owner                                                                |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 实体如何识别、authority 从哪里来、实际运行顺序是什么、哪些关系可以建边？     | [系统模型](./limina-system-model.md)                                            |
+| 配置选择、最近根 manifest 与 workspace/single 分类如何建立 authority？       | [根 authority](./limina-system-model.md#工作区发现-authority)                   |
+| 无名称 Knip owner 如何保留身份，哪些 pnpm 行为属于独立能力？                 | [Knip identity 与能力](./limina-system-model.md#knip-owner-identity-与能力边界) |
+| validated region 如何索引 canonical package、owner cut 与重入？              | [Region 查询索引](./limina-system-model.md#validated-region-的内部查询索引)     |
+| TypeScript / Vue / Astro / Svelte 如何取得可信的 dependency facts？          | [语义事实](./limina-semantics.md)                                               |
+| generation、cache、dispose、artifact、mutation 和 issue freshness 如何衔接？ | [生命周期与发布](./limina-lifecycle.md)                                         |
+| 哪些性质不可在普通重构中意外改变，为什么，如何反证？                         | [12 条 Core Invariants 与 evidence matrix](./limina-invariants.md)              |
+| PR 如何做 impact analysis，如何同步代码、guard、PCR？                        | [Review 与维护 workflow](./limina-architecture-workflow.md)                     |
+| 旧 PCR 修了什么、四轮 review 和实际命令结果是什么？                          | [本次审计](./limina-architecture-audit.md)                                      |
 
 系统模型负责定义；invariants 负责性质、反例和保护位置；workflow 负责维护动作；audit 只保存本次证据和修正结果。其他记录链接这些 owner，不复制完整定义。仓库集成边界仍由 [architecture.md](./architecture.md#limina-边界) 负责。
 

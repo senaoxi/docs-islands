@@ -2,21 +2,23 @@
 
 [English](./limina.md) | [简体中文](./zh/limina.md)
 
-Limina connects workspace governance scope, checker semantic facts, declaration build relations, and filesystem mutation authority. A successful governance run must separately answer “who may interpret this source,” “which relations require validation or building,” and “whether this result is still valid.” These answers share inputs but have distinct authority; one field cannot establish all of them.
+Limina connects config-selected package governance scope, checker semantic facts, declaration build relations, and filesystem mutation authority. A successful governance run must separately answer “who may interpret this source,” “which relations require validation or building,” and “whether this result is still valid.” These answers share inputs but have distinct authority; one field cannot establish all of them.
 
 This record set was reconstructed from the **2026-09-11 working tree**. Production code, types, schemas, configuration, and executable call chains establish facts; tests seek counterexamples. Earlier PCR served only to identify questions to recheck. None of the prose has a human vouch. `Confirmed` means direct implementation evidence, not a long-term product commitment or empirical coverage of every environment. The empirical scope is recorded separately in the [audit](./limina-architecture-audit.md).
 
 ## Find a record by question
 
-| Question                                                                                                                                | Sole prose owner                                                                          |
-| --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| How are entities identified, where does authority come from, what is the actual execution order, and which relations can produce edges? | [System model](./limina-system-model.md)                                                  |
-| How does a validated region index canonical packages, owner cuts, and re-entry?                                                         | [Region query index](./limina-system-model.md#internal-query-index-for-validated-regions) |
-| How do TypeScript / Vue / Astro / Svelte obtain trustworthy dependency facts?                                                           | [Semantic facts](./limina-semantics.md)                                                   |
-| How do generation, caches, disposal, artifacts, mutation, and issue freshness fit together?                                             | [Lifecycle and publication](./limina-lifecycle.md)                                        |
-| Which properties must ordinary refactoring preserve, why, and how can they be challenged?                                               | [12 Core Invariants and evidence matrix](./limina-invariants.md)                          |
-| How should PRs analyze impact and synchronize code, guards, and PCR?                                                                    | [Review and maintenance workflow](./limina-architecture-workflow.md)                      |
-| What changed in the earlier PCR, and what were the four review rounds and actual command results?                                       | [Audit](./limina-architecture-audit.md)                                                   |
+| Question                                                                                                                                | Sole prose owner                                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| How are entities identified, where does authority come from, what is the actual execution order, and which relations can produce edges? | [System model](./limina-system-model.md)                                                                 |
+| How do config selection, the nearest root manifest, and workspace/single classification establish authority?                            | [Root authority](./limina-system-model.md#workspace-discovery-authority)                                 |
+| How do nameless Knip owners retain identity and which pnpm behaviors remain capability-specific?                                        | [Knip identity and capabilities](./limina-system-model.md#knip-owner-identity-and-capability-boundaries) |
+| How does a validated region index canonical packages, owner cuts, and re-entry?                                                         | [Region query index](./limina-system-model.md#internal-query-index-for-validated-regions)                |
+| How do TypeScript / Vue / Astro / Svelte obtain trustworthy dependency facts?                                                           | [Semantic facts](./limina-semantics.md)                                                                  |
+| How do generation, caches, disposal, artifacts, mutation, and issue freshness fit together?                                             | [Lifecycle and publication](./limina-lifecycle.md)                                                       |
+| Which properties must ordinary refactoring preserve, why, and how can they be challenged?                                               | [12 Core Invariants and evidence matrix](./limina-invariants.md)                                         |
+| How should PRs analyze impact and synchronize code, guards, and PCR?                                                                    | [Review and maintenance workflow](./limina-architecture-workflow.md)                                     |
+| What changed in the earlier PCR, and what were the four review rounds and actual command results?                                       | [Audit](./limina-architecture-audit.md)                                                                  |
 
 The system model owns definitions; invariants own properties, counterexamples, and enforcement sites; the workflow owns maintenance actions; the audit records only this reconstruction's evidence and corrections. Other records link these owners rather than duplicating full definitions. Repository integration boundaries remain owned by [architecture.md](./architecture.md#limina-boundary).
 
