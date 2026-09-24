@@ -10,7 +10,7 @@ import coreTransformComponentTags, {
   travelImports,
 } from '@docs-islands/core/node/transform';
 import { RENDER_STRATEGY_CONSTANTS } from '@docs-islands/core/shared/constants/render-strategy';
-import { type ImportSpecifier, init, parse } from 'es-module-lexer';
+import { type Import, init, parse } from 'es-module-lexer';
 import { createElapsedTimer, formatErrorMessage } from 'logaria/helper';
 import type { SourceMap } from 'magic-string';
 import { join } from 'pathe';
@@ -91,7 +91,7 @@ export function createReactFrameworkParser(
       script,
     }: RenderingFrameworkParserScriptContext): Promise<ReactParsedScriptResult> {
       const parseElapsed = createElapsedTimer();
-      await init;
+      await init();
       const importReferenceResolver =
         createImportReferenceResolver(moduleResolver);
       const maybeComponentReferenceMap = new Map<
@@ -103,7 +103,7 @@ export function createReactFrameworkParser(
         { localName: string; path: string; importedName: string }
       >();
 
-      let imports: readonly ImportSpecifier[];
+      let imports: readonly Import[];
       try {
         [imports] = parse(script.content);
       } catch (parseError) {
@@ -112,15 +112,17 @@ export function createReactFrameworkParser(
         throw new Error(message);
       }
 
-      for (const _importSpecifier of imports) {
-        const importSpecifier = _importSpecifier || {};
-        const {
-          ss: expStart,
-          se: expEnd,
-          n: rawIdentifier = '',
-        } = importSpecifier;
+      for (const importSpecifier of imports) {
+        if (importSpecifier.type !== 'static' || importSpecifier.typeOnly) {
+          continue;
+        }
 
-        const exp = script.content.slice(expStart, expEnd);
+        const {
+          importStart,
+          importEnd,
+          specifier: rawIdentifier,
+        } = importSpecifier;
+        const exp = script.content.slice(importStart, importEnd);
 
         let importSets: ImportNameSpecifier[];
         try {
