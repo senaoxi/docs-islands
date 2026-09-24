@@ -56,8 +56,8 @@ catalogs:
     '@clack/prompts': ^1.4.0
     '@farmfe/core': 2.0.0-beta.10
     '@rollup/plugin-replace': ^6.0.3
-    '@rspack/core': ^1.6.0
-    '@tsdown/css': ^0.22.3
+    '@rspack/core': ^2.2.7
+    '@tsdown/css': ^0.23.0
     '@types/babel__generator': ^7.27.0
     '@types/babel__traverse': ^7.20.7
     '@types/eslint-plugin-jsx-a11y': ^6.10.1
@@ -68,24 +68,23 @@ catalogs:
     '@types/prompts': ^2.4.9
     '@types/react': ^18.2.0
     '@types/react-dom': ^18.2.0
-    '@types/semver': ^7.7.1
+    '@types/semver': ^7.8.0
     '@types/ssri': ^7.1.5
-    '@typescript/native-preview': 7.0.0-dev.20260704.1
+    '@typescript/native-preview': 7.0.0-dev.20260707.2
     '@vitejs/plugin-react-swc': ^4.3.1
-    '@vue/compiler-sfc': ^3.5.28
-    boxen: ^8.0.1
-    cac: ^6.7.14
-    concurrently: ^10.0.3
+    boxen: ^9.0.0
+    cac: ^7.0.0
+    concurrently: ^10.0.5
     del-cli: ^7.0.0
-    es-module-lexer: ^2.0.0
-    esbuild: ^0.28.1
+    es-module-lexer: ^3.0.2
+    esbuild: ^0.28.2
     htmlparser2: ^10.0.0
     husky: ^9.1.7
     is-in-ci: ^2.0.0
     lint-staged: ^16.1.5
     magic-string: ^0.30.17
     markdown-it: ^14.2.0
-    nx: ^23.1.0
+    nx: ^23.2.1
     pathe: ^2.0.3
     picocolors: 1.1.1
     svelte2tsx: ^0.7.61
@@ -93,34 +92,34 @@ catalogs:
     prompts: ^2.4.2
     react: ^18.2.0
     react-dom: ^18.2.0
-    rolldown: ^1.1.4
-    rolldown-plugin-dts: ^0.26.0
-    rollup: ^4.62.2
-    rollup-plugin-license: ^3.6.0
-    semver: ^7.8.1
+    rolldown: ^1.2.9
+    rolldown-plugin-dts: ^0.28.6
+    rollup: ^4.63.4
+    rollup-plugin-license: ^3.7.1
+    semver: ^7.8.5
     shiki: ^2.5.0
     ssri: ^13.0.1
     string-width: ^8.2.2
-    tsdown: ^0.22.3
-    tsx: ^4.22.4
+    tsdown: ^0.23.0
+    tsx: ^4.23.15
     typescript: ~6.0.3
     unplugin-vue: ^7.2.0
     vue-json-pretty: ^2.6.0
     vue-router: 4.6.4
     vue-tsc: ~3.2.4
-    wait-on: ^9.0.10
-    webpack: ^5.102.1
+    wait-on: ^9.1.0
+    webpack: ^5.111.1
     '@pnpm/catalogs.types': 1100.0.0
     '@pnpm/pnpmfile': 1002.1.13
     '@pnpm/workspace.read-manifest': 1000.3.1
     '@pnpm/exportable-manifest': 1000.4.2
-    yaml: ^2.9.0
-    zod: ^4.3.6
-    shescape: ^2.1.14
+    yaml: ^2.9.1
+    zod: ^4.6.5
+    shell-quote: ^1.10.0
     jsonc-parser: ^3.3.1
-    logaria: 0.0.3
-    ignore: ^7.0.6
-    vite: ^8.1.5
+    logaria: ^0.0.3
+    ignore: ^7.0.10
+    vite: ^8.3.0
   docs-dev:
     '@nolebase/vitepress-plugin-enhanced-mark': ^2.18.2
     '@types/http-proxy': ^1.17.16
@@ -155,9 +154,9 @@ catalogs:
     eslint-plugin-unicorn: ^62.0.0
     eslint-plugin-vue: ^10.4.0
     jsonc-eslint-parser: ^2.4.1
-    knip: ^6.15.0
+    knip: ^6.38.0
     npm-package-json-lint: ^9.1.0
-    publint: ^0.3.17
+    publint: ^0.3.24
     typescript-eslint: ^8.62.1
     vue-eslint-parser: ^10.2.0
     yaml-eslint-parser: ^2.0.0
@@ -172,7 +171,7 @@ catalogs:
     '@vitest/eslint-plugin': ^1.6.17
     execa: 9.6.1
     get-port: ^7.1.0
-    globals: ^17.3.0
+    globals: ^17.12.0
     jsdom: ^28.0.0
     playwright-chromium: 1.62.0
     vitest: 4.1.11
@@ -225,11 +224,12 @@ overrides:
   undici: 7.29.0
   undici-types: ^6.24.0
   typescript: ~6.0.3
-  shell-quote: 1.9.0
+  shell-quote: 1.10.0
   axios: 1.18.0
   postcss: ^8.5.23
   less: ^4.9.0
   smol-toml: 1.7.1
+  '@swc/helpers': 0.5.23
 
 packageExtensions:
   '@pnpm/manifest-utils@*':

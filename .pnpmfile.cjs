@@ -37,11 +37,13 @@ function readPackage(pkg) {
     };
   }
 
-  // Ensure the integrity of type detection.
+  // Both Vue compiler declaration files import Babel types. With hoist=false,
+  // each compiler needs its own dependency, matching the Babel parser version.
   if (pkg.name === '@vue/compiler-core' || pkg.name === '@vue/compiler-sfc') {
     pkg.dependencies = {
       ...pkg.dependencies,
-      '@babel/types': '*',
+      '@babel/types':
+        pkg.dependencies['@babel/types'] ?? pkg.dependencies['@babel/parser'],
     };
   }
 

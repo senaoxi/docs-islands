@@ -36,6 +36,12 @@
 
 Peer dependency 兼容范围保留在各包 manifest 中。部分依赖值还使用 workspace protocols 或包内局部值。实现没有将所有版本都限定在 catalogs 中。
 
+### Vue compiler 声明依赖
+
+在 `hoist: false` 下，每个 Vue compiler 都必须拥有其发布声明导入的依赖。Vue 3.5.39 的 `@vue/compiler-core` 与 `@vue/compiler-sfc` 声明都导入了 `@babel/types`，但它们发布的 manifest 只将其列为开发依赖。[pnpm read-package hook](../../../.pnpmfile.cjs) 使用各 compiler 声明的 `@babel/parser` 范围为两者补齐缺失依赖，并保留已有的显式 Babel types 依赖。此前的通配版本让 Babel 8 与 Babel 7 parser 并存；现在 lockfile 复用 Babel 7.29.7，没有引入新包，也没有放宽声明检查。
+
+祖先目录中的 `node_modules/@babel/types` 可能掩盖开发机上的依赖缺失。[安装回归测试](../../../packages/vitepress/src/node/__tests__/compiler-type-dependencies.test.ts) 要求 compiler 在自身 pnpm 依赖范围内拥有该依赖，并与其 parser 使用同一份 Babel types 安装。VitePress 产物的严格检查保持启用。2026-09-25 的本地复现通过隔离 virtual store 排除了祖先目录中的 Babel 包：旧 hook 在 `compiler-sfc.d.ts` 中产生两条 `TS2307`；只对齐 compiler-core 的 Babel 版本仍然失败。修复后的安装通过了直接导入、根目录另装 Babel 8 的 Vue 传递依赖 workspace，以及 NodeNext 声明检查；错误声明仍被拒绝。这些检查在 macOS、Node 22.18.0 与 24.21.0、pnpm 11.9.0、TypeScript 6.0.3、Vue 3.5.39 下运行，不能证明远端 GitHub Actions 重跑通过。
+
 ## 发布版本排序
 
 根发布规划与 changelog 标签选择共用 catalog 中的 `semver` 比较器。预发布的数字标识按数值排序（`beta.10` 晚于 `beta.9`）；稳定版排在对应预发布之后。既有版本输入解析、包标签与旧标签选择规则仍由[共享发布辅助代码](../../../scripts/release/shared.ts)负责。[回归测试](../../../scripts/release/shared.spec.ts)覆盖规划守卫与标签消费者，包括反向比较与层级。根项目通过既有 catalog 声明 `semver` 和 `@types/semver` 开发依赖；它们用于发布脚本，不增加已交付包的运行时依赖。

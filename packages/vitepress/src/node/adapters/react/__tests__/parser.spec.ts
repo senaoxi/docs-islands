@@ -48,6 +48,50 @@ const createScriptContext = (
 });
 
 describe('createReactFrameworkParser', () => {
+  it('resolves static component imports from the installed lexer shape', async () => {
+    const parser = createParser();
+    const resolveId = vi.fn(async (id: string) => ({
+      id: `/project/docs/components/${id.split('/').at(-1)}`,
+    }));
+
+    const result = await parser.parseScript(
+      createScriptContext(
+        `import Foo from '../components/Foo.tsx';
+import { Bar as Baz } from '../components/Bar.tsx';
+import type Ghost from '../components/Ghost.tsx';
+export * from '../components/Star.tsx';
+import('./Dynamic.tsx');
+import.meta.url;`,
+        { resolveId },
+      ),
+    );
+
+    expect(resolveId).toHaveBeenCalledTimes(2);
+    expect(resolveId).toHaveBeenNthCalledWith(
+      1,
+      '../components/Foo.tsx',
+      '/project/docs/guide/fail-fast.md',
+    );
+    expect(resolveId).toHaveBeenNthCalledWith(
+      2,
+      '../components/Bar.tsx',
+      '/project/docs/guide/fail-fast.md',
+    );
+    expect([...result.componentReferences]).toEqual([
+      [
+        'Foo',
+        {
+          identifier: '/project/docs/components/Foo.tsx',
+          importedName: 'default',
+        },
+      ],
+      [
+        'Baz',
+        { identifier: '/project/docs/components/Bar.tsx', importedName: 'Bar' },
+      ],
+    ]);
+  });
+
   it('throws a contextual error when React script JavaScript parsing fails', async () => {
     const parser = createParser();
 

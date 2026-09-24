@@ -119,22 +119,21 @@ const hasPublicCreateLoggerImport = async (
     return false;
   }
 
-  await init;
+  await init();
 
   try {
     const [imports] = parseImports(code);
 
     return imports.some((importSpecifier) => {
       if (
-        !importSpecifier.n ||
-        importSpecifier.n !== loggerModuleId ||
-        importSpecifier.d !== -1
+        importSpecifier.type !== 'static' ||
+        importSpecifier.specifier !== loggerModuleId
       ) {
         return false;
       }
 
       return code
-        .slice(importSpecifier.ss, importSpecifier.se)
+        .slice(importSpecifier.importStart, importSpecifier.importEnd)
         .includes('createLogger');
     });
   } catch {
