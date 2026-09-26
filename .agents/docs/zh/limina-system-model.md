@@ -165,11 +165,9 @@ source resource 检查分别问物理文件是否存在、类型是否声明、p
 
 executor 区分 passed、failed、disabled、blocked、skipped 等 task outcome，stop policy、前提依赖与基础设施异常另有处理。issue presentation 和 completed inventory 不能把“未运行”“数据不可用”变成“零问题”。精确状态以 [tasks](../../../packages/limina/src/execution/tasks.ts)、[execution-results](../../../packages/limina/src/execution/execution-results.ts) 和 [snapshot types](../../../packages/limina/src/source-check/snapshot/types.ts) 为准。
 
-工作区 exports 预检在检查源码 occurrence 前，按活动检查器配置校验已声明入口的解析。未被导入但缺失的运行时或类型入口可能失败；可解析的纯运行时 JavaScript 入口可在没有稳定类型证据时通过，直到受治理源码导入它。occurrence 检查随后要求稳定类型或 checker-source 解析。预检和运行时命中都不建立编译器引用。[公开 CLI 回归](../../../packages/limina/integration/tests/workspace-exports.spec.ts)覆盖无 import 的缺失入口及有效源码、运行时对照。
+消费者图的正确性取决于实际 import。未使用的损坏 exports 不使 graph check 失败；已消费但无法解析的工作区入口在 import 处失败，graph export 同样拒绝。两者消费[保留的依赖证据](../../../packages/limina/src/core/project-dependencies/evidence.ts)，不增加并行 resolver 或 wildcard surface 枚举。Declaration-entry inventory 仅保留给 source ambient-policy 分类，不是 graph resolution authority。[Graph 回归](../../../packages/limina/src/__tests__/graph.spec.ts)覆盖精确、pattern、null 入口及 ATTW 独立性。
 
-export 模式发现枚举包文件，再把目标解释为具有星号替换的字面字符串：一次捕获可以跨目录，目标中的每个星号都使用同一捕获值。目标中的 glob 特殊字符保持字面含义。发现阶段只产生候选项；原始 exports 条件树、null 分支和键优先级仍由解析器决定。[Node 对照测试](../../../packages/limina/src/__tests__/workspace-export-patterns.spec.ts) 覆盖嵌套捕获、重复星号、字面方括号与空捕获拒绝。
-
-稳定的 export 类型入口必须来自成功的原生 TypeScript 解析，或该 profile 对应 Vue、Astro、Svelte 语义适配器的成功解析调用。旧的物理 checker-source 候选项，以及遍历扁平化 export 目标后找到的文件，都不充分。内部结果保留原生、框架和未解析三种来源；公开索引与快照 schema 保持不变。索引构建完成或失败后都会释放框架解析上下文。该预检探针既不创建源码 occurrence，也不提供 TypeEvidence 或构建归属。[解析证据测试](../../../packages/limina/src/__tests__/workspace-export-resolution.spec.ts) 在不活动/null/自定义条件、非法目标与不支持的后缀下，将原生结果与 TypeScript 对照。 条件行为遵循选中的工具链版本；对于 null types 分支后跟 default 入口的情况，较旧的 Vue/TypeScript 组合可能与 TypeScript 6 不同。
+发布端检查只覆盖配置的输出 entries。Limina 负责 manifest 声明一致性（包括本地协议和混合 exports 根键）；可选 publint 负责 packed target 存在性及发布质量；可选 ATTW 负责 runtime/type 兼容性；boundary 与 release 保留既有契约。禁用或无法使用 publint 时，目标存在性未检查。所有这些检查均不从工作区使用情况推断公开 API 设计，package checks 也不扩展 ATTW entrypoints。这一职责划分落实用户契约，不表示覆盖所有可能的声明或类型缺陷。
 
 导出的依赖边优先依据实际源码归属，而不是目录拼写。只有位于工作区已验证输出根内的目标才归为 artifact 边；这些根与工作区路径索引使用相同的规范路径。导出器不把 `dist` 视为证据，也不从产物归因推断 compiler relation。[图投影测试](../../../packages/limina/src/__tests__/dependency-graph.spec.ts) 覆盖自定义/嵌套输出、`dist` 内源码、未声明的输出候选项以及三个视图。
 

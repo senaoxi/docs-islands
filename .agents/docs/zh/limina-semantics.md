@@ -65,6 +65,8 @@ flowchart TB
 
 普通 runtime-like import inspection 另有 TypeScript syntax pass 和 Oxc resolver 路径。这些 API 不共享 locked checker 的全部限制。带 query 或 fragment 的 specifier 不会交给 Oxc：它的 full-path 结果内建了 Limina 不采用的 bundler query 语义，因此除非 checker 提供框架源码目标，否则运行时解释保持 unsupported。即使把完整字符串传给文件系统路径归一化也不安全：`./absent.ts?x/../style.css` 会被折叠成 `./style.css`。因此 runtime inspection 与 missing-provider diagnostics 会在这类请求进入路径归一化之前停止；checker 实际产生的 source/declaration 结果和 compiler relation 仍然保留。原生 CommonJS 识别进行词法 binding 判断；shadowed `require` 排除，`createRequire(import.meta.url)` 只接受直接 immutable binding，mutable/indirect/computed 等形式不自动解释为 loader。证据见 [typescript-imports](../../../packages/limina/src/core/import-analysis/typescript-imports.ts) 及其测试。
 
+[依赖证据快照](../../../packages/limina/src/core/project-dependencies/evidence.ts)在 dependencies、observations、failures 与缓存克隆之间保留 occurrence、mode、checker 结果和目标、已取得的 runtime evidence、native admission/provider/requirement facts、框架映射来源以及 context/generation identity。Runtime evidence 保持独立；缺少证据表示未观察，不表示目标缺失。快照复制后递归冻结。归属使用真实 checker target 与当前 workspace snapshot；裸包名仅用于诊断查找，不用于目标归属。
+
 Package resource resolution 保留 occurrence mode 与 custom conditions。null target、精确 package-import key 和 Node 拥有的 `module-sync` / `node-addons` conditions 使用只解析不加载的 Node probe；无法解析 package metadata 时也回退到该 probe。probe 继承进程中启用或禁用这些默认 conditions 的开关，不跨 Node 版本硬编码。其结果仅为物理 runtime evidence，不能成为 TypeEvidence 或 compiler relation。[Condition 守卫](../../../packages/limina/src/__tests__/resource-resolution-conditions.spec.ts)将 imports 和 exports 与当前运行 Node 的 resolver 对照。
 
 ## Locked resolution 与 framework preparation
@@ -88,7 +90,7 @@ Toolchain 来源、accepted versions 和 capability checks 以 [checker](../../.
 
 Svelte [source-mapping](../../../packages/limina/src/core/svelte-semantic/source-mapping.ts) 要求 generated dependency 每个 UTF-16 offset 被明确 segments 连续、单调映射到当前 source；部分覆盖、cross-source 或非连续映射产生 mismatch，完全未映射保留 unmapped observation。[generated-script](../../../packages/limina/src/core/svelte-semantic/generated-script.ts) 构造 TraceMap 不加 map URL，避免 absolute Windows source drive 被再次 rebasing。Vue/Astro 则通过自身 mapping 算法处理 full-token/inner-content、ambiguity 与 mismatch，不能把一种框架的 map 条件套给全部框架。
 
-Package framework-export preflight 在 package self-name location 使用明确的 SourceFile format，分别探测 import 和 require。实际 framework host 必须返回有类型的源码或 declaration；无关 JavaScript 分支不能遮蔽可用的有类型分支。此 index 记录 package capability，不是 occurrence TypeEvidence：实际消费者仍保留自身的 mode、provider 和 reference requirement。inactive condition 和 null target 仍被拒绝。[Vue export 守卫](../../../packages/limina/src/__tests__/vue-semantic.spec.ts)覆盖 NodeNext/Node16 import、require-only export、混合分支及 null target。
+实际消费者 occurrence 提供 package exports 解析。Graph check 与 graph export 消费同一套保留的 checker facts；两者都不构建 eager exports index、不尝试第二个 profile，也不以 runtime evidence 修复 checker miss。Self-name、conditions 与框架映射遵循所选 checker。[Vue 守卫](../../../packages/limina/src/__tests__/vue-semantic.spec.ts)及 [Astro/native 守卫](../../../packages/limina/src/__tests__/workspace-export-resolution.spec.ts)使用真实消费者；Svelte 守卫使用组件生成依赖。条件行为仍取决于工具链版本。
 
 Vue 语义上下文中的原生文件使用同一套 Vue 所属 TypeScript 实例、语言服务 host 和编译选项计算模块格式。因此，懒加载的 SourceFile 对 .mts、.cts 和受包作用域影响的 .ts 文件选择与最终 Program 一致的 import/require 条件，无须仅为确定格式而构造 Program。[Vue 语义回归](../../../packages/limina/src/__tests__/vue-semantic.spec.ts) 将懒加载解析与实际 checker 的类型提供者比较，并断言 Program 仍保持懒加载。
 
