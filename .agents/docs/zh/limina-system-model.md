@@ -178,3 +178,15 @@ Release tarball 卫生检查从 TypeScript JavaScript 解析树取得注释位�
 可选分析器缺失与已安装工具失败是不同结果。[Peer 加载](../../../packages/limina/src/package-check/peer-tools.ts)在加载出错后，从相同 ESM 模块来源与条件探测包元数据；元数据子路径未导出也能证明包存在。只有找不到包才进入现有可选跳过结果。初始化、语法、入口缺失与传递依赖失败会保留原错误，并使包检查失败。[隔离加载测试](../../../packages/limina/src/__tests__/package-peer-loading.spec.ts)使用真实夹具包，覆盖 Publint、ATTW 及 import/require 条件。
 
 打包后的发布依赖范围采用 semver 默认的预发布准入语义。[Manifest 校验](../../../packages/limina/src/package-check/release/packed/manifest.ts)不会全局启用 `includePrerelease`；显式预发布比较项只准入 semver 定义的对应系列。[范围回归测试](../../../packages/limina/src/__tests__/release-prerelease-ranges.spec.ts)覆盖三类发布依赖、稳定版本、显式选择与不同预发布系列。
+
+## Release registry authority
+
+release 命令在运行各 entry 前，以有效 cwd 创建 npm registry 配置快照。[配置解析](../../../packages/limina/src/package-check/release/registry/configuration.ts)按全局、用户、项目、环境变量依次合并各 registry 键，再按包 scope 选择。此次未新增 Limina 公共 registry 字段。默认使用 npm 官方 registry，显式配置的企业 HTTPS registry 也可以成为 authority。registry 路径参与 metadata URL 与缓存身份；输出目录和远端 metadata 都不决定配置来源。这是独立于工作区治理 authority 的网络 authority。
+
+[Authority 校验](../../../packages/limina/src/package-check/release/registry/authority.ts)要求 HTTPS、无 credentials/query/fragment，tarball 的规范化 origin 必须完全相同。两处 fetch 都在跟随重定向前拒绝所有重定向。已有显式测试 seam 创建独立的 loopback HTTP authority 并捕获测试超时；生产 HTTP registry 不能进入该分支。配置无效和 URL 拒绝保留结构化 `LIMINA_RELEASE_REGISTRY` 原因，不持久化被拒绝 URL 的 credentials 或 query。此处不隐含 npmrc 认证、CA 或代理集成能力。跨源 CDN 与带签名查询参数的 tarball 仍不受该策略支持。
+
+[响应体读取器](../../../packages/limina/src/package-check/release/registry/body.ts)拒绝有效且超限的 Content-Length，并始终累计 HTTP 解码后的字节数；metadata 超过 16 MiB、tarball 超过 128 MiB 即取消读取。只有通过限制的响应体才进入 JSON 解析或原有 integrity/打包路径。这些上限不约束 tar 归档解压、并发累计分配或所有 OOM 路径。触发原始来源控制问题需要控制 registry metadata/重定向响应，或已被信任的配置 registry；未建立普通包发布者能够任意控制 registry 生成的 dist URL 的证据。
+
+[Authority 与上限回归测试](../../../packages/limina/src/__tests__/release-registry.spec.ts)覆盖 scope 优先级、cwd 定位、快照隔离、包含路径的缓存身份、fetch 前 URL 拒绝、声明/实际大小及恰好上限。[测试 authority 守卫](../../../packages/limina/src/__tests__/release-registry-test-seam.spec.ts)保持 HTTP 例外显式。每条 importer 边的内容策略仍由原有遍历负责。该用户指定边界于 2026-09-26 实施；这不代表人工背书，也不承诺完整 npm 网络兼容性。
+
+依赖准入：npm 的 `ini@6.0.0` 提供成熟 INI 解析，避免手写解析器。它支持 Node 22.18，声明 ISC 许可，无运行时依赖，所查 npm metadata 未标记 deprecated。npm 维护中的 v7 要求更高 Node 下限，因此选择 v6。`@types/ini@4.1.1` 为 MIT、仅类型依赖，未标记 deprecated。通过隔离注入解析器，使用相同生产 Rolldown 入口与配置，按逐文件 gzip level 9 测量整个输出：682,319 → 684,176 字节（+0.27%）；原始体积 3,304,349 → 3,310,226 字节。生成的许可证保留 ISC 声明。2026-09-26 获取的 npm 下载信号为最近一周 144,168,301、最近一月 511,393,973；这些信号不能覆盖硬准入门槛。[上游版本](https://github.com/npm/ini/tree/v6.0.0)、[维护发布](https://github.com/npm/ini/releases)与[准入策略](./dependency-admission.md)界定证据与决策边界。

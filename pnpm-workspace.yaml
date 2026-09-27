@@ -48,6 +48,8 @@ catalogMode: strict
 
 catalogs:
   dev:
+    ini: 6.0.0
+    '@types/ini': 4.1.1
     '@astrojs/check': 0.9.10
     '@babel/generator': ^7.29.1
     '@babel/parser': ^7.29.0
