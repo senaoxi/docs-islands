@@ -48,6 +48,16 @@ Root release planning and changelog tag selection share the catalogued `semver` 
 
 ## Task orchestration
 
+### Release build environment and cache
+
+Release and publish orchestration in [release.ts](../../scripts/release/release.ts) supplies production mode, `DOCS_ISLANDS_SOURCEMAP=false`, and `DOCS_ISLANDS_MINIFY=true` to package builds and VitePress dependency builds. These explicit child-process values override inherited development settings. VitePress still distinguishes its local-test build with `DOCS_ISLANDS_TEST=1` from its final build with `DOCS_ISLANDS_TEST=0`; ordinary development builds retain their configurable sourcemaps.
+
+Two conditions caused the Logaria release failure investigated on 2026-09-28: standard package release builds inherited Nx's root `.env` sourcemap default, and build cache inputs did not include the build environment. Changing only the environment could therefore restore a cached development tarball. [Nx configuration](../../nx.json) now includes mode, sourcemap, minification, and debug variables in build inputs. The release gate continues rejecting `.map` files and JavaScript source-map directives; generated output must be rebuilt, not manually scrubbed.
+
+The [orchestration regression](../../scripts/release/release.spec.ts) exercises the public publish entry for all three packages with hostile inherited settings and intercepts external processes. Actual Nx/Rolldown reproduction additionally covers cold builds, development/production cache switching, and packed output. This is local macOS evidence on Node 24.21.0, pnpm 11.9.0, Nx 23.2.1, Rolldown 1.2.10, and rolldown-plugin-dts 0.28.6; it does not establish remote CI or an npm publication.
+
+### Task runners
+
 Nx provides dependency-graph-aware orchestration and caching for the configured `build` and `docs:build` targets. The root `build` script invokes `nx run-many`, and release scripts invoke package build targets through `pnpm nx run`.
 
 Nx is not the repository's only task orchestrator:

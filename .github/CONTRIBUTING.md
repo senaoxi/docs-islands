@@ -245,6 +245,14 @@ attach provenance attestations.
   pnpm --filter @docs-islands/vitepress changelog --type patch
   ```
 
+Release and publish builds explicitly use production mode, disable sourcemaps,
+and enable minification, even when the shell or local environment files select
+development settings. Nx build caching includes these environment controls so
+a release does not reuse development output. Ordinary development builds can
+still enable sourcemaps. If a release check reports `.map` files or
+`sourceMappingURL` directives, rerun the build through the release workflow;
+do not remove generated files by hand or bypass the release check.
+
 Current public release targets:
 
 - `logaria` -> `logaria`

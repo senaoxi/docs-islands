@@ -27,7 +27,14 @@
   "targetDefaults": {
     "build": {
       "cache": true,
-      "inputs": ["production", "^production"],
+      "inputs": [
+        "production",
+        "^production",
+        { "env": "DOCS_ISLANDS_MODE" },
+        { "env": "DOCS_ISLANDS_SOURCEMAP" },
+        { "env": "DOCS_ISLANDS_MINIFY" },
+        { "env": "DOCS_ISLANDS_DEBUG" }
+      ],
       "outputs": ["{projectRoot}/dist"]
     },
     "docs:build": {
