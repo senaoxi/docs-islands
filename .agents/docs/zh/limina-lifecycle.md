@@ -87,6 +87,8 @@ Generated config 身份相对 active workspace root 判定；更高目录里的 
 
 [manifest version](../../../packages/limina/src/core/build-graph/manifest-version.ts) / [ownership](../../../packages/limina/src/core/build-graph/manifest-ownership.ts) 允许旧格式仅作为 cleanup ownership ledger；当前 schema 定义在生产 types。当前检查时为 v5，v1–4 不作为当前 graph 重用。future/非法版本拒绝。ordering 使用 code-unit comparison；运行时能力描述和 live source descriptors 不因此变成持久化 graph。
 
+被忽略的 `.limina` 目录可能在生成它的分支切换后继续保留。v5 实现旁残留的 v6 manifest 会在编译器执行前触发 `Generated-artifact manifest is corrupt: Error: invalid manifest shape`，包括 `@docs-islands/utils` 的 managed build 及依赖它的 postinstall 构建。确定没有 Limina 命令使用该目录后，将不兼容目录完整保存在工作区外，再运行当前 managed build 重新生成。不要修改 manifest 版本号或扩大接受的版本范围：旧实现无法解释未来版本的 ownership ledger。[生成图测试](../../../packages/limina/src/__tests__/generated-graph.spec.ts)分别保留受支持旧版本清理和未来版本拒绝的契约。
+
 这套 namespace materialization 管的是 managed generated artifacts。graph export 的用户目标文件、`build --raw` 的外部工具输出和 migration 有不同 writer contract；不能写成“全部磁盘写入都经过 materializer”。managed checker output 另经 [managed-mutation](../../../packages/limina/src/typecheck/managed-mutation.ts) 与 [output](../../../packages/limina/src/typecheck/output/) 校验 authority。
 
 跨进程 holder 通过目录 rename 发布不可变、以 token 命名的 owner record。回收只删除观察到的 record，然后执行非递归 rmdir；替换 holder 的不同 record 会阻止其非空目录被删除。release 使用相同规则。清理中断留下的空已发布 slot 可以恢复；未发布的 reader candidate 不属于 reader membership，不能作为空 lease 被回收。旧 `owner.json` record 可以退役，但不再发布这种格式。这是当前 Limina 进程之间的协作协议；并发运行且递归删除 holder 的旧版二进制不在该协议内。[Lease 回收守卫](../../../packages/limina/src/__tests__/cross-process-lease-reclamation.spec.ts)在另一 writer 获得 slot 时分别延迟 record 删除与目录移除。

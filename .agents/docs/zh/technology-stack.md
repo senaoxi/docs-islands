@@ -48,6 +48,16 @@ Peer dependency 兼容范围保留在各包 manifest 中。部分依赖值还使
 
 ## 任务编排
 
+### 发布构建环境与缓存
+
+[release.ts](../../../scripts/release/release.ts) 中的 release 与 publish 编排为包构建和 VitePress 依赖构建显式设置 production 模式、`DOCS_ISLANDS_SOURCEMAP=false` 和 `DOCS_ISLANDS_MINIFY=true`。这些子进程环境值覆盖继承的开发设置。VitePress 仍通过 `DOCS_ISLANDS_TEST=1` 标识本地测试构建，通过 `DOCS_ISLANDS_TEST=0` 标识最终构建；普通开发构建保留可配置的 sourcemap。
+
+2026-09-28 排查的 Logaria 发布失败涉及两个条件：普通包的发布构建继承了 Nx 加载的根 `.env` sourcemap 默认值，而构建缓存输入未包含构建环境。因此，仅修改环境仍可能恢复出开发 tarball 缓存。[Nx 配置](../../../nx.json) 现在将模式、sourcemap、压缩和 debug 环境变量纳入构建输入。发布门禁继续拒绝 `.map` 文件和 JavaScript source-map 指令；应重新构建生成产物，不应手动清洗。
+
+[编排回归测试](../../../scripts/release/release.spec.ts) 使用相冲突的继承环境，通过公开 publish 入口覆盖三个包，并拦截外部进程。真实 Nx/Rolldown 复现另行覆盖冷构建、开发与生产缓存切换以及打包产物。这些是 macOS 上 Node 24.21.0、pnpm 11.9.0、Nx 23.2.1、Rolldown 1.2.10 与 rolldown-plugin-dts 0.28.6 的本地证据，不能证明远端 CI 或 npm 发布成功。
+
+### 任务运行器
+
 Nx 为已配置的 `build` 和 `docs:build` targets 提供理解依赖图的编排与缓存。根 `build` 脚本调用 `nx run-many`，发布脚本通过 `pnpm nx run` 调用包的 build targets。
 
 Nx 不是仓库唯一的任务编排器：

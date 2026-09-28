@@ -47,6 +47,12 @@ interface PublishPackageOptions {
   provenance: boolean;
 }
 
+const productionBuildEnv: NodeJS.ProcessEnv = {
+  DOCS_ISLANDS_MODE: 'production',
+  DOCS_ISLANDS_MINIFY: 'true',
+  DOCS_ISLANDS_SOURCEMAP: 'false',
+};
+
 function getPackageScriptRunner(
   config: ResolvedReleasePackageConfig,
   scriptName: string,
@@ -151,20 +157,18 @@ function buildVitepressProject(
 ): void {
   const { localTest = false } = options;
   const workspaceDependencies = getWorkspaceDependencies(config.manifest);
+  const buildEnv = {
+    ...productionBuildEnv,
+    DOCS_ISLANDS_TEST: localTest ? '1' : '0',
+  };
 
   cleanDirectory('dist', config.packageDir);
 
   for (const dependencyName of workspaceDependencies) {
-    runWorkspaceBuildTarget(dependencyName, {
-      DOCS_ISLANDS_MODE: 'production',
-      DOCS_ISLANDS_TEST: localTest ? '1' : '0',
-    });
+    runWorkspaceBuildTarget(dependencyName, buildEnv);
   }
 
-  runPackageBuildTarget(config, {
-    DOCS_ISLANDS_MODE: 'production',
-    DOCS_ISLANDS_TEST: localTest ? '1' : '0',
-  });
+  runPackageBuildTarget(config, buildEnv);
 }
 
 function verifyDistVersion(plan: ReleasePlan): void {
@@ -201,7 +205,7 @@ function runStandardPackageReleaseChecks(
     }
   }
   if (!options.skipBuild) {
-    runPackageBuildTarget(config);
+    runPackageBuildTarget(config, productionBuildEnv);
     verifyDistVersion(plan);
     runPackageArtifactChecks(config);
     runPackageReleaseConsistencyChecks(config);

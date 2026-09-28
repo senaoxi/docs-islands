@@ -234,6 +234,8 @@ pnpm docs:link:prod
   pnpm release publish --package vitepress
   ```
 
+Release 与 publish 构建显式使用 production 模式、关闭 sourcemap 并启用压缩，即使 shell 或本地环境文件设置了开发选项也是如此。Nx 构建缓存包含这些环境控制项，避免发布复用开发产物。普通开发构建仍可启用 sourcemap。如果发布检查报告 `.map` 文件或 `sourceMappingURL` 指令，应通过发布流程重新构建；不要手动删除生成文件或绕过发布检查。
+
 当前公开发布目标：
 
 - `logaria` -> `logaria`
