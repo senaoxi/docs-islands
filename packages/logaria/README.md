@@ -1,8 +1,8 @@
 # logaria
 
 <p align="center">
-  <a href="https://docs.senao.me/docs-islands/logaria" target="_blank" rel="noopener noreferrer">
-    <img width="180" src="https://docs.senao.me/docs-islands/logaria/logo.svg" alt="logaria logo">
+  <a href="https://senao.me/repos/docs-islands/logaria" target="_blank" rel="noopener noreferrer">
+    <img width="180" src="https://senao.me/repos/docs-islands/logaria/logo.svg" alt="logaria logo">
   </a>
 </p>
 <p align="center">
@@ -26,4 +26,4 @@ Logaria gives tools and libraries a small, framework-agnostic logging layer for 
 
 Logaria is not an observability platform, telemetry pipeline, or monitoring service. It focuses on local runtime logging, configurable console visibility, and optional production pruning through supported bundler integrations.
 
-[Read the Docs to Learn More](https://docs.senao.me/docs-islands/logaria/)
+[Read the Docs to Learn More](https://senao.me/repos/docs-islands/logaria/)

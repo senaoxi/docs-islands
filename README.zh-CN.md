@@ -1,8 +1,8 @@
 # Docs Islands
 
 <p align="center">
-  <a href="https://docs.senao.me/docs-islands" target="_blank" rel="noopener noreferrer">
-    <img width="180" src="https://docs.senao.me/docs-islands/favicon.svg" alt="Docs Islands logo">
+  <a href="https://senao.me/repos/docs-islands" target="_blank" rel="noopener noreferrer">
+    <img width="180" src="https://senao.me/repos/docs-islands/favicon.svg" alt="Docs Islands logo">
   </a>
 </p>
 <br/>
@@ -33,7 +33,7 @@
 
 - **📦 完善开发体验** - 开发环境热更新即时反馈，开发与生产环境行为一致。提供完整的类型支持和性能优化选项，确保从开发到部署的流畅体验。
 
-> 更多详细信息和使用指南，请访问 [文档站点](https://docs.senao.me/docs-islands/zh/)。
+> 更多详细信息和使用指南，请访问 [文档站点](https://senao.me/repos/docs-islands/zh/)。
 
 ## 包
 

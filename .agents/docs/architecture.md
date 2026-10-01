@@ -27,6 +27,14 @@ Generated `dist` directories are excluded from workspace discovery.
 
 The current discovered workspace includes the root project, published packages, private packages, package documentation sites, the VitePress playground and smoke workspace, the Limina smoke workspace, and the Logaria plugin test workspace.
 
+## Documentation publication boundary
+
+The root documentation site and package documentation sites build independently. The root `docs:build` deployment path selects only `@docs-islands/monorepo-docs`, `@docs-islands/logaria-docs`, and `@docs-islands/vitepress-docs`. `scripts/merge-docs.ts` then merges the package documentation that remains owned by this site into `docs/.vitepress/dist/<target>/`; the current merged package targets are Logaria and `@docs-islands/vitepress`. Their public VitePress bases share the fixed `/repos/docs-islands/` namespace.
+
+Limina documentation is explicitly excluded from this merge because its standalone deployment owns `/repos/limina/`. The Docs Islands landing page links to that standalone namespace instead of publishing a duplicate `/repos/docs-islands/limina/` copy.
+
+The Docs Islands Vercel project owns only the merged static output and does not rewrite the public prefix internally. The Senao site is the external routing authority for `/repos/docs-islands/*` and proxies those requests to the independent Docs Islands Vercel deployment. The previous `docs.senao.me/docs-islands/*` entry redirects to the new namespace; its legacy Limina subtree redirects to `/repos/limina/*`.
+
 ## Published packages
 
 Release scripts and package manifests identify three independent publication targets:

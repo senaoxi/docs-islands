@@ -24,6 +24,8 @@ interface PackageInfo {
   targetName: string;
 }
 
+const externallyDeployedDocs = new Set(['limina']);
+
 async function findDocsPackages(): Promise<PackageInfo[]> {
   const findElapsed = createElapsedTimer();
   const packages: PackageInfo[] = [];
@@ -70,6 +72,13 @@ async function processPackageJson(
     const match = packageName?.match(/^@docs-islands\/(.+)-docs$/);
     if (match) {
       const targetName = match[1];
+      if (externallyDeployedDocs.has(targetName)) {
+        MergeDocsLogger.info(
+          `skip external docs package: ${packageName} -> ${targetName}`,
+        );
+        return;
+      }
+
       const packageDir = dirname(packageJsonPath);
       const distPath = join(packageDir, '.vitepress/dist');
 

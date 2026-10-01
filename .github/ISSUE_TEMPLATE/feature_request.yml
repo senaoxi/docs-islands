@@ -43,7 +43,7 @@ body:
           required: true
         - label: Read the [Contributing Guidelines](https://github.com/senaoxi/docs-islands/blob/main/.github/CONTRIBUTING.md).
           required: true
-        - label: Read the [docs](https://docs.senao.me/docs-islands/).
+        - label: Read the [docs](https://senao.me/repos/docs-islands/).
           required: true
         - label: Check that there isn't already an issue that request the same feature to avoid creating a duplicate.
           required: true

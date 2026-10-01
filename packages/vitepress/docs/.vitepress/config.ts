@@ -18,7 +18,7 @@ const { release, siteDevtools } = loadEnv();
 const { DOUBAO_BASE_URL, DOUBAO_API_KEY, CLAUDE_BASE_URL, CLAUDE_API_KEY } =
   siteDevtools;
 const vitepressPackageName = '@docs-islands/vitepress';
-const base = `/${vitepressPackageName.replace('@', '')}/`;
+const base = `/repos/${vitepressPackageName.replace('@', '')}/`;
 const claudeUS = claude.provider({
   label: 'Claude US',
   baseUrl: CLAUDE_BASE_URL,

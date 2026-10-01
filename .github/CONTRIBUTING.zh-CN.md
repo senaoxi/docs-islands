@@ -182,7 +182,7 @@ pnpm install
 
    你可以在库的源代码中（例如 `packages/vitepress/src/node/**`、`packages/vitepress/src/client/**`）放置 `debugger;` 语句，当代码路径运行时，执行将在附加的调试器中暂停。
 
-   执行上述命令后，访问 http://localhost:5173/docs-islands/vitepress/ 并尝试修改源代码，你将在开发过程中获得实时更新。
+   执行上述命令后，访问 http://localhost:5173/repos/docs-islands/vitepress/ 并尝试修改源代码，你将在开发过程中获得实时更新。
 
 3. 编辑、保存、继续：
 

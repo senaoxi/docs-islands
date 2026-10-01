@@ -1,8 +1,8 @@
 # @docs-islands/vitepress
 
 <p align="center">
-  <a href="https://docs.senao.me/docs-islands/vitepress/zh/guide/" target="_blank" rel="noopener noreferrer">  
-    <img width="180" src="https://docs.senao.me/docs-islands/vitepress/favicon.svg" alt="logo">
+  <a href="https://senao.me/repos/docs-islands/vitepress/zh/guide/" target="_blank" rel="noopener noreferrer">
+    <img width="180" src="https://senao.me/repos/docs-islands/vitepress/favicon.svg" alt="logo">
   </a>
 </p>
 <br/>
@@ -26,11 +26,11 @@
 - **HMR 支持**: 跨框架边界的完整热模块替换，保持状态，维护开发速度。
 - **MPA 模式兼容**: 兼容 VitePress MPA 模式。
 
-> 更完整的策略设计、动机与示例，见文档 [介绍](https://docs.senao.me/docs-islands/vitepress/zh/guide/) 与 [工作原理](https://docs.senao.me/docs-islands/vitepress/zh/guide/how-it-works)。
+> 更完整的策略设计、动机与示例，见文档 [介绍](https://senao.me/repos/docs-islands/vitepress/zh/guide/) 与 [工作原理](https://senao.me/repos/docs-islands/vitepress/zh/guide/how-it-works)。
 
 ## 快速上手
 
-阅读 [快速上手](https://docs.senao.me/docs-islands/vitepress/zh/guide/getting-started) 来了解更多信息。
+阅读 [快速上手](https://senao.me/repos/docs-islands/vitepress/zh/guide/getting-started) 来了解更多信息。
 
 ```ts
 import { createDocsIslands } from '@docs-islands/vitepress';

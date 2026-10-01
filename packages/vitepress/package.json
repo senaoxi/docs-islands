@@ -30,7 +30,7 @@
   "bugs": {
     "url": "https://github.com/senaoxi/docs-islands/issues"
   },
-  "homepage": "https://docs.senao.me/docs-islands/vitepress",
+  "homepage": "https://senao.me/repos/docs-islands/vitepress",
   "publishConfig": {
     "access": "public"
   },

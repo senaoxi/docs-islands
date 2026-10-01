@@ -1,8 +1,8 @@
 # logaria
 
 <p align="center">
-  <a href="https://docs.senao.me/docs-islands/logaria/zh" target="_blank" rel="noopener noreferrer">
-    <img width="180" src="https://docs.senao.me/docs-islands/logaria/logo.svg" alt="logaria logo">
+  <a href="https://senao.me/repos/docs-islands/logaria/zh" target="_blank" rel="noopener noreferrer">
+    <img width="180" src="https://senao.me/repos/docs-islands/logaria/logo.svg" alt="logaria logo">
   </a>
 </p>
 <p align="center">
@@ -26,4 +26,4 @@ Logaria 为工具和库提供一个小型、框架无关的 console 日志层，
 
 Logaria 不是 observability 平台、telemetry pipeline 或监控服务。它专注于本地运行时日志、可配置的 console 可见性，以及通过受支持构建工具集成提供的可选生产裁剪。
 
-[阅读文档了解更多](https://docs.senao.me/docs-islands/logaria/zh/)
+[阅读文档了解更多](https://senao.me/repos/docs-islands/logaria/zh/)

@@ -15,7 +15,7 @@
     "docs",
     "utils"
   ],
-  "homepage": "https://docs.senao.me/docs-islands",
+  "homepage": "https://senao.me/repos/docs-islands",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/senaoxi/docs-islands.git"
