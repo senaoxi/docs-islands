@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress';
 import enConfig from '../en/config';
 import zhConfig from '../zh/config';
 
-const base = '/docs-islands/logaria/';
+const base = '/repos/docs-islands/logaria/';
 
 export default defineConfig({
   base,

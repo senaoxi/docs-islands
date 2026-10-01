@@ -27,6 +27,14 @@
 
 当前发现的 workspace 包括根项目、已发布包、私有包、各包文档站点、VitePress playground 与 smoke workspace、Limina smoke workspace，以及 Logaria 插件测试 workspace。
 
+## 文档发布边界
+
+根文档站与各 package 文档站分别构建。根 `docs:build` 部署路径只选择 `@docs-islands/monorepo-docs`、`@docs-islands/logaria-docs` 和 `@docs-islands/vitepress-docs`。随后 `scripts/merge-docs.ts` 只将仍由本站负责的 package 文档合并到 `docs/.vitepress/dist/<target>/`；当前合并目标是 Logaria 和 `@docs-islands/vitepress`。它们的公开 VitePress base 共享固定的 `/repos/docs-islands/` namespace。
+
+Limina 文档被明确排除在该合并之外，因为其独立部署拥有 `/repos/limina/`。Docs Islands 落地页直接链接到这个独立 namespace，不再发布重复的 `/repos/docs-islands/limina/` 副本。
+
+Docs Islands 的 Vercel project 只负责合并后的静态产物，不在内部 rewrite 公开前缀。Senao 站点是 `/repos/docs-islands/*` 的外部路由 authority，并将请求代理到独立的 Docs Islands Vercel 部署。此前的 `docs.senao.me/docs-islands/*` 入口 redirect 到新 namespace；其中旧 Limina 子树 redirect 到 `/repos/limina/*`。
+
 ## 已发布包
 
 发布脚本和 package manifest 确定了三个独立发布目标：

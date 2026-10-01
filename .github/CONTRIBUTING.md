@@ -182,7 +182,7 @@ This repository provides an optimized development experience where you can devel
 
    You can place `debugger;` statements in the library source code (e.g., `packages/vitepress/src/node/**`, `packages/vitepress/src/client/**`), and when the code path runs, execution will pause in the attached debugger.
 
-   After executing the above command, visit http://localhost:5173/docs-islands/vitepress/ and try modifying the source code. You'll get live updates as you develop.
+   After executing the above command, visit http://localhost:5173/repos/docs-islands/vitepress/ and try modifying the source code. You'll get live updates as you develop.
 
 3. Edit, save, continue:
 

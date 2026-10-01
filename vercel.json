@@ -8,15 +8,9 @@
   },
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [
-    {
-      "source": "/docs-islands/(.*)",
-      "destination": "/$1"
-    }
-  ],
   "headers": [
     {
-      "source": "/docs-islands/(.*)/assets/(.*)",
+      "source": "/(.*)/assets/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

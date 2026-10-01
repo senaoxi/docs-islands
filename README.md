@@ -1,8 +1,8 @@
 # Docs Islands
 
 <p align="center">
-  <a href="https://docs.senao.me/docs-islands" target="_blank" rel="noopener noreferrer">
-    <img width="180" src="https://docs.senao.me/docs-islands/favicon.svg" alt="Docs Islands logo">
+  <a href="https://senao.me/repos/docs-islands" target="_blank" rel="noopener noreferrer">
+    <img width="180" src="https://senao.me/repos/docs-islands/favicon.svg" alt="Docs Islands logo">
   </a>
 </p>
 <br/>
@@ -33,7 +33,7 @@ Brings the performance benefits of Islands Architecture to documentation framewo
 
 - **📦 Polished Developer Experience** - Instant feedback through hot module replacement in development, consistent behavior across dev and production environments. Complete TypeScript support and performance optimization options ensure a smooth experience from development to deployment.
 
-> For more details and usage guides, visit the [documentation site](https://docs.senao.me/docs-islands/).
+> For more details and usage guides, visit the [documentation site](https://senao.me/repos/docs-islands/).
 
 ## Packages
 

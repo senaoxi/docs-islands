@@ -1,8 +1,8 @@
 # @docs-islands/vitepress
 
 <p align="center">
-  <a href="https://docs.senao.me/docs-islands/vitepress/guide/" target="_blank" rel="noopener noreferrer">  
-    <img width="180" src="https://docs.senao.me/docs-islands/vitepress/favicon.svg" alt="logo">
+  <a href="https://senao.me/repos/docs-islands/vitepress/guide/" target="_blank" rel="noopener noreferrer">
+    <img width="180" src="https://senao.me/repos/docs-islands/vitepress/favicon.svg" alt="logo">
   </a>
 </p>
 <br/>
@@ -26,11 +26,11 @@ Brings cross‑framework component rendering to VitePress (currently built-in Re
 - **HMR support**: Complete hot module replacement across framework boundaries, preserving state and maintaining development velocity.
 - **MPA compatibility**: Works with VitePress MPA mode.
 
-> For comprehensive design rationale and examples, see [Introduction](https://docs.senao.me/docs-islands/vitepress/guide/) and [How It Works](https://docs.senao.me/docs-islands/vitepress/guide/how-it-works).
+> For comprehensive design rationale and examples, see [Introduction](https://senao.me/repos/docs-islands/vitepress/guide/) and [How It Works](https://senao.me/repos/docs-islands/vitepress/guide/how-it-works).
 
 ## Quick Start
 
-Read [Getting Started](https://docs.senao.me/docs-islands/vitepress/guide/getting-started) for more information.
+Read [Getting Started](https://senao.me/repos/docs-islands/vitepress/guide/getting-started) for more information.
 
 ```ts
 import { createDocsIslands } from '@docs-islands/vitepress';

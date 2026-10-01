@@ -12,7 +12,7 @@ import { dynamicProxyPlugin } from './dynamicProxyPlugin';
 
 const { release } = loadEnv();
 
-const base = '/docs-islands/';
+const base = '/repos/docs-islands/';
 
 const vitepressConfig: UserConfig<DefaultTheme.Config> = defineConfig({
   base,
