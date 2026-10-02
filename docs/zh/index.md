@@ -7,14 +7,16 @@ markdownStyles: false
 
 hero:
   name: 'Docs Islands'
-  tagline: 面向文档站点的跨框架 Islands 架构
+  text: '让文档，<br />拥有真实交互。'
+  tagline: '在 VitePress Markdown 中使用 React 组件。保留静态优先的页面，为每个 island 选择交互时机。'
   image:
     src: /favicon.svg
     alt: Docs Islands
   actions:
     - theme: brand
-      text: 浏览产品
-      link: '#core-package'
+      text: 开始接入
+      link: '/vitepress/zh/'
+      target: _self
     - theme: alt
       text: 在 GitHub 上查看
       link: https://github.com/senaoxi/docs-islands

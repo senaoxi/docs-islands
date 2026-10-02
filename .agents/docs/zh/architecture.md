@@ -31,9 +31,17 @@
 
 根文档站与各 package 文档站分别构建。根 `docs:build` 部署路径只选择 `@docs-islands/monorepo-docs`、`@docs-islands/logaria-docs` 和 `@docs-islands/vitepress-docs`。随后 `scripts/merge-docs.ts` 只将仍由本站负责的 package 文档合并到 `docs/.vitepress/dist/<target>/`；当前合并目标是 Logaria 和 `@docs-islands/vitepress`。它们的公开 VitePress base 共享固定的 `/repos/docs-islands/` namespace。
 
-Limina 文档被明确排除在该合并之外，因为其独立部署拥有 `/repos/limina/`。Docs Islands 落地页直接链接到这个独立 namespace，不再发布重复的 `/repos/docs-islands/limina/` 副本。
+Limina 文档被明确排除在该合并之外，因为其独立部署拥有 `/repos/limina/`。根落地页不将 Limina 展示为 Docs Islands 的接入前提，也不发布重复的 `/repos/docs-islands/limina/` 副本。
 
 Docs Islands 的 Vercel project 只负责合并后的静态产物，不在内部 rewrite 公开前缀。Senao 站点是 `/repos/docs-islands/*` 的外部路由 authority，并将请求代理到独立的 Docs Islands Vercel 部署。此前的 `docs.senao.me/docs-islands/*` 入口 redirect 到新 namespace；其中旧 Limina 子树 redirect 到 `/repos/limina/*`。
+
+### 根落地页展示
+
+双语根落地页由 `docs/en/index.md`、`docs/zh/index.md`、`DocsProductMatrix.vue`、`DocsMarkdownExample.vue` 和 `docs/.vitepress/theme/styles/main.css` 中限定首页作用域的样式负责。阅读顺序是产品介绍与指南 CTA、现有架构图、当前支持范围、渲染原则和 Markdown 接入示例。支持范围条明确列出 VitePress + React；此展示不确立未来适配器的支持。参见[已实现范围](./intent.md)。
+
+展示采用无衬线标题、克制的紫色强调、统一对齐和以细线分隔的开放区块。这让接入路径更突出，而不把 Logaria 和 Limina 展示成前置控制层。深浅色 token 限定在 `VPHome` 内；各包主题与文档发布仍保持独立。示例明确用于完成配置之后，并链接到完整接入指南。两个接入 CTA 都通过 `target="_self"` 触发整页导航：各包文档拥有独立的 VitePress 路由清单，即使静态文件位于同一 origin，根站 SPA 路由也无法解析它们。图示内部行为仍由其组件负责；外框样式不确立键盘或点选行为。浏览器报告 reduced motion 时，首页动画与过渡均禁用。
+
+`DocsMarkdownExample.vue` 负责示例的逐字输入、光标、暂停／继续、重播和完整文本复制。它展示 `index.md` 源文件，不包含 shell 提示符或模拟命令输出。SSR、屏幕阅读器和减少动态效果偏好下均可获得完整示例。隐藏的完整文本布局占位防止输入过程中面板高度变化。普通播放在示例进入视口时开始，播放一次，并在离屏或文档隐藏时保留进度；恢复时重设计时基准，不消耗后台经过的时间。开启减少动态效果偏好会立即完成展示，关闭该偏好后仍保留全文，直到用户请求重播。复制控件始终使用完整 Markdown；输入过程中选中文本并复制，也复制完整示例，避免得到截断的前缀。剪贴板失败则显示完整的可选择文本。卸载时清理计时器、可见性 observer 以及媒体和文档监听器。这些控件与样式仅属于此示例区域，不增加包依赖或执行能力。
 
 ## 已发布包
 

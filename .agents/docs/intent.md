@@ -6,7 +6,7 @@
 
 This record describes the scope established by the current source, tests, manifests, configuration, build inputs, public exports, and command execution.
 
-Target audience, long-term product positioning, future framework coverage, design rationale, and permanent non-goals are not established by the implementation. Those points require human confirmation.
+Target audience, long-term product positioning, future framework coverage, design rationale, and permanent non-goals are not established by the implementation alone. The human-stated documentation direction below is recorded separately from shipped support; other direction questions still require human confirmation.
 
 ## Current implementation
 
@@ -42,6 +42,16 @@ The separation between `@docs-islands/core` and `@docs-islands/vitepress` permit
 
 The repository can develop and release Docs Islands, Limina, and Logaria from one workspace without making them one published package. This follows from their separate manifests, build outputs, release entries, and tags.
 
+## Human-stated documentation direction
+
+On 2026-10-01, the user stated that Docs Islands should bridge multiple documentation frameworks and multiple UI frameworks: documentation frameworks form the bottom layer, Docs Islands is the middle bridge, and UI frameworks form the top layer. This is product direction, not evidence that additional integrations ship today.
+
+The [landing diagram](../../docs/.vitepress/theme/components/landing/DocsHeroMockup.vue) must make that relationship readable and distinguish current support from planned integrations. VitePress and React are the current supported path, established by the [supported adapter set](../../packages/vitepress/src/node/constants/adapters/index.ts), [orchestrator](../../packages/vitepress/src/node/core/orchestrator.ts), and [package exports](../../packages/vitepress/package.json). Docusaurus, Nextra, Astro, Vue, Svelte, and Solid appear only as planned examples. Their presence in the diagram does not establish implementation, priority, a release date, or a committed individual integration roadmap.
+
+For this homepage change, the user requested a restrained upward response to hover, keyboard focus, or touch on a documentation framework, inspired by the layered interaction at [Vite](https://vite.dev/). The diagram must keep keyboard access, respect reduced motion, and work in both site themes and on phones. Core controls is removed from this homepage, including unused component-specific copy and styles; this does not remove Logaria or Limina product capabilities, packages, or documentation.
+
+Source: the user's explicit homepage request on 2026-10-01. This record has no human vouch. Validation of the homepage's implementation is separate from this direction and must be reported by the change that implements it.
+
 ## Not established by the current implementation
 
 The current implementation establishes that VitePress is the only documentation-framework integration. It does not establish a plan to support other documentation frameworks.
@@ -54,8 +64,8 @@ The source does not establish whether the primary audience is documentation team
 
 ## Human direction requiring confirmation
 
-- Does Docs Islands plan to support documentation frameworks other than VitePress?
-- Does Docs Islands plan to add UI framework adapters other than React?
+- Which additional documentation-framework integrations should be prioritized, and what would establish their support?
+- Which additional UI framework adapters should be prioritized, and what would establish their support?
 - What is the long-term product relationship between the root Docs Islands project, Limina, and Logaria?
 - Who are the primary intended users?
 - Which directions are permanent non-goals?
