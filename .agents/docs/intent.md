@@ -52,6 +52,16 @@ For this homepage change, the user requested a restrained upward response to hov
 
 Source: the user's explicit homepage request on 2026-10-01. This record has no human vouch. Validation of the homepage's implementation is separate from this direction and must be reported by the change that implements it.
 
+## Human-stated visual identity direction
+
+On 2026-10-02, the user selected the first purple concept: a lower-left document contour, a tall right contour, and a small detached, tilted island. The identity should remain simple and work as native SVG, at favicon sizes, and in one color or white. The flat primary color is `#7051E8`; the ink and reverse variants use `#211E2E` and white. The supplied concept board is a reference, not a site logo asset.
+
+The user requested local adoption in the logo and favicon entries, with restrained finite animation informed by the standalone Limina site's current logo behavior. The outer contours remain stable while the small island responds briefly to entry or interaction. This reference does not make Limina part of the Docs Islands product or transfer its geometry into this identity.
+
+The same request asks for less vertical space in the homepage diagram through layout, tile spacing, and footer wrapping. Preserve the three layers, readable labels, the VitePress + React available path, planned labels, hover/focus/touch selection, keyboard dismissal, and reduced motion. Local implementation does not authorize a commit, push, or deployment.
+
+Source: the user's explicit logo selection and local implementation request on 2026-10-02. This record has no human vouch. Implementation evidence is owned by [the visual architecture record](./architecture.md#visual-identity-and-diagram-layout); validation must be reported by the implementing change.
+
 ## Not established by the current implementation
 
 The current implementation establishes that VitePress is the only documentation-framework integration. It does not establish a plan to support other documentation frameworks.

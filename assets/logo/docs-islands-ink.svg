@@ -1,5 +1,5 @@
 <!-- Generated from assets/logo/docs-islands.svg. Run pnpm exec tsx scripts/sync-brand-assets.ts. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 448" color="#7051E8" role="img" aria-label="Docs Islands logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 448" color="#211E2E" role="img" aria-label="Docs Islands logo">
   <g id="docs-islands-frame" transform="translate(32 20)" fill="currentColor">
     <path d="M84 183H99C108.4 183 116 190.6 116 200V297C116 319.6 134.4 338 157 338H223C242.9 338 259 354.1 259 374V390C259 399.4 251.4 407 242 407H94C42.1 407 0 364.9 0 313V267C0 220.6 37.6 183 84 183Z"/>
     <path d="M245 0H277C336.1 0 384 47.9 384 107V301C384 353 348 397 297 407V183C297 154 281 144 263 136C241 127 228 113 228 91V17C228 7.6 235.6 0 245 0Z"/>

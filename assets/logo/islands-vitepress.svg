@@ -1,54 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="docs-islands vitepress variant">
-  <defs>
-    <!-- Soft ambient shadow for elements -->
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.18"/>
-    </filter>
-    <!-- Card shadow -->
-    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="12" stdDeviation="20" flood-color="#0b1220" flood-opacity="0.35"/>
-    </filter>
-    
-    <!-- Abstract bolt gradient (neutral, non-official) -->
-    <linearGradient id="boltGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffd166"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
-    </linearGradient>
-    <!-- Card border gradient -->
-    <linearGradient id="cardStrokeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#60a5fa"/>
-      <stop offset="50%" stop-color="#a78bfa"/>
-      <stop offset="100%" stop-color="#22d3ee"/>
-    </linearGradient>
-    <!-- Badge slot frame gradient -->
-    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#22d3ee"/>
-    </linearGradient>
-    <!-- Clip path to keep content within card -->
-    <clipPath id="cardClip">
-      <rect x="48" y="16" width="416" height="480" rx="40" ry="40"/>
-    </clipPath>
-  </defs>
-
-  <!-- Elevated card with gradient border (no shadow) -->
-  <g>
-    <rect x="48" y="16" width="416" height="480" rx="40" ry="40" fill="#ffffff"/>
-    <rect x="48" y="16" width="416" height="480" rx="40" ry="40" fill="none" stroke="url(#cardStrokeGrad)" stroke-width="10"/>
+<!-- Generated from assets/logo/docs-islands.svg. Run pnpm exec tsx scripts/sync-brand-assets.ts. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 448" color="#7051E8" role="img" aria-label="Docs Islands logo">
+  <g id="docs-islands-frame" transform="translate(32 20)" fill="currentColor">
+    <path d="M84 183H99C108.4 183 116 190.6 116 200V297C116 319.6 134.4 338 157 338H223C242.9 338 259 354.1 259 374V390C259 399.4 251.4 407 242 407H94C42.1 407 0 364.9 0 313V267C0 220.6 37.6 183 84 183Z"/>
+    <path d="M245 0H277C336.1 0 384 47.9 384 107V301C384 353 348 397 297 407V183C297 154 281 144 263 136C241 127 228 113 228 91V17C228 7.6 235.6 0 245 0Z"/>
   </g>
-
-  <!-- Core islands mark grouped and scaled to leave inner padding -->
-  <g clip-path="url(#cardClip)">
-    <g transform="translate(256,256) scale(0.92) translate(-256,-256)">
-      <circle cx="196" cy="256" r="150" fill="#42b883"/>
-      <circle cx="316" cy="256" r="150" fill="#61dafb"/>
-    </g>
-    <g transform="translate(256,256) scale(0.92) translate(-256,-256)">
-      <path d="M256 176 L300 160 L276 228 L324 228 L238 352 L260 280 L208 280 Z" fill="url(#boltGrad)"/>
-    </g>
-  </g>
-
-  
+  <path id="docs-islands-island" transform="translate(32 20)" fill="currentColor" d="M168 194L220 181C235 177 249 187 249 202V251C249 263 242 273 230 276L179 289C164 293 151 283 151 267V218C151 207 157 197 168 194Z"/>
 </svg>
-
-
