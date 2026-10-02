@@ -11,6 +11,7 @@
   "types": "./dist/index.d.ts",
   "devDependencies": {
     "eslint": "catalog:lint",
+    "limina": "catalog:dev",
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "workspace:*",
     "rollup-plugin-license": "catalog:dev",

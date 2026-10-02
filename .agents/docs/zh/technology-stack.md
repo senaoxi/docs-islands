@@ -54,7 +54,7 @@ Peer dependency 兼容范围保留在各包 manifest 中。部分依赖值还使
 
 2026-09-28 排查的 Logaria 发布失败涉及两个条件：普通包的发布构建继承了 Nx 加载的根 `.env` sourcemap 默认值，而构建缓存输入未包含构建环境。因此，仅修改环境仍可能恢复出开发 tarball 缓存。[Nx 配置](../../../nx.json) 现在将模式、sourcemap、压缩和 debug 环境变量纳入构建输入。发布门禁继续拒绝 `.map` 文件和 JavaScript source-map 指令；应重新构建生成产物，不应手动清洗。
 
-[编排回归测试](../../../scripts/release/release.spec.ts) 使用相冲突的继承环境，通过公开 publish 入口覆盖三个包，并拦截外部进程。真实 Nx/Rolldown 复现另行覆盖冷构建、开发与生产缓存切换以及打包产物。这些是 macOS 上 Node 24.21.0、pnpm 11.9.0、Nx 23.2.1、Rolldown 1.2.10 与 rolldown-plugin-dts 0.28.6 的本地证据，不能证明远端 CI 或 npm 发布成功。
+[编排回归测试](../../../scripts/release/release.spec.ts) 使用相冲突的继承环境，通过公开 publish 入口覆盖两个 workspace 发布包，并拦截外部进程。真实 Nx/Rolldown 复现另行覆盖冷构建、开发与生产缓存切换以及打包产物。原先三个包的复现是 macOS 上 Node 24.21.0、pnpm 11.9.0、Nx 23.2.1、Rolldown 1.2.10 与 rolldown-plugin-dts 0.28.6 的本地证据，不能证明远端 CI 或 npm 发布成功。
 
 ### 任务运行器
 
@@ -76,11 +76,11 @@ TypeScript 是已检查包中的主要源码语言与类型系统。
 
 根 Limina 配置将 TypeScript checker scope 指定为 `tsgo` preset，将 Vue 相关 scope 指定为 `vue-tsc` preset。`graph` 和 `lib` pipelines 执行 `tsgo -b`，`vue` pipeline 执行 `vue-tsc -b`。
 
-仓库安装了 `vue-tsgo`，Limina 也支持将其作为 checker preset，但当前根仓库 pipelines 不执行它。它在当前仓库中的用途限于 Limina 实现以及该 checker 路径的测试覆盖。
+根 pipelines 执行安装的 `tsgo` 与 `vue-tsc` 工具。Limina 专属的 checker adapter 实现与测试不再属于本 workspace。
 
 各包使用不同的构建工具：
 
-- `@docs-islands/core`、`@docs-islands/vitepress`、Logaria、Limina 和 `@docs-islands/agents` 的主要 JavaScript 构建使用 Rolldown。
+- `@docs-islands/core`、`@docs-islands/vitepress`、Logaria 和 `@docs-islands/agents` 的主要 JavaScript 构建使用 Rolldown。
 - 已检查的这些 Rolldown 配置使用 `rolldown-plugin-dts` 输出声明。
 - VitePress theme 构建使用 tsdown。
 - `@docs-islands/eslint-config`、`@docs-islands/utils` 和 `@docs-islands/plugin-license` 通过 Limina 命令构建，不使用同一套 Rolldown 配置模式。
@@ -89,7 +89,7 @@ TypeScript 是已检查包中的主要源码语言与类型系统。
 
 ## CI 状态汇总
 
-[CI 状态门禁](../../../.github/workflows/ci.yml)等待所有验证任务，包括精确 Vue 语义矩阵。任一已声明依赖失败或被取消都会使门禁失败；既有变更过滤器跳过的任务仍可接受。统一遍历 `needs.*.result` 的表达式避免再手工维护一份结果清单。[工作流回归覆盖](../../../packages/limina/src/__tests__/ci-workflow.spec.ts)约束依赖集合与汇总契约保持一致。本地 YAML 与 shell 场景覆盖结果汇总；只有远端 Actions 执行才能确立调度与分支保护行为。
+[CI 状态门禁](../../../.github/workflows/ci.yml)等待保留的 build、quality、test、smoke 和 docs 任务。任一已声明依赖失败或被取消都会使门禁失败；既有变更过滤器跳过的任务仍可接受。Limina 的实现矩阵与 integration 任务随源码移出。2026-10-02 的分离验证检查了投影历史中全部 24 份不同 CI 配置的任务依赖有效性。候选分支已明确启用 push CI；只有候选精确 SHA 上的 Actions 执行才能建立远端结果。
 
 ## 浏览器测试
 
@@ -101,17 +101,11 @@ VitePress consumer smoke suite 使用 Vitest fixtures：Chromium 的 scope 是 w
 
 ## Limina
 
-仓库将 Limina 用作开发期架构、source、package、release、proof 和 TypeScript 治理工具。
+Workspace 通过 dev catalog 的精确版本和九个开发依赖引用使用真实 npm `limina@0.4.0`。根脚本使用它执行 default check、命名的 graph/lib/vue/consumer pipelines、package 产物检查与 release 检查。根配置仍是本仓库的策略 owner；分离没有新增 exception 或 allowlist。
 
-根脚本调用 Limina 执行 default check 以及命名的 `graph`、`lib`、`vue` 和 `consumer` pipelines。Package linting 调用 `limina package check`。
+CLI 的可选治理 peers `@arethetypeswrong/core`、`knip`、`npm-package-json-lint` 与 `publint` 现在是显式根开发依赖，保留原来由 Limina workspace 开发依赖提供支持的已配置检查。Knip 保持冻结基线的 `6.38.0`。这些是开发工具，不进入 VitePress 浏览器产物。
 
-Limina 的默认任务集合及其执行前提由 [Limina 系统模型](./limina-system-model.md#pipeline-与-phase-contracts) 定义，证据来自 `pipeline/steps.ts` 和 `pipeline/plan.ts`。根仓库的命名 pipelines 是配置选择，不是 default check plan。
-
-根配置还定义 package 和 publish pipelines，并列出 package checks 覆盖的构建产物。
-
-Limina 不随 VitePress 浏览器 runtime 一起交付。Limina 本身是独立构建和发布的 CLI，提供 `limina` binary 和自身的 release entry。
-
-当前公开命令、checker execution classes、workspace authority model、generated graph、persisted issue state 和 mutation boundaries 见 [limina.md](./limina.md)。本仓库层面的工具链记录不重复这些包专属契约。
+该精确 npm 版本使用 MIT、未标记废弃，并支持仓库的 Node 范围。它的 npm repository 与 provenance 仍指向 `97fc3accfcc4c4f6aaf9be05e28d0d8c4ec9b08e` 上原有 `docs-islands` 发布；如实保留这一事实，不将它表述为新的独立发布。安装的 CLI 配置与命令已直接执行验证。版本号或没有 breaking-change 标记不能作为能力证据。归档、tag 映射与验证边界见 [history-extraction.md](./history-extraction.md)。
 
 ## Logaria 与内部包
 

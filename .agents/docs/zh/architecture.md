@@ -25,7 +25,7 @@
 
 生成的 `dist` 目录不参与 workspace discovery。
 
-当前发现的 workspace 包括根项目、已发布包、私有包、各包文档站点、VitePress playground 与 smoke workspace、Limina smoke workspace，以及 Logaria 插件测试 workspace。
+当前发现的 workspace 包括根项目、已发布包、私有包、各包文档站点、VitePress playground 与 smoke workspace、Logaria 插件测试 workspace。
 
 ## 文档发布边界
 
@@ -47,11 +47,10 @@ Docs Islands 的 Vercel project 只负责合并后的静态产物，不在内部
 
 发布脚本和 package manifest 确定了三个独立发布目标：
 
-| 包                        | 独立发布 | 当前职责                                                                           |
-| ------------------------- | -------: | ---------------------------------------------------------------------------------- |
-| `@docs-islands/vitepress` |       是 | VitePress 集成包，提供 node、client、React adapter、theme 和开发工具 exports       |
-| `logaria`                 |       是 | 运行时日志工具，提供 helper、core、plugin 和 types exports，包括构建时裁剪能力     |
-| `limina`                  |       是 | 用于 monorepo 架构、source、package、release、proof 和 TypeScript graph 治理的 CLI |
+| 包                        | 独立发布 | 当前职责                                                                       |
+| ------------------------- | -------: | ------------------------------------------------------------------------------ |
+| `@docs-islands/vitepress` |       是 | VitePress 集成包，提供 node、client、React adapter、theme 和开发工具 exports   |
+| `logaria`                 |       是 | 运行时日志工具，提供 helper、core、plugin 和 types exports，包括构建时裁剪能力 |
 
 每个发布目标都有独立的包目录、构建后的发布目录、版本、changelog、tag 前缀、构建步骤、package checks 和 release checks。
 
@@ -107,7 +106,7 @@ Logaria 独立打包和发布，在结构上不与 `@docs-islands/core` 耦合�
 
 ## Limina 边界
 
-Limina 是独立构建和发布的 CLI 包，提供 `limina` binary。
+Limina 是外部 npm CLI 依赖，提供 `limina` binary。九个开发消费者均引用既有 dev catalog 中精确的 `0.4.0`，不使用 caret 或 tilde。其源码、文档、fixtures 与 release targets 不再属于本 workspace；[分离记录](./history-extraction.md) 拥有 provenance 和恢复说明。
 
 根仓库通过 Limina 配置和命令完成：
 
@@ -121,17 +120,17 @@ Limina 是独立构建和发布的 CLI 包，提供 `limina` binary。
 
 当前 graph rules 约束 client 和 shared runtime imports 及 project references。它们拒绝配置指定的 Node.js built-in dependencies，以及配置指定的跨 client、shared 和 node runtime 边界 references。
 
-当前 package checks 只覆盖配置指定的 Logaria、Limina 和 `@docs-islands/vitepress` 构建产物。
+当前 package checks 覆盖配置指定的 Logaria 和 `@docs-islands/vitepress` 构建产物。
 
 Limina 是开发和发布治理工具，不是 VitePress 浏览器产物的前端 runtime dependency。
 
 Limina 失败表示某项已配置的治理规则、package check、release check、proof 或 checker 未通过，需要调查；源码没有为每一种失败定义统一的缺陷分类。
 
-从 [limina.md](./limina.md) 进入 Limina 包内知识索引。[系统模型](./limina-system-model.md) 拥有 authority 与关系定义；[生命周期记录](./limina-lifecycle.md) 拥有状态、发布和修改契约。本仓库架构记录只拥有 Limina 与其他 workspace 单元的关系。
+根配置与安装的 npm 产物建立被治理的命令。Limina 的实现记录仍保存在原历史归档中。本架构记录只拥有它与保留 workspace 单元的关系。
 
 ## 由实现推导的结果
 
-三个已发布包可以独立管理版本和发布，同时在同一 workspace 中共享私有实现与构建包。
+两个已发布包可以独立管理版本和发布，同时在同一 workspace 中共享私有实现与构建包。
 
 根发布配置不将 Core、仓库 utilities、agent tooling、ESLint 配置或许可证插件列为发布目标。它们的 manifest 也将其标记为私有包。
 
@@ -141,6 +140,5 @@ Limina 失败表示某项已配置的治理规则、package check、release chec
 
 - 支持 VitePress 以外的文档框架，是否是 Core 与 VitePress 分离的长期理由？
 - Logaria 应继续限定在 Docs Islands 用途，还是发展为通用日志包？
-- Limina 与 Docs Islands 是否会长期保留在同一 monorepo？
 - 当前私有包中是否有计划独立发布的包？
 - Plugins workspace 是否预期扩展成更广泛的插件集合？

@@ -54,7 +54,7 @@ Release and publish orchestration in [release.ts](../../scripts/release/release.
 
 Two conditions caused the Logaria release failure investigated on 2026-09-28: standard package release builds inherited Nx's root `.env` sourcemap default, and build cache inputs did not include the build environment. Changing only the environment could therefore restore a cached development tarball. [Nx configuration](../../nx.json) now includes mode, sourcemap, minification, and debug variables in build inputs. The release gate continues rejecting `.map` files and JavaScript source-map directives; generated output must be rebuilt, not manually scrubbed.
 
-The [orchestration regression](../../scripts/release/release.spec.ts) exercises the public publish entry for all three packages with hostile inherited settings and intercepts external processes. Actual Nx/Rolldown reproduction additionally covers cold builds, development/production cache switching, and packed output. This is local macOS evidence on Node 24.21.0, pnpm 11.9.0, Nx 23.2.1, Rolldown 1.2.10, and rolldown-plugin-dts 0.28.6; it does not establish remote CI or an npm publication.
+The [orchestration regression](../../scripts/release/release.spec.ts) exercises the public publish entry for both workspace release packages with hostile inherited settings and intercepts external processes. Actual Nx/Rolldown reproduction additionally covers cold builds, development/production cache switching, and packed output. The original three-package reproduction was local macOS evidence on Node 24.21.0, pnpm 11.9.0, Nx 23.2.1, Rolldown 1.2.10, and rolldown-plugin-dts 0.28.6; it does not establish remote CI or an npm publication.
 
 ### Task runners
 
@@ -76,11 +76,11 @@ TypeScript is the primary source language and type system across the inspected p
 
 The root Limina configuration assigns the TypeScript checker scope to the `tsgo` preset and the Vue-related scope to the `vue-tsc` preset. The `graph` and `lib` pipelines execute `tsgo -b`. The `vue` pipeline executes `vue-tsc -b`.
 
-`vue-tsgo` is installed and supported by Limina as a checker preset, but the current root repository pipelines do not execute it. Its current repository use is limited to Limina implementation and test coverage for that checker path.
+The root pipelines execute the installed `tsgo` and `vue-tsc` tools. Limina-specific checker adapter implementation and tests are outside this workspace.
 
 Build tools differ by package:
 
-- `@docs-islands/core`, `@docs-islands/vitepress`, Logaria, Limina, and `@docs-islands/agents` use Rolldown for their primary JavaScript builds.
+- `@docs-islands/core`, `@docs-islands/vitepress`, Logaria, and `@docs-islands/agents` use Rolldown for their primary JavaScript builds.
 - Their inspected Rolldown configurations use `rolldown-plugin-dts` for declaration output.
 - The VitePress theme build uses tsdown.
 - `@docs-islands/eslint-config`, `@docs-islands/utils`, and `@docs-islands/plugin-license` build through Limina commands rather than the same Rolldown configuration pattern.
@@ -89,7 +89,7 @@ The repository does not use one build tool uniformly for every package.
 
 ## CI status aggregation
 
-The [CI status gate](../../.github/workflows/ci.yml) waits for all validation jobs, including the exact Vue semantic matrix. It fails if any declared dependency fails or is cancelled; jobs skipped by existing change filters remain allowed. One expression over `needs.*.result` avoids a second hand-maintained list of results. [Workflow regression coverage](../../packages/limina/src/__tests__/ci-workflow.spec.ts) keeps the dependency set and aggregation contract aligned. Local YAML and shell scenarios exercise result aggregation; only a remote Actions run can establish scheduling and branch-protection behavior.
+The [CI status gate](../../.github/workflows/ci.yml) waits for the retained build, quality, test, smoke and docs jobs. It fails when any declared dependency fails or is cancelled; existing change-filter skips remain allowed. Limina implementation matrices and integration jobs moved out with its source. The 2026-10-02 extraction validation checked all 24 distinct projected CI configurations for valid job dependencies. The candidate branch is explicitly enabled for push CI; only an Actions run at its exact SHA can establish remote results.
 
 ## Browser testing
 
@@ -115,17 +115,11 @@ attachments. The MPA integration smoke remains a Node-only Vitest test.
 
 ## Limina
 
-The repository uses Limina as a development-time architecture, source, package, release, proof, and TypeScript governance tool.
+The workspace consumes real npm `limina@0.4.0` through an exact dev catalog pin and nine development dependency references. Root scripts use it for the default check, named graph/lib/vue/consumer pipelines, package artifact checks and release checks. Root configuration remains the repository’s policy owner; no exception or allowlist was added for extraction.
 
-Root scripts invoke Limina for the default check and the named `graph`, `lib`, `vue`, and `consumer` pipelines. Package linting invokes `limina package check`.
+The CLI’s optional governance peers `@arethetypeswrong/core`, `knip`, `npm-package-json-lint` and `publint` are now explicit root development dependencies, preserving the configured checks formerly supported by Limina’s workspace dev dependencies. Knip stays at the frozen baseline’s `6.38.0`. This is development tooling and does not enter VitePress browser output.
 
-Limina's default task set and its execution prerequisites are defined in the [Limina system model](./limina-system-model.md#pipeline-and-phase-contracts), backed by `pipeline/steps.ts` and `pipeline/plan.ts`. The root repository's named pipelines are configuration choices and are not the default check plan.
-
-The root configuration also defines package and publish pipelines and lists the built outputs covered by package checks.
-
-Limina is not shipped as part of the VitePress browser runtime. Limina itself is a separately built and published CLI with a `limina` binary and its own release entry.
-
-See [limina.md](./limina.md) for the current public command surface, checker execution classes, workspace authority model, generated graph, persisted issue state, and mutation boundaries. Those package-specific contracts are not repeated in this repository-level toolchain record.
+The exact npm version is MIT, not deprecated, and supports the repository’s Node range. Its npm repository and provenance still point to the original `docs-islands` publication at `97fc3accfcc4c4f6aaf9be05e28d0d8c4ec9b08e`; that fact is retained rather than presented as a new independent publication. The installed CLI’s configuration and commands were exercised directly. A version number or absence of a breaking-change label is not capability evidence. See [history-extraction.md](./history-extraction.md) for archive, tag mapping and verification boundaries.
 
 ## Logaria and internal packages
 

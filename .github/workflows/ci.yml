@@ -18,7 +18,7 @@ permissions:
 
 on:
   push:
-    branches: [main]
+    branches: [main, "codex/docs-islands-history-cleanup-20261002"]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -340,7 +340,7 @@ jobs:
       # Upload documentation build artifacts
       - name: Upload Docs Artifacts
         # actions/upload-artifact@v4.6.2
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa024
         with:
           name: docs-dist
           path: docs/.vitepress/dist
@@ -349,14 +349,7 @@ jobs:
   status:
     name: CI Status
     runs-on: ubuntu-latest
-    needs:
-      [
-        build-artifacts,
-        quality,
-        test,
-        smoke,
-        build,
-      ]
+    needs: [build-artifacts, quality, test, smoke, build]
     if: always()
     steps:
       - name: Check Status

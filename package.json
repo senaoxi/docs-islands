@@ -69,6 +69,7 @@
     "@typescript/native-preview": "catalog:dev",
     "eslint": "catalog:lint",
     "@docs-islands/eslint-config": "workspace:*",
+    "limina": "catalog:dev",
     "logaria": "workspace:*",
     "@docs-islands/utils": "workspace:*",
     "prettier": "catalog:format",
@@ -84,7 +85,11 @@
     "del-cli": "catalog:dev",
     "husky": "catalog:dev",
     "concurrently": "catalog:dev",
-    "yaml": "catalog:dev"
+    "yaml": "catalog:dev",
+    "@arethetypeswrong/core": "catalog:lint",
+    "knip": "catalog:lint",
+    "npm-package-json-lint": "catalog:lint",
+    "publint": "catalog:lint"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,vue,mjs,cjs}": [

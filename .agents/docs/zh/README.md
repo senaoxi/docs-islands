@@ -14,22 +14,16 @@
 - **由实现推导的结果**：根据多个实现事实推导出的结果，不宣称设计意图。
 - **需要人类确认的方向**：实现无法建立的受众、理由、未来范围和永久非目标。
 
-| 领域                          | 记录                                                                 | 范围                                                                                             |
-| ----------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 仓库层面已实现的范围          | [intent.md](./intent.md)                                             | 仓库当前对外提供的产品范围，以及源码无法回答的方向问题                                           |
-| Docs 首页框架示意图           | [intent.md](./intent.md#人类明确提出的文档方向)                      | 人类明确提出的多框架桥接方向、已支持与规划路径、交互、可访问性和移除范围                         |
-| 工具链与强制约束              | [technology-stack.md](./technology-stack.md)                         | 包管理器、Node.js、模块格式、任务执行、构建工具和治理工具                                        |
-| Workspace 与包边界            | [architecture.md](./architecture.md)                                 | Workspace 布局、发布单元、私有包、依赖方向、adapter 边界、构建边界和根落地页展示                 |
-| Limina 架构入口与未决方向     | [limina.md](./limina.md)                                             | 阅读路线、公开接口、证据层级、未决的人类判断                                                     |
-| Limina 实体、authority 与关系 | [limina-system-model.md](./limina-system-model.md)                   | Identity、CLI 实际接线、phase contracts、graph 与 scheduling 的区别、失败域                      |
-| Limina checker 依赖事实       | [limina-semantics.md](./limina-semantics.md)                         | Effective roots、bounded TypeScript、occurrence evidence、framework adapters 与能力边界          |
-| Limina 状态与修改             | [limina-lifecycle.md](./limina-lifecycle.md)                         | Analysis/provider generation、缓存、context ownership、artifact 恢复、migration、issue freshness |
-| Limina invariant 影响         | [limina-invariants.md](./limina-invariants.md)                       | 12 条核心性质、因果解释、source/test evidence matrix 和 guard 强度                               |
-| Limina 审查与知识维护         | [limina-architecture-workflow.md](./limina-architecture-workflow.md) | PR 影响分析、单一 prose owner、更新触发条件、验证和已付出调试代价的陷阱                          |
-| Limina 重建证据               | [limina-architecture-audit.md](./limina-architecture-audit.md)       | Working-tree 审计、PCR reconciliation、四轮对抗性审查、发现与实际验证                            |
-| 第三方 npm 依赖准入           | [dependency-admission.md](./dependency-admission.md)                 | 必要性、npm 采用情况、生产产物影响、许可证兼容性、废弃版本拒绝规则和维护状态比较                 |
+| 领域                 | 记录                                                 | 范围                                                                             |
+| -------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 仓库层面已实现的范围 | [intent.md](./intent.md)                             | 仓库当前对外提供的产品范围，以及源码无法回答的方向问题                           |
+| Docs 首页框架示意图  | [intent.md](./intent.md#人类明确提出的文档方向)      | 人类明确提出的多框架桥接方向、已支持与规划路径、交互、可访问性和移除范围         |
+| 工具链与强制约束     | [technology-stack.md](./technology-stack.md)         | 包管理器、Node.js、模块格式、任务执行、构建工具和治理工具                        |
+| Workspace 与包边界   | [architecture.md](./architecture.md)                 | Workspace 布局、发布单元、私有包、依赖方向、adapter 边界、构建边界和根落地页展示 |
+| 第三方 npm 依赖准入  | [dependency-admission.md](./dependency-admission.md) | 必要性、npm 采用情况、生产产物影响、许可证兼容性、废弃版本拒绝规则和维护状态比较 |
+| 历史分离与外部 CLI   | [history-extraction.md](./history-extraction.md)     | 冻结基线、归档、npm 固定版本、changelog 映射基线和验证边界                       |
 
-根级[意图记录](./intent.md) 不定义 Limina、Logaria 或 VitePress 集成的完整长期意图。Limina 专属实现上下文现在归 [limina.md](./limina.md)。如果 Logaria 或 VitePress 集成需要稳定的产品边界或决策历史，应新增相应领域的记录，而不是无限扩充根意图记录。
+根级[意图记录](./intent.md) 不定义 Limina、Logaria 或 VitePress 集成的完整长期意图。Limina 实现记录保存在原历史归档中。[history-extraction.md](./history-extraction.md) 拥有本仓库的历史分离和外部 CLI 依赖事实。如果 Logaria 或 VitePress 集成需要稳定的产品边界或决策历史，应新增相应领域的记录，而不是无限扩充根意图记录。
 
 ## 双语发布与维护
 

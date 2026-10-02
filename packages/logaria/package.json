@@ -53,6 +53,7 @@
     "@babel/parser": "catalog:dev",
     "@babel/traverse": "catalog:dev",
     "@babel/types": "catalog:dev",
+    "limina": "catalog:dev",
     "@docs-islands/plugin-license": "workspace:*",
     "es-module-lexer": "catalog:dev",
     "globals": "catalog:test",

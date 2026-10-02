@@ -56,6 +56,7 @@
     "@types/babel__traverse": "catalog:dev",
     "@docs-islands/eslint-config": "workspace:*",
     "@docs-islands/utils": "workspace:*",
+    "limina": "catalog:dev",
     "@types/node": "catalog:dev",
     "@types/markdown-it": "catalog:dev",
     "@types/react": "catalog:dev",

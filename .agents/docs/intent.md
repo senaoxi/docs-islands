@@ -32,7 +32,7 @@ The current public Docs Islands entry point is not a general Web application fra
 
 The repository development environment enforces pnpm through the root `preinstall` script and package-manager configuration. This is a repository constraint. It does not establish that consumers of published packages must use pnpm.
 
-Limina, Logaria, and `@docs-islands/vitepress` are separate public release units. The release configuration assigns each package its own package directory, publish directory, version, changelog, and tag prefix.
+Logaria and `@docs-islands/vitepress` are the public release units in this workspace. The release configuration assigns each its own package directory, publish directory, version, changelog, and tag prefix. Limina is consumed as an external development dependency pinned to npm `0.4.0`; its source and release are outside this workspace.
 
 ## Derived implementation consequences
 
@@ -40,7 +40,7 @@ The adapter array and adapter contract permit more than one adapter instance to 
 
 The separation between `@docs-islands/core` and `@docs-islands/vitepress` permits framework-neutral abstractions to be consumed by a framework-specific package. The source establishes the structure, but not the design rationale.
 
-The repository can develop and release Docs Islands, Limina, and Logaria from one workspace without making them one published package. This follows from their separate manifests, build outputs, release entries, and tags.
+The repository can develop and release Docs Islands and Logaria from one workspace without making them one published package. Their manifests, build outputs, release entries, and tags remain separate; the external Limina CLI governs that workspace.
 
 ## Human-stated documentation direction
 

@@ -23,7 +23,7 @@ interface ProxyConfig {
 }
 
 const DEFAULT_CONFIG: ProxyConfig = {
-  validProjects: ['vitepress', 'limina', 'logaria'],
+  validProjects: ['vitepress', 'logaria'],
   basePath: '/docs-islands',
   packageScope: '@docs-islands',
   devCommand: 'docs:dev',

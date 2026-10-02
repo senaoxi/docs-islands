@@ -42,7 +42,6 @@ it('publishes with production build controls despite inherited development setti
     );
     for (const [key, name] of [
       ['logaria', 'logaria'],
-      ['limina', 'limina'],
       ['vitepress', '@docs-islands/vitepress'],
     ]) {
       const packageDir = path.join(fixture, 'packages', key!);
@@ -98,7 +97,7 @@ it('publishes with production build controls despite inherited development setti
       pathToFileURL(path.join(fixture, 'scripts/release/release.ts')).href
     )) as typeof import('./release');
     await runPublishCommand({
-      packageSelectors: ['logaria', 'limina', 'vitepress'],
+      packageSelectors: ['logaria', 'vitepress'],
       dryRun: false,
       skipTests: false,
       skipBuild: false,
@@ -106,12 +105,11 @@ it('publishes with production build controls despite inherited development setti
       help: false,
     });
 
-    assert.equal(published.length, 3);
+    assert.equal(published.length, 2);
     assert.deepEqual(
       builds.map(({ project }) => project),
       [
         'logaria:build',
-        'limina:build',
         '@docs-islands/utils:build',
         '@docs-islands/vitepress:build',
         '@docs-islands/utils:build',
@@ -124,7 +122,7 @@ it('publishes with production build controls despite inherited development setti
       assert.equal(env.DOCS_ISLANDS_MINIFY, 'true', project);
     }
     assert.deepEqual(
-      builds.slice(2).map(({ env }) => env.DOCS_ISLANDS_TEST),
+      builds.slice(1).map(({ env }) => env.DOCS_ISLANDS_TEST),
       ['1', '1', '0', '0'],
     );
     assert.equal(process.env.DOCS_ISLANDS_SOURCEMAP, 'true');

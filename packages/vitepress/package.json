@@ -70,6 +70,7 @@
     "@babel/types": "catalog:dev",
     "@docs-islands/core": "workspace:*",
     "@docs-islands/eslint-config": "workspace:*",
+    "limina": "catalog:dev",
     "@docs-islands/plugin-license": "workspace:*",
     "@docs-islands/utils": "workspace:*",
     "@tsdown/css": "catalog:dev",

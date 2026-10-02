@@ -1,13 +1,13 @@
 packages:
-- packages/*
-- packages/*/docs
-- packages/*/playground
-- packages/*/smoke
-- packages/plugins/*
-- packages/**/__tests__/**
-- docs
-- utils
-- '!**/dist'
+  - packages/*
+  - packages/*/docs
+  - packages/*/playground
+  - packages/*/smoke
+  - packages/plugins/*
+  - packages/**/__tests__/**
+  - docs
+  - utils
+  - '!**/dist'
 allowBuilds:
   '@swc/core': true
   core-js: true
@@ -16,11 +16,11 @@ allowBuilds:
   playwright-chromium: true
 auditConfig:
   ignoreGhsas:
-  - GHSA-67mh-4wv8-2f99
-  - GHSA-4w7w-66w2-5vf9
-  - GHSA-fx2h-pf6j-xcff
-  - GHSA-v6wh-96g9-6wx3
-  - GHSA-h67p-54hq-rp68
+    - GHSA-67mh-4wv8-2f99
+    - GHSA-4w7w-66w2-5vf9
+    - GHSA-fx2h-pf6j-xcff
+    - GHSA-v6wh-96g9-6wx3
+    - GHSA-h67p-54hq-rp68
 autoInstallPeers: false
 catalogMode: strict
 catalogs:
@@ -86,6 +86,7 @@ catalogs:
     zod: ^4.6.5
     logaria: ^0.0.3
     vite: ^8.3.0
+    limina: 0.4.0
   docs-dev:
     '@nolebase/vitepress-plugin-enhanced-mark': ^2.18.2
     '@types/http-proxy': ^1.17.16
@@ -100,6 +101,7 @@ catalogs:
   frameworks:
     vitepress: ^1.6.4
   lint:
+    '@arethetypeswrong/core': ^0.18.3
     '@eslint/js': ^9.39.2
     '@eslint/markdown': ^7.4.0
     '@html-eslint/eslint-plugin': ^0.47.0
@@ -118,6 +120,9 @@ catalogs:
     eslint-plugin-unicorn: ^62.0.0
     eslint-plugin-vue: ^10.4.0
     jsonc-eslint-parser: ^2.4.1
+    knip: 6.38.0
+    npm-package-json-lint: ^9.1.0
+    publint: ^0.3.24
     typescript-eslint: ^8.62.1
     vue-eslint-parser: ^10.2.0
     yaml-eslint-parser: ^2.0.0
@@ -187,6 +192,6 @@ strictDepBuilds: true
 strictPeerDependencies: true
 trustPolicy: no-downgrade
 trustPolicyExclude:
-- vite@5.4.21
-- semver
+  - vite@5.4.21
+  - semver
 verifyDepsBeforeRun: install

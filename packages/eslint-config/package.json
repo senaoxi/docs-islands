@@ -39,6 +39,7 @@
     "@typescript-eslint/parser": "catalog:lint",
     "typescript-eslint": "catalog:lint",
     "typescript": "catalog:dev",
+    "limina": "catalog:dev",
     "globals": "catalog:test",
     "del-cli": "catalog:dev",
     "vitest": "catalog:test"

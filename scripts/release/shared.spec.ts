@@ -11,11 +11,11 @@ import {
 
 function releaseConfig(version: string): ResolvedReleasePackageConfig {
   return {
-    key: 'limina',
-    packageName: 'limina',
-    tagPrefix: 'limina',
-    relativeDir: 'packages/limina',
-    publishRelativeDir: 'packages/limina/dist',
+    key: 'logaria',
+    packageName: 'logaria',
+    tagPrefix: 'logaria',
+    relativeDir: 'packages/logaria',
+    publishRelativeDir: 'packages/logaria/dist',
     changelogRelativePath: 'CHANGELOG.md',
     changelogPaths: [],
     previewChecks: [],
@@ -23,7 +23,7 @@ function releaseConfig(version: string): ResolvedReleasePackageConfig {
     publishDir: '.',
     changelogPath: 'CHANGELOG.md',
     manifestPath: 'package.json',
-    manifest: { name: 'limina', version },
+    manifest: { name: 'logaria', version },
   };
 }
 
@@ -66,7 +66,7 @@ describe('release version precedence', () => {
       plan('1.0.0-beta.9', '1.0.0-beta.10').newVersion,
       '1.0.0-beta.10',
     );
-    assert.equal(plan('1.0.0-beta.10', '1.0.0').gitTag, 'limina/v1.0.0');
+    assert.equal(plan('1.0.0-beta.10', '1.0.0').gitTag, 'logaria/v1.0.0');
     assert.throws(
       () => plan('1.0.0-beta.10', '1.0.0-beta.2'),
       /must be greater/u,
@@ -78,9 +78,9 @@ describe('release version precedence', () => {
     assert.throws(() => plan('1.0.1', '1.0.0'), /must be greater/u);
   });
   it('selects the newest package tag and retains the legacy fallback', () => {
-    const tags = ['limina/v1.0.0-beta.9', 'limina/v1.0.0-beta.10'];
+    const tags = ['logaria/v1.0.0-beta.9', 'logaria/v1.0.0-beta.10'];
     assert.equal(
-      selectPreviousGitTag({ tagPrefix: 'limina', legacyTagPrefix: 'v' }, [
+      selectPreviousGitTag({ tagPrefix: 'logaria', legacyTagPrefix: 'v' }, [
         ...tags,
         'other/v9.0.0',
         'v2.0.0',
@@ -89,7 +89,7 @@ describe('release version precedence', () => {
     );
     assert.deepEqual(sortTagsByVersion(tags.toReversed()), [tags[1], tags[0]]);
     assert.equal(
-      selectPreviousGitTag({ tagPrefix: 'limina', legacyTagPrefix: 'v' }, [
+      selectPreviousGitTag({ tagPrefix: 'logaria', legacyTagPrefix: 'v' }, [
         'v1.0.0-2',
         'v1.0.0-10',
       ]),
@@ -103,6 +103,6 @@ describe('release version precedence', () => {
       () => compareVersions('v1.0.0', '1.0.0'),
       /Invalid version format/u,
     );
-    assert.equal(plan('1.0.0', '1.0.1').gitTag, 'limina/v1.0.1');
+    assert.equal(plan('1.0.0', '1.0.1').gitTag, 'logaria/v1.0.1');
   });
 });

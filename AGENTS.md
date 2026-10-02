@@ -6,7 +6,7 @@ This file defines the repository-wide operating contract for coding agents. It c
 
 - These rules apply across the repository.
 - A nearer `AGENTS.md` governs its subtree and may add, narrow, or explicitly override repository-level instructions where stated.
-- Before changing files in a subtree with a nested instruction file, read that file first. In particular, `packages/limina/AGENTS.md` governs Limina-specific work.
+- Before changing files in a subtree with a nested instruction file, read that file first.
 - Start project-context retrieval from `.agents/docs/README.md`. Read only the records relevant to the area being changed.
 - Treat source code, tests, manifests, checked-in configuration, and executable scripts as the current behavioral evidence.
 - PCR records preserve durable intent, rationale, decisions, and trade-offs. Unstamped drafts are not authoritative when they conflict with executable evidence.

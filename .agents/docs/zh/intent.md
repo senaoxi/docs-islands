@@ -32,7 +32,7 @@
 
 仓库开发环境通过根 `preinstall` 脚本和包管理器配置强制使用 pnpm。这是仓库约束，并不意味着已发布包的消费者必须使用 pnpm。
 
-Limina、Logaria 和 `@docs-islands/vitepress` 是独立的公开发布单元。发布配置为每个包分配独立的包目录、发布目录、版本、changelog 和 tag 前缀。
+Logaria 和 `@docs-islands/vitepress` 是本 workspace 的公开发布单元。发布配置为两者分配独立的包目录、发布目录、版本、changelog 和 tag 前缀。Limina 作为固定到 npm `0.4.0` 的外部开发依赖使用，其源码与发布不再属于本 workspace。
 
 ## 由实现推导的结果
 
@@ -40,7 +40,7 @@ Adapter 数组和 adapter contract 允许多个 adapter 实例参与编排，但
 
 `@docs-islands/core` 与 `@docs-islands/vitepress` 的分离，使框架专属包能够使用框架无关的抽象。源码建立了这种结构，但没有建立设计理由。
 
-仓库可以在一个 workspace 内开发和发布 Docs Islands、Limina 和 Logaria，而不将它们合成一个发布包。这由独立的 manifest、构建产物、release entries 和 tags 推导而来。
+仓库可以在一个 workspace 内开发和发布 Docs Islands 与 Logaria，而不将它们合成一个发布包。两者的 manifest、构建产物、release entries 和 tags 仍然独立；外部 Limina CLI 负责该 workspace 的治理。
 
 ## 人类明确提出的文档方向
 

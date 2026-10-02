@@ -31,6 +31,7 @@
     "@pnpm/workspace.read-manifest": "catalog:dev",
     "@types/picomatch": "catalog:dev",
     "@docs-islands/eslint-config": "workspace:*",
+    "limina": "catalog:dev",
     "typescript": "catalog:dev",
     "pathe": "catalog:dev",
     "is-in-ci": "catalog:dev",

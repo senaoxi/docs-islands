@@ -25,7 +25,7 @@ Package names and descriptions do not establish design rationale, future publica
 
 Generated `dist` directories are excluded from workspace discovery.
 
-The current discovered workspace includes the root project, published packages, private packages, package documentation sites, the VitePress playground and smoke workspace, the Limina smoke workspace, and the Logaria plugin test workspace.
+The current discovered workspace includes the root project, published packages, private packages, package documentation sites, the VitePress playground and smoke workspace, the Logaria plugin test workspace.
 
 ## Documentation publication boundary
 
@@ -51,7 +51,6 @@ Release scripts and package manifests identify three independent publication tar
 | ------------------------- | ----------------------: | ------------------------------------------------------------------------------------------------------ |
 | `@docs-islands/vitepress` |                     yes | VitePress integration package with node, client, React adapter, theme, and development-tooling exports |
 | `logaria`                 |                     yes | Runtime logger with helper, core, plugin, and types exports, including build-time pruning facilities   |
-| `limina`                  |                     yes | CLI for monorepo architecture, source, package, release, proof, and TypeScript graph governance        |
 
 Each release target has a separate package directory, built publish directory, version, changelog, tag prefix, build step, package checks, and release checks.
 
@@ -107,7 +106,7 @@ Logaria is packaged and released independently and is not structurally coupled t
 
 ## Limina boundary
 
-Limina is an independently built and published CLI package with a `limina` binary.
+Limina is an external npm CLI dependency with a `limina` binary. All nine development consumers use the existing dev catalog pinned exactly to `0.4.0`, with no caret or tilde. Its source, docs, fixtures and release targets are outside this workspace; the [extraction record](./history-extraction.md) owns provenance and recovery.
 
 The root repository uses Limina configuration and commands for:
 
@@ -121,17 +120,17 @@ The root repository uses Limina configuration and commands for:
 
 Current graph rules constrain client and shared runtime imports and project references. They reject configured Node.js built-in dependencies and configured references across client, shared, and node runtime boundaries.
 
-Current package checks cover only the configured built outputs for Logaria, Limina, and `@docs-islands/vitepress`.
+Current package checks cover the configured built outputs for Logaria and `@docs-islands/vitepress`.
 
 Limina is a development and release governance tool. It is not a frontend runtime dependency of the VitePress browser output.
 
 A Limina failure indicates that a configured governance rule, package check, release check, proof, or checker did not pass. It requires investigation; the source does not define a universal defect classification for every failure.
 
-Start at [limina.md](./limina.md) for Limina's package-local knowledge map. Its [system model](./limina-system-model.md) owns authority and relation definitions; its [lifecycle record](./limina-lifecycle.md) owns state, publication and mutation contracts. This repository architecture record only owns Limina's relationship to the other workspace units.
+The root configuration and the installed npm artifact establish the governed commands. Limina’s implementation records remain in the original-history archive. This architecture record owns only its relationship to the retained workspace units.
 
 ## Derived implementation consequences
 
-The three published packages can version and release independently while sharing private implementation and build packages in one workspace.
+The two published packages can version and release independently while sharing private implementation and build packages in one workspace.
 
 The root release configuration does not include Core, repository utilities, agent tooling, ESLint configuration, or the license plugin as publication targets. Their manifests also mark them as private.
 
@@ -141,6 +140,5 @@ The configured graph rules enforce only the boundaries represented by their labe
 
 - Is support for documentation frameworks other than VitePress a long-term reason for the Core and VitePress separation?
 - Should Logaria remain scoped to Docs Islands usage or develop as a general logging package?
-- Will Limina and Docs Islands remain in the same monorepo long term?
 - Are any current private packages intended for independent publication?
 - Is the plugins workspace expected to expand into a broader plugin collection?
