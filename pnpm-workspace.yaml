@@ -56,7 +56,7 @@ catalogs:
     is-in-ci: ^2.0.0
     lint-staged: ^16.1.5
     magic-string: ^0.30.17
-    markdown-it: ^14.2.0
+    markdown-it: ^14.3.1
     nx: ^23.2.1
     pathe: ^2.0.3
     picocolors: 1.1.1
@@ -157,7 +157,7 @@ overrides:
   form-data: 4.0.6
   gray-matter>js-yaml: 3.15.2
   lodash: 4.18.0
-  markdown-it: ^14.2.0
+  markdown-it: ^14.3.1
   minimatch@^10.0.0: ^10.2.5
   minimatch@^10.0.0>brace-expansion: 5.0.9
   minimatch@^3.0.0: ^3.1.4
