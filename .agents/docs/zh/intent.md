@@ -6,7 +6,7 @@
 
 本记录描述由当前源码、测试、manifest、配置、构建输入、public exports 和命令执行建立的范围。
 
-实现不能建立目标受众、长期产品定位、未来框架覆盖、设计理由和永久非目标。这些内容需要人类确认。
+仅凭实现不能建立目标受众、长期产品定位、未来框架覆盖、设计理由和永久非目标。下文单独记录人类明确提出的文档方向，区别于已交付支持；其他方向问题仍需人类确认。
 
 ## 当前实现
 
@@ -42,6 +42,16 @@ Adapter 数组和 adapter contract 允许多个 adapter 实例参与编排，但
 
 仓库可以在一个 workspace 内开发和发布 Docs Islands、Limina 和 Logaria，而不将它们合成一个发布包。这由独立的 manifest、构建产物、release entries 和 tags 推导而来。
 
+## 人类明确提出的文档方向
+
+2026-10-01，用户明确提出 Docs Islands 应桥接多个文档框架与多个 UI 框架：文档框架处于底层，Docs Islands 处于中间桥接层，UI 框架处于上层。这是产品方向，不是新增集成已经交付的证据。
+
+[首页示意图](../../../docs/.vitepress/theme/components/landing/DocsHeroMockup.vue) 必须清楚呈现这一关系，并区分当前支持与规划中的集成。VitePress 和 React 是当前支持的路径，证据来自[支持的 adapter 集合](../../../packages/vitepress/src/node/constants/adapters/index.ts)、[orchestrator](../../../packages/vitepress/src/node/core/orchestrator.ts) 和 [package exports](../../../packages/vitepress/package.json)。Docusaurus、Nextra、Astro、Vue、Svelte 和 Solid 仅作为规划示例出现。图中展示它们不代表已实现、优先级、发布日期或对某个具体集成路线图的承诺。
+
+本次首页变更中，用户要求参考 [Vite](https://vite.dev/) 的分层交互，在文档框架被悬停、键盘聚焦或轻触时，产生有节制的向上传递响应。示意图必须保留键盘访问、遵循减少动态效果偏好，并适配本站亮暗主题与手机。Core controls 从本次首页移除，包括组件内不再使用的专用文案和样式；这不移除 Logaria 或 Limina 的产品能力、包或文档。
+
+来源：用户在 2026-10-01 明确提出的首页请求。本记录没有人类认可标记。首页实现的验证与本方向分开，必须由实现该方向的变更报告。
+
 ## 当前实现未建立的内容
 
 当前实现建立了 VitePress 是唯一文档框架集成的事实，没有建立支持其他文档框架的计划。
@@ -54,8 +64,8 @@ Adapter 数组和 adapter contract 允许多个 adapter 实例参与编排，但
 
 ## 需要人类确认的方向
 
-- Docs Islands 是否计划支持 VitePress 以外的文档框架？
-- Docs Islands 是否计划新增 React 以外的 UI 框架 adapter？
+- 应优先推进哪些新增文档框架集成，哪些证据能够建立对它们的支持？
+- 应优先推进哪些新增 UI 框架 adapter，哪些证据能够建立对它们的支持？
 - 根 Docs Islands 项目、Limina 和 Logaria 的长期产品关系是什么？
 - 主要目标用户是谁？
 - 哪些方向是永久非目标？

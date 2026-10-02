@@ -17,8 +17,9 @@
 | 领域                          | 记录                                                                 | 范围                                                                                             |
 | ----------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | 仓库层面已实现的范围          | [intent.md](./intent.md)                                             | 仓库当前对外提供的产品范围，以及源码无法回答的方向问题                                           |
+| Docs 首页框架示意图           | [intent.md](./intent.md#人类明确提出的文档方向)                      | 人类明确提出的多框架桥接方向、已支持与规划路径、交互、可访问性和移除范围                         |
 | 工具链与强制约束              | [technology-stack.md](./technology-stack.md)                         | 包管理器、Node.js、模块格式、任务执行、构建工具和治理工具                                        |
-| Workspace 与包边界            | [architecture.md](./architecture.md)                                 | Workspace 布局、发布单元、私有包、依赖方向、adapter 边界和构建边界                               |
+| Workspace 与包边界            | [architecture.md](./architecture.md)                                 | Workspace 布局、发布单元、私有包、依赖方向、adapter 边界、构建边界和根落地页展示                 |
 | Limina 架构入口与未决方向     | [limina.md](./limina.md)                                             | 阅读路线、公开接口、证据层级、未决的人类判断                                                     |
 | Limina 实体、authority 与关系 | [limina-system-model.md](./limina-system-model.md)                   | Identity、CLI 实际接线、phase contracts、graph 与 scheduling 的区别、失败域                      |
 | Limina checker 依赖事实       | [limina-semantics.md](./limina-semantics.md)                         | Effective roots、bounded TypeScript、occurrence evidence、framework adapters 与能力边界          |

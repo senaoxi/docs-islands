@@ -7,14 +7,16 @@ markdownStyles: false
 
 hero:
   name: 'Docs Islands'
-  tagline: Cross-framework Islands Architecture for documentation sites
+  text: 'Your docs. Real components.'
+  tagline: 'Bring React components into VitePress Markdown. Keep your pages static-first. Choose when each island becomes interactive.'
   image:
     src: /favicon.svg
     alt: Docs Islands
   actions:
     - theme: brand
-      text: Explore Products
-      link: '#core-package'
+      text: Read the guide
+      link: '/vitepress/'
+      target: _self
     - theme: alt
       text: View on GitHub
       link: https://github.com/senaoxi/docs-islands
