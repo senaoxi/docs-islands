@@ -16,7 +16,6 @@ npx skills add senaoxi/docs-islands --list
 npx skills add senaoxi/docs-islands --skill logaria
 ```
 
-
 安装 VitePress skill：
 
 ```bash

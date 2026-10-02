@@ -117,11 +117,11 @@ onBeforeUnmount(() => {
     aria-hidden="true"
     @pointerenter="activateIsland"
   >
-    <use :href="`${logoHref}#docs-islands-frame`" />
+    <use :href="`${logoHref}#docs-islands-vitepress-frame`" />
     <use
       ref="islandRef"
       class="logo-island"
-      :href="`${logoHref}#docs-islands-island`"
+      :href="`${logoHref}#docs-islands-vitepress-island`"
     />
   </svg>
 </template>

@@ -1,8 +1,9 @@
-<!-- Generated from assets/logo/docs-islands.svg. Run pnpm exec tsx scripts/sync-brand-assets.ts. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 448" color="#7051E8" role="img" aria-label="Docs Islands logo">
-  <g id="docs-islands-frame" transform="translate(32 20)" fill="currentColor">
-    <path d="M84 183H99C108.4 183 116 190.6 116 200V297C116 319.6 134.4 338 157 338H223C242.9 338 259 354.1 259 374V390C259 399.4 251.4 407 242 407H94C42.1 407 0 364.9 0 313V267C0 220.6 37.6 183 84 183Z"/>
-    <path d="M245 0H277C336.1 0 384 47.9 384 107V301C384 353 348 397 297 407V183C297 154 281 144 263 136C241 127 228 113 228 91V17C228 7.6 235.6 0 245 0Z"/>
+<!-- Generated from assets/logo/docs-islands-vitepress.svg. Run pnpm exec tsx scripts/sync-brand-assets.ts. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 448" color="#7051E8" role="img" aria-labelledby="docs-islands-vitepress-title">
+  <title id="docs-islands-vitepress-title">Docs Islands for VitePress</title>
+  <g id="docs-islands-vitepress-frame" fill="currentColor">
+    <path d="M56 146H100C113.3 146 124 156.7 124 170V307C124 322.5 136.5 335 152 335H220C233.3 335 244 345.7 244 359V403C244 416.3 233.3 427 220 427H80C53.5 427 32 405.5 32 379V170C32 156.7 42.7 146 56 146Z"/>
+    <path d="M248 20H368C394.5 20 416 41.5 416 68V272C416 285.3 405.3 296 392 296H348C334.7 296 324 285.3 324 272V140C324 124.5 311.5 112 296 112H248C234.7 112 224 101.3 224 88V44C224 30.7 234.7 20 248 20Z"/>
   </g>
-  <path id="docs-islands-island" transform="translate(32 20)" fill="currentColor" d="M168 194L220 181C235 177 249 187 249 202V251C249 263 242 273 230 276L179 289C164 293 151 283 151 267V218C151 207 157 197 168 194Z"/>
+  <path id="docs-islands-vitepress-island" fill="currentColor" d="M196 190L242 178C255 175 268 184 268 198V241C268 252 262 261 251 264L206 276C193 280 181 271 181 257V213C181 203 187 193 196 190Z"/>
 </svg>

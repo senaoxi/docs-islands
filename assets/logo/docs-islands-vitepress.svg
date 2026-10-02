@@ -1,4 +1,3 @@
-<!-- Generated from assets/logo/docs-islands-vitepress.svg. Run pnpm exec tsx scripts/sync-brand-assets.ts. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 448" color="#7051E8" role="img" aria-labelledby="docs-islands-vitepress-title">
   <title id="docs-islands-vitepress-title">Docs Islands for VitePress</title>
   <g id="docs-islands-vitepress-frame" fill="currentColor">

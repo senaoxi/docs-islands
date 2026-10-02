@@ -5,15 +5,15 @@
 | 依赖                       | 版本要求                  |
 | -------------------------- | ------------------------- |
 | Node.js                    | `^22.18.0` 或 `>=24.11.0` |
-| VitePress                  | `^1.6.3`                  |
+| VitePress                  | `^1.6.4`                  |
 | React / ReactDOM           | `^18.2.0`                 |
-| `@vitejs/plugin-react-swc` | `^3.9.0`                  |
+| `@vitejs/plugin-react-swc` | `^4.3.1`                  |
 
 ## 1. 安装依赖
 
 ```bash
-pnpm add -D @docs-islands/vitepress @vitejs/plugin-react-swc
-pnpm add react react-dom
+pnpm add -D @docs-islands/vitepress @vitejs/plugin-react-swc@^4.3.1
+pnpm add react@^18.2.0 react-dom@^18.2.0
 ```
 
 ## 2. 应用插件

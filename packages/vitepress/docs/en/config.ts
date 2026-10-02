@@ -51,7 +51,7 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
       {
         text: 'Options',
         activeMatch: '/options/',
-        link: '/options/',
+        link: '/options/logging',
       },
       {
         text: pkg.version,

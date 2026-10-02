@@ -62,6 +62,28 @@ The same request asks for less vertical space in the homepage diagram through la
 
 Source: the user's explicit logo selection and local implementation request on 2026-10-02. This record has no human vouch. Implementation evidence is owned by [the visual architecture record](./architecture.md#visual-identity-and-diagram-layout); validation must be reported by the implementing change.
 
+## Human-stated VitePress integration identity direction
+
+On 2026-10-02, the user accepted the revised integration mark: two offset rounded document boundaries surrounding a detached, tilted island. The earlier long, curved V was rejected because it suggested human organs. Keep the simpler geometric document slot and the parent's rounded solid forms and negative space; do not restore the rejected contour.
+
+The primary color is purple `#7051E8`. This identity belongs to `@docs-islands/vitepress`, the Docs Islands adaptation layer for VitePress; it does not claim to be the official upstream VitePress identity. Current framework support remains VitePress + React. The user authorized local adoption in the package navigation, homepage mark, favicons, and related brand entries, with a single native SVG source and the existing finite island animation and reduced-motion mechanism. Preserve the parent Docs Islands and other product identities. This request does not authorize staging unrelated work, a commit, push, or deployment, or moving the user's reference PNGs.
+
+Source: the user's explicit rejection, revised-logo acceptance, and local implementation request on 2026-10-02. This record has no human vouch. The adopted geometry is preserved in [`assets/logo/docs-islands-vitepress.svg`](../../assets/logo/docs-islands-vitepress.svg); implementation evidence is owned by [the visual architecture record](./architecture.md#visual-identity-and-diagram-layout). Validation must be reported by the implementing change.
+
+### Integration landing page
+
+On 2026-10-02, the user expanded local work to the VitePress integration's bilingual landing page. Make the page restrained and technical, with a complete reading order: why a VitePress document needs local interaction, current React support, effective installation/configuration/Markdown examples, and source-verified HMR, build output, and SSR behavior. The primary CTA must enter the correct guide; secondary entries expose examples and options. Use the approved purple integration identity, avoid generic feature-card repetition and oversized diagrams, and coordinate desktop/phone and light/dark presentations. Preserve existing navigation, deep links, deployment base, and the parent proxy boundary. New controls must support keyboard/focus and, when animation is offered, pause/replay and reduced motion. This is a local implementation request, without commit, push, or deployment.
+
+The user's subsequent eleven-step demo direction requires simulated console input alongside the original Hello, world! page, complete build and client setup, React creation and Markdown use, source-grounded rendering/HMR logs, and an actual interactive preview. Editing the component's copy must preserve the user's count on the same instance; automatic stage changes must not clear it. Playback gives interaction priority and supports pause/continue, explicit restart, and reduced motion. Verify the adapter's real HMR behavior before presenting state preservation; a static simulation must not conceal a runtime capability gap or authorize an unrelated runtime refactor.
+
+The user then required every file edit to use vi over an already installed/configured site: show the original minimal contents, preserve existing configuration, make NORMAL/INSERT and cursor position clear, and save/quit with Esc and `:wq`. Do not use heredocs, shell file redirection, or directory initialization as demo actions. Typing must be substantially slower, grouped by code token or phrase with reproducible bursts and pauses at semantic boundaries, lines, mode changes and saves. Verify a complete actual browser playback and report its duration; hidden/offscreen time must not cause progress catch-up.
+
+The user further required developer-style insertion: append imports after the existing dependency declarations or open a line that pushes the following original content down, without temporarily overwriting or reordering it. Opening braces must visibly produce their closing partners; move the cursor inside, then enter/indent and fill the contents. Consistent assistance may cover other paired delimiters. Present this as an assisted editor, and inspect the actual insertion locations and intermediate paired states during browser playback.
+
+The user explicitly clarified that `export default config;` and the theme’s closing `};` must first move down one line before the new statement or method is entered at their original positions. Intermediate input must never concatenate with those original lines.
+
+Source: the user's explicit integration-landing implementation request on 2026-10-02. This record has no human vouch. Source-owned behavior is recorded in [the landing architecture](./architecture.md#vitepress-integration-landing-presentation); validation remains separate.
+
 ## Not established by the current implementation
 
 The current implementation establishes that VitePress is the only documentation-framework integration. It does not establish a plan to support other documentation frameworks.

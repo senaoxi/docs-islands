@@ -45,13 +45,33 @@ Docs Islands 的 Vercel project 只负责合并后的静态产物，不在内部
 
 ### 视觉标识与图示布局
 
-[`assets/logo/docs-islands.svg`](../../../assets/logo/docs-islands.svg) 是唯一几何源。其稳定的外部轮廓与分离的小岛使用独立 SVG fragment ID。[`scripts/sync-brand-assets.ts`](../../../scripts/sync-brand-assets.ts) 确定性地生成十个用于仓库资产和两个文档站的静态版本；`pnpm exec tsx scripts/sync-brand-assets.ts --check` 校验它们的字节内容。紫色、深墨色、白色和黑色 mask 版本共享相同路径。
+[`assets/logo/docs-islands.svg`](../../../assets/logo/docs-islands.svg) 是主产品标识的几何源。[`assets/logo/docs-islands-vitepress.svg`](../../../assets/logo/docs-islands-vitepress.svg) 独立负责 VitePress 集成标识：两块错位圆角文档边界与一片分离、倾斜的小岛。每个源都通过产品专属 SVG fragment ID 分开稳定的边界与小岛。[`scripts/sync-brand-assets.ts`](../../../scripts/sync-brand-assets.ts) 确定性地生成十个静态版本：六个主标资产与四个集成资产；`pnpm exec tsx scripts/sync-brand-assets.ts --check` 校验它们的字节内容。集成源生成 `assets/logo/islands-vitepress.svg` 及 package 站点的 logo、favicon 和黑色 Safari mask。双语 package README 引用集成的规范源。主产品与其他产品标识保留各自几何；同一标识的各版本共享该标识的路径。内容未变的生成文件不会被重写。
 
-根站与 package 的 `NavBarLogo.vue` 组件引用这些外部 fragment，不复制路径数据。根站图示在中间层复用同一组件。小岛采用 700 ms 的有限激活动画、140 ms 延迟和 `cubic-bezier(0.22, 1, 0.36, 1)`，参考独立维护的 Limina 站点有限入场节奏。进入视口时播放一次，也可响应指针进入、链接聚焦、主题变化或图示激活，没有空闲循环。离开视口、隐藏文档、启用减少动态效果或卸载时取消动画；卸载时清理 observer 和监听器。
+根站与 package 的 `NavBarLogo.vue` 组件分别引用各自标识的外部 fragment，不复制路径数据。`withBase('/logo.svg')` 保留 package 站点的 `/repos/docs-islands/vitepress/` 资产前缀。两个 package 首页都使用生成的 favicon 作为静态 hero 标识；配置中的 icon 与 mask 入口也来自同一集成源。根站图示继续在中间层复用主标组件。集成标识遵循[人类明确提出的子项目方向](./intent.md#人类明确提出的-vitepress-集成标识方向)。小岛采用 700 ms 的有限激活动画、140 ms 延迟和 `cubic-bezier(0.22, 1, 0.36, 1)`，参考独立维护的 Limina 站点有限入场节奏。进入视口时播放一次，也可响应指针进入、链接聚焦、主题变化或图示激活，没有空闲循环。离开视口、隐藏文档、启用减少动态效果或卸载时取消动画；卸载时清理 observer 和监听器。
 
 根站图示负责 304 px 场景、68 px 框架卡片和 56 px 桥接层。连接线坐标跟随卡片行及激活后的偏移。窄宽度下页脚可自然换行；紧凑性不依赖对整个图示应用 transform 或缩小标签文字。只有 VitePress + React 显示为已支持，保留原有规划路径与输入行为。该布局与标识遵循[人类明确提出的视觉方向](./intent.md#人类明确提出的视觉标识方向)。
 
 这些事实由源码归属建立。浏览器、构建、typecheck 和治理结果必须由实现变更报告；本记录本身不宣称成功执行。
+
+### VitePress 集成落地页展示
+
+集成落地页由双语 `packages/vitepress/docs/*/index.md` 页面、[`VitePressLanding.vue`](../../../packages/vitepress/docs/.vitepress/theme/components/VitePressLanding.vue)、[`LandingDemo.tsx`](../../../packages/vitepress/docs/components/react/LandingDemo.tsx) 和 [`LandingCounter.tsx`](../../../packages/vitepress/docs/components/react/LandingCounter.tsx) 负责。完整接入片段与核实后的日志／事件摘录位于 [`landing-demo-source.ts`](../../../packages/vitepress/docs/components/react/landing-demo-source.ts)，演示样式位于 [`LandingDemo.css`](../../../packages/vitepress/docs/components/react/LandingDemo.css)。阅读顺序是组件边界、控制台接入演示、四种渲染策略、完整最小接入、开发／构建行为，以及指南 CTA。它替换 package 首页的大面积光晕 hero 与重复功能卡片网格；根落地页继续独立负责。
+
+演示是真实的 `client:visible` React 小岛，通过 Vue 落地页组件的 slot 传入。初始 HTML 经过预渲染；React 在 hydration 中从服务端快照切换为客户端快照时启用计数器。Reducer 依次推进原始 Markdown 页面、构建配置、必需的客户端 theme 注册、组件创建、Markdown 集成、渲染日志、可交互计数器、组件文案修改、HMR 事件与更新后的预览。回放表达模拟的文件输入和录制的控制台／事件摘录，不在页面中写磁盘或实际启动开发服务器。摘录标明 adapter 的 `runtime.react.dev-render` 日志组与 `docs-islands:react-hmr:prepare:fast-refresh` 开发事件；路径经过缩短，不虚构耗时。
+
+每个文件阶段在固定、已配置的 VitePress 站点上使用模拟 vi 缓冲区。既有配置的 title 与 description、默认主题以及 Hello, world! 在按定位增补接入代码时持续可见。编辑器显示行号、定位光标、NORMAL／INSERT 模式、导航／编辑按键、Esc 与 `:wq`，随后回到已保存／退出的 shell 状态。组件通过 vi 创建；文案更新重新打开 vi，只替换标题这一行。[`landing-demo-playback.ts`](../../../packages/vitepress/docs/components/react/landing-demo-playback.ts) 负责这些子状态与确定性的词组输入计划：标识符内短促连续输入，在词组、语句和换行之间较长停顿，并有初始阅读停顿及明确的模式／保存停顿。调度器每个定时器只推进一帧，隐藏或离开视口时取消；返回后从同一帧继续，不消耗后台经过的时间。减少动态效果时保留分开的手动编辑步骤。已有目录与初始 VitePress 配置是 fixture 前提，不是演示动作。
+
+辅助编辑器按插入、配对、换行／缩进和光标移动动作保存真实的缓冲区快照及光标位置。新增 imports 追加到已有依赖声明之后；插入换行会将原有后续内容向下推。花括号、圆括号、方括号与引号先成对出现，再填写内部；自动补齐的闭合符号通过移过光标处理，不重复输入。开行动作在新代码块输入任何字符前先保留分隔换行，因此原有 `export default config;` 与外层 `};` 在每个中间缓冲区中都保持独立的后续行。标题更新保留周围的 JSX 标签和计数 hook。界面明确说明配对／缩进辅助，不宣称它们是原生 vi 默认行为。
+
+计数器在阶段变化中保持挂载，更新标题是在同一组件实例上改变 props。播放在首次可交互阶段停下；指针／焦点交互会暂停播放。继续阶段从不重置用户状态。只有明确的重新开始控件改变计数器 key 并重置演示；计数器自身的重置仍是用户明确操作。展示的 HMR 场景只修改字符串，保持组件导出与 hook 结构不变。Adapter 通过 [`createFrameworkComponentHmrPlugin`](../../../packages/vitepress/src/node/plugins/vite-plugin-framework-component-hmr.ts) 与 [React 客户端集成](../../../packages/vitepress/src/client/adapters/react/index.ts) 将这条路径交给 React Fast Refresh。这不承诺所有修改都保留状态，也不改变产品 runtime。
+
+当前支持明确为 VitePress + React 18，与 adapter 及 peer 声明一致。模式说明区分构建时 SSR、客户端接管和仅在浏览器渲染。完整接入包含依赖安装、构建插件、客户端 theme 注册、组件和 Markdown。双语入门指南的 VitePress／SWC 要求及 React 安装范围与 package peer 声明一致。接入参考 Tab 在 SSR 中完整、可选中，使用方向键、Home 和 End 的游动焦点。控制台初始为静态 Hello, world! 示例；只有主动播放才开始输入。暂停／继续、手动下一步、重新开始均为带可见焦点的键盘控件。部分输入时复制仍使用完整源码。隐藏文档及离开视口时保留播放进度；减少动态效果时可手动逐步查看，不进行逐字输入，动态切换该偏好会停止播放；卸载时清理定时器与监听器。`spa:sync-render` 链接保留其资源加载代价。
+
+Vue scoped 样式将完整的深色祖先／组件选择器包在 `:global(.dark .vitepress-landing)` 中。拆成 `:global(.dark) .vitepress-landing` 会使编译后的规则指向祖先，不能覆盖组件本地色板；深色截图与实际计算后的色板检查须捕获这种对比度问题。
+
+配置入口使用现有 `/options/logging` 文档及其侧栏。英文导航此前链接到不存在的 `/options/` 索引；现将目标修正为与中文配置入口一致，不改变导航结构。
+
+落地页链接通过 `withBase` 与当前语言组合，保持在 `/repos/docs-islands/vitepress/` 内。既有导航、文档深链、主站代理边界、package runtime、manifest 和部署配置不变。展示遵循[人类明确提出的集成落地页方向](./intent.md#集成落地页)。浏览器、HMR、构建、typecheck 和治理结果必须由实现变更报告；本记录本身不宣称成功执行。
 
 ## 已发布包
 
