@@ -43,6 +43,16 @@ The presentation uses sans-serif headings, restrained purple accents, shared ali
 
 `DocsMarkdownExample.vue` owns the example's character input, cursor, pause/resume, replay, and complete-text copy. It presents an `index.md` source file without a shell prompt or simulated command output. The complete example is available in SSR, to screen readers, and when reduced motion is requested. A hidden full-text layout reserve prevents the panel from changing height during typing. Normal playback starts when the example enters the viewport, runs once, and keeps its progress while offscreen or while the document is hidden; resuming resets the tick clock rather than consuming background time. Turning on reduced motion finishes immediately, and turning it off leaves the complete example until replay is requested. The copy control always uses the complete Markdown; selecting and copying during typing also copies the complete example instead of a truncated prefix. Clipboard failure reveals the full selectable text. Timers, the visibility observer, and media/document listeners are released on unmount. These controls and styles belong only to this example region and add no package dependency or execution capability.
 
+### Visual identity and diagram layout
+
+[`assets/logo/docs-islands.svg`](../../assets/logo/docs-islands.svg) is the single geometry source. Its stable outer contours and detached island have separate SVG fragment IDs. [`scripts/sync-brand-assets.ts`](../../scripts/sync-brand-assets.ts) deterministically generates ten static variants for repository assets and both documentation sites; `pnpm exec tsx scripts/sync-brand-assets.ts --check` verifies their bytes. Purple, ink, white, and black mask variants share the same paths.
+
+The root and package `NavBarLogo.vue` components reference those external fragments rather than copying path data. The root diagram reuses the same component in its middle layer. The island uses a finite 700 ms activation with a 140 ms delay and `cubic-bezier(0.22, 1, 0.36, 1)`, informed by the independently maintained Limina site's finite reveal cadence. It runs once on viewport entry and may respond to pointer entry, link focus, theme change, or diagram activation. There is no idle loop. Leaving the viewport, hiding the document, enabling reduced motion, or unmounting cancels the animation; observers and listeners are released on unmount.
+
+The root diagram owns a 304 px scene, 68 px framework tiles, and a 56 px bridge. Connector coordinates follow the tile rows and their active offsets. The footer may wrap naturally at narrow widths; compactness does not rely on a transform applied to the whole diagram or smaller label text. Only VitePress + React is presented as available, with the existing planned paths and input behavior retained. This layout and identity follow [the human-stated visual direction](./intent.md#human-stated-visual-identity-direction).
+
+These facts are established by source ownership. Browser, build, typecheck, and governance results must be reported by the implementing change; this record does not itself claim a successful run.
+
 ## Published packages
 
 Release scripts and package manifests identify three independent publication targets:

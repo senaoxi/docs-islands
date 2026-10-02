@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useData, useRoute } from 'vitepress';
 import { computed, ref } from 'vue';
+import NavBarLogo from '../NavBarLogo.vue';
 
 const { lang } = useData();
 const route = useRoute();
@@ -99,11 +100,18 @@ const clearPreview = () => {
 const connectorPositions = [80, 240, 400, 560];
 const docsPath = (index: number) => {
   const x = connectorPositions[index];
-  return `M ${x} 304 V 285 Q ${x} 275 ${x < 320 ? x + 10 : x - 10} 275 H ${x < 320 ? 310 : 330} Q 320 275 320 265 V 248`;
+  const startY =
+    activeFramework.value === docsFrameworks[index].name ? 222 : 224;
+  const corner = startY - 220;
+  return `M ${x} ${startY} Q ${x} 220 ${x < 320 ? x + corner : x - corner} 220 H ${x < 320 ? 316 : 324} Q 320 220 320 216 V 186`;
 };
 const uiPath = (index: number) => {
   const x = connectorPositions[index];
-  return `M 320 172 V 158 Q 320 148 ${x < 320 ? 310 : 330} 148 H ${x < 320 ? x + 10 : x - 10} Q ${x} 148 ${x} 138 V 124`;
+  const endY =
+    isActive.value && (isPlanned.value || uiFrameworks[index].available)
+      ? 89
+      : 92;
+  return `M 320 130 V 102 Q 320 96 ${x < 320 ? 314 : 326} 96 H ${x < 320 ? x + 4 : x - 4} Q ${x} 96 ${x} 92 V ${endY}`;
 };
 </script>
 
@@ -122,7 +130,7 @@ const uiPath = (index: number) => {
     >
       <svg
         class="flow-connectors"
-        viewBox="0 0 640 410"
+        viewBox="0 0 640 304"
         preserveAspectRatio="none"
         aria-hidden="true"
       >
@@ -226,24 +234,7 @@ const uiPath = (index: number) => {
         </div>
         <div class="bridge-rail">
           <div class="bridge-card">
-            <svg
-              class="bridge-mark"
-              viewBox="0 0 40 40"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M4 26 L20 34 L36 26 M4 19 L20 27 L36 19 M4 12 L20 4 L36 12 L20 20 Z"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M20 10 V15 M17.5 12.5 H22.5"
-                stroke="currentColor"
-                stroke-width="1.5"
-              />
-            </svg>
+            <NavBarLogo class="bridge-mark" :active="isActive" />
             <div>
               <strong>docs-islands</strong>
               <span>{{ copy.bridgeDetail }}</span>
@@ -340,7 +331,7 @@ const uiPath = (index: number) => {
 }
 
 .mockup-eyebrow {
-  margin: 0 0 14px;
+  margin: 0 0 6px;
   color: var(--docs-home-accent-strong);
   font-family: var(--docs-home-font-mono);
   font-size: 10px;
@@ -362,7 +353,7 @@ const uiPath = (index: number) => {
 
 .mockup-intro {
   max-width: 560px;
-  margin: 12px 0 0;
+  margin: 6px 0 0;
   color: var(--flow-muted);
   font-size: 14px;
   line-height: 1.7;
@@ -370,7 +361,7 @@ const uiPath = (index: number) => {
 
 .flow-scene {
   position: relative;
-  height: 410px;
+  height: 304px;
   margin-top: 14px;
   user-select: none;
 }
@@ -461,15 +452,15 @@ const uiPath = (index: number) => {
 }
 
 .layer-ui {
-  top: 38px;
+  top: 24px;
 }
 
 .layer-bridge {
-  top: 172px;
+  top: 130px;
 }
 
 .layer-docs {
-  top: 304px;
+  top: 224px;
 }
 
 .layer-label {
@@ -515,12 +506,12 @@ const uiPath = (index: number) => {
   width: calc(100% - 14px);
   max-width: 122px;
   min-width: 0;
-  height: 86px;
+  height: 68px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 10px 5px;
+  gap: 4px;
+  padding: 6px 5px;
   border: 1px dashed var(--flow-line);
   border-radius: 10px;
   background: var(--docs-home-surface);
@@ -548,7 +539,7 @@ const uiPath = (index: number) => {
 
 .framework-mark {
   display: grid;
-  height: 24px;
+  height: 22px;
   place-items: center;
   color: inherit;
   font-family: var(--docs-home-font-mono);
@@ -558,8 +549,8 @@ const uiPath = (index: number) => {
 }
 
 .framework-mark svg {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
 }
 
 .framework-tile strong {
@@ -637,7 +628,7 @@ const uiPath = (index: number) => {
   position: relative;
   display: flex;
   width: min(248px, 100%);
-  height: 76px;
+  height: 56px;
   align-items: center;
   justify-content: center;
   gap: 12px;
@@ -656,9 +647,8 @@ const uiPath = (index: number) => {
 
 .bridge-mark {
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  color: var(--flow-accent);
+  width: 32px;
+  height: 32px;
 }
 
 .bridge-card strong {
@@ -712,16 +702,19 @@ const uiPath = (index: number) => {
 
 .mockup-footer {
   display: flex;
-  min-height: 48px;
+  min-height: 36px;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding-top: 16px;
+  gap: 8px 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--docs-home-border);
 }
 
 .flow-caption {
   display: flex;
+  min-width: 0;
+  flex: 1 1 160px;
   align-items: center;
   gap: 9px;
   margin: 0;
@@ -777,7 +770,7 @@ const uiPath = (index: number) => {
 }
 
 .interaction-hint {
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   color: var(--flow-muted);
   font-size: 10px;
   line-height: 1.6;
@@ -814,7 +807,7 @@ const uiPath = (index: number) => {
   }
 
   .flow-scene {
-    margin-top: 30px;
+    margin-top: 18px;
   }
 
   .flow-scene::before,
@@ -852,13 +845,7 @@ const uiPath = (index: number) => {
   }
 
   .framework-tile small {
-    font-size: 8px;
-  }
-
-  .mockup-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
+    font-size: 9px;
   }
 
   .flow-legend {

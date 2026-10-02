@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://senao.me/repos/docs-islands" target="_blank" rel="noopener noreferrer">
-    <img width="180" src="https://senao.me/repos/docs-islands/favicon.svg" alt="Docs Islands logo">
+    <img width="180" src="./assets/logo/docs-islands.svg" alt="Docs Islands logo">
   </a>
 </p>
 <br/>

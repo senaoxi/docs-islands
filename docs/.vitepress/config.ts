@@ -35,7 +35,7 @@ const vitepressConfig: UserConfig<DefaultTheme.Config> = defineConfig({
       {
         rel: 'mask-icon',
         href: `${base}safari-pinned-tab.svg`,
-        color: '#646CFF',
+        color: '#7051E8',
       },
     ],
     ['meta', { name: 'theme-color', content: '#0f172a' }],

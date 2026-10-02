@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://senao.me/repos/docs-islands/vitepress/zh/guide/" target="_blank" rel="noopener noreferrer">
-    <img width="180" src="https://senao.me/repos/docs-islands/vitepress/favicon.svg" alt="logo">
+    <img width="180" src="../../assets/logo/docs-islands.svg" alt="Docs Islands logo">
   </a>
 </p>
 <br/>

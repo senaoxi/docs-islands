@@ -489,7 +489,7 @@ body {
 .VPHome .docs-hero-mockup {
   border-radius: 12px;
   box-shadow: var(--docs-home-shadow-lg);
-  padding: 26px 22px 22px;
+  padding: 20px 20px 16px;
 }
 .VPHome .docs-hero-mockup .mockup-heading h2 {
   font-family: var(--vp-font-family-base);
@@ -505,7 +505,7 @@ body {
 }
 @container docs-home-diagram (max-width: 680px) {
   .VPHome .docs-hero-mockup .flow-scene {
-    margin-top: 30px;
+    margin-top: 18px;
   }
   .VPHome .docs-hero-mockup .flow-scene::before,
   .VPHome .docs-hero-mockup .flow-connectors {
@@ -535,12 +535,7 @@ body {
     font-size: clamp(9px, 2.5vw, 12px);
   }
   .VPHome .docs-hero-mockup .framework-tile small {
-    font-size: 8px;
-  }
-  .VPHome .docs-hero-mockup .mockup-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
+    font-size: 9px;
   }
   .VPHome .docs-hero-mockup .flow-legend {
     gap: 14px;
@@ -548,7 +543,7 @@ body {
 }
 @media (max-width: 480px) {
   .VPHome .docs-hero-mockup {
-    padding: 22px 14px 18px;
+    padding: 18px 14px 14px;
   }
   .VPHome .docs-hero-mockup .mockup-heading h2 {
     font-size: 20px;
