@@ -7,7 +7,7 @@ markdownStyles: false
 
 hero:
   name: 'Docs Islands'
-  text: 'Your docs. Real components.'
+  text: 'Your docs.<br />Real components.'
   tagline: 'Bring React components into VitePress Markdown. Keep your pages static-first. Choose when each island becomes interactive.'
   image:
     src: /favicon.svg

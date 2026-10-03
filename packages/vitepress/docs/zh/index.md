@@ -17,6 +17,6 @@ import VitePressLanding from '../.vitepress/theme/components/VitePressLanding.vu
 
 <VitePressLanding locale="zh">
   <template #demo>
-    <LandingDemo client:visible locale="zh" />
+    <LandingDemo client:visible locale="zh" pet="sunset" />
   </template>
 </VitePressLanding>

@@ -2,6 +2,14 @@
 import { useData, useRoute } from 'vitepress';
 import { computed, ref } from 'vue';
 import NavBarLogo from '../NavBarLogo.vue';
+import docusaurusLogo from './framework-logos/docusaurus.svg';
+import nextraLogo from './framework-logos/nextra.svg';
+import reactLogo from './framework-logos/react.svg';
+import rspressLogo from './framework-logos/rspress.svg';
+import solidLogo from './framework-logos/solid.svg';
+import svelteLogo from './framework-logos/svelte.svg';
+import vitepressLogo from './framework-logos/vitepress.svg';
+import vueLogo from './framework-logos/vue.svg';
 
 const { lang } = useData();
 const route = useRoute();
@@ -12,10 +20,8 @@ const isZh = computed(
 const copy = computed(() =>
   isZh.value
     ? {
-        eyebrow: '跨框架，清晰的边界',
-        title: '你的文档，你的 UI。',
-        intro: '连接文档框架与 UI 运行时，让内容保持静态，让交互成为孤岛。',
-        diagramLabel: '文档框架通过 Docs Islands 桥接 UI 框架',
+        title: '框架连接',
+        diagramLabel: '文档框架的原生 UI 支持与 Docs Islands 跨框架桥接',
         uiLayer: 'UI 框架',
         uiNote: '各自的运行时',
         bridgeLayer: '桥接层',
@@ -24,19 +30,18 @@ const copy = computed(() =>
         docsNote: '内容、路由与构建',
         bridgeDetail: 'SSR · 按需水合',
         available: '已支持',
+        native: '默认支持',
+        nativeNote: 'VitePress 默认支持 Vue；React 由 Docs Islands 桥接。',
         planned: '规划中',
         current: '当前支持',
         preview: '规划示意',
-        hint: '悬停、聚焦或轻触文档框架，查看连接',
+        hint: '悬停、聚焦或轻触，查看连接',
         previewAction: '查看连接',
       }
     : {
-        eyebrow: 'Cross-framework, clear boundaries',
-        title: 'Your docs. Your UI.',
-        intro:
-          'A bridge from documentation to UI runtimes. Content stays static. Interaction becomes an island.',
+        title: 'Framework connections',
         diagramLabel:
-          'Documentation frameworks connect to UI frameworks through Docs Islands',
+          'Native UI support and cross-framework connections through Docs Islands',
         uiLayer: 'UI frameworks',
         uiNote: 'Their own runtimes',
         bridgeLayer: 'The bridge',
@@ -45,27 +50,32 @@ const copy = computed(() =>
         docsNote: 'Content, routes, builds',
         bridgeDetail: 'SSR · on-demand hydration',
         available: 'Available',
+        native: 'Built in',
+        nativeNote: 'VitePress includes Vue; Docs Islands bridges React.',
         planned: 'Planned',
         current: 'Available today',
         preview: 'Planned integration',
-        hint: 'Hover, focus, or tap a docs framework to follow the connection',
+        hint: 'Hover, focus, or tap to explore',
         previewAction: 'Preview connection',
       },
 );
 
-// Only VitePress + React ships today. Dashed routes illustrate the direction
-// described in .agents/docs/intent.md, rather than claiming adapter support.
+// VitePress provides Vue natively; Docs Islands currently bridges React.
+// Dashed routes illustrate the direction described in .agents/docs/intent.md.
 const uiFrameworks = [
-  { name: 'React', mark: 'R', available: true },
-  { name: 'Vue', mark: 'V', available: false },
-  { name: 'Svelte', mark: 'Sv', available: false },
-  { name: 'Solid', mark: 'So', available: false },
+  { name: 'React', logo: reactLogo, available: true, native: false },
+  { name: 'Vue', logo: vueLogo, available: true, native: true },
+  { name: 'Svelte', logo: svelteLogo, available: false, native: false },
+  { name: 'Solid', logo: solidLogo, available: false, native: false },
 ];
+const bridgeUiFrameworks = uiFrameworks
+  .map((framework, index) => ({ ...framework, index }))
+  .filter((framework) => !framework.native);
 const docsFrameworks = [
-  { name: 'VitePress', mark: 'VP', available: true },
-  { name: 'Docusaurus', mark: 'D', available: false },
-  { name: 'Nextra', mark: 'N', available: false },
-  { name: 'Astro', mark: 'A', available: false },
+  { name: 'VitePress', logo: vitepressLogo, available: true },
+  { name: 'Docusaurus', logo: docusaurusLogo, available: false },
+  { name: 'Nextra', logo: nextraLogo, available: false },
+  { name: 'Rspress', logo: rspressLogo, available: false },
 ];
 
 const hoveredFramework = ref<string | null>(null);
@@ -76,6 +86,7 @@ const activeFramework = computed(
     hoveredFramework.value ?? focusedFramework.value ?? selectedFramework.value,
 );
 const isActive = computed(() => activeFramework.value !== null);
+const isNativeActive = computed(() => activeFramework.value === 'VitePress');
 const isPlanned = computed(
   () => isActive.value && activeFramework.value !== 'VitePress',
 );
@@ -87,6 +98,10 @@ const activePath = computed(() =>
 
 const enterFramework = (event: PointerEvent, framework: string) => {
   if (event.pointerType !== 'touch') hoveredFramework.value = framework;
+};
+const focusFramework = (framework: string) => {
+  hoveredFramework.value = null;
+  focusedFramework.value = framework;
 };
 const leaveFramework = () => {
   hoveredFramework.value = null;
@@ -113,14 +128,19 @@ const uiPath = (index: number) => {
       : 92;
   return `M 320 130 V 102 Q 320 96 ${x < 320 ? 314 : 326} 96 H ${x < 320 ? x + 4 : x - 4} Q ${x} 96 ${x} 92 V ${endY}`;
 };
+const nativePath = computed(() => {
+  const startY = isNativeActive.value ? 222 : 224;
+  const endY = isNativeActive.value ? 89 : 92;
+  const corner = startY - 220;
+  return `M 80 ${startY} Q 80 220 ${80 - corner} 220 H -6 Q -12 220 -12 214 V 110 Q -12 104 -6 104 H 234 Q 240 104 240 98 V ${endY}`;
+});
 </script>
 
 <template>
   <section class="docs-hero-mockup" :aria-label="copy.diagramLabel">
     <div class="mockup-heading">
-      <p class="mockup-eyebrow">{{ copy.eyebrow }}</p>
       <h2>{{ copy.title }}</h2>
-      <p class="mockup-intro">{{ copy.intro }}</p>
+      <p class="interaction-hint">{{ copy.hint }}</p>
     </div>
 
     <div
@@ -135,7 +155,7 @@ const uiPath = (index: number) => {
         aria-hidden="true"
       >
         <g
-          v-for="(framework, index) in uiFrameworks"
+          v-for="framework in bridgeUiFrameworks"
           :key="framework.name"
           class="connection-ui flow-connection"
           :class="{
@@ -143,8 +163,12 @@ const uiPath = (index: number) => {
             'is-connected': isActive && (isPlanned || framework.available),
           }"
         >
-          <path class="connection-track" :d="uiPath(index)" />
-          <path class="connection-signal" :d="uiPath(index)" pathLength="1" />
+          <path class="connection-track" :d="uiPath(framework.index)" />
+          <path
+            class="connection-signal"
+            :d="uiPath(framework.index)"
+            pathLength="1"
+          />
         </g>
         <g
           v-for="(framework, index) in docsFrameworks"
@@ -157,6 +181,14 @@ const uiPath = (index: number) => {
         >
           <path class="connection-track" :d="docsPath(index)" />
           <path class="connection-signal" :d="docsPath(index)" pathLength="1" />
+        </g>
+        <g
+          class="connection-native flow-connection is-available"
+          :class="{ 'is-connected': isNativeActive }"
+        >
+          <path class="native-clearance" :d="nativePath" />
+          <path class="connection-track" :d="nativePath" />
+          <path class="connection-signal" :d="nativePath" pathLength="1" />
         </g>
       </svg>
 
@@ -175,50 +207,22 @@ const uiPath = (index: number) => {
             class="framework-tile ui-tile"
             :class="{
               'is-available': framework.available,
-              'is-responding': isActive && (isPlanned || framework.available),
+              'is-native': framework.native,
+              'is-responding': framework.native
+                ? isNativeActive
+                : isActive && (isPlanned || framework.available),
             }"
           >
             <span class="framework-mark" aria-hidden="true">
-              <svg
-                v-if="framework.name === 'React'"
-                viewBox="0 0 32 32"
-                fill="none"
-              >
-                <g stroke="currentColor" stroke-width="1.4">
-                  <ellipse cx="16" cy="16" rx="14" ry="5.5" />
-                  <ellipse
-                    cx="16"
-                    cy="16"
-                    rx="14"
-                    ry="5.5"
-                    transform="rotate(60 16 16)"
-                  />
-                  <ellipse
-                    cx="16"
-                    cy="16"
-                    rx="14"
-                    ry="5.5"
-                    transform="rotate(120 16 16)"
-                  />
-                </g>
-                <circle cx="16" cy="16" r="2.6" fill="currentColor" />
-              </svg>
-              <svg
-                v-else-if="framework.name === 'Vue'"
-                viewBox="0 0 32 32"
-                fill="none"
-              >
-                <path
-                  d="M3 7 L16 28 L29 7 M10 7 L16 17 L22 7"
-                  stroke="currentColor"
-                  stroke-width="3"
-                />
-              </svg>
-              <span v-else>{{ framework.mark }}</span>
+              <img :src="framework.logo" width="22" height="22" alt="" />
             </span>
             <strong>{{ framework.name }}</strong>
             <small>{{
-              framework.available ? copy.available : copy.planned
+              framework.native
+                ? copy.native
+                : framework.available
+                  ? copy.available
+                  : copy.planned
             }}</small>
           </li>
         </ul>
@@ -266,13 +270,19 @@ const uiPath = (index: number) => {
             @pointerenter="enterFramework($event, framework.name)"
             @pointerleave="leaveFramework"
             @pointercancel="leaveFramework"
-            @focus="focusedFramework = framework.name"
+            @focus="focusFramework(framework.name)"
             @blur="focusedFramework = null"
             @click="selectedFramework = framework.name"
           >
-            <span class="framework-mark" aria-hidden="true">{{
-              framework.mark
-            }}</span>
+            <span class="framework-mark" aria-hidden="true">
+              <img
+                :src="framework.logo"
+                :class="{ 'nextra-mark': framework.name === 'Nextra' }"
+                width="22"
+                height="22"
+                alt=""
+              />
+            </span>
             <strong>{{ framework.name }}</strong>
             <small>{{
               framework.available ? copy.available : copy.planned
@@ -306,7 +316,7 @@ const uiPath = (index: number) => {
         <span><i class="legend-line"></i>{{ copy.planned }}</span>
       </div>
     </div>
-    <p class="interaction-hint">{{ copy.hint }}</p>
+    <p class="native-support-note">{{ copy.nativeNote }}</p>
   </section>
 </template>
 
@@ -327,36 +337,21 @@ const uiPath = (index: number) => {
 }
 
 .mockup-heading {
-  max-width: 650px;
-}
-
-.mockup-eyebrow {
-  margin: 0 0 6px;
-  color: var(--docs-home-accent-strong);
-  font-family: var(--docs-home-font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  line-height: 1.5;
-  text-transform: uppercase;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
 }
 
 .mockup-heading h2 {
   margin: 0;
   color: var(--flow-strong);
-  font-family: var(--docs-home-font-serif);
-  font-size: 34px;
-  font-style: italic;
-  font-weight: 400;
-  line-height: 1.2;
-}
-
-.mockup-intro {
-  max-width: 560px;
-  margin: 6px 0 0;
-  color: var(--flow-muted);
-  font-size: 14px;
-  line-height: 1.7;
+  font-family: var(--vp-font-family-base);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.5;
 }
 
 .flow-scene {
@@ -434,8 +429,30 @@ const uiPath = (index: number) => {
   animation-delay: 280ms;
 }
 
+.native-clearance {
+  fill: none;
+  stroke: var(--docs-home-surface);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.connection-native .connection-track {
+  stroke: color-mix(in srgb, var(--docs-home-success) 48%, var(--flow-line));
+}
+
+.connection-native.is-connected .connection-track,
+.connection-native .connection-signal {
+  stroke: var(--docs-home-success);
+}
+
 .is-planned-flow .is-available .connection-track {
   stroke-dasharray: 3 6;
+}
+
+.is-planned-flow .connection-native .connection-track {
+  stroke-dasharray: none;
 }
 
 .is-planned-flow .connection-signal {
@@ -512,12 +529,10 @@ const uiPath = (index: number) => {
   justify-content: center;
   gap: 4px;
   padding: 6px 5px;
-  border: 1px dashed var(--flow-line);
+  border: 1px solid color-mix(in srgb, var(--flow-line) 65%, transparent);
   border-radius: 10px;
   background: var(--docs-home-surface);
   color: var(--flow-muted);
-  box-shadow: 0 3px 8px
-    color-mix(in srgb, var(--docs-home-primary) 3%, transparent);
   transition:
     border-color 180ms ease,
     color 180ms ease,
@@ -541,16 +556,16 @@ const uiPath = (index: number) => {
   display: grid;
   height: 22px;
   place-items: center;
-  color: inherit;
-  font-family: var(--docs-home-font-mono);
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1;
 }
 
-.framework-mark svg {
+.framework-mark img {
   width: 22px;
   height: 22px;
+  object-fit: contain;
+}
+
+:global(.dark .docs-hero-mockup .nextra-mark) {
+  filter: invert(1);
 }
 
 .framework-tile strong {
@@ -577,6 +592,25 @@ const uiPath = (index: number) => {
   box-shadow: 0 0 22px color-mix(in srgb, var(--flow-accent) 12%, transparent);
   transform: translateY(-3px);
   transition-delay: 420ms;
+}
+
+.ui-tile.is-native {
+  border-color: color-mix(
+    in srgb,
+    var(--docs-home-success) 30%,
+    var(--flow-line)
+  );
+}
+
+.ui-tile.is-native small {
+  color: var(--docs-home-success);
+}
+
+.ui-tile.is-native.is-responding {
+  border-color: var(--docs-home-success);
+  color: var(--docs-home-success);
+  box-shadow: 0 0 22px
+    color-mix(in srgb, var(--docs-home-success) 12%, transparent);
 }
 
 .docs-tile {
@@ -612,7 +646,6 @@ const uiPath = (index: number) => {
 .bridge-rail::before {
   position: absolute;
   inset: -13px 8px;
-  border: 1px solid color-mix(in srgb, var(--flow-accent) 10%, transparent);
   border-radius: 14px;
   background: linear-gradient(
     90deg,
@@ -769,11 +802,18 @@ const uiPath = (index: number) => {
   border-top-color: var(--flow-accent);
 }
 
-.interaction-hint {
+.native-support-note {
   margin: 8px 0 0;
   color: var(--flow-muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.6;
+}
+
+.interaction-hint {
+  margin: 0;
+  color: var(--flow-muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 @keyframes signal-travel {
@@ -796,14 +836,6 @@ const uiPath = (index: number) => {
 @media (max-width: 680px) {
   .docs-hero-mockup {
     padding: 24px 20px 18px;
-  }
-
-  .mockup-heading h2 {
-    font-size: 28px;
-  }
-
-  .mockup-intro {
-    font-size: 12px;
   }
 
   .flow-scene {

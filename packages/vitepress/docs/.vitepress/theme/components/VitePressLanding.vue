@@ -208,12 +208,12 @@ onBeforeUnmount(() => {
         </div>
         <p class="support"><span aria-hidden="true" />{{ copy.support }}</p>
       </div>
-    </section>
-    <section
-      class="demo-section"
-      :aria-label="chinese ? 'React 集成演示' : 'React integration demo'"
-    >
-      <slot name="demo" />
+      <section
+        class="demo-section"
+        :aria-label="chinese ? 'React 集成演示' : 'React integration demo'"
+      >
+        <slot name="demo" />
+      </section>
     </section>
 
     <section class="model-section" aria-labelledby="model-title">
@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
   --landing-panel: #fbfaff;
   max-width: 1160px;
   margin: 0 auto;
-  padding: 64px 32px 0;
+  padding: 0 32px;
   color: var(--landing-ink);
 }
 :global(.dark .vitepress-landing) {
@@ -381,11 +381,28 @@ dd {
   margin: 0;
 }
 .landing-hero {
-  max-width: 760px;
-  padding-bottom: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 490px) minmax(0, 1fr);
+  align-items: center;
+  gap: 64px;
+  width: calc(50vw + 50% - 24px);
+  padding-bottom: 56px;
 }
+.hero-copy,
 .demo-section {
-  margin-bottom: 56px;
+  min-width: 0;
+}
+.demo-section :deep(.demo-heading) {
+  display: none;
+}
+.demo-section :deep(.demo-route-shell) {
+  padding-top: 0;
+}
+.demo-section :deep(.demo-terminal-code) {
+  height: clamp(220px, 28vh, 320px);
+}
+.demo-section :deep(.demo-terminal-inner) {
+  margin: 12px 20px 48px;
 }
 .eyebrow {
   display: flex;
@@ -695,10 +712,23 @@ button:focus-visible,
   outline: 2px solid var(--landing-accent);
   outline-offset: 4px;
 }
-@media (max-width: 960px) {
-  .landing-hero {
-    gap: 32px;
+@media (max-width: 1100px) {
+  .vitepress-landing {
+    padding-top: 64px;
   }
+  .landing-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+    width: auto;
+  }
+  .demo-section :deep(.demo-terminal-code) {
+    height: 348px;
+  }
+  .demo-section :deep(.demo-route-shell) {
+    padding-top: var(--demo-rail);
+  }
+}
+@media (max-width: 960px) {
   .model-section,
   .workflow-section,
   .setup-heading {
@@ -715,6 +745,12 @@ button:focus-visible,
   }
   .landing-hero {
     padding-bottom: 36px;
+  }
+  .demo-section :deep(.demo-terminal-code) {
+    height: 286px;
+  }
+  .demo-section :deep(.demo-terminal-inner) {
+    margin: 8px 12px 50px;
   }
   h1 {
     font-size: 38px;

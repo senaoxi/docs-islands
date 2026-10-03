@@ -1,9 +1,12 @@
+import type { getLandingDemoSnippets } from './landing-demo-landing';
+import type { EditorPart } from './landing-demo-source';
 import {
-  type EditorPart,
-  type getIntegrationSnippets,
-  integrationHmrLog,
-  integrationRenderLog,
-} from './landing-demo-source';
+  getSunsetArrival,
+  getSunsetMotion,
+  jumpDuration,
+  runDuration,
+  thinkingDuration,
+} from './sunset-motion';
 
 export type EditorStep =
   | 'terminal'
@@ -41,16 +44,20 @@ export interface DemoState {
   edit: number;
   frame: number;
   playing: boolean;
-  generation: number;
-  interaction: boolean;
+  clock: number;
+  partial: number;
+  reverseAt: number | null;
 }
 export type DemoAction =
-  | { type: 'tick'; stages: DemoStage[] }
+  | {
+      type: 'tick';
+      stages: DemoStage[];
+      ms?: number;
+      endAt?: number;
+      direction?: 'left' | 'right';
+    }
   | { type: 'start'; stages: DemoStage[] }
-  | { type: 'next'; stages: DemoStage[] }
-  | { type: 'pause'; interaction?: boolean }
-  | { type: 'reduce'; frame: number }
-  | { type: 'restart'; state: DemoState };
+  | { type: 'finish'; stages: DemoStage[]; endAt?: number };
 
 // Reproducible short bursts within code tokens, with pauses between tokens,
 // statements and lines. No random per-character timing or elapsed-time catch-up.
@@ -85,7 +92,53 @@ export function developerTyping(
     else if (/^[$A-Z_a-z]/.test(token))
       frames.push({ position, delay: 75 + (burst % 3) * 35 });
   }
-  return frames;
+  return frames.map((frame) => ({ ...frame, delay: frame.delay / 1.2 }));
+}
+
+// Find the end of an opening tag without treating arrows, comparisons or
+// quoted attribute values as the tag boundary.
+function getTagEnd(source: string, start: number): number {
+  let quote = '';
+  let expressionDepth = 0;
+  for (let index = start; index < source.length; index++) {
+    const character = source[index]!;
+    if (quote) {
+      if (character === quote && source[index - 1] !== '\\') quote = '';
+      continue;
+    }
+    switch (character) {
+      case "'":
+      case '"':
+      case '`': {
+        quote = character;
+        break;
+      }
+      case '{': {
+        expressionDepth++;
+        break;
+      }
+      case '}': {
+        expressionDepth--;
+        break;
+      }
+      default: {
+        if (character === '>' && expressionDepth === 0) return index;
+      }
+    }
+  }
+  return -1;
+}
+function getOpeningTag(source: string, position: number) {
+  const tag = /^<([A-Za-z][\w.:-]*)(?=[\s/>])|^<(?=>)/u.exec(
+    source.slice(position),
+  );
+  if (!tag) return null;
+  const end = getTagEnd(source, position + tag[0].length);
+  if (end < 0) return null;
+  return {
+    end,
+    closing: source[end - 1] === '/' ? '' : `</${tag[1] ?? ''}>`,
+  };
 }
 
 // Model an assisted vi session: insert at the cursor, preserve surrounding
@@ -105,6 +158,7 @@ export function developerEditing(source: string): EditorFrame[] {
   let position = 0;
   let burst = 0;
   let quote = '';
+  const tagEndings = new Map<number, string>();
   const insert = (text: string) => {
     buffer = buffer.slice(0, cursor) + text + buffer.slice(cursor);
     cursor += text.length;
@@ -116,7 +170,7 @@ export function developerEditing(source: string): EditorFrame[] {
     const line = `\n${indentation}`;
     if (buffer.slice(cursor, cursor + line.length) === line)
       cursor += line.length;
-    else if (/^[}\])]/u.test(buffer.slice(cursor))) {
+    else if (/^(?:[}\])]|<\/)/u.test(buffer.slice(cursor))) {
       const currentLine = buffer.slice(0, cursor).split('\n').at(-1)!;
       const closingIndent = /^[ \t]*/u.exec(currentLine)![0];
       buffer = `${buffer.slice(0, cursor) + line}\n${
@@ -148,6 +202,34 @@ export function developerEditing(source: string): EditorFrame[] {
       emit(80, 'type');
     }
   };
+  const insertTag = (character: string) => {
+    if (quote) return false;
+    if (character === '<') {
+      const existingTag = /^<\/(?:[A-Za-z][\w.:-]*)?\s*>/u.exec(
+        source.slice(position),
+      )?.[0];
+      if (existingTag && buffer.startsWith(existingTag, cursor)) {
+        cursor += existingTag.length;
+        position += existingTag.length;
+        emit(180, 'move');
+        return true;
+      }
+      const tag = getOpeningTag(source, position);
+      if (tag?.closing) tagEndings.set(tag.end, tag.closing);
+    }
+    const closingTag = tagEndings.get(position);
+    if (closingTag) {
+      insert(character + closingTag);
+      cursor -= closingTag.length;
+      tagEndings.delete(position);
+      position++;
+      emit(80, 'pair');
+      emit(480, 'pause');
+      burst++;
+      return true;
+    }
+    return false;
+  };
   // Open the insertion line before typing so the existing suffix stays on
   // its own line throughout the edit, including the very first character.
   if (source.endsWith('\n')) {
@@ -169,6 +251,7 @@ export function developerEditing(source: string): EditorFrame[] {
       insertQuote(character);
       continue;
     }
+    if (insertTag(character)) continue;
     const closing = !quote && pairs.get(character);
     if (closing) {
       insert(character + closing);
@@ -210,7 +293,7 @@ export function developerEditing(source: string): EditorFrame[] {
     position += text.length;
     emit(character === ';' ? 280 : 80, 'type');
   }
-  return frames;
+  return frames.map((frame) => ({ ...frame, delay: frame.delay / 1.2 }));
 }
 const logTyping = (text: string): TypingFrame[] => {
   let position = 0;
@@ -251,64 +334,33 @@ const makeStage = (
   };
 };
 export function getDemoStages(
-  snippets: ReturnType<typeof getIntegrationSnippets>,
+  snippets: ReturnType<typeof getLandingDemoSnippets>,
 ): DemoStage[] {
   return [
-    makeStage('initial', 'index.md', '# Hello, world!', '# Hello, world!'),
     makeStage(
-      'config',
-      snippets.config.file,
-      snippets.config.code,
+      'page',
+      snippets.page.file,
+      snippets.page.code,
       '',
-      snippets.config.parts,
-      2400,
-    ),
-    makeStage(
-      'client',
-      snippets.theme.file,
-      snippets.theme.code,
-      '',
-      snippets.theme.parts,
-      2100,
-    ),
-    makeStage(
-      'component',
-      snippets.component.file,
-      snippets.component.code,
-      '',
-      snippets.component.parts,
-      1000,
-    ),
-    makeStage(
-      'markdown',
-      snippets.markdown.file,
-      snippets.markdown.code,
-      '',
-      snippets.markdown.parts,
+      snippets.page.parts,
       1800,
     ),
-    makeStage('mount', 'console', integrationRenderLog, integrationRenderLog),
-    makeStage('live', 'index.md', integrationRenderLog, integrationRenderLog),
     makeStage(
-      'edit',
-      snippets.updatedComponent.file,
-      snippets.updatedComponent.code,
+      'render',
+      'dev server',
+      snippets.logs.markdown,
+      snippets.logs.markdown,
+    ),
+    makeStage(
+      'css',
+      snippets.updatedStyles.file,
+      snippets.updatedStyles.code,
       '',
-      snippets.updatedComponent.parts,
-      2200,
+      snippets.updatedStyles.parts,
+      1000,
     ),
-    makeStage(
-      'hmr',
-      'console + dev events',
-      integrationHmrLog,
-      integrationHmrLog,
-    ),
-    makeStage(
-      'updated',
-      'console + dev events',
-      integrationHmrLog,
-      integrationHmrLog,
-    ),
+    makeStage('hmr', 'dev server', snippets.logs.hmr, snippets.logs.hmr),
+    makeStage('updated', 'dev server', snippets.logs.hmr, snippets.logs.hmr),
   ];
 }
 const emptyPlan: TypingFrame[] = [];
@@ -317,7 +369,7 @@ const savePlan: TypingFrame[] = [
   { position: 1, delay: 150 },
   { position: 2, delay: 180 },
   { position: 3, delay: 220 },
-];
+].map((frame) => ({ ...frame, delay: frame.delay / 1.2 }));
 export function getPlaybackPlan(
   stage: DemoStage,
   editor: EditorStep,
@@ -345,6 +397,7 @@ export function getPlaybackPlan(
   }
 }
 export function getHoldDuration(stage: DemoStage, editor: EditorStep): number {
+  if (stage.id === 'updated') return 0;
   switch (editor) {
     case 'open': {
       return stage.readMs;
@@ -366,48 +419,34 @@ export function getHoldDuration(stage: DemoStage, editor: EditorStep): number {
     }
   }
 }
-export function initialDemoState(
-  stages: DemoStage[],
-  generation = 0,
-): DemoState {
+export function initialDemoState(): DemoState {
   return {
     phase: 0,
-    editor: 'terminal',
+    editor: 'command',
     edit: 0,
-    frame: stages[0]!.terminalPlan.length,
+    frame: 0,
     playing: false,
-    generation,
-    interaction: false,
+    clock: 0,
+    partial: 0,
+    reverseAt: null,
   };
 }
-const enterPhase = (
-  state: DemoState,
-  stages: DemoStage[],
-  animate: boolean,
-): DemoState => {
+function enterPhase(state: DemoState, stages: DemoStage[]): DemoState {
   const phase = Math.min(state.phase + 1, stages.length - 1);
   const stage = stages[phase]!;
   const editor = stage.parts ? 'command' : 'terminal';
-  const hold = phase === 6 || phase === 9;
+  const last = phase === stages.length - 1;
   return {
     ...state,
     phase,
     editor,
     edit: 0,
-    frame: animate && !hold ? 0 : getPlaybackPlan(stage, editor, 0).length,
-    playing: animate && !hold,
-    interaction: false,
+    frame: last ? getPlaybackPlan(stage, editor, 0).length : 0,
+    playing: true,
   };
-};
-export function advanceDemo(
-  state: DemoState,
-  stages: DemoStage[],
-  animate: boolean,
-): DemoState {
+}
+function advanceDemo(state: DemoState, stages: DemoStage[]): DemoState {
   const stage = stages[state.phase]!;
-  const plan = getPlaybackPlan(stage, state.editor, state.edit);
-  if (!animate && state.frame < plan.length)
-    return { ...state, frame: plan.length, playing: false };
   let editor: EditorStep;
   let edit = state.edit;
   switch (state.editor) {
@@ -435,48 +474,63 @@ export function advanceDemo(
       break;
     }
     default: {
-      return enterPhase(state, stages, animate);
+      return enterPhase(state, stages);
     }
   }
-  return {
-    ...state,
-    editor,
-    edit,
-    frame: animate ? 0 : getPlaybackPlan(stage, editor, edit).length,
-    playing: animate,
-    interaction: false,
-  };
+  return { ...state, editor, edit, frame: 0 };
+}
+function tickDemo(
+  state: DemoState,
+  action: Extract<DemoAction, { type: 'tick' }>,
+): DemoState {
+  if (!state.playing) return state;
+  if (state.phase === action.stages.length - 1) {
+    const end = action.endAt ?? state.clock;
+    const clock = Math.min(end, state.clock + (action.ms ?? end - state.clock));
+    return { ...state, clock, playing: clock < end, partial: 0 };
+  }
+  const stage = action.stages[state.phase]!;
+  const plan = getPlaybackPlan(stage, state.editor, state.edit);
+  const delay =
+    plan[state.frame]?.delay ?? getHoldDuration(stage, state.editor);
+  const ms = Math.min(
+    action.ms ?? delay - state.partial,
+    delay - state.partial,
+  );
+  const clock = state.clock + ms;
+  const partial = state.partial + ms;
+  if (partial < delay) return { ...state, clock, partial };
+  const next =
+    state.frame < plan.length
+      ? { ...state, frame: state.frame + 1 }
+      : advanceDemo(state, action.stages);
+  return { ...next, clock, partial: 0 };
 }
 export function demoReducer(state: DemoState, action: DemoAction): DemoState {
   switch (action.type) {
     case 'tick': {
-      if (!state.playing) return state;
-      const stage = action.stages[state.phase]!;
-      const plan = getPlaybackPlan(stage, state.editor, state.edit);
-      return state.frame < plan.length
-        ? { ...state, frame: state.frame + 1 }
-        : advanceDemo(state, action.stages, true);
+      const next =
+        action.direction === 'left' && state.reverseAt === null
+          ? { ...state, reverseAt: state.clock }
+          : state;
+      return tickDemo(next, action);
     }
     case 'start': {
-      return state.phase === 0 || state.phase === 6
-        ? advanceDemo(state, action.stages, true)
-        : { ...state, playing: true, interaction: false };
+      return state.phase === action.stages.length - 1
+        ? state
+        : { ...state, playing: true };
     }
-    case 'next': {
-      return advanceDemo(state, action.stages, false);
-    }
-    case 'pause': {
+    case 'finish': {
       return {
-        ...state,
+        phase: action.stages.length - 1,
+        editor: 'terminal',
+        edit: 0,
+        frame: action.stages.at(-1)!.terminalPlan.length,
         playing: false,
-        interaction: action.interaction ?? false,
+        clock: action.endAt ?? state.clock,
+        partial: 0,
+        reverseAt: state.reverseAt,
       };
-    }
-    case 'reduce': {
-      return { ...state, playing: false, frame: action.frame };
-    }
-    case 'restart': {
-      return action.state;
     }
     default: {
       return state;
@@ -533,6 +587,28 @@ export function getVisibleText(
     : (stage.terminalPlan[state.frame - 1]?.position ?? 0);
   return stage.output.slice(0, position);
 }
+// vi uses an alternate buffer; leaving it restores the accumulated shell
+// transcript. Keep commands and recorded dev-server output exactly once.
+export function getTerminalTranscript(
+  stages: DemoStage[],
+  state: DemoState,
+  reduced: boolean,
+): string {
+  const saved = (stage: DemoStage) => stage.command;
+  const history = stages
+    .slice(0, state.phase)
+    .map((stage) => (stage.parts ? saved(stage) : stage.output));
+  const stage = stages[state.phase]!;
+  if (stage.id !== 'updated')
+    history.push(
+      state.editor === 'saved'
+        ? saved(stage)
+        : getVisibleText(stage, state, reduced),
+    );
+  if (state.editor === 'saved' || stage.id === 'updated') history.push('$');
+  return history.filter(Boolean).join('\n\n');
+}
+
 export function getActiveChange(stage: DemoStage, edit: number) {
   return editorChanges(stage)[edit];
 }
@@ -598,37 +674,91 @@ export function getEditorCursor(
   );
   return { line: lines.length, column };
 }
-export function getPlaybackDuration(stages: DemoStage[]) {
-  const phaseDurations = stages.map((stage) => {
-    if (!stage.parts)
-      return (
-        stage.terminalPlan.reduce((sum, frame) => sum + frame.delay, 0) + 450
-      );
-    const commands = stage.commandPlan.reduce(
-      (sum, frame) => sum + frame.delay,
-      0,
-    );
-    const edits = stage.editPlans.reduce(
-      (sum, plan, index) =>
-        sum +
-        plan.reduce((total, frame) => total + frame.delay, 0) +
-        stage.keyPlans[index]!.reduce(
-          (total, frame) => total + frame.delay,
-          0,
-        ) +
-        650 +
-        450,
-      0,
-    );
-    return commands + 450 + stage.readMs + edits + 1100 + 750 + 900;
-  });
+export interface DemoClockEntry {
+  elapsed: number;
+  delay: number;
+}
+const stateKey = (state: DemoState) =>
+  `${state.phase}/${state.editor}/${state.edit}/${state.frame}/${state.playing}`;
+export function getDemoTimeline(stages: DemoStage[]) {
+  const entries = new Map<string, DemoClockEntry>();
+  let state = { ...initialDemoState(), playing: true };
+  let appearance = 0;
+  let styleAt = 0;
+  for (let index = 0; index < 10_000; index++) {
+    const stage = stages[state.phase]!;
+    if (stage.id === 'page' && state.editor === 'saved')
+      appearance = state.clock;
+    if (stage.id === 'hmr' && state.frame === 1) styleAt = state.clock;
+    const delay =
+      getPlaybackPlan(stage, state.editor, state.edit)[state.frame]?.delay ??
+      getHoldDuration(stage, state.editor);
+    entries.set(stateKey(state), { elapsed: state.clock, delay });
+    if (!state.playing) break;
+    state = demoReducer(state, { type: 'tick', stages });
+  }
+  const motionDuration =
+    Math.ceil(
+      Math.max(12_000, (styleAt - appearance - jumpDuration) * 1.5) /
+        runDuration,
+    ) * runDuration;
+  const arrival =
+    appearance + getSunsetArrival(motionDuration, styleAt - appearance + 80);
   return {
-    phaseDurations,
-    toFirstInteractionMs: phaseDurations
-      .slice(1, 6)
-      .reduce((sum, time) => sum + time, 0),
-    copyUpdateMs: phaseDurations
-      .slice(7, 9)
-      .reduce((sum, time) => sum + time, 0),
+    entries,
+    appearance,
+    styleAt,
+    motionDuration,
+    arrival,
+    finishAt: arrival + thinkingDuration,
+    duration: arrival + thinkingDuration,
+    finalPhase: stages.length - 1,
+  };
+}
+export function getPrototypeMotion(
+  state: DemoState,
+  timeline: ReturnType<typeof getDemoTimeline>,
+  reduced = false,
+) {
+  const reverseAfter =
+    state.reverseAt === null
+      ? undefined
+      : state.reverseAt - timeline.appearance;
+  const arrival =
+    timeline.appearance +
+    getSunsetArrival(timeline.motionDuration, reverseAfter);
+  const finishAt = arrival + thinkingDuration;
+  const entry = timeline.entries.get(stateKey(state));
+  const final = state.phase === timeline.finalPhase;
+  const remaining = final
+    ? finishAt - state.clock
+    : (entry?.delay ?? 0) - state.partial;
+  const elapsed = Math.max(0, state.clock - timeline.appearance);
+  const character = getSunsetMotion(
+    elapsed,
+    timeline.motionDuration,
+    reverseAfter,
+  );
+  return {
+    ...character,
+    ...(reduced
+      ? { progress: 0, row: 8, column: 5, pose: 'thinking-rest' }
+      : {}),
+    visible:
+      reduced ||
+      final ||
+      (state.clock >= timeline.appearance && timeline.appearance > 0),
+    elapsed,
+    finishAt,
+    duration: state.playing ? Math.min(80, Math.max(0, remaining)) : 0,
+  };
+}
+export function getPlaybackDuration(stages: DemoStage[]) {
+  const timeline = getDemoTimeline(stages);
+  return {
+    durationMs: timeline.duration,
+    appearanceMs: timeline.appearance,
+    styleAtMs: timeline.styleAt,
+    arrivalMs: timeline.arrival,
   };
 }
