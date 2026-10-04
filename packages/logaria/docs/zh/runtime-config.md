@@ -86,6 +86,7 @@ resetLoggerConfig();
 
 - `setLoggerConfig()` 抛错。
 - `resetLoggerConfig()` 抛错。
+- 作用域 ID 归一化为默认作用域时，`setScopedLoggerConfig()` 和 `resetScopedLoggerConfig()` 也抛错。显式非默认作用域仍可配置。
 
 这是有意为之，避免运行时配置与构建期裁剪策略产生漂移——否则会出现“运行时允许这条日志，但打包产物里这条日志已经不在了”这类反直觉情况。
 

@@ -68,15 +68,19 @@ const sanitizeDebugSummaryValue = (
       return '[object]';
     }
 
-    const objectEntries = Object.entries(value as Record<string, unknown>)
-      .toSorted(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    const keys = Object.keys(value);
+    const objectEntries = keys
+      .toSorted((leftKey, rightKey) => leftKey.localeCompare(rightKey))
       .slice(0, DEBUG_SUMMARY_MAX_KEYS)
-      .map(([key, entryValue]) => [
+      .map((key) => [
         key,
-        sanitizeDebugSummaryValue(entryValue, depth + 1),
+        sanitizeDebugSummaryValue(
+          (value as Record<string, unknown>)[key],
+          depth + 1,
+        ),
       ]);
     const sanitizedObject = Object.fromEntries(objectEntries);
-    const totalKeyCount = Object.keys(value as Record<string, unknown>).length;
+    const totalKeyCount = keys.length;
 
     if (totalKeyCount > DEBUG_SUMMARY_MAX_KEYS) {
       sanitizedObject.__truncatedKeys__ =
@@ -94,13 +98,11 @@ export const sanitizeDebugSummary = (summary: unknown): string => {
     return 'n/a';
   }
 
-  const sanitizedSummary = sanitizeDebugSummaryValue(summary);
-
-  if (typeof sanitizedSummary === 'string') {
-    return sanitizedSummary;
-  }
-
   try {
+    const sanitizedSummary = sanitizeDebugSummaryValue(summary);
+    if (typeof sanitizedSummary === 'string') {
+      return sanitizedSummary;
+    }
     return sanitizeDebugText(JSON.stringify(sanitizedSummary));
   } catch {
     return '[unserializable summary]';

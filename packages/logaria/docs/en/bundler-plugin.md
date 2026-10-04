@@ -81,6 +81,8 @@ loggerPlugin.farm({ config, treeshake });
 
 All adapters share the same options and behave identically — the runtime semantics do not change between bundlers.
 
+Each plugin instance compiles its own pruning policy. Creating another instance does not replace that policy or configure the build process's default runtime scope. The injected config belongs to the bundle produced by that instance.
+
 ## Options
 
 | Option      | Meaning                                                                                          |
@@ -108,8 +110,10 @@ Pruning is **deliberately conservative**. A log call can be removed only when th
 
 - `createLogger` is imported as a named, unaliased import from `logaria`.
 - `main`, `group`, and the log message are string literals.
+- The `createLogger` options contain one unambiguous `main`, without spreads, computed keys, or methods.
 - The logger binding is not reassigned.
 - The log call is a standalone expression.
+- There are no extra arguments to evaluate, except a literal elapsed-time options object with numeric values (including unary `+`/`-`).
 - The plugin is running in a build context with `treeshake: true`.
 
 ### Supported Static Shape
@@ -133,11 +137,15 @@ logger.debug('static metric details');
 The plugin keeps any call shape that it cannot statically verify. Runtime filtering remains canonical for these:
 
 - Dynamic `main`, `group`, or message values.
+- Options with spreads, computed properties, methods, or repeated `main` keys.
+- Calls with computed elapsed-time options, extra arguments, or spread arguments, so their evaluation is preserved.
 - Aliased `createLogger` imports (`import { createLogger as cl } from 'logaria'`).
 - Reassigned logger bindings.
 - Destructured methods (`const { info } = logger`).
 - Computed method access (`logger['info']`).
 - Non-standalone expressions, such as assigning the result of a log call.
+
+Suppressed removable statements are replaced with an empty statement. This preserves bare `if`/`else` and loop bodies. Runtime filtering still evaluates call arguments before hiding output; pruning must not remove their side effects.
 
 ::: info Why conservative
 A missed removal costs you a few bytes. A wrong removal costs you a missing log on a real incident. Logaria trades the second risk away on purpose. See [Why Logaria — Why Conservative Pruning](./why.md#why-conservative-pruning).

@@ -38,6 +38,7 @@ import {
   DEFAULT_LOGGER_SCOPE_ID,
   normalizeLoggerScopeId,
 } from './helper/scope';
+import { clearMainLoggerCacheForScope } from './instances';
 
 export const DEFAULT_LOGGER_CONFIG: LoggerConfig = {
   levels: ['info', 'success', 'warn', 'error'],
@@ -253,11 +254,10 @@ const getRuleEffectiveLevels = (
   return createDefaultResolvedLevels();
 };
 
-export const resolveLoggerContext = (
+export const resolveLoggerContextForConfig = (
   context: LoggerContext,
-  scopeId?: LoggerScopeId,
+  config: NormalizedLoggerConfig | null,
 ): ResolvedLoggerContext => {
-  const config = getCompiledLoggerConfigForScope(scopeId);
   const baseEnabledLevels = config?.levels || createDefaultResolvedLevels();
   const baseDebugEnabled = config?.debug ?? false;
   const hasRules = config?.rules !== undefined;
@@ -296,6 +296,15 @@ export const resolveLoggerContext = (
   };
 };
 
+export const resolveLoggerContext = (
+  context: LoggerContext,
+  scopeId?: LoggerScopeId,
+): ResolvedLoggerContext =>
+  resolveLoggerContextForConfig(
+    context,
+    getCompiledLoggerConfigForScope(scopeId),
+  );
+
 /**
  * Retrieves the raw logger configuration for a specific scope.
  *
@@ -329,7 +338,7 @@ export function getScopedLoggerConfig(
  *
  * @param scopeId - The identifier for the logger scope
  * @param config - The logger configuration to apply for this scope
- * @throws {Error} If the logger is controlled by the vite plugin and config cannot be modified directly
+ * @throws {Error} If the default scope is controlled by a bundler plugin
  */
 export function setScopedLoggerConfig(
   scopeId: LoggerScopeId,
@@ -338,6 +347,9 @@ export function setScopedLoggerConfig(
   const normalizedScopeId = normalizeLoggerScopeId(scopeId);
 
   if (normalizedScopeId === DEFAULT_LOGGER_SCOPE_ID) {
+    if (isLoggerControlled()) {
+      throw new Error(CONTROLLED_LOGGER_CONFIG_ERROR);
+    }
     hasSyncedRuntimeDefinedDefaultLoggerConfig = true;
   }
 
@@ -345,21 +357,27 @@ export function setScopedLoggerConfig(
 }
 
 /**
- * Resets the logger configuration for a specific scope to its initial state.
+ * Removes a scope configuration and releases its cached loggers.
  *
- * After calling this function, the scope will use the default configuration
- * until a new configuration is applied via setScopedLoggerConfig().
+ * Explicit scopes must be registered again before logging. The default scope
+ * is initialized lazily. Existing references keep reading the scope's current
+ * configuration, but new logger creation no longer reuses the released cache.
  *
  * @param scopeId - The identifier for the logger scope to reset
+ * @throws {Error} If the default scope is controlled by a bundler plugin
  */
 export function resetScopedLoggerConfig(scopeId: LoggerScopeId): void {
   const normalizedScopeId = normalizeLoggerScopeId(scopeId);
 
   if (normalizedScopeId === DEFAULT_LOGGER_SCOPE_ID) {
+    if (isLoggerControlled()) {
+      throw new Error(CONTROLLED_LOGGER_CONFIG_ERROR);
+    }
     hasSyncedRuntimeDefinedDefaultLoggerConfig = false;
   }
 
   getLoggerConfigRegistry().delete(normalizedScopeId);
+  clearMainLoggerCacheForScope(normalizedScopeId);
 }
 
 /**
@@ -522,7 +540,9 @@ function setMergedRuleEntry(
 
   if (entries.has(entry.reference)) {
     const existEntry = entries.get(entry.reference);
-    const existSetting = (existEntry?.setting ?? {}) as LoggerRuleUserConfig;
+    const existSetting = (
+      existEntry?.setting === 'off' ? {} : { ...existEntry?.setting }
+    ) as LoggerRuleUserConfig;
     const newSetting = (entry?.setting ?? {}) as LoggerRuleUserConfig;
 
     if (entry.reference.includes(PLUGIN_RULE_REFERENCE_SEPARATOR)) {
@@ -534,6 +554,9 @@ function setMergedRuleEntry(
           );
         }
         existSetting[key as keyof LoggerRuleUserConfig] = val;
+      }
+      if (existEntry) {
+        entries.set(entry.reference, { ...existEntry, setting: existSetting });
       }
     } else {
       entry.setting = {

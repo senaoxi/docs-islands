@@ -23,7 +23,7 @@ setScopedLoggerConfig(scopeId, {
 } satisfies LoggerConfig);
 ```
 
-Registers or updates a config for the scope.
+Registers or updates a config for the scope. The default scope cannot be changed when controlled by a bundler plugin; explicit non-default scopes remain configurable.
 
 ## createScopedLogger
 
@@ -54,7 +54,7 @@ import { resetScopedLoggerConfig } from 'logaria/core';
 resetScopedLoggerConfig(scopeId);
 ```
 
-Removes the scope config. Creating a scoped logger for that scope will throw until config is registered again.
+Removes the explicit scope config and releases its cached main/group loggers. Creating or using a logger for that scope throws until config is registered again. New creation after re-registration uses fresh cached objects; existing held references read the new config. The default scope is initialized lazily, and resetting it throws when it is bundler-controlled.
 
 ## shouldSuppressLog
 

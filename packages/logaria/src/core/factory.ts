@@ -13,54 +13,26 @@ import {
   DEFAULT_LOGGER_SCOPE_ID,
   normalizeLoggerScopeId,
 } from './helper/scope';
-
-declare const MAIN_LOGGER_CACHE_KEY: unique symbol;
-
-type MainLoggerCacheKey = string & {
-  readonly [MAIN_LOGGER_CACHE_KEY]: true;
-};
-
-// Length-prefixing keeps adjacent arbitrary strings from sharing boundaries.
-const createCacheKeySegment = (value: string): string =>
-  `${value.length}:${value}`;
-
-const createMainLoggerCacheKey = (
-  scopeId: LoggerScopeId,
-  main: string,
-): MainLoggerCacheKey => {
-  const normalizedScopeId = normalizeLoggerScopeId(scopeId);
-  const normalizedMain = normalizeLoggerMain(main);
-
-  return `${createCacheKeySegment(normalizedScopeId)}:${createCacheKeySegment(
-    normalizedMain,
-  )}` as MainLoggerCacheKey;
-};
+import { getOrCreateMainLogger } from './instances';
 
 class LoggerImpl implements LoggerApi {
   readonly #main: string;
   readonly #scopeId: LoggerScopeId;
   readonly #scopedLoggers = new Map<string, ScopedLoggerImpl>();
 
-  /** Cache for main loggers. */
-  static readonly #mainCacheMap = new Map<MainLoggerCacheKey, LoggerImpl>();
-
   private constructor(scopeId: LoggerScopeId, main: string) {
     this.#main = normalizeLoggerMain(main);
     this.#scopeId = normalizeLoggerScopeId(scopeId);
   }
 
-  static getOrCreate(main: string, scopeId: LoggerScopeId): LoggerImpl {
-    const cacheKey = createMainLoggerCacheKey(scopeId, main);
-    const cachedLogger = LoggerImpl.#mainCacheMap.get(cacheKey);
-
-    if (cachedLogger) {
-      return cachedLogger;
-    }
-
-    const logger = new LoggerImpl(scopeId, main);
-    LoggerImpl.#mainCacheMap.set(cacheKey, logger);
-
-    return logger;
+  static getOrCreate(main: string, scopeId: LoggerScopeId): LoggerApi {
+    const normalizedScopeId = normalizeLoggerScopeId(scopeId);
+    const normalizedMain = normalizeLoggerMain(main);
+    return getOrCreateMainLogger(
+      normalizedScopeId,
+      normalizedMain,
+      () => new LoggerImpl(normalizedScopeId, normalizedMain),
+    );
   }
 
   getLoggerByGroup(group: string): ScopedLoggerApi {

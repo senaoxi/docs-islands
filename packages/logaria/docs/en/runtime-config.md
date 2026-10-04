@@ -86,6 +86,7 @@ When a bundler installs [`loggerPlugin`](./bundler-plugin.md), the default scope
 
 - `setLoggerConfig()` throws.
 - `resetLoggerConfig()` throws.
+- `setScopedLoggerConfig()` and `resetScopedLoggerConfig()` also throw when the scope id normalizes to the default scope. Explicit non-default scopes remain configurable.
 
 This is intentional. It prevents the runtime config and the build-time pruning policy from drifting apart — if they could drift, you'd end up with logs the runtime allows but the bundle no longer contains, or vice versa.
 

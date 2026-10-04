@@ -58,6 +58,8 @@ import { createElapsedTimer, formatDebugMessage, formatErrorMessage } from 'loga
 
 `createElapsedLogOptions` and `formatElapsedTime` are internal module exports and are **not** part of the `logaria/helper` package entry.
 
+Summary serialization failures, including throwing getters or Proxy traps, return `[unserializable summary]`. Only values for the selected summary keys are read; key enumeration and sorting still inspect the key set. `formatErrorMessage` returns `Unknown error` if reading an error message or converting a value throws. These helpers do not redact sensitive data.
+
 ## `logaria/plugin`
 
 The universal bundler adapter and supporting constants.

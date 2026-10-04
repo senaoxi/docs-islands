@@ -4,8 +4,20 @@ import babelTraverse from '@babel/traverse';
 import * as t from '@babel/types';
 import { init, parse as parseImports } from 'es-module-lexer';
 import MagicString, { type SourceMap } from 'magic-string';
-import { shouldSuppressLog } from '../core/config';
-import type { LoggerScopeId, LogKind } from '../types';
+import {
+  resolveLoggerContextForConfig,
+  shouldSuppressLog,
+} from '../core/config';
+import {
+  normalizeLoggerGroup,
+  normalizeLoggerMain,
+} from '../core/helper/normalize';
+import type {
+  LoggerContext,
+  LoggerScopeId,
+  LogKind,
+  NormalizedLoggerConfig,
+} from '../types';
 
 /**
  * The name identifier for the logger tree-shaking plugin.
@@ -165,20 +177,22 @@ const readStaticMainFromCreateLoggerCall = (
     return null;
   }
 
+  let main: string | null = null;
   for (const property of options.properties) {
     if (!t.isObjectProperty(property) || property.computed) {
-      continue;
+      // Spreads, computed keys and methods can replace an earlier main.
+      return null;
     }
 
-    if (
-      getStaticPropertyName(property.key) === 'main' &&
-      isStaticStringLiteral(property.value)
-    ) {
-      return property.value.value;
+    if (getStaticPropertyName(property.key) === 'main') {
+      if (main !== null || !isStaticStringLiteral(property.value)) {
+        return null;
+      }
+      main = property.value.value;
     }
   }
 
-  return null;
+  return main;
 };
 
 const readStaticLoggerBinding = (
@@ -226,6 +240,32 @@ const readStaticLoggerBinding = (
   };
 };
 
+const hasRemovableLogArguments = (expression: t.CallExpression): boolean => {
+  if (expression.arguments.length === 1) {
+    return true;
+  }
+  const options = expression.arguments[1];
+  if (expression.arguments.length !== 2 || !t.isObjectExpression(options)) {
+    return false;
+  }
+  return options.properties.every((property) => {
+    if (
+      !t.isObjectProperty(property) ||
+      property.computed ||
+      getStaticPropertyName(property.key) !== 'elapsedTimeMs'
+    ) {
+      return false;
+    }
+    const value = property.value;
+    return (
+      t.isNumericLiteral(value) ||
+      (t.isUnaryExpression(value) &&
+        (value.operator === '-' || value.operator === '+') &&
+        t.isNumericLiteral(value.argument))
+    );
+  });
+};
+
 const readStaticLogCall = (
   expression: t.Expression,
   path: NodePath<t.ExpressionStatement>,
@@ -249,7 +289,10 @@ const readStaticLogCall = (
 
   const [messageArgument] = expression.arguments;
 
-  if (!isStaticStringLiteral(messageArgument)) {
+  if (
+    !isStaticStringLiteral(messageArgument) ||
+    !hasRemovableLogArguments(expression)
+  ) {
     return null;
   }
 
@@ -320,6 +363,40 @@ export async function transformLoggerTreeShaking(
 ): Promise<LoggerTreeShakingTransformResult | null> {
   const loggerModuleId = normalizeLoggerModuleId(options.loggerModuleId);
 
+  return transformLoggerCalls(code, id, loggerModuleId, (context) =>
+    shouldSuppressLog(context.kind, context, options.loggerScopeId),
+  );
+}
+
+/** Internal entry for a plugin instance's compiled policy, without a global scope. */
+export function transformLoggerTreeShakingForConfig(
+  code: string,
+  id: string,
+  loggerModuleId: string,
+  config: NormalizedLoggerConfig,
+): Promise<LoggerTreeShakingTransformResult | null> {
+  return transformLoggerCalls(
+    code,
+    id,
+    normalizeLoggerModuleId(loggerModuleId),
+    (context) =>
+      resolveLoggerContextForConfig(
+        {
+          ...context,
+          group: normalizeLoggerGroup(context.group),
+          main: normalizeLoggerMain(context.main),
+        },
+        config,
+      ).suppress,
+  );
+}
+
+async function transformLoggerCalls(
+  code: string,
+  id: string,
+  loggerModuleId: string,
+  suppressLog: (context: LoggerContext) => boolean,
+): Promise<LoggerTreeShakingTransformResult | null> {
   if (!(await hasPublicCreateLoggerImport(code, loggerModuleId))) {
     return null;
   }
@@ -388,17 +465,7 @@ export async function transformLoggerTreeShaking(
         return;
       }
 
-      if (
-        !shouldSuppressLog(
-          staticLogCall.kind,
-          {
-            group: staticLogCall.group,
-            main: staticLogCall.main,
-            message: staticLogCall.message,
-          },
-          options.loggerScopeId,
-        )
-      ) {
+      if (!suppressLog(staticLogCall)) {
         return;
       }
 
@@ -409,7 +476,8 @@ export async function transformLoggerTreeShaking(
         return;
       }
 
-      transformedCode.remove(path.node.start, path.node.end);
+      // An empty statement preserves bare if/else, loop and labelled bodies.
+      transformedCode.overwrite(path.node.start, path.node.end, ';');
       removedLogCount += 1;
     },
   });

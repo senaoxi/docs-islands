@@ -26,6 +26,8 @@ loggerPlugin.vite({
 
 Omitting `config` injects the default visibility policy.
 
+Each instance compiles its own pruning policy; creating another instance does not configure the host process default scope or replace the first instance's policy.
+
 ```ts
 loggerPlugin.vite({
   treeshake: true,
@@ -49,6 +51,7 @@ When plugin config is present in a bundle:
 
 - `setLoggerConfig()` throws.
 - `resetLoggerConfig()` throws.
+- Scoped setters and resetters also throw when targeting the default scope; explicit non-default scopes remain independently configurable.
 - Update the bundler `loggerPlugin.*({ config })` option instead.
 - The same policy is used for runtime filtering and build-time pruning.
 

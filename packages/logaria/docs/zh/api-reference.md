@@ -58,6 +58,8 @@ import { createElapsedTimer, formatDebugMessage, formatErrorMessage } from 'loga
 
 `createElapsedLogOptions` 与 `formatElapsedTime` 是内部模块导出，**不**属于 `logaria/helper` 包入口。
 
+摘要序列化失败（包括 getter 或 Proxy trap 抛错）时返回 `[unserializable summary]`。只读取选中的摘要键对应的值；键的枚举和排序仍会处理整个键集合。读取错误消息或转换字符串抛错时，`formatErrorMessage` 返回 `Unknown error`。这些辅助函数不会脱敏敏感数据。
+
 ## `logaria/plugin`
 
 通用打包工具适配器与配套常量。

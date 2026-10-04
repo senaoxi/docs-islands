@@ -158,6 +158,12 @@ Logaria 拥有独立的 public exports、构建产物、package checks、release
 
 Logaria 独立打包和发布，在结构上不与 `@docs-islands/core` 耦合。实现没有建立其长期产品范围是 Docs Islands 专属还是通用日志工具。
 
+### 日志策略与生命周期
+
+每个构建插件实例持有编译后的裁剪策略，不把它注册到构建进程的默认运行时作用域。运行时输出与裁剪复用同一配置判定函数。公开的直接转换接口保留显式作用域契约。裁剪仅处理静态支持且参数求值安全的调用，用空语句保留无花括号控制流；选项存在歧义时保留调用，由运行时过滤。参见 [`plugin/index.ts`](../../../packages/logaria/src/plugin/index.ts)、[`plugin/transform.ts`](../../../packages/logaria/src/plugin/transform.ts) 和 [`tree-shaking-safety.spec.ts`](../../../packages/logaria/src/__tests__/tree-shaking-safety.spec.ts)。
+
+作用域重置同时删除配置和日志器复用缓存。重新注册后，新创建操作得到新的 main/group 对象；外部仍持有的引用继续读取当前配置，并在显式作用域缺失时抛错。活跃作用域的名称缓存仍保留到重置。缓存是内部实现，不新增公开 dispose API。构建插件受控的默认作用域，在根入口和 scoped 公开接口中都限制配置修改。预设解析不修改可复用或冻结的输入。诊断摘要只访问选中的键对应的属性值，序列化失败有兜底；键枚举与排序的工作量不受输出键数量上限约束。参见 [`instances.ts`](../../../packages/logaria/src/core/instances.ts)、[`config.ts`](../../../packages/logaria/src/core/config.ts)、[`runtime-regressions.spec.ts`](../../../packages/logaria/src/__tests__/runtime-regressions.spec.ts) 和 [`controlled-runtime.spec.ts`](../../../packages/logaria/src/plugin/__tests__/controlled-runtime.spec.ts)。
+
 ## Limina 边界
 
 Limina 是外部 npm CLI 依赖，提供 `limina` binary。九个开发消费者均引用既有 dev catalog 中精确的 `0.4.0`，不使用 caret 或 tilde。其源码、文档、fixtures 与 release targets 不再属于本 workspace；[分离记录](./history-extraction.md) 拥有 provenance 和恢复说明。

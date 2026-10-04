@@ -33,6 +33,10 @@ resetScopedLoggerConfig(scopeId);
 
 `createScopedLogger()` requires the scope config to be registered first. If the scope is missing, it throws — Logaria refuses to fall back to the default scope silently, because the whole point of scoped integrations is to keep ownership explicit.
 
+Reset removes both the configuration and the scope's cached main/group loggers. Re-registering the same id creates fresh cached objects. References still held by application code are not invalidated: they throw while an explicit scope is missing and read the new config after it is registered again. Keep main and group names stable within a live scope; end a per-instance scope with reset when its owner finishes.
+
+The default scope is initialized lazily after a reset. In a bundler-controlled runtime, setting or resetting that default scope through `logaria/core` also throws; non-default host scopes remain independently configurable.
+
 ## Reading Scope Config
 
 Use `getScopedLoggerConfig()` when integration code needs to inspect the raw config currently registered for a scope:

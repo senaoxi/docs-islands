@@ -8,10 +8,12 @@ A call can be removed only when the plugin can statically prove all of these:
 
 - `createLogger` is a named, unaliased import from `logaria`.
 - `main`, `group`, and message are string literals.
+- The options have one `main`, without spreads, computed keys, or methods.
 - The logger binding is a `const` and is not reassigned.
 - The log call is a standalone expression statement.
 - The plugin is running in a build context.
-- `treeshake` is not `false`.
+- `treeshake` is `true`.
+- Arguments after the message are absent or a literal elapsed-time options object with numeric values, including unary `+`/`-`.
 
 ## Supported Shape
 
@@ -32,6 +34,8 @@ logger.debug('static metric details');
 These patterns are preserved and filtered at runtime:
 
 - Dynamic `main`, `group`, or message values
+- Ambiguous options or duplicate `main` keys
+- Computed options, extra arguments, or spread arguments whose evaluation must remain
 - Aliased `createLogger` imports
 - Reassigned logger bindings
 - Destructured logger methods
@@ -48,6 +52,8 @@ loggerPlugin.vite({
 ```
 
 With that config, a supported static `logger.info('...')` call can be removed from a production build. Unsupported shapes remain in the bundle and are suppressed by runtime policy.
+
+Removable statements become empty statements, preserving bare control-flow bodies. Each plugin instance owns its compiled pruning policy without changing the build process default scope. The direct transform API continues using its explicitly registered scope.
 
 ## Related
 

@@ -55,6 +55,8 @@ Exact matches are faster and easier to reason about. Use globs when you genuinel
 
 Preset plugins are how packages and frameworks ship **reusable rule templates** with optional named configs. Registering a preset does not enable anything by itself — you enable preset behavior through `extends` or `rules` references.
 
+Resolution merges into separate rule settings without changing the preset inputs. The same preset, including frozen rule settings, can be reused across configurations with different overrides.
+
 ```ts
 import type { LoggerPresetPlugin } from 'logaria/types';
 import { setLoggerConfig } from 'logaria';

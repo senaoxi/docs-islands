@@ -15,12 +15,11 @@ import {
   type UnpluginContextMeta,
   type UnpluginFactory,
 } from 'unplugin';
-import { DEFAULT_LOGGER_CONFIG, setScopedLoggerConfig } from '../core/config';
-import { DEFAULT_LOGGER_SCOPE_ID } from '../core/helper/scope';
+import { DEFAULT_LOGGER_CONFIG, resolveLoggerConfig } from '../core/config';
 import type { LoggerConfig } from '../types';
 import {
   DEFAULT_LOGGER_MODULE_ID,
-  transformLoggerTreeShaking,
+  transformLoggerTreeShakingForConfig,
 } from './transform';
 
 const resolveModuleSpecifier = (
@@ -329,13 +328,11 @@ const factory: UnpluginFactory<LoggerPluginOptions | undefined> = (
   options = {},
   meta,
 ) => {
-  const loggerScopeId = DEFAULT_LOGGER_SCOPE_ID;
   const loggerConfig = options.config ?? DEFAULT_LOGGER_CONFIG;
   const defines = createLoggerPluginDefines(loggerConfig);
+  const compiledConfig = resolveLoggerConfig(loggerConfig);
   const shouldTreeshake = options.treeshake === true;
   let isBuild = readInitialIsBuild(meta);
-
-  setScopedLoggerConfig(loggerScopeId, loggerConfig);
 
   return {
     name: LOGGER_PLUGIN_NAME,
@@ -396,10 +393,12 @@ const factory: UnpluginFactory<LoggerPluginOptions | undefined> = (
         return null;
       }
 
-      return transformLoggerTreeShaking(code, id, {
-        loggerModuleId: DEFAULT_LOGGER_MODULE_ID,
-        loggerScopeId,
-      });
+      return transformLoggerTreeShakingForConfig(
+        code,
+        id,
+        DEFAULT_LOGGER_MODULE_ID,
+        compiledConfig,
+      );
     },
   };
 };
@@ -426,11 +425,11 @@ const factory: UnpluginFactory<LoggerPluginOptions | undefined> = (
  * @example
  * ```ts
  * // Vite configuration
- * import { loggerPlugin } from 'logaria';
+ * import { loggerPlugin } from 'logaria/plugin';
  *
  * export default {
  *   plugins: [
- *     loggerPlugin({
+ *     loggerPlugin.vite({
  *       config: {
  *         levels: ['error', 'warn'],
  *       },

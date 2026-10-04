@@ -158,6 +158,12 @@ Logaria has independent public exports, build output, package checks, release ch
 
 Logaria is packaged and released independently and is not structurally coupled to `@docs-islands/core`. The implementation does not establish whether its long-term product scope is Docs Islands-specific or general-purpose.
 
+### Logger policy and lifetimes
+
+Each bundler plugin instance holds a compiled pruning policy instead of registering it in the build process's default runtime scope. Runtime emission and pruning share the same config decision function. The public direct transform keeps its explicit scope contract. Pruning only removes statically supported calls with safe argument evaluation, and uses an empty statement to preserve bare control-flow bodies; ambiguous options remain for runtime filtering. See [`plugin/index.ts`](../../packages/logaria/src/plugin/index.ts), [`plugin/transform.ts`](../../packages/logaria/src/plugin/transform.ts) and [`tree-shaking-safety.spec.ts`](../../packages/logaria/src/__tests__/tree-shaking-safety.spec.ts).
+
+Scope reset removes its config and logger reuse cache. New creation after re-registration gets fresh main/group objects; externally held references retain the existing behavior of reading current config and throwing while an explicit scope is missing. Live scopes still retain their cached names until reset. The cache is internal and adds no public disposal API. Default-scope mutations are guarded through both root and scoped public APIs when controlled by a bundler. Preset resolution does not mutate reusable or frozen inputs. Diagnostic summary property access is bounded to selected keys and serialization failures have fallbacks; key enumeration and sorting are not bounded by the output-key limit. See [`instances.ts`](../../packages/logaria/src/core/instances.ts), [`config.ts`](../../packages/logaria/src/core/config.ts), [`runtime-regressions.spec.ts`](../../packages/logaria/src/__tests__/runtime-regressions.spec.ts) and [`controlled-runtime.spec.ts`](../../packages/logaria/src/plugin/__tests__/controlled-runtime.spec.ts).
+
 ## Limina boundary
 
 Limina is an external npm CLI dependency with a `limina` binary. All nine development consumers use the existing dev catalog pinned exactly to `0.4.0`, with no caret or tilde. Its source, docs, fixtures and release targets are outside this workspace; the [extraction record](./history-extraction.md) owns provenance and recovery.
