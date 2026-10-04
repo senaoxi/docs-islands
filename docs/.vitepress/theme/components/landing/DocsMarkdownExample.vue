@@ -36,7 +36,7 @@ const copy = computed(() =>
 const source = `<script lang="react">\n  import Counter from './Counter';\n\u003C/script>\n\n<Counter client:visible />`;
 const codeId = useId();
 const labelId = useId();
-const demo = ref<HTMLElement>();
+const exampleRoot = ref<HTMLElement>();
 // SSR and readers without JavaScript receive the complete example.
 const progress = ref(source.length);
 const mounted = ref(false);
@@ -152,7 +152,7 @@ onMounted(() => {
     },
     { threshold: [0, 0.15] },
   );
-  if (demo.value) observer.observe(demo.value);
+  if (exampleRoot.value) observer.observe(exampleRoot.value);
   media.addEventListener('change', onMotion);
   globalThis.document.addEventListener('visibilitychange', onVisibility);
 });
@@ -167,7 +167,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="demo" class="markdown-terminal">
+  <div ref="exampleRoot" class="markdown-terminal">
     <div class="terminal-chrome">
       <div class="terminal-file">
         <svg viewBox="0 0 16 16" aria-hidden="true" fill="none">

@@ -1,5 +1,5 @@
-import type { getLandingDemoSnippets } from './landing-demo-landing';
-import type { EditorPart } from './landing-demo-source';
+import type { getIntegrationWalkthroughSnippets } from './integration-walkthrough-content';
+import type { EditorPart } from './integration-walkthrough-source';
 import {
   getSunsetArrival,
   getSunsetMotion,
@@ -25,7 +25,7 @@ export interface EditorFrame extends TypingFrame {
   cursor: number;
   action: 'type' | 'pair' | 'newline' | 'open-line' | 'move' | 'pause';
 }
-export interface DemoStage {
+export interface WalkthroughStage {
   id: string;
   file: string;
   source: string;
@@ -38,7 +38,7 @@ export interface DemoStage {
   editPlans: EditorFrame[][];
   keyPlans: TypingFrame[][];
 }
-export interface DemoState {
+export interface WalkthroughState {
   phase: number;
   editor: EditorStep;
   edit: number;
@@ -48,16 +48,16 @@ export interface DemoState {
   partial: number;
   reverseAt: number | null;
 }
-export type DemoAction =
+export type WalkthroughAction =
   | {
       type: 'tick';
-      stages: DemoStage[];
+      stages: WalkthroughStage[];
       ms?: number;
       endAt?: number;
       direction?: 'left' | 'right';
     }
-  | { type: 'start'; stages: DemoStage[] }
-  | { type: 'finish'; stages: DemoStage[]; endAt?: number };
+  | { type: 'start'; stages: WalkthroughStage[] }
+  | { type: 'finish'; stages: WalkthroughStage[]; endAt?: number };
 
 // Reproducible short bursts within code tokens, with pauses between tokens,
 // statements and lines. No random per-character timing or elapsed-time catch-up.
@@ -302,7 +302,7 @@ const logTyping = (text: string): TypingFrame[] => {
     return { position, delay: 350 };
   });
 };
-const editorChanges = (stage: DemoStage) =>
+const editorChanges = (stage: WalkthroughStage) =>
   stage.parts?.filter(
     (part): part is Exclude<EditorPart, string> => typeof part !== 'string',
   ) ?? [];
@@ -313,7 +313,7 @@ const makeStage = (
   output: string,
   parts?: EditorPart[],
   readMs = 0,
-): DemoStage => {
+): WalkthroughStage => {
   const changes =
     parts?.filter(
       (part): part is Exclude<EditorPart, string> => typeof part !== 'string',
@@ -333,9 +333,9 @@ const makeStage = (
     keyPlans: changes.map((change) => developerTyping(change.keys, 'command')),
   };
 };
-export function getDemoStages(
-  snippets: ReturnType<typeof getLandingDemoSnippets>,
-): DemoStage[] {
+export function getWalkthroughStages(
+  snippets: ReturnType<typeof getIntegrationWalkthroughSnippets>,
+): WalkthroughStage[] {
   return [
     makeStage(
       'page',
@@ -371,7 +371,7 @@ const savePlan: TypingFrame[] = [
   { position: 3, delay: 220 },
 ].map((frame) => ({ ...frame, delay: frame.delay / 1.2 }));
 export function getPlaybackPlan(
-  stage: DemoStage,
+  stage: WalkthroughStage,
   editor: EditorStep,
   edit: number,
 ): TypingFrame[] {
@@ -396,7 +396,10 @@ export function getPlaybackPlan(
     }
   }
 }
-export function getHoldDuration(stage: DemoStage, editor: EditorStep): number {
+export function getHoldDuration(
+  stage: WalkthroughStage,
+  editor: EditorStep,
+): number {
   if (stage.id === 'updated') return 0;
   switch (editor) {
     case 'open': {
@@ -419,7 +422,7 @@ export function getHoldDuration(stage: DemoStage, editor: EditorStep): number {
     }
   }
 }
-export function initialDemoState(): DemoState {
+export function initialWalkthroughState(): WalkthroughState {
   return {
     phase: 0,
     editor: 'command',
@@ -431,7 +434,10 @@ export function initialDemoState(): DemoState {
     reverseAt: null,
   };
 }
-function enterPhase(state: DemoState, stages: DemoStage[]): DemoState {
+function enterPhase(
+  state: WalkthroughState,
+  stages: WalkthroughStage[],
+): WalkthroughState {
   const phase = Math.min(state.phase + 1, stages.length - 1);
   const stage = stages[phase]!;
   const editor = stage.parts ? 'command' : 'terminal';
@@ -445,7 +451,10 @@ function enterPhase(state: DemoState, stages: DemoStage[]): DemoState {
     playing: true,
   };
 }
-function advanceDemo(state: DemoState, stages: DemoStage[]): DemoState {
+function advanceWalkthrough(
+  state: WalkthroughState,
+  stages: WalkthroughStage[],
+): WalkthroughState {
   const stage = stages[state.phase]!;
   let editor: EditorStep;
   let edit = state.edit;
@@ -479,10 +488,10 @@ function advanceDemo(state: DemoState, stages: DemoStage[]): DemoState {
   }
   return { ...state, editor, edit, frame: 0 };
 }
-function tickDemo(
-  state: DemoState,
-  action: Extract<DemoAction, { type: 'tick' }>,
-): DemoState {
+function tickWalkthrough(
+  state: WalkthroughState,
+  action: Extract<WalkthroughAction, { type: 'tick' }>,
+): WalkthroughState {
   if (!state.playing) return state;
   if (state.phase === action.stages.length - 1) {
     const end = action.endAt ?? state.clock;
@@ -503,17 +512,20 @@ function tickDemo(
   const next =
     state.frame < plan.length
       ? { ...state, frame: state.frame + 1 }
-      : advanceDemo(state, action.stages);
+      : advanceWalkthrough(state, action.stages);
   return { ...next, clock, partial: 0 };
 }
-export function demoReducer(state: DemoState, action: DemoAction): DemoState {
+export function walkthroughReducer(
+  state: WalkthroughState,
+  action: WalkthroughAction,
+): WalkthroughState {
   switch (action.type) {
     case 'tick': {
       const next =
         action.direction === 'left' && state.reverseAt === null
           ? { ...state, reverseAt: state.clock }
           : state;
-      return tickDemo(next, action);
+      return tickWalkthrough(next, action);
     }
     case 'start': {
       return state.phase === action.stages.length - 1
@@ -537,7 +549,11 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
     }
   }
 }
-function getEditorFrame(stage: DemoStage, state: DemoState, reduced = false) {
+function getEditorFrame(
+  stage: WalkthroughStage,
+  state: WalkthroughState,
+  reduced = false,
+) {
   const active = stage.editPlans[state.edit];
   const index = reduced && active ? active.length - 1 : state.frame - 1;
   return (
@@ -546,8 +562,8 @@ function getEditorFrame(stage: DemoStage, state: DemoState, reduced = false) {
   );
 }
 export function getEditorBuffer(
-  stage: DemoStage,
-  state: DemoState,
+  stage: WalkthroughStage,
+  state: WalkthroughState,
   reduced: boolean,
 ): string {
   const frame = getEditorFrame(stage, state, reduced);
@@ -572,8 +588,8 @@ export function getEditorBuffer(
   );
 }
 export function getVisibleText(
-  stage: DemoStage,
-  state: DemoState,
+  stage: WalkthroughStage,
+  state: WalkthroughState,
   reduced: boolean,
 ): string {
   if (state.editor === 'command') {
@@ -590,11 +606,11 @@ export function getVisibleText(
 // vi uses an alternate buffer; leaving it restores the accumulated shell
 // transcript. Keep commands and recorded dev-server output exactly once.
 export function getTerminalTranscript(
-  stages: DemoStage[],
-  state: DemoState,
+  stages: WalkthroughStage[],
+  state: WalkthroughState,
   reduced: boolean,
 ): string {
-  const saved = (stage: DemoStage) => stage.command;
+  const saved = (stage: WalkthroughStage) => stage.command;
   const history = stages
     .slice(0, state.phase)
     .map((stage) => (stage.parts ? saved(stage) : stage.output));
@@ -609,10 +625,13 @@ export function getTerminalTranscript(
   return history.filter(Boolean).join('\n\n');
 }
 
-export function getActiveChange(stage: DemoStage, edit: number) {
+export function getActiveChange(stage: WalkthroughStage, edit: number) {
   return editorChanges(stage)[edit];
 }
-export function getEditorAction(stage: DemoStage, state: DemoState) {
+export function getEditorAction(
+  stage: WalkthroughStage,
+  state: WalkthroughState,
+) {
   return state.editor === 'insert'
     ? getEditorFrame(stage, state)?.action
     : undefined;
@@ -621,8 +640,8 @@ export function getViMode(editor: EditorStep) {
   return editor === 'insert' ? '-- INSERT --' : 'NORMAL';
 }
 export function getViCommand(
-  stage: DemoStage,
-  state: DemoState,
+  stage: WalkthroughStage,
+  state: WalkthroughState,
   reduced: boolean,
 ): string {
   const text =
@@ -635,8 +654,8 @@ export function getViCommand(
 }
 
 export function getEditorCursor(
-  stage: DemoStage,
-  state: DemoState,
+  stage: WalkthroughStage,
+  state: WalkthroughState,
   reduced: boolean,
 ) {
   if (state.editor === 'open' || state.editor === 'command')
@@ -674,15 +693,15 @@ export function getEditorCursor(
   );
   return { line: lines.length, column };
 }
-export interface DemoClockEntry {
+export interface WalkthroughClockEntry {
   elapsed: number;
   delay: number;
 }
-const stateKey = (state: DemoState) =>
+const stateKey = (state: WalkthroughState) =>
   `${state.phase}/${state.editor}/${state.edit}/${state.frame}/${state.playing}`;
-export function getDemoTimeline(stages: DemoStage[]) {
-  const entries = new Map<string, DemoClockEntry>();
-  let state = { ...initialDemoState(), playing: true };
+export function getWalkthroughTimeline(stages: WalkthroughStage[]) {
+  const entries = new Map<string, WalkthroughClockEntry>();
+  let state = { ...initialWalkthroughState(), playing: true };
   let appearance = 0;
   let styleAt = 0;
   for (let index = 0; index < 10_000; index++) {
@@ -695,7 +714,7 @@ export function getDemoTimeline(stages: DemoStage[]) {
       getHoldDuration(stage, state.editor);
     entries.set(stateKey(state), { elapsed: state.clock, delay });
     if (!state.playing) break;
-    state = demoReducer(state, { type: 'tick', stages });
+    state = walkthroughReducer(state, { type: 'tick', stages });
   }
   const motionDuration =
     Math.ceil(
@@ -716,8 +735,8 @@ export function getDemoTimeline(stages: DemoStage[]) {
   };
 }
 export function getPrototypeMotion(
-  state: DemoState,
-  timeline: ReturnType<typeof getDemoTimeline>,
+  state: WalkthroughState,
+  timeline: ReturnType<typeof getWalkthroughTimeline>,
   reduced = false,
 ) {
   const reverseAfter =
@@ -753,8 +772,8 @@ export function getPrototypeMotion(
     duration: state.playing ? Math.min(80, Math.max(0, remaining)) : 0,
   };
 }
-export function getPlaybackDuration(stages: DemoStage[]) {
-  const timeline = getDemoTimeline(stages);
+export function getPlaybackDuration(stages: WalkthroughStage[]) {
+  const timeline = getWalkthroughTimeline(stages);
   return {
     durationMs: timeline.duration,
     appearanceMs: timeline.appearance,

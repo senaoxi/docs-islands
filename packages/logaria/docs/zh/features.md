@@ -195,7 +195,7 @@ export default {
 下方演示直接导入真实的 `logaria` 包。选择一个配置档——默认、安静、debug 或规则模式——运行它即可看到被捕获的控制台输出。
 
 <script setup>
-import LoggerRuntimeDemo from '../.vitepress/theme/components/LoggerRuntimeDemo.vue'
+import LoggerRuntimeExplorer from '../.vitepress/theme/components/LoggerRuntimeExplorer.vue'
 </script>
 
-<LoggerRuntimeDemo locale="zh" />
+<LoggerRuntimeExplorer locale="zh" />

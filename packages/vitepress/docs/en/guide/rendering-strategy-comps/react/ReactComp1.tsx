@@ -6,7 +6,7 @@ import { renderSharedLicense } from './shared/renderSharedLicense';
 export default function ReactComp1(props: CompProps): JSX.Element {
   const [count, setCount] = useState(0);
   return (
-    <div className="react-comp1-demo">
+    <div className="react-comp1-example">
       <strong>
         {props['render-count']}: Rendering Strategy: {props['render-strategy']}
       </strong>

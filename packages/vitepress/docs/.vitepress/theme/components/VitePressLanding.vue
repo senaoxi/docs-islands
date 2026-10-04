@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import {
   getIntegrationSnippets,
   integrationInstall,
-} from '../../../components/react/landing-demo-source';
+} from '../../../components/react/integration-walkthrough-source';
 
 const props = defineProps<{ locale: 'en' | 'zh' }>();
 const chinese = computed(() => props.locale === 'zh');
@@ -209,10 +209,12 @@ onBeforeUnmount(() => {
         <p class="support"><span aria-hidden="true" />{{ copy.support }}</p>
       </div>
       <section
-        class="demo-section"
-        :aria-label="chinese ? 'React 集成演示' : 'React integration demo'"
+        class="walkthrough-section"
+        :aria-label="
+          chinese ? 'React 集成演示' : 'React integration walkthrough'
+        "
       >
-        <slot name="demo" />
+        <slot name="walkthrough" />
       </section>
     </section>
 
@@ -389,19 +391,19 @@ dd {
   padding-bottom: 56px;
 }
 .hero-copy,
-.demo-section {
+.walkthrough-section {
   min-width: 0;
 }
-.demo-section :deep(.demo-heading) {
+.walkthrough-section :deep(.walkthrough-heading) {
   display: none;
 }
-.demo-section :deep(.demo-route-shell) {
+.walkthrough-section :deep(.walkthrough-route-shell) {
   padding-top: 0;
 }
-.demo-section :deep(.demo-terminal-code) {
+.walkthrough-section :deep(.walkthrough-terminal-code) {
   height: clamp(220px, 28vh, 320px);
 }
-.demo-section :deep(.demo-terminal-inner) {
+.walkthrough-section :deep(.walkthrough-terminal-inner) {
   margin: 12px 20px 48px;
 }
 .eyebrow {
@@ -721,11 +723,11 @@ button:focus-visible,
     gap: 32px;
     width: auto;
   }
-  .demo-section :deep(.demo-terminal-code) {
+  .walkthrough-section :deep(.walkthrough-terminal-code) {
     height: 348px;
   }
-  .demo-section :deep(.demo-route-shell) {
-    padding-top: var(--demo-rail);
+  .walkthrough-section :deep(.walkthrough-route-shell) {
+    padding-top: var(--walkthrough-rail);
   }
 }
 @media (max-width: 960px) {
@@ -746,10 +748,10 @@ button:focus-visible,
   .landing-hero {
     padding-bottom: 36px;
   }
-  .demo-section :deep(.demo-terminal-code) {
+  .walkthrough-section :deep(.walkthrough-terminal-code) {
     height: 286px;
   }
-  .demo-section :deep(.demo-terminal-inner) {
+  .walkthrough-section :deep(.walkthrough-terminal-inner) {
     margin: 8px 12px 50px;
   }
   h1 {

@@ -35,3 +35,10 @@ pnpm docs:dev [pkg]     # Dev server for docs (default: monorepo)
 ## Skills
 
 - **comment-optimization** - Optimize code comments for grammar, style, and clarity. See `.claude/skills/comment-optimization/SKILL.md`.
+
+## Persistent project context
+
+Follow the root [PCR privacy and evidence rule](../AGENTS.md#pcr-privacy-and-evidence)
+and [project-context-writing](../.agents/skills/project-context-writing/SKILL.md)
+when writing records or saving audit results. Distill project facts and constraints
+without retaining private dialogue attribution, dates or local metadata.

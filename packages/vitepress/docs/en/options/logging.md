@@ -303,7 +303,7 @@ Without `loggerPlugin`, this generic runtime uses the default scope and can be c
 The playground below runs the VitePress logger facade from inside this docs site:
 
 - A normal `@docs-islands/vitepress/logger` import uses the current `createDocsIslands()` logger scope through runtime injection.
-- The framework-agnostic `logaria` runtime demo lives on the standalone logger package page.
+- The framework-agnostic `logaria` runtime explorer lives on the standalone logger package page.
 
 <LoggerScopePlayground
   client:load

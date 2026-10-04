@@ -4,9 +4,9 @@
 
 ## 证据与权威边界
 
-这是 2026-10-02 仅在云端执行分离工作的未盖章实现记录。此前失败云环境的 bundles 与候选对象无法取得。本轮重新构建投影，不声称沿用或复现此前候选 SHA。
+本未盖章实现记录涵盖 2026-10-02 完成的分离工作。投影根据冻结的仓库基线重建。此前候选对象不可用，因此这些证据不代表沿用或复现此前候选 SHA。
 
-最初冻结的 main 是 `57f5cacdbf00b39a3861a711ff6b949976086191`。完成前，远端 main 前进到 `99e797c7c8ab6da76f98d1123ec289878cd1b119`。新增的唯一业务提交已纳入：两个首页组件与其原始内容逐字节相同，其中的双语 intent/map 修改与分离记录合并。其他 UI 任务尚未提交的工作不属于本轮范围。
+最初冻结的 main 是 `57f5cacdbf00b39a3861a711ff6b949976086191`；完成的分离采用推进后的基线 `99e797c7c8ab6da76f98d1123ec289878cd1b119`。其中新增的业务提交已纳入：两个首页组件与原始内容逐字节相同，双语 intent/map 修改与分离记录合并。投影仅覆盖已提交的基线内容。
 
 更新后的冻结历史包含 384 个线性提交。投影 `39555cecc0ba44b4e3975c5630ee4256e64e1748` 保留 287 个，删除 97 个投影后为空的提交：92 个只含专属路径，另有五个混合提交的剩余投影 tree 没有变化。路径分类包含专属实现、文档和 PCR 路径；不代表每个路径混合提交都包含业务行为。[提交映射](../../../maintenance/history-extraction-20261002/commit-map.tsv) 逐项记录原 SHA、投影 SHA、处理动作、分类与主题。
 
@@ -24,7 +24,7 @@
 
 `@arethetypeswrong/core`、`knip`、`npm-package-json-lint` 与 `publint` 成为显式根开发依赖，因为配置中的可选治理 peers 此前通过 Limina 自身 workspace 开发依赖提供。Knip 保持基线的 `6.38.0`；治理策略及 checker/proof exceptions 均保留。
 
-该 registry 版本使用 MIT、未废弃，并声明 Node `^22.18.0 || >=24.11.0`。其 repository 与 provenance 仍描述 `97fc3accfcc4c4f6aaf9be05e28d0d8c4ec9b08e` 上此前的 `docs-islands` 发布。用户暂时接受此真实版本，不代表已在独立仓库新发布。本轮分离不发布任何 npm 版本。配置支持由安装后 CLI 的实际执行确立，不从版本号或 changelog 标签推断。
+该 registry 版本使用 MIT、未废弃，并声明 Node `^22.18.0 || >=24.11.0`。其 repository 与 provenance 仍描述 `97fc3accfcc4c4f6aaf9be05e28d0d8c4ec9b08e` 上此前的 `docs-islands` 发布。暂用这一 registry 固定版本不代表已在独立仓库新发布。此次分离不发布任何 npm 版本。配置支持由安装后 CLI 的实际执行确立，不从版本号或 changelog 标签推断。
 
 ## Tags 与发布基线
 

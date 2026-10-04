@@ -119,7 +119,7 @@ Logaria 在根入口背后有一个默认作用域，以及可选的、宿主集
 下方演示直接从文档站点导入真实的 `logaria` 包。选择配置档与场景，即可看到被捕获的控制台输出。
 
 <script setup>
-import LoggerRuntimeDemo from '../.vitepress/theme/components/LoggerRuntimeDemo.vue'
+import LoggerRuntimeExplorer from '../.vitepress/theme/components/LoggerRuntimeExplorer.vue'
 </script>
 
-<LoggerRuntimeDemo locale="zh" />
+<LoggerRuntimeExplorer locale="zh" />

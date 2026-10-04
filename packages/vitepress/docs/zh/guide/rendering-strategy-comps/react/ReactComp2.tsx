@@ -38,7 +38,7 @@ export function ReactComp2(props: CompProps): JSX.Element {
     return <ul>{showLocalList}</ul>;
   };
   return (
-    <div className="react-comp2-demo">
+    <div className="react-comp2-example">
       <strong>
         {props['render-count']}: 渲染策略: {props['render-strategy']}
       </strong>

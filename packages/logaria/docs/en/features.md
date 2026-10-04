@@ -192,10 +192,10 @@ See [Scoped Integrations](./scoped-integrations.md).
 
 ## Try it live
 
-The demo below imports the real `logaria` package. Pick a profile — default, quiet, debug, or rule mode — and run it to see the captured console output.
+The explorer below imports the real `logaria` package. Pick a profile — default, quiet, debug, or rule mode — and run it to see the captured console output.
 
 <script setup>
-import LoggerRuntimeDemo from '../.vitepress/theme/components/LoggerRuntimeDemo.vue'
+import LoggerRuntimeExplorer from '../.vitepress/theme/components/LoggerRuntimeExplorer.vue'
 </script>
 
-<LoggerRuntimeDemo locale="en" />
+<LoggerRuntimeExplorer locale="en" />

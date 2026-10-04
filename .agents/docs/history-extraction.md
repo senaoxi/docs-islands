@@ -4,9 +4,9 @@
 
 ## Evidence and authority
 
-This is an unstamped implementation record for the cloud-only extraction on 2026-10-02. The failed earlier cloud environment's bundles and candidate objects were unavailable. This run rebuilt the projection and does not claim to reuse or reproduce those earlier candidate SHAs.
+This unstamped implementation record covers the extraction completed on 2026-10-02. The projection was rebuilt from the frozen repository baseline. Earlier candidate objects were unavailable, so this evidence does not establish reuse or reproduction of their SHAs.
 
-The first frozen main was `57f5cacdbf00b39a3861a711ff6b949976086191`. Before completion, remote main advanced to `99e797c7c8ab6da76f98d1123ec289878cd1b119`. That one additional business commit is included: both landing components are byte-identical to its originals, and its bilingual intent/map edits are combined with the extraction records. Uncommitted work from other UI tasks is outside this run.
+The first frozen main was `57f5cacdbf00b39a3861a711ff6b949976086191`; the completed extraction uses the advanced baseline `99e797c7c8ab6da76f98d1123ec289878cd1b119`. Its additional business commit is included: both landing components are byte-identical to their originals, and bilingual intent/map edits are combined with the extraction records. The projection covers committed baseline content only.
 
 The updated frozen history has 384 linear commits. Projection `39555cecc0ba44b4e3975c5630ee4256e64e1748` retains 287 and drops 97 projected-empty commits: 92 with only exclusive paths and five mixed commits whose remaining projected tree is unchanged. Path classes count exclusive implementation/docs/PCR paths; they are not a claim that every path-mixed commit contains business behavior. The [commit map](../../maintenance/history-extraction-20261002/commit-map.tsv) records each original SHA, projected SHA, action, class and subject.
 
@@ -24,7 +24,7 @@ All nine development consumers use `limina: catalog:dev`, backed by the exact `l
 
 `@arethetypeswrong/core`, `knip`, `npm-package-json-lint` and `publint` are explicit root development dependencies because the configured optional governance peers were previously available through Limina's own workspace development dependencies. Knip remains at the baseline's `6.38.0`; governance policies and checker/proof exceptions are preserved.
 
-The registry version is MIT, not deprecated, and declares Node `^22.18.0 || >=24.11.0`. Its repository and provenance still describe the earlier `docs-islands` publication at `97fc3accfcc4c4f6aaf9be05e28d0d8c4ec9b08e`. The user's temporary acceptance of this real version does not establish a new independent-repository publication. No npm version is published by this extraction. Configuration support is established by running the installed CLI, not inferred from a version number or changelog label.
+The registry version is MIT, not deprecated, and declares Node `^22.18.0 || >=24.11.0`. Its repository and provenance still describe the earlier `docs-islands` publication at `97fc3accfcc4c4f6aaf9be05e28d0d8c4ec9b08e`. The temporary registry pin does not establish a new independent-repository publication. No npm version is published by this extraction. Configuration support is established by running the installed CLI, not inferred from a version number or changelog label.
 
 ## Tags and release baselines
 

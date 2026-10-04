@@ -4,7 +4,7 @@ import type { CompProps } from '../type';
 export function ReactComp5(props: CompProps): JSX.Element {
   const [count, setCount] = useState(0);
   return (
-    <div className="react-comp5-demo">
+    <div className="react-comp5-example">
       <strong>
         {props['render-count']}: Rendering Strategy: {props['render-strategy']}
       </strong>

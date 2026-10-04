@@ -8,15 +8,9 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import IslandPrototype from './IslandPrototype';
-import { getLandingDemoSnippets } from './landing-demo-landing';
+import { getIntegrationWalkthroughSnippets } from './integration-walkthrough-content';
 import {
-  demoReducer,
-  type DemoStage,
-  type DemoState,
   getActiveChange,
-  getDemoStages,
-  getDemoTimeline,
   getEditorAction,
   getEditorBuffer,
   getEditorCursor,
@@ -24,14 +18,20 @@ import {
   getTerminalTranscript,
   getViCommand,
   getViMode,
-  initialDemoState,
-} from './landing-demo-playback';
-import './LandingDemo.css';
+  getWalkthroughStages,
+  getWalkthroughTimeline,
+  initialWalkthroughState,
+  walkthroughReducer,
+  type WalkthroughStage,
+  type WalkthroughState,
+} from './integration-walkthrough-playback';
+import './IntegrationWalkthrough.css';
+import IslandPrototype from './IslandPrototype';
 import TerminalCode from './TerminalCode';
 
 function getEditorInstruction(
-  stage: DemoStage,
-  state: DemoState,
+  stage: WalkthroughStage,
+  state: WalkthroughState,
   chinese: boolean,
 ) {
   if (state.editor === 'open')
@@ -51,8 +51,8 @@ function getEditorInstruction(
 }
 
 interface ViEditorProps {
-  stage: DemoStage;
-  state: DemoState;
+  stage: WalkthroughStage;
+  state: WalkthroughState;
   reducedMotion: boolean;
   chinese: boolean;
   terminalRef: RefObject<HTMLDivElement>;
@@ -100,8 +100,8 @@ function ViEditor({
       );
   }, [buffer, cursor.line, cursor.column, state.editor, terminalRef]);
   return (
-    <div className="demo-vi-editor" data-mode={mode}>
-      <div className="demo-vi-title">
+    <div className="walkthrough-vi-editor" data-mode={mode}>
+      <div className="walkthrough-vi-title">
         <span>
           vi <span>{stage.file}</span>
         </span>
@@ -109,22 +109,20 @@ function ViEditor({
           {newFile ? '[New File]' : chinese ? '已有文件' : 'Existing file'}
         </span>
       </div>
-      <div className="demo-vi-buffer">
-        <div className="demo-vi-gutter" aria-hidden="true">
+      <div className="walkthrough-vi-buffer">
+        <div className="walkthrough-vi-gutter" aria-hidden="true">
           <pre style={{ transform: `translateY(-${scroll.top}px)` }}>
             {numbers}
           </pre>
         </div>
         <div
           ref={terminalRef}
-          className="demo-code"
+          className="walkthrough-code"
           role="textbox"
           aria-readonly="true"
           aria-multiline="true"
           tabIndex={0}
-          aria-label={
-            chinese ? '模拟 vi 编辑缓冲区' : 'Simulated vi editor buffer'
-          }
+          aria-label={chinese ? 'vi 回放缓冲区' : 'vi playback buffer'}
           onScroll={(event) =>
             setScroll({
               top: event.currentTarget.scrollTop,
@@ -141,7 +139,7 @@ function ViEditor({
         </div>
         <span
           ref={caret}
-          className={`demo-vi-cursor ${state.editor === 'insert' ? 'is-insert' : ''}`}
+          className={`walkthrough-vi-cursor ${state.editor === 'insert' ? 'is-insert' : ''}`}
           aria-hidden="true"
           style={{
             top: `calc(${cursor.line - 1} * 1.85em + 4px - ${scroll.top}px)`,
@@ -149,7 +147,7 @@ function ViEditor({
           }}
         />
       </div>
-      <div className="demo-vi-status">
+      <div className="walkthrough-vi-status">
         <span className={state.editor === 'insert' ? 'is-insert' : ''}>
           {mode}
         </span>
@@ -158,7 +156,7 @@ function ViEditor({
           {cursor.line}:{cursor.column + 1}
         </span>
       </div>
-      <div className="demo-vi-command">
+      <div className="walkthrough-vi-command">
         <span>
           {state.editor === 'save' ||
           (state.editor === 'normal' && state.edit > 0)
@@ -169,7 +167,7 @@ function ViEditor({
           {state.editor === 'save' || state.editor === 'normal' ? command : ''}
         </code>
         {state.editor === 'save' && (
-          <span className="demo-vi-save-note">
+          <span className="walkthrough-vi-save-note">
             {chinese ? '保存并退出' : 'Save and quit'}
           </span>
         )}
@@ -192,7 +190,7 @@ const subscribeVisibility = (listener: () => void) => {
   return () => document.removeEventListener('visibilitychange', listener);
 };
 
-interface LandingDemoProps {
+interface IntegrationWalkthroughProps {
   locale?: 'en' | 'zh';
   pet?: 'sunset';
 }
@@ -203,12 +201,21 @@ interface RouteSize {
   bottom: number;
 }
 
-export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
+export default function IntegrationWalkthrough({
+  locale = 'en',
+  pet,
+}: IntegrationWalkthroughProps) {
   const chinese = locale === 'zh';
-  const snippets = useMemo(() => getLandingDemoSnippets(locale), [locale]);
-  const stages = useMemo(() => getDemoStages(snippets), [snippets]);
-  const timeline = useMemo(() => getDemoTimeline(stages), [stages]);
-  const [state, dispatch] = useReducer(demoReducer, initialDemoState());
+  const snippets = useMemo(
+    () => getIntegrationWalkthroughSnippets(locale),
+    [locale],
+  );
+  const stages = useMemo(() => getWalkthroughStages(snippets), [snippets]);
+  const timeline = useMemo(() => getWalkthroughTimeline(stages), [stages]);
+  const [state, dispatch] = useReducer(
+    walkthroughReducer,
+    initialWalkthroughState(),
+  );
   const reducedMotion = useSyncExternalStore(
     subscribeMotion,
     getReducedMotion,
@@ -238,8 +245,8 @@ export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
         title: '让 Sunset 跑进这页文档。',
         description:
           '在本页 Markdown 接入已有 React 组件；Sunset 从左跑向右，途中通过 CSS 热更新转身跑回。',
-        badge: '自动演示 · 真实 React 原型',
-        terminal: 'Terminal · vi 模拟 / 实测日志回放',
+        badge: '辅助回放 · 真实 React 原型',
+        terminal: 'Terminal · vi 回放 / 实测日志回放',
         phases: [
           `编辑本页 ${snippets.page.file}`,
           '刷新预览，渲染 Sunset',
@@ -253,8 +260,8 @@ export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
         title: 'Let Sunset run through this page.',
         description:
           'Connect an existing React component in Markdown. Sunset runs left to right as CSS HMR sends it running back.',
-        badge: 'Automatic demo · live React prototype',
-        terminal: 'Terminal · vi simulation / recorded logs',
+        badge: 'Assisted playback · live React prototype',
+        terminal: 'Terminal · vi playback / recorded logs',
         phases: [
           `Edit this ${snippets.page.file}`,
           'Reload preview; render Sunset',
@@ -282,9 +289,13 @@ export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
                 direction:
                   (motion.pose === 'jumping' ||
                     motion.pose === 'running-right') &&
-                  root.current?.querySelector('.demo-character > span') &&
+                  root.current?.querySelector(
+                    '.walkthrough-character > span',
+                  ) &&
                   getComputedStyle(
-                    root.current.querySelector('.demo-character > span')!,
+                    root.current.querySelector(
+                      '.walkthrough-character > span',
+                    )!,
                   )
                     .getPropertyValue('--run-direction')
                     .trim() === 'left'
@@ -360,14 +371,14 @@ export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
       }
     : {
         top: 'auto',
-        left: 'var(--demo-rail)',
-        bottom: 'var(--demo-rail)',
+        left: 'var(--walkthrough-rail)',
+        bottom: 'var(--walkthrough-rail)',
         transform: 'translateX(-50%)',
       };
   return (
     <div
       ref={root}
-      className="integration-demo"
+      className="integration-walkthrough"
       data-phase={stage.id}
       data-playing={reducedMotion ? false : state.playing}
       data-editor-step={state.editor}
@@ -377,33 +388,36 @@ export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
       data-vi-mode={editorActive ? getViMode(state.editor) : 'SHELL'}
       data-progress={motion.progress}
     >
-      <div className="demo-heading">
+      <div className="walkthrough-heading">
         <div>
           <h2>{copy.title}</h2>
           <p>{copy.description}</p>
         </div>
-        <span className="demo-simulation-label">{copy.badge}</span>
+        <span className="walkthrough-caption">{copy.badge}</span>
       </div>
-      <div ref={shell} className="demo-route-shell">
-        <div ref={consoleRef} className="demo-console">
-          <div className="demo-terminal-inner">
-            <div className="demo-pane-toolbar">
+      <div ref={shell} className="walkthrough-route-shell">
+        <div ref={consoleRef} className="walkthrough-console">
+          <div className="walkthrough-terminal-inner">
+            <div className="walkthrough-pane-toolbar">
               <span>
-                <span className="demo-terminal-symbol" aria-hidden="true">
+                <span
+                  className="walkthrough-terminal-symbol"
+                  aria-hidden="true"
+                >
                   ›_
                 </span>
                 {copy.terminal}
               </span>
-              <span className="demo-file">{stage.file}</span>
+              <span className="walkthrough-file">{stage.file}</span>
             </div>
-            <div className="demo-stage-bar">
+            <div className="walkthrough-stage-bar">
               <span>
                 {String(state.phase + 1).padStart(2, '0')} /{' '}
                 {String(stages.length).padStart(2, '0')}
               </span>
               <span>{copy.phases[state.phase]}</span>
             </div>
-            <div className="demo-terminal-code">
+            <div className="walkthrough-terminal-code">
               {editorActive ? (
                 <ViEditor
                   key={state.phase}
@@ -416,7 +430,7 @@ export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
               ) : (
                 <div
                   ref={terminal}
-                  className="demo-code demo-shell-code"
+                  className="walkthrough-code walkthrough-shell-code"
                   role="textbox"
                   aria-readonly="true"
                   aria-multiline="true"
@@ -428,12 +442,12 @@ export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
                   </pre>
                 </div>
               )}
-              <pre className="demo-screen-reader">
+              <pre className="walkthrough-screen-reader">
                 <code>{stage.source}</code>
               </pre>
             </div>
-            <div className="demo-console-footer">
-              <ol className="demo-journey" aria-label={copy.title}>
+            <div className="walkthrough-console-footer">
+              <ol className="walkthrough-journey" aria-label={copy.title}>
                 {copy.groups.map((group, index) => (
                   <li
                     key={group}
@@ -447,20 +461,20 @@ export default function LandingDemo({ locale = 'en', pet }: LandingDemoProps) {
                   </li>
                 ))}
               </ol>
-              <span className="demo-playground">Playground</span>
+              <span className="walkthrough-playground">Playground</span>
             </div>
           </div>
         </div>
         {motion.visible && pet === 'sunset' ? (
           <div
-            className="demo-prototype"
+            className="walkthrough-prototype"
             style={markerStyle}
             data-progress={motion.progress}
             data-updated={updated}
             aria-hidden="true"
           >
             <div
-              className="demo-character"
+              className="walkthrough-character"
               data-pose={motion.pose}
               style={
                 {

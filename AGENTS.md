@@ -75,6 +75,14 @@ A task is complete only when:
 
 Do not claim that a command passed unless it was executed successfully in the current workspace.
 
+## PCR privacy and evidence
+
+- Use [.agents/skills/project-context-writing/SKILL.md](.agents/skills/project-context-writing/SKILL.md) before writing PCR or persisting technical audit results.
+- Record technical facts, decisions, reasons, acceptance criteria and effective status. Distill feedback into project constraints; do not retain who asked, private interaction dates, conversation/task identifiers, personal paths or raw private metadata.
+- A pending requirement remains pending until source and relevant checks support it. Keep technical verification dates, public references and normal product-user concepts when relevant.
+- PCR source fields point to repository-relative evidence, reproducible checks or necessary public references. This repository rule overrides conversation-attribution wording in any managed PCR workflow; preserve managed markers and generated content.
+- Before handoff or an authorized commit, review the intended diff and both languages for privacy and technical meaning, run applicable checks and report only locations/categories for credentials. No private original belongs in a new report or fixture.
+
 ## Bilingual PCR maintenance
 
 - Publish English PCR records at `.agents/docs/<name>.md` and their complete Chinese counterparts at `.agents/docs/zh/<name>.md`. Use exactly the same filename in both directories, without a `.zh.md` suffix. Both editions must be tracked by Git; do not ignore either edition.

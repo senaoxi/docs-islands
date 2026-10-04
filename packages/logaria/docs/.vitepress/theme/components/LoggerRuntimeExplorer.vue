@@ -36,7 +36,7 @@ const copy = {
     empty: 'Run a scenario to capture logger output here.',
     output: 'Captured output',
     run: 'Run scenario',
-    title: 'Runtime logger demo',
+    title: 'Runtime logger explorer',
   },
   zh: {
     clear: '清空',
@@ -94,13 +94,13 @@ const scenarios: ScenarioDefinition[] = [
       debug: true,
       levels: ['error'],
       rules: {
-        'docs-demo-flow': {
-          group: 'runtime.demo',
+        'docs-example-flow': {
+          group: 'runtime.example',
           levels: ['info', 'warn'],
           main: 'docs.logger',
         },
-        'docs-demo-error': {
-          group: 'runtime.demo',
+        'docs-example-error': {
+          group: 'runtime.example',
           levels: ['error'],
           main: 'docs.logger',
           message: 'error survives strict filters',
@@ -195,9 +195,9 @@ const captureConsole = (run: () => void): CapturedLog[] => {
   return rows;
 };
 
-const emitDemoLogs = (): void => {
+const emitRuntimeLogs = (): void => {
   const mainLogger = createLogger({ main: 'docs.logger' });
-  const logger = mainLogger.getLoggerByGroup('runtime.demo');
+  const logger = mainLogger.getLoggerByGroup('runtime.example');
 
   logger.info('info survives the active logger config', {
     elapsedTimeMs: 8,
@@ -221,7 +221,7 @@ const runScenario = (scenario: ScenarioDefinition): void => {
   } else {
     setLoggerConfig(scenario.config);
   }
-  capturedLogs.value = captureConsole(emitDemoLogs);
+  capturedLogs.value = captureConsole(emitRuntimeLogs);
 };
 
 const clearOutput = (): void => {
@@ -234,15 +234,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="logger-demo">
-    <div class="logger-demo__header">
+  <section class="logger-explorer">
+    <div class="logger-explorer__header">
       <h2>{{ localized.title }}</h2>
-      <div class="logger-demo__actions">
+      <div class="logger-explorer__actions">
         <button
           v-for="scenario in scenarios"
           :key="scenario.id"
           :aria-pressed="activeScenarioId === scenario.id"
-          class="logger-demo__scenario"
+          class="logger-explorer__scenario"
           type="button"
           @click="runScenario(scenario)"
         >
@@ -251,14 +251,14 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <p class="logger-demo__note">{{ activeScenario.notes[locale] }}</p>
+    <p class="logger-explorer__note">{{ activeScenario.notes[locale] }}</p>
 
-    <div class="logger-demo__grid">
-      <section class="logger-demo__panel">
-        <div class="logger-demo__panel-head">
+    <div class="logger-explorer__grid">
+      <section class="logger-explorer__panel">
+        <div class="logger-explorer__panel-head">
           <h3>{{ localized.config }}</h3>
           <button
-            class="logger-demo__run"
+            class="logger-explorer__run"
             type="button"
             @click="runScenario(activeScenario)"
           >
@@ -268,14 +268,18 @@ onBeforeUnmount(() => {
         <pre><code>{{ activeConfig }}</code></pre>
       </section>
 
-      <section class="logger-demo__panel">
-        <div class="logger-demo__panel-head">
+      <section class="logger-explorer__panel">
+        <div class="logger-explorer__panel-head">
           <h3>{{ localized.output }}</h3>
-          <button class="logger-demo__ghost" type="button" @click="clearOutput">
+          <button
+            class="logger-explorer__ghost"
+            type="button"
+            @click="clearOutput"
+          >
             {{ localized.clear }}
           </button>
         </div>
-        <ol v-if="capturedLogs.length > 0" class="logger-demo__output">
+        <ol v-if="capturedLogs.length > 0" class="logger-explorer__output">
           <li
             v-for="entry in capturedLogs"
             :key="entry.id"
@@ -285,14 +289,14 @@ onBeforeUnmount(() => {
             <code>{{ entry.message }}</code>
           </li>
         </ol>
-        <p v-else class="logger-demo__empty">{{ localized.empty }}</p>
+        <p v-else class="logger-explorer__empty">{{ localized.empty }}</p>
       </section>
     </div>
   </section>
 </template>
 
 <style scoped>
-.logger-demo {
+.logger-explorer {
   margin: 32px 0;
   padding: 20px;
   border: 1px solid var(--vp-c-divider);
@@ -300,41 +304,41 @@ onBeforeUnmount(() => {
   background: var(--vp-c-bg-soft);
 }
 
-.logger-demo__header,
-.logger-demo__panel-head {
+.logger-explorer__header,
+.logger-explorer__panel-head {
   display: flex;
   gap: 12px;
   align-items: center;
   justify-content: space-between;
 }
 
-.logger-demo__header {
+.logger-explorer__header {
   flex-wrap: wrap;
 }
 
-.logger-demo h2,
-.logger-demo h3,
-.logger-demo p {
+.logger-explorer h2,
+.logger-explorer h3,
+.logger-explorer p {
   margin: 0;
 }
 
-.logger-demo h2 {
+.logger-explorer h2 {
   font-size: 20px;
   line-height: 1.3;
 }
 
-.logger-demo h3 {
+.logger-explorer h3 {
   font-size: 14px;
   line-height: 1.4;
 }
 
-.logger-demo__actions {
+.logger-explorer__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.logger-demo button {
+.logger-explorer button {
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--vp-c-divider);
@@ -350,36 +354,36 @@ onBeforeUnmount(() => {
     color 0.2s ease;
 }
 
-.logger-demo button:hover {
+.logger-explorer button:hover {
   border-color: var(--vp-c-brand-1);
 }
 
-.logger-demo__scenario[aria-pressed='true'],
-.logger-demo__run {
+.logger-explorer__scenario[aria-pressed='true'],
+.logger-explorer__run {
   border-color: var(--vp-c-brand-1);
   color: var(--vp-c-bg);
   background: var(--vp-c-brand-1);
 }
 
-.logger-demo__ghost {
+.logger-explorer__ghost {
   color: var(--vp-c-text-2);
 }
 
-.logger-demo__note {
+.logger-explorer__note {
   margin-top: 14px;
   color: var(--vp-c-text-2);
   font-size: 14px;
   line-height: 1.7;
 }
 
-.logger-demo__grid {
+.logger-explorer__grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 16px;
   margin-top: 18px;
 }
 
-.logger-demo__panel {
+.logger-explorer__panel {
   min-width: 0;
   padding: 16px;
   border: 1px solid var(--vp-c-divider);
@@ -387,7 +391,7 @@ onBeforeUnmount(() => {
   background: var(--vp-c-bg);
 }
 
-.logger-demo pre {
+.logger-explorer pre {
   min-height: 180px;
   margin: 14px 0 0;
   padding: 14px;
@@ -396,12 +400,12 @@ onBeforeUnmount(() => {
   background: var(--vp-code-block-bg);
 }
 
-.logger-demo code {
+.logger-explorer code {
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.logger-demo__output {
+.logger-explorer__output {
   display: grid;
   gap: 10px;
   margin: 14px 0 0;
@@ -409,7 +413,7 @@ onBeforeUnmount(() => {
   list-style: none;
 }
 
-.logger-demo__output li {
+.logger-explorer__output li {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
   gap: 10px;
@@ -420,42 +424,42 @@ onBeforeUnmount(() => {
   background: var(--vp-c-bg-soft);
 }
 
-.logger-demo__output span {
+.logger-explorer__output span {
   color: var(--vp-c-text-2);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
-.logger-demo__output li[data-method='error'] span {
+.logger-explorer__output li[data-method='error'] span {
   color: var(--vp-c-danger-1);
 }
 
-.logger-demo__output li[data-method='warn'] span {
+.logger-explorer__output li[data-method='warn'] span {
   color: var(--vp-c-warning-1);
 }
 
-.logger-demo__output li[data-method='debug'] span {
+.logger-explorer__output li[data-method='debug'] span {
   color: var(--vp-c-text-3);
 }
 
-.logger-demo__empty {
+.logger-explorer__empty {
   margin-top: 20px;
   color: var(--vp-c-text-2);
   font-size: 14px;
 }
 
 @media (max-width: 760px) {
-  .logger-demo {
+  .logger-explorer {
     padding: 16px;
   }
 
-  .logger-demo__grid {
+  .logger-explorer__grid {
     grid-template-columns: 1fr;
   }
 
-  .logger-demo__panel-head,
-  .logger-demo__output li {
+  .logger-explorer__panel-head,
+  .logger-explorer__output li {
     grid-template-columns: 1fr;
   }
 }

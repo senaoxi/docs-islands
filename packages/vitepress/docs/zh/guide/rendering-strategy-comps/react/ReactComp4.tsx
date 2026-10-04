@@ -4,7 +4,7 @@ import type { CompProps } from '../type';
 export function ReactComp4(props: CompProps): JSX.Element {
   const [count, setCount] = useState(0);
   return (
-    <div className="react-comp4-demo">
+    <div className="react-comp4-example">
       <strong>
         {props['render-count']}: 渲染策略: {props['render-strategy']}
       </strong>

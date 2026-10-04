@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo } from 'react';
 
-// Only the fixed demo buffers are highlighted, including partially typed input.
+// Only the fixed walkthrough buffers are highlighted, including partially typed input.
 // Render token text through React so code never becomes executable markup.
 const patterns = {
   markdown:
@@ -26,7 +26,7 @@ export default function TerminalCode({
         ([, value]) => value !== undefined,
       )?.[0];
       result.push(
-        <span key={match.index} className={`demo-token-${kind}`}>
+        <span key={match.index} className={`walkthrough-token-${kind}`}>
           {match[0]}
         </span>,
       );

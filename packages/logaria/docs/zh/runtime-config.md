@@ -112,7 +112,7 @@ export default {
 下方演示使用真实的 `logaria` 包，可以切换配置档，直观看到运行时配置如何影响输出。
 
 <script setup>
-import LoggerRuntimeDemo from '../.vitepress/theme/components/LoggerRuntimeDemo.vue'
+import LoggerRuntimeExplorer from '../.vitepress/theme/components/LoggerRuntimeExplorer.vue'
 </script>
 
-<LoggerRuntimeDemo locale="zh" />
+<LoggerRuntimeExplorer locale="zh" />

@@ -114,12 +114,12 @@ Reusable libraries should **not** call `setLoggerConfig()` or `resetLoggerConfig
 - Own a private scope from a host package — [Scoped Integrations](./scoped-integrations.md)
 - Look up every export — [API Reference](./api-reference.md)
 
-## Runtime Demo
+## Runtime Explorer
 
-The demo below imports the real `logaria` package from this docs site. Pick a profile and run the scenario to see the captured console output.
+The explorer below imports the real `logaria` package from this docs site. Pick a profile and run the scenario to see the captured console output.
 
 <script setup>
-import LoggerRuntimeDemo from '../.vitepress/theme/components/LoggerRuntimeDemo.vue'
+import LoggerRuntimeExplorer from '../.vitepress/theme/components/LoggerRuntimeExplorer.vue'
 </script>
 
-<LoggerRuntimeDemo locale="en" />
+<LoggerRuntimeExplorer locale="en" />

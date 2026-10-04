@@ -12,11 +12,11 @@ import VitePressLanding from '../.vitepress/theme/components/VitePressLanding.vu
 </script>
 
 <script lang="react">
-  import LandingDemo from '../components/react/LandingDemo';
+  import IntegrationWalkthrough from '../components/react/IntegrationWalkthrough';
 </script>
 
 <VitePressLanding locale="en">
-  <template #demo>
-    <LandingDemo client:visible locale="en" pet="sunset" />
+  <template #walkthrough>
+    <IntegrationWalkthrough spa:sync-render client:load locale="en" pet="sunset" />
   </template>
 </VitePressLanding>

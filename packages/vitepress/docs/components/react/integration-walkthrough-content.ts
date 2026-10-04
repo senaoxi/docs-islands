@@ -1,8 +1,8 @@
-import type { EditorPart } from './landing-demo-source';
+import type { EditorPart } from './integration-walkthrough-source';
 
 const homepageBefore = {
-  en: '---\nlayout: home\naside: false\neditLink: false\nmarkdownStyles: false\ntitle: Docs Islands for VitePress\ndescription: Add React islands to VitePress Markdown, choose when each component hydrates, and keep the static documentation workflow.\n---\n\n<script setup>\nimport VitePressLanding from \'../.vitepress/theme/components/VitePressLanding.vue\'\n</script>\n\n<script lang="react">\n  import LandingDemo from \'../components/react/LandingDemo\';\n</script>\n\n<VitePressLanding locale="en">\n  <template #demo>\n    <LandingDemo client:visible locale="en" />\n  </template>\n</VitePressLanding>\n',
-  zh: '---\nlayout: home\naside: false\neditLink: false\nmarkdownStyles: false\ntitle: Docs Islands for VitePress\ndescription: 在 VitePress Markdown 中加入 React 小岛，选择每个组件的客户端接管时机，并保留静态文档工作流。\n---\n\n<script setup>\nimport VitePressLanding from \'../.vitepress/theme/components/VitePressLanding.vue\'\n</script>\n\n<script lang="react">\n  import LandingDemo from \'../components/react/LandingDemo\';\n</script>\n\n<VitePressLanding locale="zh">\n  <template #demo>\n    <LandingDemo client:visible locale="zh" />\n  </template>\n</VitePressLanding>\n',
+  en: '---\nlayout: home\naside: false\neditLink: false\nmarkdownStyles: false\ntitle: Docs Islands for VitePress\ndescription: Add React islands to VitePress Markdown, choose when each component hydrates, and keep the static documentation workflow.\n---\n\n<script setup>\nimport VitePressLanding from \'../.vitepress/theme/components/VitePressLanding.vue\'\n</script>\n\n<script lang="react">\n  import IntegrationWalkthrough from \'../components/react/IntegrationWalkthrough\';\n</script>\n\n<VitePressLanding locale="en">\n  <template #walkthrough>\n    <IntegrationWalkthrough spa:sync-render client:load locale="en" />\n  </template>\n</VitePressLanding>\n',
+  zh: '---\nlayout: home\naside: false\neditLink: false\nmarkdownStyles: false\ntitle: Docs Islands for VitePress\ndescription: 在 VitePress Markdown 中加入 React 小岛，选择每个组件的客户端接管时机，并保留静态文档工作流。\n---\n\n<script setup>\nimport VitePressLanding from \'../.vitepress/theme/components/VitePressLanding.vue\'\n</script>\n\n<script lang="react">\n  import IntegrationWalkthrough from \'../components/react/IntegrationWalkthrough\';\n</script>\n\n<VitePressLanding locale="zh">\n  <template #walkthrough>\n    <IntegrationWalkthrough spa:sync-render client:load locale="zh" />\n  </template>\n</VitePressLanding>\n',
 };
 const prototypeCss =
   ".prototype {\n  display: block;\n  width: 100%;\n  height: 100%;\n  background-image: url('./sunset.webp');\n  background-repeat: no-repeat;\n  background-size: 800% 1100%;\n  background-position: var(--sprite-x, 0%) var(--sprite-y, 0%);\n  transform-origin: 50% 100%;\n  --run-direction: left;\n}\n";
@@ -22,20 +22,20 @@ const snippet = (file: string, parts: EditorPart[]) => ({
 
 // These before buffers are the actual homepage files at this change's baseline.
 // The additions use the existing import-based React integration API.
-export function getLandingDemoSnippets(locale: 'en' | 'zh') {
+export function getIntegrationWalkthroughSnippets(locale: 'en' | 'zh') {
   const chinese = locale === 'zh';
   const original = homepageBefore[locale];
-  const originalUse = `    <LandingDemo client:visible locale="${locale}" />\n`;
+  const originalUse = `    <IntegrationWalkthrough spa:sync-render client:load locale="${locale}" />\n`;
   const [usePrefix, useRest] = original.split(originalUse);
   const page = snippet(`${locale}/index.md`, [
-    `${usePrefix!}    <LandingDemo client:visible locale="${locale}"`,
+    `${usePrefix!}    <IntegrationWalkthrough spa:sync-render client:load locale="${locale}"`,
     {
       before: '',
       after: ' pet="sunset"',
-      keys: '/LandingDemo client ↵ f> 2h i',
+      keys: '/IntegrationWalkthrough spa ↵ f> 2h i',
       label: chinese
-        ? '保留 LandingDemo，启用其已有 Sunset 组件'
-        : 'Keep LandingDemo; enable its existing Sunset component',
+        ? '保留 IntegrationWalkthrough，启用其已有 Sunset 组件'
+        : 'Keep IntegrationWalkthrough; enable its existing Sunset component',
     },
     ` />\n${useRest!}`,
   ]);

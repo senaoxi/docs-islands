@@ -109,10 +109,10 @@ The thrown error names exactly the plugin entry you need to edit, so you can fin
 
 ## Interactive Behavior
 
-The demo below uses the real `logaria` package and lets you swap profiles to see how runtime config affects what prints.
+The explorer below uses the real `logaria` package and lets you swap profiles to see how runtime config affects what prints.
 
 <script setup>
-import LoggerRuntimeDemo from '../.vitepress/theme/components/LoggerRuntimeDemo.vue'
+import LoggerRuntimeExplorer from '../.vitepress/theme/components/LoggerRuntimeExplorer.vue'
 </script>
 
-<LoggerRuntimeDemo locale="en" />
+<LoggerRuntimeExplorer locale="en" />

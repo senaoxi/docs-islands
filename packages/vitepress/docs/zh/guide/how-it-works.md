@@ -189,7 +189,7 @@ import { renderSharedLicense } from './shared/renderSharedLicense';
 export default function ReactComp1(props: CompProps) {
   const [count, setCount] = useState(0);
   return (
-    <div className="react-comp1-demo">
+    <div className="react-comp1-example">
       <strong>
         {props['render-count']}: 渲染策略: {props['render-strategy']}
       </strong>
@@ -323,7 +323,7 @@ export function ReactComp2(props: CompProps) {
     return <ul>{showLocalList}</ul>;
   };
   return (
-    <div className="react-comp2-demo">
+    <div className="react-comp2-example">
       <strong>
         {props['render-count']}: 渲染策略: {props['render-strategy']}
       </strong>
@@ -444,7 +444,7 @@ import './css/rc3.css';
 export default function ReactComp3(props: CompProps) {
   const [count, setCount] = useState(0);
   return (
-    <div className="react-comp3-demo">
+    <div className="react-comp3-example">
       <strong>
         {props['render-count']}: 渲染策略: {props['render-strategy']}
       </strong>
@@ -532,7 +532,7 @@ import type { CompProps } from '../type';
 export function ReactComp4(props: CompProps) {
   const [count, setCount] = useState(0);
   return (
-    <div className="react-comp4-demo">
+    <div className="react-comp4-example">
       <strong>
         {props['render-count']}: 渲染策略: {props['render-strategy']}
       </strong>
@@ -613,7 +613,7 @@ import type { CompProps } from '../type';
 export function ReactComp5(props: CompProps) {
   const [count, setCount] = useState(0);
   return (
-    <div className="react-comp5-demo">
+    <div className="react-comp5-example">
       <strong>
         {props['render-count']}: 渲染策略: {props['render-strategy']}
       </strong>
@@ -767,7 +767,7 @@ const vueInfo = 'VueComp1';
 </script>
 
 <template>
-  <div class="vue-comp1-demo">
+  <div class="vue-comp1-example">
     <strong> {{ props.renderCount }}: 渲染策略: {{ props.renderStrategy }} </strong>
     <ol>
       <li>

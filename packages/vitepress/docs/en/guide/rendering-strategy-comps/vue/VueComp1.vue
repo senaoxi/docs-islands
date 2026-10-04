@@ -11,7 +11,7 @@ const vueInfo = 'VueComp1';
 </script>
 
 <template>
-  <div class="vue-comp1-demo">
+  <div class="vue-comp1-example">
     <strong
       >{{ props.renderCount }}: Rendering Strategy:
       {{ props.renderStrategy }}</strong

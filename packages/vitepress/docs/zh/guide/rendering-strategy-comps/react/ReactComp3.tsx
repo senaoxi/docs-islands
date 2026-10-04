@@ -5,7 +5,7 @@ import './css/rc3.css';
 export default function ReactComp3(props: CompProps): JSX.Element {
   const [count, setCount] = useState(0);
   return (
-    <div className="react-comp3-demo">
+    <div className="react-comp3-example">
       <strong>
         {props['render-count']}: 渲染策略: {props['render-strategy']}
       </strong>
