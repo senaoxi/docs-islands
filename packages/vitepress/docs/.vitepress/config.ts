@@ -13,6 +13,7 @@ import {
 import llmstxt from 'vitepress-plugin-llms';
 import enConfig from '../en/config';
 import zhConfig from '../zh/config';
+import { configureArticleMarkdown } from './article-markdown';
 
 const { release, siteDevtools } = loadEnv();
 const { DOUBAO_BASE_URL, DOUBAO_API_KEY, CLAUDE_BASE_URL, CLAUDE_API_KEY } =
@@ -92,6 +93,7 @@ const vitepressConfig: UserConfig<DefaultTheme.Config> = defineConfig({
   markdown: {
     config: (md) => {
       md.use(groupIconMdPlugin);
+      configureArticleMarkdown(md);
     },
   },
   vite: {
@@ -129,7 +131,7 @@ const vitepressConfig: UserConfig<DefaultTheme.Config> = defineConfig({
     ],
   },
   themeConfig: {
-    outline: 'deep',
+    outline: [2, 3],
     socialLinks: [
       {
         icon: 'github',

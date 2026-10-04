@@ -1,3 +1,6 @@
 @import './custom.css';
 @import './main.css';
 @import './vars.css';
+@import './article-tokens.css';
+@import './article.css';
+@import './article-navigation.css';

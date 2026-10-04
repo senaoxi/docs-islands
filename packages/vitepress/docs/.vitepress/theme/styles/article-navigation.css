@@ -1,0 +1,126 @@
+.di-article :focus-visible {
+  outline: 2px solid var(--di-link);
+  outline-offset: 3px;
+}
+
+.di-article .VPDoc > .container > .aside {
+  max-width: 216px;
+  padding-left: 20px;
+}
+
+.di-article .VPDoc :is(.aside-container, .aside-curtain) {
+  width: 196px;
+}
+
+.di-article .VPDoc .aside-container {
+  padding-top: calc(var(--vp-nav-height) + 40px);
+  scrollbar-width: thin;
+}
+
+.di-article .VPDocAsideOutline .outline-link,
+.di-article .VPLocalNavOutlineDropdown .outline-link {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+.di-article .VPDocAsideOutline .outline-link.active {
+  color: var(--di-link);
+  font-weight: 600;
+}
+
+.di-article .VPSidebar {
+  visibility: hidden;
+}
+
+.di-article .VPSidebar.open {
+  visibility: visible;
+}
+
+.di-article .VPSidebarItem .link {
+  min-height: 36px;
+}
+
+.di-article .VPSidebarItem .text {
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.di-article .VPSidebarItem.is-active > .item > .link {
+  border-left: 2px solid var(--di-link);
+  padding-left: 10px;
+  background: var(--di-accent-soft);
+}
+
+.di-article .VPSidebarItem.is-active > .item > .link .text {
+  color: var(--di-link);
+  font-weight: 600;
+}
+
+.di-article .VPLocalNav :is(.menu, .VPLocalNavOutlineDropdown) {
+  min-height: 44px;
+  padding: 10px 20px;
+  line-height: 24px;
+}
+
+.di-article .VPLocalNavOutlineDropdown button {
+  font-size: 13px;
+  line-height: 24px;
+}
+
+.di-article .VPLocalNavOutlineDropdown .items {
+  top: 44px;
+  border-radius: 6px;
+  background: var(--di-surface);
+}
+
+.di-article .vp-doc div[class*='language-'] > button.copy {
+  top: 8px;
+  opacity: 1;
+}
+
+.di-article .vp-doc div[class*='language-'] > span.lang {
+  top: 14px;
+  right: auto;
+  left: 20px;
+  opacity: 1;
+  color: var(--di-muted);
+  line-height: 20px;
+}
+
+.di-article .vp-doc .vp-code-group .tabs input:focus-visible + label {
+  outline: 2px solid var(--di-link);
+  outline-offset: -3px;
+}
+
+@media (max-width: 959px) {
+  .di-article .VPSidebarItem .link {
+    min-height: 44px;
+  }
+
+  .di-article .vp-doc div[class*='language-'] > button.copy {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (min-width: 960px) {
+  .di-article .VPSidebar {
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .di-article .VPSidebar,
+  .di-article .outline-marker,
+  .di-article .outline-link,
+  .di-article .vp-doc a.di-markdown,
+  .di-article .VPLocalNavOutlineDropdown .items {
+    transition: none;
+    animation: none;
+  }
+}

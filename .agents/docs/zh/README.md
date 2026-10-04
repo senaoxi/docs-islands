@@ -21,6 +21,7 @@
 | 视觉标识与紧凑图示   | [architecture.md](./architecture.md#视觉标识与图示布局)        | 产品各自的 SVG 源、生成版本、有限的小岛动画、紧凑布局及其链接的人类明确方向           |
 | VitePress 集成标识   | [intent.md](./intent.md#人类明确提出的-vitepress-集成标识方向) | 已采纳的子项目几何、紫色主色、package 范围、保留的主标与本地采用                      |
 | VitePress 集成落地页 | [architecture.md](./architecture.md#vitepress-集成落地页展示)  | 自动辅助 vi、保留日志、Sunset 完整帧序列、CSS 触发返程、慢速思考循环及语言／base 路由 |
+| VitePress 集成文章   | [architecture.md](./architecture.md#vitepress-集成文章主题)    | 局部紫色阅读 tokens、Markdown 归属、表格溢出、移动键盘行为、保留的 islands 及验证边界 |
 | 工具链与强制约束     | [technology-stack.md](./technology-stack.md)                   | 包管理器、Node.js、模块格式、任务执行、构建工具和治理工具                             |
 | Workspace 与包边界   | [architecture.md](./architecture.md)                           | Workspace 布局、发布单元、私有包、依赖方向、adapter 边界、构建边界和根落地页展示      |
 | 第三方 npm 依赖准入  | [dependency-admission.md](./dependency-admission.md)           | 必要性、npm 采用情况、生产产物影响、许可证兼容性、废弃版本拒绝规则和维护状态比较      |

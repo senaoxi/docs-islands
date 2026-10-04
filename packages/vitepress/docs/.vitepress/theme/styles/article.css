@@ -1,0 +1,308 @@
+.di-article .VPDoc {
+  padding: 32px 20px 80px;
+}
+
+.di-article .VPDoc > .container > .content > .content-container {
+  max-width: var(--di-reading-max);
+}
+
+.di-article .VPDoc > .container > .content {
+  min-width: 0;
+}
+
+/* Renderer-marked Markdown nodes keep component-owned typography intact. */
+.di-article .vp-doc :is(p, ul, ol, blockquote).di-markdown {
+  font-size: 16px;
+  line-height: 28px;
+}
+
+.di-article .vp-doc p.di-markdown {
+  margin: 16px 0;
+}
+
+.di-article:lang(en) .vp-doc > div > p.di-markdown {
+  max-width: 68ch;
+}
+
+.di-article .vp-doc :is(h1, h2, h3, h4).di-markdown {
+  font-weight: 600;
+  scroll-margin-top: 116px;
+}
+
+.di-article .vp-doc h1.di-markdown {
+  margin: 0 0 24px;
+  font-size: 28px;
+  line-height: 36px;
+}
+
+.di-article .vp-doc h2.di-markdown {
+  margin: 40px 0 16px;
+  border-top: 0;
+  padding-top: 0;
+  font-size: 22px;
+  line-height: 30px;
+}
+
+.di-article .vp-doc h3.di-markdown {
+  margin: 28px 0 12px;
+  font-size: 19px;
+  line-height: 28px;
+}
+
+.di-article .vp-doc h4.di-markdown {
+  margin: 24px 0 12px;
+  font-size: 16px;
+  line-height: 26px;
+}
+
+.di-article .vp-doc h2.di-markdown .header-anchor {
+  top: 0;
+}
+
+.di-article .vp-doc a.di-markdown {
+  color: var(--di-link);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color 0.15s;
+}
+
+.di-article .vp-doc a.di-markdown:hover {
+  color: var(--di-link-hover);
+}
+
+.di-article .vp-doc code.di-markdown {
+  border-radius: 3px;
+  padding: 2px 5px;
+  color: var(--di-text);
+  background: var(--di-inline-bg);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.di-article .vp-doc a.di-markdown > code.di-markdown {
+  color: var(--di-link);
+}
+
+.di-article .vp-doc :is(h1, h2, h3, h4).di-markdown > code.di-markdown {
+  padding: 0;
+  background: transparent;
+}
+
+.di-article .vp-doc blockquote.di-markdown {
+  border-left: 2px solid var(--di-border);
+  color: var(--di-muted);
+}
+
+.di-article .vp-doc blockquote.di-markdown > p.di-markdown {
+  margin: 0;
+}
+
+.di-article .vp-doc div[class*='language-'] {
+  margin: 24px 0;
+  border: 1px solid var(--di-border);
+  border-radius: 6px;
+  background: var(--di-code-bg);
+}
+
+.di-article .vp-doc div[class*='language-'] pre {
+  padding: 48px 0 20px;
+  line-height: 24px;
+}
+
+.di-article .vp-doc div[class*='language-'] pre code {
+  padding: 0 20px;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.di-article .vp-doc div.vp-code-block-title {
+  margin: 24px 0;
+}
+
+.di-article .vp-doc .vp-code-block-title-bar {
+  margin: 0;
+  border: 1px solid var(--di-border);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: var(--di-code-bg);
+}
+
+.di-article .vp-doc div.vp-code-block-title > div[class*='language-'] {
+  margin: 0;
+  border-radius: 0 0 6px 6px;
+}
+
+.di-article .vp-doc .vp-code-group {
+  margin: 24px 0;
+}
+
+.di-article .vp-doc .vp-code-group .tabs {
+  margin: 0;
+  border-bottom: 1px solid var(--di-border);
+  border-radius: 6px 6px 0 0;
+  padding: 0;
+  background: var(--di-code-bg);
+}
+
+.di-article .vp-doc .vp-code-group .tabs label {
+  min-height: 44px;
+  padding: 10px 16px;
+  line-height: 24px;
+}
+
+.di-article .vp-doc .vp-code-group div[class*='language-'] {
+  margin: 0;
+  border-radius: 0 0 6px 6px;
+}
+
+.di-article .di-table-region {
+  width: 100%;
+  margin: 24px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.di-article .di-table-region[data-scrollable='true']::after {
+  position: sticky;
+  left: 0;
+  display: block;
+  padding-top: 6px;
+  color: var(--di-muted);
+  font-size: 12px;
+  line-height: 20px;
+  content: attr(data-scroll-label);
+}
+
+.di-article .vp-doc table.di-markdown {
+  display: table;
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.di-article .vp-doc table.di-markdown tr {
+  border: 0;
+  background: transparent;
+}
+
+.di-article .vp-doc table.di-markdown :is(th, td) {
+  border: 0;
+  border-bottom: 1px solid var(--di-border);
+  padding: 12px 16px;
+  vertical-align: top;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.di-article .vp-doc table.di-markdown th {
+  color: var(--di-muted);
+  background: var(--di-surface);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.di-article .vp-doc table.di-markdown :is(th, td):first-child {
+  min-width: 128px;
+}
+
+.di-article .vp-doc table.di-markdown code.di-markdown {
+  overflow-wrap: normal;
+}
+
+.di-article .vp-doc .custom-block {
+  margin: 24px 0;
+  border-radius: 0 6px 6px 0;
+  border-left: 2px solid var(--di-border);
+  padding: 14px 20px;
+  color: var(--di-text);
+  background: var(--di-surface);
+}
+
+.di-article .vp-doc .custom-block p.di-markdown {
+  margin: 8px 0;
+}
+
+.di-article .vp-doc .custom-block .custom-block-title {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.di-article .vp-doc .custom-block.tip {
+  border-left-color: var(--di-tip-text);
+  background: var(--di-tip-bg);
+}
+
+.di-article .vp-doc .custom-block.tip .custom-block-title {
+  color: var(--di-tip-text);
+}
+
+.di-article .vp-doc .custom-block.warning {
+  border-left-color: var(--di-warning-text);
+  background: var(--di-warning-bg);
+}
+
+.di-article .vp-doc .custom-block.warning .custom-block-title {
+  color: var(--di-warning-text);
+}
+
+.di-article .vp-doc .custom-block.danger {
+  border-left-color: var(--di-danger-text);
+  background: var(--di-danger-bg);
+}
+
+.di-article .vp-doc .custom-block.danger .custom-block-title {
+  color: var(--di-danger-text);
+}
+
+.di-article .VPDocFooter {
+  margin-top: 48px;
+}
+
+@media (min-width: 640px) {
+  .di-article .VPDoc {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+
+  .di-article .vp-doc h1.di-markdown {
+    font-size: 34px;
+    line-height: 44px;
+  }
+
+  .di-article .vp-doc h2.di-markdown {
+    font-size: 24px;
+    line-height: 32px;
+  }
+}
+
+@media (min-width: 960px) {
+  .di-article .VPDoc {
+    padding-top: 40px;
+    padding-right: 32px;
+    padding-left: 32px;
+  }
+
+  .di-article .VPDoc > .container > .content {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .di-article .VPDoc > .container {
+    max-width: calc(var(--di-reading-max) + 264px);
+  }
+
+  .di-article .VPDoc > .container > .content {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+
+  .di-article .vp-doc :is(h1, h2, h3, h4).di-markdown {
+    scroll-margin-top: 88px;
+  }
+}

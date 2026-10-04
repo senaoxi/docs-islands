@@ -83,6 +83,16 @@ Hero 在 1152 px 桌面网格中给介绍与图示分配 0.9:1.1 的列宽比例
 
 Vue scoped 样式将完整的深色祖先／组件选择器包在 `:global(.dark .vitepress-landing)` 中。拆成 `:global(.dark) .vitepress-landing` 会指向祖先，不能覆盖本地色板。深色截图与计算后的色板检查须捕获此问题。展示遵循[人类明确提出的落地页方向](./intent.md#集成落地页)。浏览器、实际 CSS HMR、构建、typecheck 和治理结果须由实现变更报告；本记录本身不宣称成功执行。
 
+### VitePress 集成文章主题
+
+Package 站的文章展示由 `packages/vitepress/docs` 下的 `.vitepress/article-markdown.ts`、`theme/styles/article-{tokens,navigation}.css`、`theme/styles/article.css` 和 `theme/composables/useArticleAccessibility.ts` 拥有。`EnhanceLayout.vue` 仅为解析后的 `doc` 布局添加 `di-article`，并排除未找到页面。双语首页、terminal、logo、根文档主题、runtime 和部署配置保留各自的归属。本次第一阶段实现不添加搜索或文章上下文组件。
+
+Markdown renderer 为其自身的标题、段落、列表、引用、链接、行内代码和表格添加 `di-markdown`。排版规则针对这些已标记节点，使嵌入的 React/Vue 组件保留自己的展示。文章 tokens 使用集成落地页的紫色标识，并独立定义亮色和暗色主题。阅读栏最大宽度为 704 px，正文／列表／引用使用 16/28 px，代码块使用 14/24 px，目录包含可换行的二级和三级标题。原生导航、页面顺序、锚点、代码组、语法高亮、复制处理、语言路由和 island hydration 保持原有机制。
+
+Markdown 表格添加局部溢出容器和列标题 scope。VitePress 1.6 内置的 `table_open` renderer 硬编码 HTML，丢弃 token 属性；本主题改用 Markdown 标准 renderer 渲染该 token。仅在发生溢出时，容器才获得键盘焦点，并提供本地化标签和可见滚动提示。组件自己拥有的表格不添加包装。可访问性 composable 还为原生复制控件添加标签、公开移动目录的展开状态、在 Escape 后返回焦点，并在移动侧栏打开时约束焦点，关闭时恢复背景之前的 inert 状态。路由更新和卸载会释放 observers 与 listeners；这些辅助行为不替换原生 router 或侧栏状态。
+
+验证必须覆盖两种语言和主题、窄屏与宽屏、表格溢出／焦点、移动侧栏与目录的键盘操作、剪贴板内容、原生代码组、重复 SPA 路由切换和现有 island 示例。运行已发现的文档 typecheck／build targets、根文档 build、使用现有 docs 配置的源文件 lint，以及 `pnpm exec limina check`。构建生成的 `.vitepress/.temp` JavaScript 可能被发现为未覆盖的 proof 源文件，而对生成 bundle 执行 lint 可能产生过大的报告；仅清理被忽略的临时构建产物，并区分源文件检查与全目录 lint。本记录描述实现及可复现检查，不宣称它们的结果或已经 merge／部署。
+
 ## 已发布包
 
 发布脚本和 package manifest 确定了三个独立发布目标：
