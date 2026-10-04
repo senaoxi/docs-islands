@@ -130,7 +130,7 @@ const vitepressConfig: LocaleSpecificConfig<DefaultTheme.Config> & {
     },
     outline: {
       label: 'On this page',
-      level: 'deep',
+      level: [2, 3],
     },
     lastUpdated: {
       text: 'Last updated',

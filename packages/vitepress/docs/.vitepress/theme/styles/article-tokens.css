@@ -1,0 +1,73 @@
+/* Article-local identity: landing pages retain their existing variables. */
+.Layout.di-article {
+  --di-reading-max: 704px;
+  --di-link: #7051e8;
+  --di-link-hover: #6243d6;
+  --di-accent-soft: #f5f2ff;
+  --di-bg: #fff;
+  --di-surface: #faf9fc;
+  --di-text: #211e2e;
+  --di-muted: #706b7b;
+  --di-border: #e7e4ee;
+  --di-code-bg: #f7f5fb;
+  --di-inline-bg: #f0edf7;
+  --di-tip-text: #246f57;
+  --di-tip-bg: #f1f7f4;
+  --di-warning-text: #82541c;
+  --di-warning-bg: #fff8ed;
+  --di-danger-text: #a62e39;
+  --di-danger-bg: #fdf1f2;
+
+  --vp-c-brand-1: var(--di-link);
+  --vp-c-brand-2: var(--di-link-hover);
+  --vp-c-brand-3: #7051e8;
+  --vp-c-brand-soft: var(--di-accent-soft);
+  --vp-c-bg: var(--di-bg);
+  --vp-c-bg-alt: var(--di-surface);
+  --vp-c-bg-soft: var(--di-surface);
+  --vp-c-text-1: var(--di-text);
+  --vp-c-text-2: var(--di-muted);
+  --vp-c-divider: var(--di-border);
+  --vp-c-gutter: var(--di-border);
+  --vp-c-border: var(--di-border);
+  --vp-nav-bg-color: var(--di-bg);
+  --vp-sidebar-bg-color: var(--di-bg);
+  --vp-local-nav-bg-color: var(--di-bg);
+  --vp-sidebar-width: 248px;
+  --vp-code-font-size: 14px;
+  --vp-code-color: var(--di-text);
+  --vp-code-bg: var(--di-inline-bg);
+  --vp-code-link-color: var(--di-link);
+  --vp-code-link-hover-color: var(--di-link-hover);
+  --vp-code-block-bg: var(--di-code-bg);
+  --vp-font-family-base:
+    'Inter', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', sans-serif;
+
+  color: var(--di-text);
+  background: var(--di-bg);
+  font-family: var(--vp-font-family-base);
+}
+
+.dark .Layout.di-article {
+  --di-link: #c3b4ff;
+  --di-link-hover: #d8cdff;
+  --di-accent-soft: #282237;
+  --di-bg: #1b1a20;
+  --di-surface: #201e26;
+  --di-text: #ece9f2;
+  --di-muted: #a5a0ad;
+  --di-border: #37313f;
+  --di-code-bg: #222027;
+  --di-inline-bg: #302a3d;
+  --di-tip-text: #98d6bb;
+  --di-tip-bg: #1c2b25;
+  --di-warning-text: #e7c18a;
+  --di-warning-bg: #30291f;
+  --di-danger-text: #f0a6ae;
+  --di-danger-bg: #322126;
+}
+
+.Layout.di-article:lang(zh) {
+  --vp-code-copy-copied-text-content: '已复制';
+}
