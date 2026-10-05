@@ -12,6 +12,10 @@ This file defines the repository-wide operating contract for coding agents. It c
 - PCR records preserve durable intent, rationale, decisions, and trade-offs. Unstamped drafts are not authoritative when they conflict with executable evidence.
 - Keep package-specific rules beside the code they govern instead of copying them into this repository-level file.
 
+## Commit messages
+
+Follow [the commit convention](.github/commit-convention.md) when drafting commit messages or PR titles. Use its rules and examples directly; do not read Git history to infer commit style.
+
 ## Working agreement
 
 Before editing:
