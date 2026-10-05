@@ -274,7 +274,12 @@ export default function IntegrationWalkthrough({
 
   useEffect(() => {
     if (reducedMotion)
-      dispatch({ type: 'finish', stages, endAt: timeline.finishAt });
+      dispatch({
+        type: 'finish',
+        stages,
+        endAt: timeline.finishAt,
+        now: Date.now(),
+      });
   }, [reducedMotion, stages, timeline.finishAt]);
   useEffect(() => {
     const timer =
@@ -283,6 +288,7 @@ export default function IntegrationWalkthrough({
             () =>
               dispatch({
                 type: 'tick',
+                now: Date.now(),
                 stages,
                 ms: motion.duration,
                 endAt: motion.finishAt,
@@ -327,7 +333,12 @@ export default function IntegrationWalkthrough({
       if (entry?.isIntersecting && !started.current) {
         started.current = true;
         if (getReducedMotion())
-          dispatch({ type: 'finish', stages, endAt: timeline.finishAt });
+          dispatch({
+            type: 'finish',
+            stages,
+            endAt: timeline.finishAt,
+            now: Date.now(),
+          });
         else dispatch({ type: 'start', stages });
       }
     });

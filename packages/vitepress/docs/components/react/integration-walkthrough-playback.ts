@@ -47,6 +47,7 @@ export interface WalkthroughState {
   clock: number;
   partial: number;
   reverseAt: number | null;
+  logTimestamps: Record<string, number>;
 }
 export type WalkthroughAction =
   | {
@@ -55,9 +56,15 @@ export type WalkthroughAction =
       ms?: number;
       endAt?: number;
       direction?: 'left' | 'right';
+      now?: number;
     }
   | { type: 'start'; stages: WalkthroughStage[] }
-  | { type: 'finish'; stages: WalkthroughStage[]; endAt?: number };
+  | {
+      type: 'finish';
+      stages: WalkthroughStage[];
+      endAt?: number;
+      now?: number;
+    };
 
 // Reproducible short bursts within code tokens, with pauses between tokens,
 // statements and lines. No random per-character timing or elapsed-time catch-up.
@@ -432,6 +439,7 @@ export function initialWalkthroughState(): WalkthroughState {
     clock: 0,
     partial: 0,
     reverseAt: null,
+    logTimestamps: {},
   };
 }
 function enterPhase(
@@ -515,6 +523,29 @@ function tickWalkthrough(
       : advanceWalkthrough(state, action.stages);
   return { ...next, clock, partial: 0 };
 }
+// Read wall time in the browser callback, outside the pure reducer. Stamp a
+// log only when it becomes visible and retain it across later playback ticks.
+function captureLogTimestamps(
+  state: WalkthroughState,
+  stages: WalkthroughStage[],
+  now?: number,
+): WalkthroughState {
+  if (now === undefined) return state;
+  let logTimestamps = state.logTimestamps;
+  for (const [phase, stage] of stages.entries()) {
+    if (
+      !stage.parts &&
+      stage.output &&
+      stage.id !== 'updated' &&
+      (phase < state.phase || (phase === state.phase && state.frame > 0)) &&
+      logTimestamps[stage.id] === undefined
+    )
+      logTimestamps = { ...logTimestamps, [stage.id]: now };
+  }
+  return logTimestamps === state.logTimestamps
+    ? state
+    : { ...state, logTimestamps };
+}
 export function walkthroughReducer(
   state: WalkthroughState,
   action: WalkthroughAction,
@@ -525,7 +556,11 @@ export function walkthroughReducer(
         action.direction === 'left' && state.reverseAt === null
           ? { ...state, reverseAt: state.clock }
           : state;
-      return tickWalkthrough(next, action);
+      return captureLogTimestamps(
+        tickWalkthrough(next, action),
+        action.stages,
+        action.now,
+      );
     }
     case 'start': {
       return state.phase === action.stages.length - 1
@@ -533,16 +568,21 @@ export function walkthroughReducer(
         : { ...state, playing: true };
     }
     case 'finish': {
-      return {
-        phase: action.stages.length - 1,
-        editor: 'terminal',
-        edit: 0,
-        frame: action.stages.at(-1)!.terminalPlan.length,
-        playing: false,
-        clock: action.endAt ?? state.clock,
-        partial: 0,
-        reverseAt: state.reverseAt,
-      };
+      return captureLogTimestamps(
+        {
+          phase: action.stages.length - 1,
+          editor: 'terminal',
+          edit: 0,
+          frame: action.stages.at(-1)!.terminalPlan.length,
+          playing: false,
+          clock: action.endAt ?? state.clock,
+          partial: 0,
+          reverseAt: state.reverseAt,
+          logTimestamps: state.logTimestamps,
+        },
+        action.stages,
+        action.now,
+      );
     }
     default: {
       return state;
@@ -611,15 +651,22 @@ export function getTerminalTranscript(
   reduced: boolean,
 ): string {
   const saved = (stage: WalkthroughStage) => stage.command;
+  const log = (stage: WalkthroughStage, text = stage.output) => {
+    const timestamp = state.logTimestamps[stage.id];
+    if (!text || timestamp === undefined) return text;
+    return `${new Date(timestamp).toLocaleTimeString('en-US')} ${text}`;
+  };
   const history = stages
     .slice(0, state.phase)
-    .map((stage) => (stage.parts ? saved(stage) : stage.output));
+    .map((stage) => (stage.parts ? saved(stage) : log(stage)));
   const stage = stages[state.phase]!;
   if (stage.id !== 'updated')
     history.push(
       state.editor === 'saved'
         ? saved(stage)
-        : getVisibleText(stage, state, reduced),
+        : stage.parts
+          ? getVisibleText(stage, state, reduced)
+          : log(stage, getVisibleText(stage, state, reduced)),
     );
   if (state.editor === 'saved' || stage.id === 'updated') history.push('$');
   return history.filter(Boolean).join('\n\n');

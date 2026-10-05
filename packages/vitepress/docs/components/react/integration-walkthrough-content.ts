@@ -63,15 +63,16 @@ export function getIntegrationWalkthroughSnippets(locale: 'en' | 'zh') {
 
 // Recorded stdout from VitePress 1.6.4 + @docs-islands/vitepress 0.3.0,
 // using the docs site's logging rules and a connected development page.
-// Timestamps are capture values. CSS-module HMR reaches its React boundary.
+// Only the captured timestamps are omitted; playback stamps each displayed
+// event with the browser's local time. CSS-module HMR reaches its React boundary.
 // Browser hydration/fast-refresh messages do not belong in this transcript.
 const prototypeLogs = {
   en: {
-    markdown: '5:04:29 PM [vitepress] hmr update /en/index.md',
-    hmr: '5:04:32 PM [vitepress] hmr update /components/react/IslandPrototype.tsx',
+    markdown: '[vitepress] hmr update /en/index.md',
+    hmr: '[vitepress] hmr update /components/react/IslandPrototype.tsx',
   },
   zh: {
-    markdown: '5:05:29 PM [vitepress] hmr update /zh/index.md',
-    hmr: '5:05:32 PM [vitepress] hmr update /components/react/IslandPrototype.tsx',
+    markdown: '[vitepress] hmr update /zh/index.md',
+    hmr: '[vitepress] hmr update /components/react/IslandPrototype.tsx',
   },
 } as const;
