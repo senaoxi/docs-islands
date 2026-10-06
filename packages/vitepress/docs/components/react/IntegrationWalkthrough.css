@@ -353,7 +353,17 @@
   font: 10px var(--vp-font-family-mono);
 }
 .integration-walkthrough .walkthrough-vi-command code {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   color: var(--landing-accent);
+}
+.integration-walkthrough .walkthrough-vi-command-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  vertical-align: -0.12em;
+  background: var(--landing-accent);
 }
 .integration-walkthrough .walkthrough-vi-save-note {
   margin-left: auto;

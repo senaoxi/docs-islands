@@ -1,10 +1,20 @@
 export const integrationInstall =
   'pnpm add -D @docs-islands/vitepress @vitejs/plugin-react-swc@^4.3.1\npnpm add react@^18.2.0 react-dom@^18.2.0';
 
+export type EditorNavigation =
+  | { type: 'search'; pattern: string }
+  | { type: 'find'; character: string }
+  | { type: 'left' | 'right'; count: number }
+  | { type: 'line'; number?: number }
+  | { type: 'open-line'; above: boolean }
+  | { type: 'insert' }
+  | { type: 'change-match' }
+  | { type: 'change-until'; character: string };
+
 export interface EditorChange {
   before: string;
   after: string;
-  keys: string;
+  navigation: EditorNavigation[];
   label: string;
 }
 export type EditorPart = string | EditorChange;
@@ -46,14 +56,17 @@ export function getIntegrationSnippets(locale: 'en' | 'zh') {
       before: '',
       after:
         "import { createDocsIslands } from '@docs-islands/vitepress';\nimport { react } from '@docs-islands/vitepress/adapters/react';\n",
-      keys: '1Go',
+      navigation: [
+        { type: 'line', number: 1 },
+        { type: 'open-line', above: false },
+      ],
       label: chinese ? '增补集成 imports' : 'Add integration imports',
     },
     "\nconst config = defineConfig({\n  title: 'My docs',\n  description: 'A VitePress site.',\n});\n\n",
     {
       before: '',
       after: 'createDocsIslands({ adapters: [react()] }).apply(config);\n\n',
-      keys: 'GO',
+      navigation: [{ type: 'line' }, { type: 'open-line', above: true }],
       label: chinese
         ? '对既有配置应用 adapter'
         : 'Apply the adapter to the existing config',
@@ -66,14 +79,20 @@ export function getIntegrationSnippets(locale: 'en' | 'zh') {
       before: '',
       after:
         "import { reactClient } from '@docs-islands/vitepress/adapters/react/client';\n",
-      keys: '2Go',
+      navigation: [
+        { type: 'line', number: 2 },
+        { type: 'open-line', above: false },
+      ],
       label: chinese ? '引入 React 客户端' : 'Import the React client',
     },
     '\nconst theme: Theme = {\n  extends: DefaultTheme,\n',
     {
       before: '',
       after: '  async enhanceApp() {\n    await reactClient();\n  },\n',
-      keys: '/extends ↵ o',
+      navigation: [
+        { type: 'search', pattern: 'extends' },
+        { type: 'open-line', above: false },
+      ],
       label: chinese
         ? '保留默认主题，增补客户端注册'
         : 'Keep the default theme; register the client',
@@ -85,7 +104,7 @@ export function getIntegrationSnippets(locale: 'en' | 'zh') {
     {
       before: '',
       after: counterCode,
-      keys: 'i',
+      navigation: [{ type: 'insert' }],
       label: chinese ? '新建计数器组件' : 'Create the counter component',
     },
   ]);
@@ -98,7 +117,7 @@ export function getIntegrationSnippets(locale: 'en' | 'zh') {
 </script>
 
 <Counter client:visible />`,
-      keys: 'Gi',
+      navigation: [{ type: 'line' }, { type: 'insert' }],
       label: chinese
         ? '保留 Hello, world!，加入组件'
         : 'Keep Hello, world!; add the component',
@@ -110,7 +129,12 @@ export function getIntegrationSnippets(locale: 'en' | 'zh') {
     {
       before: title,
       after: updatedTitle,
-      keys: '8Gf>lct<',
+      navigation: [
+        { type: 'line', number: 8 },
+        { type: 'find', character: '>' },
+        { type: 'right', count: 1 },
+        { type: 'change-until', character: '<' },
+      ],
       label: chinese ? '只修改标题这一行' : 'Change only the heading line',
     },
     parts[1]!,

@@ -32,7 +32,15 @@ export function getIntegrationWalkthroughSnippets(locale: 'en' | 'zh') {
     {
       before: '',
       after: ' pet="sunset"',
-      keys: '/IntegrationWalkthrough spa ↵ f> 2h i',
+      navigation: [
+        {
+          type: 'search',
+          pattern: 'IntegrationWalkthrough spa:sync-render client:load',
+        },
+        { type: 'find', character: '>' },
+        { type: 'left', count: 2 },
+        { type: 'insert' },
+      ],
       label: chinese
         ? '保留 IntegrationWalkthrough，启用其已有 Sunset 组件'
         : 'Keep IntegrationWalkthrough; enable its existing Sunset component',
@@ -51,7 +59,10 @@ export function getIntegrationWalkthroughSnippets(locale: 'en' | 'zh') {
     {
       before: prototypeInitialDirection,
       after: prototypeFinalDirection,
-      keys: '/right ↵ cgn',
+      navigation: [
+        { type: 'search', pattern: 'right' },
+        { type: 'change-match' },
+      ],
       label: chinese
         ? '修改已有 CSS，让 Sunset 往回跑'
         : 'Change the existing CSS to run back',

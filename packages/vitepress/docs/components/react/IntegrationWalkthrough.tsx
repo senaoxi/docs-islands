@@ -68,7 +68,8 @@ function ViEditor({
   const caret = useRef<HTMLSpanElement>(null);
   const buffer = getEditorBuffer(stage, state, reducedMotion);
   const cursor = getEditorCursor(stage, state, reducedMotion);
-  const mode = getViMode(state.editor);
+  const mode = getViMode(stage, state, reducedMotion);
+  const commandLine = mode === 'SEARCH' || mode === 'COMMAND';
   const lines = buffer.split('\n').length;
   const numbers = Array.from({ length: Math.max(lines, 18) }, (_, index) =>
     index < lines ? String(index + 1) : '~',
@@ -142,6 +143,7 @@ function ViEditor({
           className={`walkthrough-vi-cursor ${state.editor === 'insert' ? 'is-insert' : ''}`}
           aria-hidden="true"
           style={{
+            visibility: commandLine ? 'hidden' : 'visible',
             top: `calc(${cursor.line - 1} * 1.85em + 4px - ${scroll.top}px)`,
             left: `calc(46px + ${cursor.column}ch - ${scroll.left}px)`,
           }}
@@ -165,6 +167,12 @@ function ViEditor({
         </span>
         <code>
           {state.editor === 'save' || state.editor === 'normal' ? command : ''}
+          {commandLine ? (
+            <span
+              className="walkthrough-vi-command-cursor"
+              aria-hidden="true"
+            />
+          ) : null}
         </code>
         {state.editor === 'save' && (
           <span className="walkthrough-vi-save-note">
@@ -396,7 +404,9 @@ export default function IntegrationWalkthrough({
       data-edit-index={state.edit}
       data-frame={state.frame}
       data-edit-action={getEditorAction(stage, state)}
-      data-vi-mode={editorActive ? getViMode(state.editor) : 'SHELL'}
+      data-vi-mode={
+        editorActive ? getViMode(stage, state, reducedMotion) : 'SHELL'
+      }
       data-progress={motion.progress}
     >
       <div className="walkthrough-heading">

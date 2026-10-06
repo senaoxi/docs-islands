@@ -2,11 +2,15 @@
   "name": "@docs-islands/vitepress-docs",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^22.18.0 || >=24.11.0"
+  },
   "scripts": {
     "docs:dev": "vitepress dev",
     "docs:build": "pnpm clean:dist && wait-on -d 100 ../dist/node/index.js && vitepress build",
     "docs:preview": "vitepress preview",
     "typecheck": "vue-tsc --noEmit",
+    "test:unit": "node --import tsx --test components/react/integration-walkthrough-playback.test.ts",
     "lint": "eslint . --config ./eslint.config.mjs --fix --cache",
     "link:dev": "link-guard link:dev:exec",
     "link:dev:exec": "del-cli ../dist --force && npm pkg set devDependencies.@docs-islands/vitepress='link:../' && pnpm install",

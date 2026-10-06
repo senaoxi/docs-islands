@@ -1,5 +1,9 @@
 import type { getIntegrationWalkthroughSnippets } from './integration-walkthrough-content';
-import type { EditorPart } from './integration-walkthrough-source';
+import type {
+  EditorChange,
+  EditorNavigation,
+  EditorPart,
+} from './integration-walkthrough-source';
 import {
   getSunsetArrival,
   getSunsetMotion,
@@ -20,6 +24,12 @@ export interface TypingFrame {
   position: number;
   delay: number;
 }
+export interface NavigationFrame extends TypingFrame {
+  command: string;
+  cursor: number;
+  origin: number;
+  mode: 'NORMAL' | 'SEARCH';
+}
 export interface EditorFrame extends TypingFrame {
   buffer: string;
   cursor: number;
@@ -36,7 +46,7 @@ export interface WalkthroughStage {
   terminalPlan: TypingFrame[];
   commandPlan: TypingFrame[];
   editPlans: EditorFrame[][];
-  keyPlans: TypingFrame[][];
+  keyPlans: NavigationFrame[][];
 }
 export interface WalkthroughState {
   phase: number;
@@ -141,7 +151,7 @@ function getOpeningTag(source: string, position: number) {
   );
   if (!tag) return null;
   const end = getTagEnd(source, position + tag[0].length);
-  if (end < 0) return null;
+  if (end === -1) return null;
   return {
     end,
     closing: source[end - 1] === '/' ? '' : `</${tag[1] ?? ''}>`,
@@ -313,6 +323,200 @@ const editorChanges = (stage: WalkthroughStage) =>
   stage.parts?.filter(
     (part): part is Exclude<EditorPart, string> => typeof part !== 'string',
   ) ?? [];
+// Replay only the navigation used by these snippets. Search uses noincsearch:
+// typing stays in the command line, Enter commits the match, and each complete
+// Normal-mode command moves the buffer cursor. Never infer a position from the
+// eventual edit boundary while its keys are still being typed.
+function navigationPlan(parts: EditorPart[], edit: number): NavigationFrame[] {
+  let source = '';
+  let target = 0;
+  let cursor = 0;
+  let current = -1;
+  let change: EditorChange | undefined;
+  for (const part of parts) {
+    if (typeof part === 'string') {
+      source += part;
+      continue;
+    }
+    current++;
+    if (current < edit) {
+      source += part.after;
+      cursor = part.after.endsWith('\n')
+        ? source.length
+        : Math.max(source.lastIndexOf('\n') + 1, source.length - 1);
+    } else {
+      if (current === edit) {
+        target = source.length;
+        change = part;
+      }
+      source += part.before;
+    }
+  }
+  if (!change) return [];
+  const origin = cursor;
+  const frames: NavigationFrame[] = [];
+  let command = '';
+  let pattern = '';
+  const emit = (text: string, delay = 180, mode = 'NORMAL' as const) => {
+    frames.push({
+      command: text,
+      position: text.length,
+      delay: delay / 1.2,
+      cursor,
+      origin,
+      mode,
+    });
+  };
+  const search = (
+    action: Extract<EditorNavigation, { type: 'search' }>,
+    prefix: string,
+  ) => {
+    pattern = action.pattern;
+    const input = `/${pattern}`;
+    for (const frame of developerTyping(input, 'command'))
+      frames.push({
+        ...frame,
+        command: prefix + input.slice(0, frame.position),
+        cursor,
+        origin,
+        mode: 'SEARCH',
+      });
+    const match = source.indexOf(pattern, cursor + 1);
+    cursor = match === -1 ? source.indexOf(pattern) : match;
+    if (!pattern || cursor === -1)
+      throw new Error(`Missing vi search match: ${pattern}`);
+    command = `${prefix}${input} ↵`;
+    emit(command, 320);
+  };
+  const find = (
+    action: Extract<EditorNavigation, { type: 'find' }>,
+    prefix: string,
+  ) => {
+    emit(`${prefix}f`);
+    const match = source.indexOf(action.character, cursor + 1);
+    const lineEnd = source.indexOf('\n', cursor);
+    if (match === -1 || (lineEnd !== -1 && match >= lineEnd))
+      throw new Error(`Missing vi line match: ${action.character}`);
+    cursor = match;
+    command = `${prefix}f${action.character}`;
+    emit(command);
+  };
+  const move = (
+    action: Extract<EditorNavigation, { type: 'left' | 'right' }>,
+    prefix: string,
+  ) => {
+    if (action.count > 1) emit(`${prefix}${action.count}`);
+    const start = source.lastIndexOf('\n', cursor - 1) + 1;
+    const end = source.indexOf('\n', cursor);
+    cursor =
+      action.type === 'left'
+        ? Math.max(start, cursor - action.count)
+        : Math.min(
+            Math.max(start, (end === -1 ? source.length : end) - 1),
+            cursor + action.count,
+          );
+    command = `${prefix}${action.count > 1 ? action.count : ''}${action.type === 'left' ? 'h' : 'l'}`;
+    emit(command);
+  };
+  const line = (
+    action: Extract<EditorNavigation, { type: 'line' }>,
+    prefix: string,
+  ) => {
+    if (action.number !== undefined) emit(`${prefix}${action.number}`);
+    const lines = source.split('\n');
+    const line = action.number ?? lines.length;
+    if (line < 1 || line > lines.length)
+      throw new Error(`Missing vi line: ${line}`);
+    const start =
+      lines.slice(0, line - 1).join('\n').length + (line > 1 ? 1 : 0);
+    cursor = start + /^[ \t]*/u.exec(lines[line - 1]!)![0].length;
+    command = `${prefix}${action.number ?? ''}G`;
+    emit(command);
+  };
+  const openLine = (
+    action: Extract<EditorNavigation, { type: 'open-line' }>,
+    prefix: string,
+  ) => {
+    const start = source.lastIndexOf('\n', cursor - 1) + 1;
+    const end = source.indexOf('\n', cursor);
+    cursor = action.above ? start : end === -1 ? source.length : end + 1;
+    if (cursor !== target || change.before !== '')
+      throw new Error('vi open-line does not reach the insertion point');
+    command = `${prefix}${action.above ? 'O' : 'o'}`;
+    emit(command, 650);
+  };
+  const insert = (prefix: string) => {
+    if (cursor !== target)
+      throw new Error('vi navigation does not reach the insertion point');
+    command = `${prefix}i`;
+    emit(command, 650);
+  };
+  const changeMatch = (prefix: string) => {
+    if (cursor !== target || pattern !== change.before)
+      throw new Error('vi search does not reach the replaced match');
+    emit(`${prefix}c`);
+    emit(`${prefix}cg`);
+    command = `${prefix}cgn`;
+    emit(command, 650);
+  };
+  const changeUntil = (
+    action: Extract<EditorNavigation, { type: 'change-until' }>,
+    prefix: string,
+  ) => {
+    emit(`${prefix}c`);
+    emit(`${prefix}ct`);
+    const match = source.indexOf(action.character, cursor + 1);
+    const end = source.indexOf('\n', cursor);
+    if (
+      cursor !== target ||
+      match === -1 ||
+      (end !== -1 && match >= end) ||
+      source.slice(cursor, match) !== change.before
+    )
+      throw new Error('vi change does not reach the replaced text');
+    command = `${prefix}ct${action.character}`;
+    emit(command, 650);
+  };
+  for (const action of change.navigation) {
+    const prefix = command ? `${command} ` : '';
+    switch (action.type) {
+      case 'search': {
+        search(action, prefix);
+        break;
+      }
+      case 'find': {
+        find(action, prefix);
+        break;
+      }
+      case 'left':
+      case 'right': {
+        move(action, prefix);
+        break;
+      }
+      case 'line': {
+        line(action, prefix);
+        break;
+      }
+      case 'open-line': {
+        openLine(action, prefix);
+        break;
+      }
+      case 'insert': {
+        insert(prefix);
+        break;
+      }
+      case 'change-match': {
+        changeMatch(prefix);
+        break;
+      }
+      case 'change-until': {
+        changeUntil(action, prefix);
+        break;
+      }
+    }
+  }
+  return frames;
+}
 const makeStage = (
   id: string,
   file: string,
@@ -337,7 +541,7 @@ const makeStage = (
     terminalPlan: logTyping(output),
     commandPlan: developerTyping(command, 'command'),
     editPlans: changes.map((change) => developerEditing(change.after)),
-    keyPlans: changes.map((change) => developerTyping(change.keys, 'command')),
+    keyPlans: changes.map((_, edit) => navigationPlan(parts!, edit)),
   };
 };
 export function getWalkthroughStages(
@@ -517,8 +721,11 @@ function tickWalkthrough(
   const clock = state.clock + ms;
   const partial = state.partial + ms;
   if (partial < delay) return { ...state, clock, partial };
-  const next =
-    state.frame < plan.length
+  const entersInsert =
+    state.editor === 'normal' && state.frame + 1 === plan.length;
+  const next = entersInsert
+    ? advanceWalkthrough(state, action.stages)
+    : state.frame < plan.length
       ? { ...state, frame: state.frame + 1 }
       : advanceWalkthrough(state, action.stages);
   return { ...next, clock, partial: 0 };
@@ -683,18 +890,46 @@ export function getEditorAction(
     ? getEditorFrame(stage, state)?.action
     : undefined;
 }
-export function getViMode(editor: EditorStep) {
-  return editor === 'insert' ? '-- INSERT --' : 'NORMAL';
+export function getViMode(
+  stage: WalkthroughStage,
+  state: WalkthroughState,
+  reduced = false,
+) {
+  if (state.editor === 'insert') return '-- INSERT --';
+  if (state.editor === 'save')
+    return getViCommand(stage, state, reduced) ? 'COMMAND' : 'NORMAL';
+  if (state.editor === 'normal')
+    return getNavigationFrame(stage, state, reduced)?.mode ?? 'NORMAL';
+  return 'NORMAL';
+}
+function getNavigationFrame(
+  stage: WalkthroughStage,
+  state: WalkthroughState,
+  reduced: boolean,
+) {
+  const plan = stage.keyPlans[state.edit];
+  return reduced ? plan?.at(-1) : plan?.[state.frame - 1];
+}
+function getNavigationCursor(
+  stage: WalkthroughStage,
+  state: WalkthroughState,
+  reduced: boolean,
+) {
+  return (
+    getNavigationFrame(stage, state, reduced)?.cursor ??
+    stage.keyPlans[state.edit]?.[0]?.origin ??
+    0
+  );
 }
 export function getViCommand(
   stage: WalkthroughStage,
   state: WalkthroughState,
   reduced: boolean,
 ): string {
-  const text =
-    state.editor === 'save'
-      ? ':wq'
-      : (getActiveChange(stage, state.edit)?.keys ?? '');
+  if (state.editor === 'normal')
+    return getNavigationFrame(stage, state, reduced)?.command ?? '';
+  if (state.editor !== 'save') return '';
+  const text = ':wq';
   const plan = getPlaybackPlan(stage, state.editor, state.edit);
   const length = reduced ? text.length : (plan[state.frame - 1]?.position ?? 0);
   return text.slice(0, length);
@@ -727,6 +962,10 @@ export function getEditorCursor(
         text += part.after;
       break;
     }
+  }
+  if (state.editor === 'normal') {
+    const position = getNavigationCursor(stage, state, reduced);
+    text = getEditorBuffer(stage, state, reduced).slice(0, position);
   }
   const lines = text.split('\n');
   const tail = [...(lines.at(-1) ?? '')];
