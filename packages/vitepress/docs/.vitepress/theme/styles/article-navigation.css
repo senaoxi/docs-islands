@@ -41,18 +41,54 @@
   visibility: visible;
 }
 
+.di-article .VPSidebar .group {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.di-article .VPSidebar .group + .group {
+  margin-top: 20px;
+}
+
+.di-article .VPSidebarItem.level-0,
+.di-article .VPSidebarItem.level-0.collapsed {
+  padding-bottom: 0;
+}
+
+.di-article .VPSidebarItem > .item {
+  margin-bottom: 2px;
+}
+
+.di-article .VPSidebarItem .indicator {
+  display: none;
+}
+
 .di-article .VPSidebarItem .link {
+  min-width: 0;
   min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  transition: background-color 0.2s;
 }
 
 .di-article .VPSidebarItem .text {
+  padding: 0;
   font-size: 14px;
   line-height: 24px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.di-article .VPSidebarItem > .item > .text {
+  padding: 6px 10px;
+}
+
+.di-article .VPSidebarItem .link:is(:hover, :focus-visible) {
+  background: var(--di-accent-soft);
 }
 
 .di-article .VPSidebarItem.is-active > .item > .link {
-  border-left: 2px solid var(--di-link);
-  padding-left: 10px;
   background: var(--di-accent-soft);
 }
 
@@ -98,8 +134,15 @@
 }
 
 @media (max-width: 959px) {
+  .di-article .VPSidebarItem > .item,
   .di-article .VPSidebarItem .link {
     min-height: 44px;
+  }
+
+  .di-article .VPSidebarItem .caret {
+    margin-right: 0;
+    width: 44px;
+    height: 44px;
   }
 
   .di-article .vp-doc div[class*='language-'] > button.copy {
@@ -116,11 +159,25 @@
 
 @media (prefers-reduced-motion: reduce) {
   .di-article .VPSidebar,
+  .di-article .VPSidebarItem .link,
   .di-article .outline-marker,
   .di-article .outline-link,
   .di-article .vp-doc a.di-markdown,
   .di-article .VPLocalNavOutlineDropdown .items {
     transition: none;
     animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .di-article .VPSidebarItem.is-active > .item > .link {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+
+  .di-article .VPSidebar :focus-visible,
+  .di-article .VPSidebarItem > .item > .link:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 3px;
   }
 }

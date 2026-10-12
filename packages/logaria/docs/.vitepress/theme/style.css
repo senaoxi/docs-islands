@@ -19,6 +19,7 @@
   --logaria-c-panel: #f7f9fc;
   --logaria-c-line: #d9e1ee;
   --logaria-c-ink: #0f172a;
+  --logaria-c-sidebar-soft: rgb(37 99 235 / 0.06);
 }
 
 .dark {
@@ -40,6 +41,7 @@
   --logaria-c-panel: #121824;
   --logaria-c-line: #293344;
   --logaria-c-ink: #f8fafc;
+  --logaria-c-sidebar-soft: rgb(147 197 253 / 0.07);
 }
 
 .VPNavBarTitle .logo {
@@ -102,8 +104,102 @@
   background: var(--vp-c-bg-soft);
 }
 
+.VPSidebar .group {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.VPSidebar .group + .group {
+  margin-top: 20px;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.VPSidebar .VPSidebarItem.level-0,
+.VPSidebar .VPSidebarItem.level-0.collapsed {
+  padding-bottom: 0;
+}
+
+.VPSidebar .VPSidebarItem > .item {
+  margin-bottom: 2px;
+}
+
+.VPSidebar .VPSidebarItem .indicator {
+  display: none;
+}
+
+.VPSidebar .VPSidebarItem .link {
+  min-width: 0;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  transition: background-color 0.2s;
+}
+
+.VPSidebar .VPSidebarItem .text {
+  padding: 0;
+  line-height: 24px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.VPSidebar .VPSidebarItem > .item > .text {
+  padding: 6px 10px;
+}
+
+.VPSidebar .VPSidebarItem .link:is(:hover, :focus-visible),
+.VPSidebar .VPSidebarItem.is-active > .item > .link {
+  background: var(--logaria-c-sidebar-soft);
+}
+
+.VPSidebar .VPSidebarItem.is-active > .item > .link .text {
+  font-weight: 600;
+}
+
+.VPSidebar :is(a, button, [tabindex='0']):focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+}
+
+@media (max-width: 959px) {
+  .VPLocalNav .menu {
+    min-height: 44px;
+  }
+
+  .VPSidebar .VPSidebarItem > .item,
+  .VPSidebar .VPSidebarItem .link {
+    min-height: 44px;
+  }
+
+  .VPSidebar .VPSidebarItem .caret {
+    margin-right: 0;
+    width: 44px;
+    height: 44px;
+  }
+}
+
 @media (min-width: 960px) {
   :root {
     --vp-home-hero-image-filter: blur(60px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .VPSidebar .VPSidebarItem .link {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .VPSidebar .VPSidebarItem.is-active > .item > .link {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+
+  .VPSidebar :is(a, button, [tabindex='0']):focus-visible,
+  .VPSidebar .VPSidebarItem > .item > .link:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 3px;
   }
 }

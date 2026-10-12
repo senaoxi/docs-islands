@@ -99,6 +99,14 @@ Markdown 表格添加局部溢出容器和列标题 scope。VitePress 1.6 内置
 
 验证必须覆盖两种语言和主题、窄屏与宽屏、表格溢出／焦点、移动侧栏与目录的键盘操作、剪贴板内容、原生代码组、重复 SPA 路由切换和现有 island 示例。运行已发现的文档 typecheck／build targets、根文档 build、使用现有 docs 配置的源文件 lint，以及 `pnpm exec limina check`。构建生成的 `.vitepress/.temp` JavaScript 可能被发现为未覆盖的 proof 源文件，而对生成 bundle 执行 lint 可能产生过大的报告；仅清理被忽略的临时构建产物，并区分源文件检查与全目录 lint。本记录描述实现及可复现检查，不宣称它们的结果或已经 merge／部署。
 
+### Package 文档侧栏
+
+[`article-navigation.css`](../../../packages/vitepress/docs/.vitepress/theme/styles/article-navigation.css) 中的 VitePress 文章侧栏与 [`style.css`](../../../packages/logaria/docs/.vitepress/theme/style.css) 中的 Logaria 侧栏使用一致的行尺寸：纵向 6 px／横向 10 px 留白、6 px 圆角、桌面链接最小高度 36 px，移动端链接、分组行、箭头按钮与侧栏菜单按钮至少为 44 px。选中行保留各自主题的品牌色文字和柔和底色，移除左边框、嵌套选中指示条及随选中状态变化的文字偏移。分组标题与同一层级的链接对齐；嵌套导航保留既有缩进。顶层分组以 20 px 间距代替横向分隔线，展开和折叠状态的底部留白均为零。
+
+VitePress 文章作用域保留紫色 tokens，以及既有的移动端可见性、焦点约束、背景 inert 恢复与菜单焦点返回。Logaria 使用蓝色品牌色和侧栏专用的半透明底色。悬停和键盘焦点使用相同的行底色；保留可见焦点轮廓，减少动态效果时禁用新增的背景过渡，强制对比度模式以系统色轮廓标记当前行，同时保留更强的键盘焦点轮廓。这些 CSS 规则不改变原生导航、折叠状态、语言路由或菜单行为。
+
+验证两种语言在浅色、深色主题及桌面、窄屏下的表现，包括 960 px 侧栏断点与 320 px 换行。检查导航／返回后的选中状态、各嵌套层级内的对齐、悬停、键盘焦点、强制对比度、分组间距、原生折叠行为、移动菜单／遮罩／Escape 处理及侧栏滚动。两站的语言配置目前均未启用折叠；检查时通过临时的浏览器内配置演练原生组件，不改变站点内容。重建后应先重启生产预览，再进行浏览器检查：运行中的预览即使重载页面，也可能继续引用前一版样式表。运行各站已发现的 typecheck 和文档 build targets、变更源文件与记录的格式检查，以及使用现有 docs preset 的只读源文件 lint；Logaria 没有独立的 lint target。运行时结果应由实现变更报告，本记录不假定检查成功。
+
 ## 已发布包
 
 发布脚本和 package manifest 确定了三个独立发布目标：
