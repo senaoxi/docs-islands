@@ -179,7 +179,7 @@ overrides:
   undici-types: ^6.24.0
   typescript: ~6.0.3
   shell-quote: 1.10.0
-  axios: 1.18.0
+  axios: 1.20.0
   postcss: ^8.5.23
   less: ^4.9.0
   smol-toml: 1.7.1
@@ -208,3 +208,6 @@ trustPolicyExclude:
   - semver
 
 verifyDepsBeforeRun: install
+minimumReleaseAgeExclude:
+  # Renovate security update: axios@1.20.0
+  - axios@1.20.0
