@@ -175,7 +175,7 @@ overrides:
   picomatch@^2.0.0: 2.3.2
   picomatch@^4.0.0: 4.0.5
   tmp: 0.2.7
-  undici: 7.29.0
+  undici: 7.29.1
   undici-types: ^6.24.0
   typescript: ~6.0.3
   shell-quote: 1.10.0
@@ -208,3 +208,6 @@ trustPolicyExclude:
   - semver
 
 verifyDepsBeforeRun: install
+minimumReleaseAgeExclude:
+  # Renovate security update: undici@7.29.1
+  - undici@7.29.1
