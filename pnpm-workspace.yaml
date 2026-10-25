@@ -178,7 +178,7 @@ overrides:
   undici: 7.29.0
   undici-types: ^6.24.0
   typescript: ~6.0.3
-  shell-quote: 1.10.0
+  shell-quote: 1.11.0
   axios: 1.18.0
   postcss: ^8.5.23
   less: ^4.9.0
@@ -208,3 +208,6 @@ trustPolicyExclude:
   - semver
 
 verifyDepsBeforeRun: install
+minimumReleaseAgeExclude:
+  # Renovate security update: shell-quote@1.11.0
+  - shell-quote@1.11.0
